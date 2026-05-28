@@ -3324,7 +3324,18 @@ function renderAgentViewDrop(){
       <div class="filter-dot" style="background:${u.color}">${u.id.toUpperCase()}</div>
       <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(u.name)}</span>
     </div>`).join('')}
+    <div style="height:1px;background:var(--border);margin:6px 0"></div>
+    <div class="filter-item" id="signOutItem">
+      <i class="ti ti-logout" style="font-size:14px;flex-shrink:0;color:var(--danger)" aria-hidden="true"></i>
+      <span style="flex:1;color:var(--danger)">Sign Out</span>
+    </div>
   `;
+  const signOut=drop.querySelector('#signOutItem');
+  if(signOut) signOut.addEventListener('click',()=>{
+    drop.style.display='none';
+    if(typeof ssSignOut==='function') ssSignOut();
+    else toast('Sign-out unavailable (Supabase not loaded)');
+  });
   drop.querySelectorAll('[data-agent-view]').forEach(item=>item.addEventListener('click',()=>{
     currentAgentViewId=item.dataset.agentView;
     filterUser=null;
