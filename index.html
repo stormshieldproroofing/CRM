@@ -907,9 +907,9 @@ function queueSupabaseSync(){
   clearTimeout(remoteSyncTimer);
   remoteSyncTimer=setTimeout(async()=>{
     try{
-      await crmSavePipelines(pipelines);
-      if(window.crmSaveTeam && typeof TEAM!=='undefined') await crmSaveTeam(TEAM);
-      await Promise.all(jobs.map(j=>crmSaveJobFinancials(j)));
+      await window.crmSavePipelines(pipelines);
+      if(window.crmSaveTeam && typeof TEAM!=='undefined') await window.crmSaveTeam(TEAM);
+      await Promise.all(jobs.map(j=>window.crmSaveJobFinancials(j)));
     }catch(e){
       console.warn('Supabase sync failed',e);
       if(typeof toast==='function') toast('Supabase sync failed');
@@ -920,14 +920,14 @@ function queueSupabaseSync(){
 async function loadFromSupabase(){
   if(!window.crmLoadState) return;
   try{
-    const session=window.crmCurrentSession ? await crmCurrentSession() : null;
+    const session=window.crmCurrentSession ? await window.crmCurrentSession() : null;
     if(!session){
       updateAuthChrome(null);
       openAuthModal();
       return;
     }
     updateAuthChrome(session);
-    const remoteState=await crmLoadState();
+    const remoteState=await window.crmLoadState();
     if(remoteState.TEAM?.length) TEAM=remoteState.TEAM;
     if(remoteState.USERS?.length){
       USERS.length=0;
@@ -953,7 +953,7 @@ async function loadFromSupabase(){
 }
 
 function bootSupabase(){
-  if(!window.crmBackendReady || !crmBackendReady()) return;
+  if(!window.crmBackendReady || !window.crmBackendReady()) return;
   loadFromSupabase();
 }
 
@@ -1009,7 +1009,7 @@ async function handleAuthSubmit(){
   const oldHtml=submit?.innerHTML;
   if(submit){submit.disabled=true;submit.innerHTML='<i class="ti ti-loader-2" aria-hidden="true"></i>Signing In...';}
   try{
-    const data=await crmSignIn(email,password);
+    const data=await window.crmSignIn(email,password);
     updateAuthChrome(data.session);
     closeAuthModal();
     toast('Signed in');
@@ -1023,9 +1023,9 @@ async function handleAuthSubmit(){
 }
 
 async function handleAuthButton(){
-  const session=window.crmCurrentSession ? await crmCurrentSession() : null;
+  const session=window.crmCurrentSession ? await window.crmCurrentSession() : null;
   if(session){
-    await crmSignOut();
+    await window.crmSignOut();
     remoteSyncEnabled=false;
     updateAuthChrome(null);
     toast('Signed out');
@@ -2459,7 +2459,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     $('dpDelete')&&$('dpDelete').addEventListener('click',()=>{
       const deletedJobId=openJobId;
       jobs=jobs.filter(x=>x.id!==openJobId);
-      if(remoteSyncEnabled && window.crmDeleteJob) crmDeleteJob(deletedJobId).catch(console.warn);
+      if(remoteSyncEnabled && window.crmDeleteJob) window.crmDeleteJob(deletedJobId).catch(console.warn);
       saveToStorage();$('detailOverlay').classList.remove('open');toast('Job deleted');renderBoard();
       if($('jobsPage')?.style.display!=='none') renderJobsPage();
     });
@@ -3618,7 +3618,7 @@ function deletePipeline(id){
   if(currentPipelineId===id) currentPipelineId=pipelines[0].id;
   syncActivePipeline();
   saveToStorage();
-  if(remoteSyncEnabled && window.crmDeletePipeline) crmDeletePipeline(id).catch(console.warn);
+  if(remoteSyncEnabled && window.crmDeletePipeline) window.crmDeletePipeline(id).catch(console.warn);
   toast(`Pipeline deleted: ${p.name}`);
   renderBoard();
   renderPipelineDrop();
@@ -3938,7 +3938,7 @@ $('confirmDeleteCol').onclick=()=>{
   const deletedStageId=pendingDeleteColId;
   const deletedPipelineId=currentPipelineId;
   columns=columns.filter(x=>x.id!==pendingDeleteColId);
-  if(remoteSyncEnabled && window.crmDeletePipelineStage) crmDeletePipelineStage(deletedPipelineId,deletedStageId).catch(console.warn);
+  if(remoteSyncEnabled && window.crmDeletePipelineStage) window.crmDeletePipelineStage(deletedPipelineId,deletedStageId).catch(console.warn);
   if(c)toast(`Deleted "${c.name}"`);
   pendingDeleteColId=null;
   $('deleteColModal').classList.remove('open');

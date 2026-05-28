@@ -332,6 +332,28 @@ async function crmDeleteJob(jobId){
   if(error) throw error;
 }
 
+async function crmDeleteTeamMember(memberId){
+  if(!crmBackendReady()) throw new Error('Supabase is not configured.');
+  const { error } = await crmSupabase.from('team_members').delete().eq('id', memberId);
+  if(error) throw error;
+}
+
+async function crmDeletePipeline(pipelineId){
+  if(!crmBackendReady()) throw new Error('Supabase is not configured.');
+  const { error } = await crmSupabase.from('pipelines').delete().eq('id', pipelineId);
+  if(error) throw error;
+}
+
+async function crmDeletePipelineStage(pipelineId, stageId){
+  if(!crmBackendReady()) throw new Error('Supabase is not configured.');
+  const { error } = await crmSupabase
+    .from('pipeline_stages')
+    .delete()
+    .eq('pipeline_id', pipelineId)
+    .eq('id', stageId);
+  if(error) throw error;
+}
+
 function crmBucketForFileCategory(category){
   const buckets = {
     photos_before: 'crm-photos',
@@ -384,3 +406,21 @@ async function crmCreateSignedFileUrl(fileRecord){
   if(error) throw error;
   return data.signedUrl;
 }
+
+Object.assign(window, {
+  crmBackendReady,
+  crmSignIn,
+  crmSignOut,
+  crmCurrentSession,
+  crmLoadState,
+  crmSaveTeam,
+  crmSavePipelines,
+  crmSaveJob,
+  crmSaveJobFinancials,
+  crmDeleteJob,
+  crmDeleteTeamMember,
+  crmDeletePipeline,
+  crmDeletePipelineStage,
+  crmUploadJobFile,
+  crmCreateSignedFileUrl
+});
