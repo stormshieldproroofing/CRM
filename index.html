@@ -168,6 +168,11 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .btn-primary{padding:6px 16px;border-radius:6px;border:none;background:var(--brand-light);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
 .btn-primary:hover{background:#3A8BD4}
 .btn-danger-sm{padding:6px 14px;border-radius:6px;border:none;background:rgba(248,113,113,0.15);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
+.auth-btn{height:30px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;gap:5px;padding:0 10px;white-space:nowrap}
+.auth-btn:hover{border-color:var(--brand-light);color:#fff;background:rgba(77,157,224,0.12)}
+.auth-btn.signed-in{border-color:rgba(52,211,153,0.35);color:var(--success);background:rgba(52,211,153,0.1)}
+.auth-status{font-size:11px;color:var(--muted);line-height:1.5;margin:-6px 0 12px}
+.auth-error{display:none;border:1px solid rgba(248,113,113,0.35);background:rgba(248,113,113,0.1);color:var(--danger);border-radius:7px;padding:8px 10px;font-size:12px;line-height:1.45;margin-bottom:12px}
 
 /* EDIT BOARD MODAL */
 .board-row{display:flex;align-items:center;gap:7px;padding:8px 10px;background:#141927;border-radius:6px;border:1px solid var(--border);margin-bottom:5px}
@@ -302,6 +307,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link">Payments</span>
   <div style="flex:1"></div>
   <input class="nav-search" id="globalSearch" placeholder="Search jobs, address, phone, policy...">
+  <button class="auth-btn" id="authBtn" type="button"><i class="ti ti-login" aria-hidden="true"></i><span id="authBtnLabel">Sign In</span></button>
   <div class="agent-view-wrap">
     <div class="nav-avatar" id="agentViewAvatar">MT</div>
     <div class="agent-view-drop" id="agentViewDrop" style="display:none"></div>
@@ -782,6 +788,23 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   </div>
 </div>
 
+<!-- Login modal -->
+<div class="m-overlay" id="authModal">
+  <div class="modal" style="width:390px">
+    <div class="modal-title"><i class="ti ti-shield-lock" aria-hidden="true"></i>Sign In</div>
+    <div class="auth-status" id="authStatus">Sign in with your Supabase user to sync CRM data across devices.</div>
+    <div class="auth-error" id="authError"></div>
+    <label for="authEmail">Email</label>
+    <input id="authEmail" type="email" autocomplete="email" placeholder="you@company.com">
+    <label for="authPassword">Password</label>
+    <input id="authPassword" type="password" autocomplete="current-password" placeholder="Password">
+    <div class="m-actions">
+      <button class="btn-cancel" id="authCancel" type="button">Later</button>
+      <button class="btn-primary" id="authSubmit" type="button"><i class="ti ti-login" aria-hidden="true"></i>Sign In</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 </div>
 
@@ -899,9 +922,11 @@ async function loadFromSupabase(){
   try{
     const session=window.crmCurrentSession ? await crmCurrentSession() : null;
     if(!session){
-      toast('Sign in to sync Supabase');
+      updateAuthChrome(null);
+      openAuthModal();
       return;
     }
+    updateAuthChrome(session);
     const remoteState=await crmLoadState();
     if(remoteState.TEAM?.length) TEAM=remoteState.TEAM;
     if(remoteState.USERS?.length){
@@ -930,6 +955,92 @@ async function loadFromSupabase(){
 function bootSupabase(){
   if(!window.crmBackendReady || !crmBackendReady()) return;
   loadFromSupabase();
+}
+
+function openAuthModal(){
+  const modal=$('authModal');
+  if(!modal) return;
+  clearAuthError();
+  modal.classList.add('open');
+  setTimeout(()=>($('authEmail')?.focus()),50);
+}
+
+function closeAuthModal(){
+  $('authModal')?.classList.remove('open');
+}
+
+function showAuthError(message){
+  const box=$('authError');
+  if(!box) return;
+  box.textContent=message||'Could not sign in.';
+  box.style.display='block';
+}
+
+function clearAuthError(){
+  const box=$('authError');
+  if(!box) return;
+  box.textContent='';
+  box.style.display='none';
+}
+
+function updateAuthChrome(session){
+  const btn=$('authBtn'),label=$('authBtnLabel'),status=$('authStatus');
+  const email=session?.user?.email||'';
+  if(btn) btn.classList.toggle('signed-in',!!session);
+  if(label) label.textContent=session?'Sign Out':'Sign In';
+  if(btn){
+    const icon=btn.querySelector('i');
+    if(icon){
+      icon.classList.toggle('ti-login',!session);
+      icon.classList.toggle('ti-logout',!!session);
+    }
+    btn.title=session?`Signed in as ${email}`:'Sign in to sync Supabase';
+  }
+  if(status) status.textContent=session?`Signed in as ${email}. CRM changes will sync to Supabase.`:'Sign in with your Supabase user to sync CRM data across devices.';
+}
+
+async function handleAuthSubmit(){
+  const email=($('authEmail')?.value||'').trim();
+  const password=$('authPassword')?.value||'';
+  if(!email){showAuthError('Email is required.');$('authEmail')?.focus();return}
+  if(!password){showAuthError('Password is required.');$('authPassword')?.focus();return}
+  clearAuthError();
+  const submit=$('authSubmit');
+  const oldHtml=submit?.innerHTML;
+  if(submit){submit.disabled=true;submit.innerHTML='<i class="ti ti-loader-2" aria-hidden="true"></i>Signing In...';}
+  try{
+    const data=await crmSignIn(email,password);
+    updateAuthChrome(data.session);
+    closeAuthModal();
+    toast('Signed in');
+    await loadFromSupabase();
+  }catch(e){
+    console.warn('sign in failed',e);
+    showAuthError(e.message||'Could not sign in. Check your email and password.');
+  }finally{
+    if(submit){submit.disabled=false;submit.innerHTML=oldHtml;}
+  }
+}
+
+async function handleAuthButton(){
+  const session=window.crmCurrentSession ? await crmCurrentSession() : null;
+  if(session){
+    await crmSignOut();
+    remoteSyncEnabled=false;
+    updateAuthChrome(null);
+    toast('Signed out');
+  } else {
+    openAuthModal();
+  }
+}
+
+function wireAuth(){
+  $('authBtn')?.addEventListener('click',()=>handleAuthButton().catch(e=>{console.warn(e);toast('Auth failed')}));
+  $('authCancel')?.addEventListener('click',closeAuthModal);
+  $('authSubmit')?.addEventListener('click',()=>handleAuthSubmit());
+  $('authPassword')?.addEventListener('keydown',e=>{if(e.key==='Enter')handleAuthSubmit();});
+  $('authEmail')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('authPassword')?.focus();});
+  $('authModal')?.addEventListener('click',e=>{if(e.target===$('authModal'))closeAuthModal();});
 }
 syncActivePipeline();
 
@@ -4490,5 +4601,6 @@ document.addEventListener('keydown', e => {
 
 // Initial sync of USERS (in case team storage has different members than the hardcoded USERS list)
 saveTeam({remote:false});
+wireAuth();
 bootSupabase();
 </script>
