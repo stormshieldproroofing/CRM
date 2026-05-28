@@ -73,11 +73,18 @@ async function loadAllFromSupabase() {
   const { data: team, error: teamErr } = await sb.from('team_members').select('*').order('created_at');
   if (teamErr) { console.error('[Supabase] team_members load failed:', teamErr); }
   else {
-    window.TEAM = (team || []).map(t => ({
+    // Mutate in place so let-scoped TEAM binding in index.html stays in sync
+    const newTeam = (team || []).map(t => ({
       id: t.id, name: t.name, email: t.email, phone: t.phone,
       role: t.role, color: t.color, status: t.status, authId: t.auth_id,
       permissions: t.permissions || [], createdAt: new Date(t.created_at).getTime(),
     }));
+    if (Array.isArray(window.TEAM)) {
+      window.TEAM.length = 0;
+      newTeam.forEach(m => window.TEAM.push(m));
+    } else {
+      window.TEAM = newTeam;
+    }
     // who am I? — resolve current logged-in member by auth_id
     window.currentMember = window.TEAM.find(m => m.authId === myAuthId) || null;
     // keep USERS in sync so the board/filters use Supabase team
@@ -93,12 +100,18 @@ async function loadAllFromSupabase() {
   const { data: stages, error: stageErr } = await sb.from('stages').select('*').order('position');
   if (pipeErr || stageErr) console.error('[Supabase] pipelines/stages load failed:', pipeErr || stageErr);
   else if (pipes && pipes.length) {
-    window.pipelines = pipes.map(p => ({
+    const newPipelines = pipes.map(p => ({
       id: p.id, name: p.name,
       columns: (stages || []).filter(s => s.pipeline_id === p.id).map(s => ({
         id: s.id, name: s.name, icon: s.icon, color: s.color, locked: s.locked,
       })),
     }));
+    if (Array.isArray(window.pipelines)) {
+      window.pipelines.length = 0;
+      newPipelines.forEach(p => window.pipelines.push(p));
+    } else {
+      window.pipelines = newPipelines;
+    }
   }
 
   // jobs + children
@@ -110,7 +123,7 @@ async function loadAllFromSupabase() {
 
   if (jobErr) { console.error('[Supabase] jobs load failed:', jobErr); }
   else {
-    window.jobs = (jobRows || []).map(r => {
+    const newJobs = (jobRows || []).map(r => {
       const jobFiles = (files || []).filter(f => f.job_id === r.id);
       const photos = { before:[], during:[], after:[] };
       jobFiles.filter(f => f.kind === 'photo').forEach(f => {
@@ -143,6 +156,12 @@ async function loadAllFromSupabase() {
         stageChecklistDone,
       };
     });
+    if (Array.isArray(window.jobs)) {
+      window.jobs.length = 0;
+      newJobs.forEach(j => window.jobs.push(j));
+    } else {
+      window.jobs = newJobs;
+    }
   }
 }
 
