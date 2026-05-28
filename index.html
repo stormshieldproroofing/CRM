@@ -3978,21 +3978,13 @@ let TEAM = USERS.map((u, i) => ({
   createdAt: Date.now() - (i * 86400000),
 }));
 
-(function loadTeamStorage(){
-  try{
-    const raw = localStorage.getItem(TEAM_STORAGE_KEY);
-    if(!raw) return;
-    const data = JSON.parse(raw);
-    if(Array.isArray(data) && data.length) TEAM = data;
-  }catch(e){ console.warn('team load failed', e); }
-})();
+// NOTE: localStorage team loading removed — Supabase is the source of truth for TEAM.
 
 function saveTeam(){
-  try{ localStorage.setItem(TEAM_STORAGE_KEY, JSON.stringify(TEAM)); }
-  catch(e){ console.warn('team save failed', e); }
   // Sync USERS array so the rest of the app sees team changes (filter dropdown, assign dropdown, etc.)
   USERS.length = 0;
   TEAM.forEach(m => USERS.push({ id: m.id, name: m.name, color: m.color }));
+  // Supabase persistence is handled by the override in supabase-crm.js.
 }
 
 function jobsAssignedTo(memberId){
@@ -4426,5 +4418,7 @@ document.addEventListener('keydown', e => {
 
 // Initial sync of USERS (in case team storage has different members than the hardcoded USERS list)
 saveTeam();
+// One-time cleanup of pre-Supabase team data lingering in localStorage
+try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
 bootSupabase().then(ok => { if (ok) { syncActivePipeline(); renderBoard(); renderTeamPage?.(); } });
 </script>
