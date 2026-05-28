@@ -65,21 +65,27 @@ window.ssSignOut = ssSignOut;
 /* ---------- LOAD: Supabase -> in-memory arrays ----------- */
 
 async function loadAllFromSupabase() {
+  // current auth user (for resolving "who am I")
+  const { data:{ user } } = await sb.auth.getUser();
+  const myAuthId = user?.id || null;
+
   // team
   const { data: team, error: teamErr } = await sb.from('team_members').select('*').order('created_at');
   if (teamErr) { console.error('[Supabase] team_members load failed:', teamErr); }
   else {
     window.TEAM = (team || []).map(t => ({
       id: t.id, name: t.name, email: t.email, phone: t.phone,
-      role: t.role, color: t.color, status: t.status,
+      role: t.role, color: t.color, status: t.status, authId: t.auth_id,
       permissions: t.permissions || [], createdAt: new Date(t.created_at).getTime(),
     }));
+    // who am I? — resolve current logged-in member by auth_id
+    window.currentMember = window.TEAM.find(m => m.authId === myAuthId) || null;
     // keep USERS in sync so the board/filters use Supabase team
     if (Array.isArray(window.USERS)) {
       window.USERS.length = 0;
       window.TEAM.forEach(m => window.USERS.push({ id:m.id, name:m.name, color:m.color }));
     }
-    console.log('[Supabase] loaded', window.TEAM.length, 'team members');
+    console.log('[Supabase] loaded', window.TEAM.length, 'team members; you are:', window.currentMember?.role || 'unknown');
   }
 
   // pipelines + stages

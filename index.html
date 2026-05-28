@@ -397,7 +397,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     <span class="subbar-title">Team Management</span>
     <button class="icon-btn" title="Refresh" onclick="renderTeamPage()"><i class="ti ti-refresh" aria-hidden="true"></i></button>
     <div style="flex:1"></div>
-    <button class="add-btn" onclick="openAddTeamMember()"><i class="ti ti-user-plus" aria-hidden="true"></i>Add Team Member</button>
+    <button class="add-btn" id="addTeamMemberBtn" onclick="openAddTeamMember()"><i class="ti ti-user-plus" aria-hidden="true"></i>Add Team Member</button>
   </div>
   <div class="team-wrap">
     <div class="team-stats" id="teamStats"></div>
@@ -3267,6 +3267,8 @@ function renderFilterDrop(){
   }));
 }
 
+function isAdmin(){ return (window.currentMember?.role) === 'admin'; }
+
 function renderAgentViewChrome(){
   const avatar=$('agentViewAvatar');
   const agent=currentAgentView();
@@ -3285,7 +3287,7 @@ function renderAgentViewChrome(){
 function renderAgentViewDrop(){
   const drop=$('agentViewDrop');
   if(!drop) return;
-  drop.innerHTML=`
+  const teamSection = isAdmin() ? `
     <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:4px 7px 7px">View CRM As</div>
     <div class="filter-item${currentAgentViewId==='all'?' active':''}" data-agent-view="all">
       <i class="ti ti-users" style="font-size:14px;flex-shrink:0" aria-hidden="true"></i>
@@ -3296,6 +3298,11 @@ function renderAgentViewDrop(){
       <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(u.name)}</span>
     </div>`).join('')}
     <div style="height:1px;background:var(--border);margin:6px 0"></div>
+  ` : `
+    <div style="font-size:10px;font-weight:700;color:var(--muted);padding:4px 7px 7px">${escapeHtml(window.currentMember?.name || '')}</div>
+    <div style="height:1px;background:var(--border);margin:6px 0"></div>
+  `;
+  drop.innerHTML = teamSection + `
     <div class="filter-item" id="signOutItem">
       <i class="ti ti-logout" style="font-size:14px;flex-shrink:0;color:var(--danger)" aria-hidden="true"></i>
       <span style="flex:1;color:var(--danger)">Sign Out</span>
@@ -4138,6 +4145,8 @@ function switchPage(pageName){
 
 // ── RENDERING ──
 function renderTeamPage(){
+  const addBtn = document.getElementById('addTeamMemberBtn');
+  if(addBtn) addBtn.style.display = isAdmin() ? '' : 'none';
   renderTeamStats();
   renderTeamTable();
 }
@@ -4167,9 +4176,12 @@ function renderTeamStats(){
 function renderTeamTable(){
   const body = document.getElementById('teamTableBody');
   if(!TEAM.length){
+    const emptyMsg = isAdmin()
+      ? 'No team members yet. Click <strong style="color:var(--brand)">Add Team Member</strong> to get started.'
+      : 'No team members to display.';
     body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">
       <i class="ti ti-users-group" style="font-size:32px;display:block;margin-bottom:8px;opacity:0.5" aria-hidden="true"></i>
-      No team members yet. Click <strong style="color:var(--brand)">Add Team Member</strong> to get started.
+      ${emptyMsg}
     </td></tr>`;
     return;
   }
@@ -4210,9 +4222,11 @@ function renderTeamTable(){
         <td><span class="jobs-count"><i class="ti ti-briefcase" aria-hidden="true"></i>${jobCount}</span></td>
         <td>
           <div class="row-actions">
+            ${isAdmin() ? `
             <button class="row-action-btn" title="Edit" onclick="openEditTeamMember('${m.id}')"><i class="ti ti-pencil" aria-hidden="true"></i></button>
             <button class="row-action-btn ${suspendClass}" title="${suspendTitle}" onclick="toggleSuspendTeamMember('${m.id}')"><i class="ti ${suspendIcon}" aria-hidden="true"></i></button>
             <button class="row-action-btn danger" title="Delete" onclick="openDeleteTeamMember('${m.id}')"><i class="ti ti-trash" aria-hidden="true"></i></button>
+            ` : '<span style="color:var(--muted);font-size:11px">—</span>'}
           </div>
         </td>
       </tr>
