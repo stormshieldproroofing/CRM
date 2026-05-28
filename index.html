@@ -786,7 +786,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 </div>
 
 <script>
-const USERS=[];
+var USERS=[];
 const PMAP={low:'p-low',med:'p-med',high:'p-high'};
 
 const PLBL={low:'Low',med:'Med',high:'High'};
@@ -800,14 +800,14 @@ const DEFAULT_COLUMNS=[
   {id:'completed',name:'Job Completed',icon:'ti-rosette-discount-check',locked:false,color:'#38BDF8'},
 ];
 
-let pipelines=[
+var pipelines=[
   {id:'insurance',name:'Insurance',columns:cloneColumns(DEFAULT_COLUMNS)}
 ];
 let currentPipelineId='insurance';
 let columns=pipelines[0].columns;
 let currentAgentViewId='all';
 
-let jobs=[];
+var jobs=[];
 
 // ── Persistence ────────────────────────────────────────────────────────
 const STORAGE_KEY='stormshield_crm_v1';
@@ -3966,7 +3966,7 @@ const ROLE_DEFAULT_PERMS = {
 const AVATAR_COLORS = ['#1557A8','#0F7B5A','#8B3FA8','#C0510B','#0891B2','#B91C1C','#7C3AED','#0E7490','#A16207','#15803D'];
 
 // Build TEAM from existing USERS, plus extra default info
-let TEAM = USERS.map((u, i) => ({
+var TEAM = USERS.map((u, i) => ({
   id: u.id,
   name: u.name,
   email: (u.name.toLowerCase().replace(/\s+/g,'.')) + '@stormshield.com',
