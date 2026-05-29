@@ -555,12 +555,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <!-- QUICK MEASURE MODAL -->
 <div class="m-overlay" id="quickMeasureModal" style="align-items:center;padding:20px">
   <div class="modal" style="width:min(1000px,95vw);height:min(720px,92vh);padding:0;display:flex;flex-direction:column;overflow:hidden">
-    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">
       <div>
         <div class="modal-title" style="margin:0"><i class="ti ti-ruler-measure" style="color:var(--brand-light)"></i>Quick Measure Roof</div>
         <div style="font-size:10px;color:var(--muted);margin-top:2px">Trace each pitched section separately · Each section gets its own pitch</div>
       </div>
-      <button onclick="closeQuickMeasure()" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--muted);font-size:14px;cursor:pointer">×</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="qmAutoDetectBtn" onclick="qmAutoDetect()" style="padding:7px 11px;border:1px solid var(--brand-light);border-radius:6px;background:rgba(77,157,224,0.1);color:var(--brand-light);font-weight:600;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px">
+          <i class="ti ti-sparkles"></i><span id="qmAutoLabel">Auto-detect</span>
+        </button>
+        <button onclick="closeQuickMeasure()" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--muted);font-size:14px;cursor:pointer">×</button>
+      </div>
     </div>
     <div style="display:flex;gap:0;flex:1;min-height:0">
       <div id="qmMap" style="flex:1;min-height:400px;height:100%;background:#0F1117"></div>
@@ -3922,6 +3927,7 @@ $('saveJob').onclick=()=>{
     saveToStorage();
     __ajSaving = true;
     $('addJobModal').classList.remove('open');
+    __ajSaving = false;
     editingJobId=null;
     __ajSnapshot = null;
     toast(`Job updated: ${name}`);
@@ -3933,7 +3939,9 @@ $('saveJob').onclick=()=>{
     saveToStorage();
     __ajSaving = true;
     __ajSnapshot = null;
-    $('addJobModal').classList.remove('open');toast(`Job added: ${name}`);renderBoard();
+    $('addJobModal').classList.remove('open');
+    __ajSaving = false;
+    toast(`Job added: ${name}`);renderBoard();
     if($('jobsPage')?.style.display!=='none') renderJobsPage();
   }
 };
@@ -4934,7 +4942,8 @@ function qmInitMap(lat, lng){
 
   __qmMap.on('load', () => {
     __qmMap.resize();
-    qmNewSection();  // start with one empty section
+    // Try auto-detect first; falls back to one empty section if it finds nothing.
+    qmAutoDetect(lat, lng, true);
   });
   setTimeout(() => __qmMap && __qmMap.resize(), 200);
   setTimeout(() => __qmMap && __qmMap.resize(), 600);
@@ -4943,6 +4952,97 @@ function qmInitMap(lat, lng){
     if(!__qmActiveId) return;
     qmAddPointToActive([e.lngLat.lng, e.lngLat.lat]);
   });
+}
+
+// Auto-detect building footprints near the job's coords using OpenStreetMap (Overpass API).
+// Called automatically on first open, also re-triggerable via the header button.
+async function qmAutoDetect(lat, lng, isInitial){
+  // If called from the button, use the job's coords
+  if(typeof lat !== 'number'){
+    const j = jobs.find(x => x.id === openJobId);
+    if(!j || j.latitude == null){ toast('Need job coordinates first'); return; }
+    lat = j.latitude; lng = j.longitude;
+  }
+  const btn = document.getElementById('qmAutoDetectBtn');
+  const lbl = document.getElementById('qmAutoLabel');
+  if(lbl) lbl.textContent = 'Searching…';
+  if(btn) btn.disabled = true;
+
+  try {
+    // Overpass query: all buildings within 30m of the point
+    const radius = 30; // meters
+    const query = `[out:json][timeout:15];(way["building"](around:${radius},${lat},${lng});relation["building"](around:${radius},${lat},${lng}););out geom;`;
+    const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+    const res = await fetch(url);
+    const data = await res.json();
+    const ways = (data.elements || []).filter(e => e.type === 'way' && e.geometry);
+
+    if(!ways.length){
+      if(lbl) lbl.textContent = 'Not found';
+      setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
+      // If this was the initial autorun, fall through to an empty section so user can manually trace
+      if(isInitial && __qmSections.length === 0) qmNewSection();
+      return;
+    }
+
+    // Sort buildings by distance from the click point — largest/closest first
+    ways.sort((a, b) => {
+      const da = Math.min(...a.geometry.map(p => haversineM(lat, lng, p.lat, p.lon)));
+      const db = Math.min(...b.geometry.map(p => haversineM(lat, lng, p.lat, p.lon)));
+      return da - db;
+    });
+
+    // Wipe any existing empty sections, replace with detected polygons
+    __qmSections.forEach(s => {
+      s.markers.forEach(m => m.remove());
+      if(__qmMap.getLayer(s.fillId)) __qmMap.removeLayer(s.fillId);
+      if(__qmMap.getLayer(s.lineId)) __qmMap.removeLayer(s.lineId);
+      if(__qmMap.getSource(s.sourceId)) __qmMap.removeSource(s.sourceId);
+    });
+    __qmSections = [];
+
+    // Create one section per detected building (up to 4 — main house, garage, etc.)
+    ways.slice(0, 4).forEach((way, i) => {
+      qmNewSection();
+      const sec = __qmSections[__qmSections.length - 1];
+      sec.name = ways.length === 1 ? 'Main building' : (i === 0 ? 'Main building' : ('Outbuilding ' + i));
+      const pts = way.geometry.map(p => [p.lon, p.lat]);
+      // OSM polygons close themselves (first === last); drop the duplicate
+      if(pts.length > 1 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]){
+        pts.pop();
+      }
+      sec.points = pts;
+      // Drop markers for each point
+      pts.forEach(c => {
+        const el = document.createElement('div');
+        el.style.cssText = `width:8px;height:8px;border-radius:50%;background:${sec.color};border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,0.5)`;
+        const m = new mapboxgl.Marker(el).setLngLat(c).addTo(__qmMap);
+        sec.markers.push(m);
+      });
+    });
+    __qmActiveId = __qmSections[0]?.id || null;
+    qmUpdateAll();
+    if(lbl) lbl.textContent = ways.length > 1 ? `Found ${Math.min(ways.length, 4)}` : 'Found 1';
+    setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
+    toast('Buildings auto-traced. Adjust pitch + verify outline.');
+  } catch(err){
+    console.warn('Overpass fetch failed', err);
+    if(lbl) lbl.textContent = 'Try again';
+    setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
+    if(isInitial && __qmSections.length === 0) qmNewSection();
+  } finally {
+    if(btn) btn.disabled = false;
+  }
+}
+
+// Distance in meters between two lat/lng points
+function haversineM(lat1, lng1, lat2, lng2){
+  const R = 6378137;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function qmNewSection(){
