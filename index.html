@@ -4639,6 +4639,11 @@ var __map = null;
 var __mapMarkers = [];
 var __mapFilters = { salesman: 'all', pipeline: 'all', stage: 'all' };
 
+// Set Mapbox token globally on script load so any map (Map page, Quick Measure) can use it.
+if(typeof mapboxgl !== 'undefined'){
+  mapboxgl.accessToken = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
+}
+
 function getStageColor(pipelineId, stageId){
   const p = (pipelines || []).find(x => x.id === pipelineId) || (pipelines || [])[0];
   if(!p) return '#4D9DE0';
@@ -4684,7 +4689,6 @@ function ensureMapInit(){
     document.getElementById('mapContainer').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Map library failed to load. Check internet connection.</div>';
     return null;
   }
-  mapboxgl.accessToken = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
   __map = new mapboxgl.Map({
     container: 'mapContainer',
     style: 'mapbox://styles/mapbox/dark-v11',

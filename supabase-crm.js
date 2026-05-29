@@ -41,13 +41,20 @@ function showAuthScreen() {
   if (document.getElementById('ssAuth')) return;
   document.body.insertAdjacentHTML('beforeend', authScreenHTML());
   const msg = document.getElementById('ssAuthMsg');
-  document.getElementById('ssSignIn').onclick = async () => {
+  const signInBtn = document.getElementById('ssSignIn');
+  signInBtn.onclick = async () => {
     const email = document.getElementById('ssEmail').value.trim();
     const password = document.getElementById('ssPass').value;
     const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) { msg.textContent = error.message; return; }
     location.reload();
   };
+  // Enter key in either email or password triggers Sign In
+  ['ssEmail','ssPass'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); signInBtn.click(); }
+    });
+  });
   document.getElementById('ssSignUp').onclick = async () => {
     const email = document.getElementById('ssEmail').value.trim();
     const password = document.getElementById('ssPass').value;
@@ -235,8 +242,12 @@ async function pushAllToSupabase() {
     }
 
     // ── Pipelines & stages: upsert current, delete what's gone ──
+    // Only admins and managers can write to these tables (per RLS).
+    // Skip the sync for salesmen to avoid 403 errors filling the console.
+    const myRole = window.currentMember?.role;
+    const canManageBoards = (myRole === 'admin' || myRole === 'manager');
     const localPipelines = window.pipelines || [];
-    if (localPipelines.length) {
+    if (canManageBoards && localPipelines.length) {
       const pipeRows = localPipelines.map((p, i) => ({
         id: p.id, name: p.name, position: i,
       }));
