@@ -4976,7 +4976,7 @@ async function qmAutoDetect(lat, lng, isInitial){
     const url = `https://api.overturemapsapi.com/buildings`
       + `?lat=${lat}&lng=${lng}`
       + `&radius=${radius}`;
-    const res = await fetch(url, { headers: { 'x-api-key': 'DEMO-API-KEY' } });
+    const res = await fetch(url, { headers: { 'x-api-key': 'live_bE0fDwkWmYjkBIdgQFxWm0Gg9ZCB0Xr6IVKFHFGOd6rAJa1Lz5pJAV6FVky9tCH3' } });
     const data = await res.json();
     // Overture API returns either an array of features OR an object with .features depending on the endpoint.
     const raw = Array.isArray(data) ? data : (data?.features || data?.results || []);
