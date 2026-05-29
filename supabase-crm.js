@@ -178,17 +178,21 @@ function scheduleSave() {
 async function pushAllToSupabase() {
   try {
     // jobs (parent rows only; children handled below)
-    const jobUpserts = (window.jobs || []).map(j => ({
-      id: (typeof j.id === 'string' && j.id.length > 20) ? j.id : undefined, // let new ids be generated
-      pipeline_id: j.pipeline || 'insurance',
-      stage_id: j.col,
-      assigned_to: j.user || null,
-      name: j.name, phone: j.phone, email: j.email, address: j.address,
-      priority: j.priority, source: j.source,
-      pot_val: parseFloat(j.potVal || 0), paid_val: parseFloat(j.paidVal || 0),
-      carrier: j.carrier || null, claim_num: j.claimNum || null,
-      latitude: j.latitude ?? null, longitude: j.longitude ?? null,
-    }));
+    const jobUpserts = (window.jobs || []).map(j => {
+      const row = {
+        pipeline_id: j.pipeline || 'insurance',
+        stage_id: j.col,
+        assigned_to: j.user || null,
+        name: j.name, phone: j.phone, email: j.email, address: j.address,
+        priority: j.priority, source: j.source,
+        pot_val: parseFloat(j.potVal || 0), paid_val: parseFloat(j.paidVal || 0),
+        carrier: j.carrier || null, claim_num: j.claimNum || null,
+        latitude: j.latitude ?? null, longitude: j.longitude ?? null,
+      };
+      // Only include id when it's a real UUID; otherwise let the database default generate one
+      if (typeof j.id === 'string' && j.id.length > 20) row.id = j.id;
+      return row;
+    });
     if (jobUpserts.length) {
       const { data, error } = await sb.from('jobs').upsert(jobUpserts).select();
       if (error) throw error;
