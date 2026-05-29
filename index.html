@@ -188,6 +188,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .team-table-wrap{background:var(--col-bg);border:1px solid var(--border);border-radius:9px;overflow:hidden}
 .team-table{width:100%;border-collapse:collapse}
 .team-table thead th{background:#141927;border-bottom:1px solid var(--border);text-align:left;padding:10px 12px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.team-table thead th.tm-sortable{cursor:pointer;user-select:none}
+.team-table thead th.tm-sortable:hover{color:var(--brand)}
+.team-table thead th.tm-sortable.tm-sort-active{color:var(--brand-light)}
+.tm-sort-ind{display:inline-block;width:10px;margin-left:5px;opacity:0.7}
 .team-table tbody td{padding:11px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--brand);vertical-align:middle}
 .team-table tbody tr:last-child td{border-bottom:none}
 .team-table tbody tr.suspended{opacity:0.5}
@@ -405,12 +409,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <table class="team-table" id="teamTable">
         <thead>
           <tr>
-            <th>Member</th>
-            <th>Contact</th>
-            <th>Role</th>
-            <th>Status</th>
+            <th class="tm-sortable" data-sort="name">Member<span class="tm-sort-ind"></span></th>
+            <th class="tm-sortable" data-sort="email">Contact<span class="tm-sort-ind"></span></th>
+            <th class="tm-sortable" data-sort="role">Role<span class="tm-sort-ind"></span></th>
+            <th class="tm-sortable" data-sort="status">Status<span class="tm-sort-ind"></span></th>
             <th style="display:none">Permissions</th>
-            <th>Jobs Assigned</th>
+            <th class="tm-sortable" data-sort="jobs">Jobs Assigned<span class="tm-sort-ind"></span></th>
             <th style="text-align:right">Actions</th>
           </tr>
         </thead>
@@ -3825,123 +3829,87 @@ $('globalSearch').addEventListener('input',function(){
   }
 });
 
-// ── Address Autocomplete (Google Places) ──
+// ── Address Autocomplete (US Census geocoder — free, no key) ──
 (function(){
-  const GAPI_KEY = 'YOUR_GOOGLE_MAPS_API_KEY'; // ← paste your key here
   const streetInput = document.getElementById('f-street');
   const sugBox      = document.getElementById('addr-suggestions');
+  if(!streetInput || !sugBox) return;
   let debounceTimer = null;
-  let sessionToken  = null;
-
-  function newToken(){ return Math.random().toString(36).slice(2); }
-  sessionToken = newToken();
+  let lastQuery = '';
 
   function closeSuggestions(){
     sugBox.classList.remove('open');
     sugBox.innerHTML = '';
   }
-
   function setFieldGreen(){
     streetInput.style.borderColor = 'var(--success)';
     setTimeout(()=>{ streetInput.style.borderColor = 'var(--border)'; }, 1400);
   }
 
-  async function fetchPlaceDetails(placeId){
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=address_components&key=${GAPI_KEY}&sessiontoken=${sessionToken}`;
-    sessionToken = newToken(); // new token after detail fetch
-    try {
-      const res  = await fetch(url);
-      const data = await res.json();
-      const comps = data?.result?.address_components || [];
-      const get = (types) => comps.find(c => types.every(t => c.types.includes(t)))?.short_name || '';
-      document.getElementById('f-city').value  = get(['locality']) || get(['sublocality']);
-      document.getElementById('f-state').value = get(['administrative_area_level_1']);
-      document.getElementById('f-zip').value   = get(['postal_code']);
-      setFieldGreen();
-      closeSuggestions();
-      document.getElementById('f-apt').focus();
-    } catch(e){ closeSuggestions(); }
+  // Parse a Census matched address like:
+  //   "123 MAIN ST, HOUSTON, TX, 77002"
+  // into street/city/state/zip. Census returns reliably comma-separated.
+  function parseCensusAddress(matchedAddress){
+    const parts = (matchedAddress || '').split(',').map(s => s.trim());
+    return {
+      street: parts[0] || '',
+      city:   parts[1] || '',
+      state:  parts[2] || '',
+      zip:    parts[3] || '',
+    };
   }
 
   async function fetchSuggestions(query){
+    if(query === lastQuery) return;
+    lastQuery = query;
     sugBox.innerHTML = '<div class="addr-loading"><div class="addr-spinner"></div>Looking up address…</div>';
     sugBox.classList.add('open');
     try {
-      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=address&components=country:us&key=${GAPI_KEY}&sessiontoken=${sessionToken}`;
+      const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(query)}&benchmark=Public_AR_Current&format=json`;
       const res  = await fetch(url);
       const data = await res.json();
-      const preds = (data?.predictions || []).slice(0, 6);
-
-      if(!preds.length){
+      // Bail if the user has typed more since we fired this request
+      if(query !== lastQuery) return;
+      const matches = (data?.result?.addressMatches || []).slice(0, 6);
+      if(!matches.length){
         sugBox.innerHTML = '<div class="addr-loading"><i class="ti ti-map-off" style="font-size:13px;color:var(--muted)"></i><span>No matches — try adding city or ZIP</span></div>';
         return;
       }
-
-      sugBox.innerHTML = preds.map((p, i) => {
-        const main = p.structured_formatting?.main_text || p.description;
-        const sub  = p.structured_formatting?.secondary_text || '';
-        return `<div class="addr-sug-item" data-idx="${i}" data-pid="${p.place_id}">
+      sugBox.innerHTML = matches.map((m, i) => {
+        const parsed = parseCensusAddress(m.matchedAddress);
+        const sub = [parsed.city, parsed.state, parsed.zip].filter(Boolean).join(', ');
+        return `<div class="addr-sug-item" data-idx="${i}">
           <i class="ti ti-map-pin"></i>
           <div>
-            <div class="addr-sug-main">${main}</div>
-            ${sub ? `<div class="addr-sug-sub">${sub}</div>` : ''}
+            <div class="addr-sug-main">${parsed.street}</div>
+            <div class="addr-sug-sub">${sub}</div>
           </div>
         </div>`;
       }).join('');
-
-      sugBox.querySelectorAll('.addr-sug-item').forEach((el, i) => {
+      sugBox.querySelectorAll('[data-idx]').forEach((el, i) => {
         el.addEventListener('mousedown', e => {
           e.preventDefault();
-          streetInput.value = preds[i].structured_formatting?.main_text || preds[i].description;
-          fetchPlaceDetails(preds[i].place_id);
-        });
-      });
-    } catch(err){
-      // Fallback to Census geocoder if Google fails or key not set
-      if(GAPI_KEY === 'YOUR_GOOGLE_MAPS_API_KEY'){
-        fallbackCensus(query);
-      } else {
-        sugBox.innerHTML = '<div class="addr-loading"><i class="ti ti-wifi-off" style="font-size:13px;color:var(--muted)"></i><span>Could not reach address lookup</span></div>';
-      }
-    }
-  }
-
-  async function fallbackCensus(query){
-    try {
-      const url  = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(query)}&benchmark=Public_AR_Current&format=json`;
-      const res  = await fetch(url);
-      const data = await res.json();
-      const matches = (data?.result?.addressMatches || []).slice(0, 6);
-      if(!matches.length){ sugBox.innerHTML = '<div class="addr-loading"><span>No matches found</span></div>'; return; }
-      sugBox.innerHTML = matches.map((m, i) => {
-        const parts = (m.matchedAddress || '').split(',').map(s => s.trim());
-        return `<div class="addr-sug-item" data-cidx="${i}">
-          <i class="ti ti-map-pin"></i>
-          <div><div class="addr-sug-main">${parts[0]}</div><div class="addr-sug-sub">${parts.slice(1).join(', ')}</div></div>
-        </div>`;
-      }).join('');
-      sugBox.querySelectorAll('[data-cidx]').forEach((el, i) => {
-        el.addEventListener('mousedown', e => {
-          e.preventDefault();
-          const parts = (matches[i].matchedAddress || '').split(',').map(s => s.trim());
-          streetInput.value = parts[0] || '';
-          document.getElementById('f-city').value  = parts[1] || '';
-          document.getElementById('f-state').value = parts[2] || '';
-          document.getElementById('f-zip').value   = parts[3] || '';
-          setFieldGreen(); closeSuggestions();
+          const parsed = parseCensusAddress(matches[i].matchedAddress);
+          streetInput.value = parsed.street;
+          document.getElementById('f-city').value  = parsed.city;
+          document.getElementById('f-state').value = parsed.state;
+          document.getElementById('f-zip').value   = parsed.zip;
+          setFieldGreen();
+          closeSuggestions();
           document.getElementById('f-apt').focus();
         });
       });
-    } catch(e){ sugBox.innerHTML = '<div class="addr-loading"><span>Could not reach geocoder</span></div>'; }
+    } catch(err){
+      sugBox.innerHTML = '<div class="addr-loading"><i class="ti ti-wifi-off" style="font-size:13px;color:var(--muted)"></i><span>Could not reach address lookup</span></div>';
+    }
   }
 
   streetInput.addEventListener('input', function(){
     const q = this.value.trim();
     clearTimeout(debounceTimer);
-    if(q.length < 4){ closeSuggestions(); return; }
-    debounceTimer = setTimeout(() => fetchSuggestions(q), 350);
+    if(q.length < 5){ closeSuggestions(); lastQuery=''; return; }
+    debounceTimer = setTimeout(() => fetchSuggestions(q), 400);
   });
-
   streetInput.addEventListener('keydown', e => { if(e.key==='Escape') closeSuggestions(); });
   document.addEventListener('click', e => { if(!e.target.closest('.addr-autocomplete-wrap')) closeSuggestions(); });
 })();
@@ -4162,6 +4130,24 @@ function renderTeamPage(){
   renderTeamTable();
 }
 
+// One-time: wire up sort header clicks
+(function attachTeamSort(){
+  const thead = document.querySelector('#teamTable thead');
+  if(!thead) return;
+  thead.addEventListener('click', e => {
+    const th = e.target.closest('th.tm-sortable');
+    if(!th) return;
+    const key = th.dataset.sort;
+    if(teamSort.key === key){
+      teamSort.dir = teamSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      teamSort.key = key;
+      teamSort.dir = 'asc';
+    }
+    renderTeamTable();
+  });
+})();
+
 function renderTeamStats(){
   const total = TEAM.length;
   const active = TEAM.filter(m=>m.status==='active').length;
@@ -4184,8 +4170,23 @@ function renderTeamStats(){
   `).join('');
 }
 
+// Team table sort state
+var teamSort = { key: 'name', dir: 'asc' };
+
 function renderTeamTable(){
   const body = document.getElementById('teamTableBody');
+  // Update header indicators
+  document.querySelectorAll('#teamTable thead th.tm-sortable').forEach(th => {
+    const key = th.dataset.sort;
+    const ind = th.querySelector('.tm-sort-ind');
+    if(key === teamSort.key){
+      th.classList.add('tm-sort-active');
+      if(ind) ind.textContent = teamSort.dir === 'asc' ? '▲' : '▼';
+    } else {
+      th.classList.remove('tm-sort-active');
+      if(ind) ind.textContent = '';
+    }
+  });
   if(!TEAM.length){
     const emptyMsg = isAdmin()
       ? 'No team members yet. Click <strong style="color:var(--brand)">Add Team Member</strong> to get started.'
@@ -4196,7 +4197,23 @@ function renderTeamTable(){
     </td></tr>`;
     return;
   }
-  body.innerHTML = TEAM.map(m => {
+  // Sort a copy so original order isn't mutated
+  const roleOrder = { admin:0, manager:1, salesman:2 };
+  const sorted = TEAM.slice().sort((a,b) => {
+    let av, bv;
+    switch(teamSort.key){
+      case 'name':   av=(a.name||'').toLowerCase();  bv=(b.name||'').toLowerCase();  break;
+      case 'email':  av=(a.email||'').toLowerCase(); bv=(b.email||'').toLowerCase(); break;
+      case 'role':   av=roleOrder[a.role] ?? 99;     bv=roleOrder[b.role] ?? 99;     break;
+      case 'status': av=a.status||'';                bv=b.status||'';                break;
+      case 'jobs':   av=jobsAssignedTo(a.id);        bv=jobsAssignedTo(b.id);        break;
+      default:       av=a.name||'';                  bv=b.name||'';
+    }
+    if(av < bv) return teamSort.dir==='asc' ? -1 : 1;
+    if(av > bv) return teamSort.dir==='asc' ?  1 :-1;
+    return 0;
+  });
+  body.innerHTML = sorted.map(m => {
     const jobCount = jobsAssignedTo(m.id);
     const initials = m.name.split(/\s+/).map(p=>p[0]||'').slice(0,2).join('').toUpperCase();
     const visiblePerms = m.permissions.slice(0, 3);
