@@ -4973,7 +4973,7 @@ async function qmAutoDetect(lat, lng, isInitial){
     // (union of OSM + Microsoft + Meta + Google + Esri building footprints).
     // Demo key works for low-volume testing; replace with your own if you self-host later.
     const radius = 100;  // meters
-    const url = `https://api.overturemapsapi.com/places/buildings`
+    const url = `https://api.overturemapsapi.com/buildings`
       + `?lat=${lat}&lng=${lng}`
       + `&radius=${radius}`;
     const res = await fetch(url, { headers: { 'x-api-key': 'DEMO-API-KEY' } });
