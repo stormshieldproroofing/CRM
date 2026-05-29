@@ -4930,6 +4930,8 @@ function closeQuickMeasure(){
   __qmActiveId = null;
 }
 
+const GEOAPIFY_KEY = 'cffb7a7c4225478b80647d5539985398';
+
 function qmInitMap(lat, lng){
   __qmMap = new mapboxgl.Map({
     container: 'qmMap',
@@ -4942,8 +4944,7 @@ function qmInitMap(lat, lng){
 
   __qmMap.on('load', () => {
     __qmMap.resize();
-    // Try auto-detect first; falls back to one empty section if it finds nothing.
-    qmAutoDetect(lat, lng, true);
+    qmAutoDetect(lat, lng, true);   // auto-detect on first open; falls back to empty section
   });
   setTimeout(() => __qmMap && __qmMap.resize(), 200);
   setTimeout(() => __qmMap && __qmMap.resize(), 600);
@@ -4954,10 +4955,9 @@ function qmInitMap(lat, lng){
   });
 }
 
-// Auto-detect building footprints near the job's coords using OpenStreetMap (Overpass API).
-// Called automatically on first open, also re-triggerable via the header button.
+// Auto-detect building footprints via Geoapify Places API.
+// Uses Microsoft Buildings + OSM + Geoapify's own data — best free coverage available.
 async function qmAutoDetect(lat, lng, isInitial){
-  // If called from the button, use the job's coords
   if(typeof lat !== 'number'){
     const j = jobs.find(x => x.id === openJobId);
     if(!j || j.latitude == null){ toast('Need job coordinates first'); return; }
@@ -4969,30 +4969,32 @@ async function qmAutoDetect(lat, lng, isInitial){
   if(btn) btn.disabled = true;
 
   try {
-    // Overpass query: all buildings within 30m of the point
-    const radius = 30; // meters
-    const query = `[out:json][timeout:15];(way["building"](around:${radius},${lat},${lng});relation["building"](around:${radius},${lat},${lng}););out geom;`;
-    const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
-    const res = await fetch(url);
+    // Geoapify Places API — find buildings within ~60m of the point.
+    // categories=building captures residential + outbuildings.
+    const radius = 60;
+    const url = `https://api.geoapify.com/v2/places`
+      + `?categories=building`
+      + `&filter=circle:${lng},${lat},${radius}`
+      + `&bias=proximity:${lng},${lat}`
+      + `&limit=6`
+      + `&apiKey=${GEOAPIFY_KEY}`;
+    const res  = await fetch(url);
     const data = await res.json();
-    const ways = (data.elements || []).filter(e => e.type === 'way' && e.geometry);
+    // Geoapify returns features with geometry that may be Point OR Polygon depending on the source.
+    // We only want polygon footprints — points are useless for tracing.
+    const polys = (data.features || []).filter(f => {
+      const g = f.geometry;
+      return g && (g.type === 'Polygon' || g.type === 'MultiPolygon');
+    });
 
-    if(!ways.length){
+    if(!polys.length){
       if(lbl) lbl.textContent = 'Not found';
       setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
-      // If this was the initial autorun, fall through to an empty section so user can manually trace
       if(isInitial && __qmSections.length === 0) qmNewSection();
       return;
     }
 
-    // Sort buildings by distance from the click point — largest/closest first
-    ways.sort((a, b) => {
-      const da = Math.min(...a.geometry.map(p => haversineM(lat, lng, p.lat, p.lon)));
-      const db = Math.min(...b.geometry.map(p => haversineM(lat, lng, p.lat, p.lon)));
-      return da - db;
-    });
-
-    // Wipe any existing empty sections, replace with detected polygons
+    // Wipe existing sections
     __qmSections.forEach(s => {
       s.markers.forEach(m => m.remove());
       if(__qmMap.getLayer(s.fillId)) __qmMap.removeLayer(s.fillId);
@@ -5001,18 +5003,24 @@ async function qmAutoDetect(lat, lng, isInitial){
     });
     __qmSections = [];
 
-    // Create one section per detected building (up to 4 — main house, garage, etc.)
-    ways.slice(0, 4).forEach((way, i) => {
+    // Build a section per polygon (handles MultiPolygon by flattening)
+    let secIdx = 0;
+    polys.slice(0, 4).forEach((feat) => {
+      const rings = feat.geometry.type === 'MultiPolygon'
+        ? feat.geometry.coordinates.flat()       // [[ring1], [ring2], ...]
+        : feat.geometry.coordinates;             // [[outerRing]]
+      const outer = rings[0];                    // outer ring only (ignore inner holes)
+      if(!outer || outer.length < 3) return;
       qmNewSection();
       const sec = __qmSections[__qmSections.length - 1];
-      sec.name = ways.length === 1 ? 'Main building' : (i === 0 ? 'Main building' : ('Outbuilding ' + i));
-      const pts = way.geometry.map(p => [p.lon, p.lat]);
-      // OSM polygons close themselves (first === last); drop the duplicate
+      sec.name = polys.length === 1 ? 'Main building' : (secIdx === 0 ? 'Main building' : ('Outbuilding ' + secIdx));
+      secIdx++;
+      // GeoJSON polygons close themselves (first === last); drop the duplicate
+      const pts = [...outer];
       if(pts.length > 1 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]){
         pts.pop();
       }
       sec.points = pts;
-      // Drop markers for each point
       pts.forEach(c => {
         const el = document.createElement('div');
         el.style.cssText = `width:8px;height:8px;border-radius:50%;background:${sec.color};border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,0.5)`;
@@ -5020,29 +5028,25 @@ async function qmAutoDetect(lat, lng, isInitial){
         sec.markers.push(m);
       });
     });
-    __qmActiveId = __qmSections[0]?.id || null;
+    if(!__qmSections.length){
+      if(lbl) lbl.textContent = 'Not found';
+      setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
+      qmNewSection();
+      return;
+    }
+    __qmActiveId = __qmSections[0].id;
     qmUpdateAll();
-    if(lbl) lbl.textContent = ways.length > 1 ? `Found ${Math.min(ways.length, 4)}` : 'Found 1';
+    if(lbl) lbl.textContent = polys.length > 1 ? `Found ${Math.min(polys.length, 4)}` : 'Found 1';
     setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
-    toast('Buildings auto-traced. Adjust pitch + verify outline.');
+    toast('Buildings auto-traced. Verify outline + set pitch.');
   } catch(err){
-    console.warn('Overpass fetch failed', err);
+    console.warn('Geoapify fetch failed', err);
     if(lbl) lbl.textContent = 'Try again';
     setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
     if(isInitial && __qmSections.length === 0) qmNewSection();
   } finally {
     if(btn) btn.disabled = false;
   }
-}
-
-// Distance in meters between two lat/lng points
-function haversineM(lat1, lng1, lat2, lng2){
-  const R = 6378137;
-  const toRad = d => d * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
-  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function qmNewSection(){
