@@ -571,9 +571,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <div id="qmMap" style="flex:1;min-height:400px;height:100%;background:#0F1117"></div>
       <div style="width:280px;border-left:1px solid var(--border);background:#141927;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden">
         <!-- Sections list -->
-        <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700">Sections</div>
-          <button onclick="qmNewSection()" style="padding:4px 9px;border:1px solid var(--brand-light);border-radius:5px;background:rgba(77,157,224,0.1);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer"><i class="ti ti-plus"></i> Add</button>
+          <div style="display:flex;gap:6px">
+            <button id="qmDetectOutbuildingsBtn" onclick="qmDetectOutbuildings()" title="Find detached garages or outbuildings nearby" style="padding:4px 9px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer"><i class="ti ti-search"></i> Outbuildings</button>
+            <button onclick="qmNewSection()" style="padding:4px 9px;border:1px solid var(--brand-light);border-radius:5px;background:rgba(77,157,224,0.1);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer"><i class="ti ti-plus"></i> Add</button>
+          </div>
         </div>
         <div id="qmSections" style="overflow-y:auto;flex:1;padding:8px"></div>
         <!-- Totals -->
@@ -5049,6 +5052,84 @@ async function qmAutoDetect(lat, lng, isInitial){
     if(isInitial && __qmSections.length === 0) qmNewSection();
   } finally {
     if(btn) btn.disabled = false;
+  }
+}
+
+// Detect detached outbuildings (garage, shed, pool house) within 50m of the address.
+// Excludes any polygon already on screen, and any polygon overlapping the main building.
+async function qmDetectOutbuildings(){
+  const j = jobs.find(x => x.id === openJobId);
+  if(!j || j.latitude == null){ toast('Need job coordinates'); return; }
+  const btn = document.getElementById('qmDetectOutbuildingsBtn');
+  const origLabel = btn?.innerHTML;
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader"></i> Searching…'; }
+
+  try {
+    const radius = 50;  // meters — wide enough for typical detached structures
+    const url = `https://api.overturemapsapi.com/buildings`
+      + `?lat=${j.latitude}&lng=${j.longitude}&radius=${radius}`;
+    const res = await fetch(url, { headers: { 'x-api-key': 'live_bE0fDwkWmYjkBIdgQFxWm0Gg9ZCB0Xr6IVKFHFGOd6rAJa1Lz5pJAV6FVky9tCH3' } });
+    const data = await res.json();
+    const raw = Array.isArray(data) ? data : (data?.features || data?.results || []);
+    const polys = raw.filter(f => {
+      const g = f.geometry;
+      return g && (g.type === 'Polygon' || g.type === 'MultiPolygon');
+    });
+
+    if(!polys.length){
+      toast('No outbuildings found nearby');
+      return;
+    }
+
+    // Collect points already traced (across all existing sections) for dedup
+    const existingPoints = [];
+    __qmSections.forEach(sec => sec.points.forEach(p => existingPoints.push(p)));
+
+    // For each candidate, check if it overlaps any existing section's points (i.e., we've already got this building)
+    const candidates = polys.filter(feat => {
+      const rings = feat.geometry.type === 'MultiPolygon' ? feat.geometry.coordinates.flat() : feat.geometry.coordinates;
+      const outer = rings[0];
+      if(!outer || outer.length < 3) return false;
+      // If any existing point falls within ~3m of this polygon's vertices, skip — same building
+      return !existingPoints.some(([elng, elat]) => {
+        return outer.some(([clng, clat]) => haversineM(elat, elng, clat, clng) < 3);
+      });
+    });
+
+    if(!candidates.length){
+      toast('No additional outbuildings found');
+      return;
+    }
+
+    // Add each remaining building as a new section
+    let added = 0;
+    candidates.forEach(feat => {
+      const rings = feat.geometry.type === 'MultiPolygon' ? feat.geometry.coordinates.flat() : feat.geometry.coordinates;
+      const outer = rings[0];
+      if(!outer || outer.length < 3) return;
+      qmNewSection();
+      const sec = __qmSections[__qmSections.length - 1];
+      added++;
+      sec.name = 'Outbuilding ' + added;
+      const pts = [...outer];
+      if(pts.length > 1 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]){
+        pts.pop();
+      }
+      sec.points = pts;
+      pts.forEach(c => {
+        const el = document.createElement('div');
+        el.style.cssText = `width:8px;height:8px;border-radius:50%;background:${sec.color};border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,0.5)`;
+        const m = new mapboxgl.Marker(el).setLngLat(c).addTo(__qmMap);
+        sec.markers.push(m);
+      });
+    });
+    qmUpdateAll();
+    toast(added === 1 ? 'Added 1 outbuilding' : `Added ${added} outbuildings`);
+  } catch(err){
+    console.warn('Outbuilding detection failed', err);
+    toast('Could not search — try again');
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = origLabel; }
   }
 }
 
