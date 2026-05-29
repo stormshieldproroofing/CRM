@@ -541,7 +541,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- QUICK MEASURE MODAL -->
 <div class="m-overlay" id="quickMeasureModal" style="align-items:center;padding:20px">
-  <div class="modal" style="width:min(900px,95vw);max-height:92vh;padding:0;display:flex;flex-direction:column;overflow:hidden">
+  <div class="modal" style="width:min(900px,95vw);height:min(700px,92vh);padding:0;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <div>
         <div class="modal-title" style="margin:0"><i class="ti ti-ruler-measure" style="color:var(--brand-light)"></i>Quick Measure Roof</div>
@@ -550,7 +550,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button onclick="closeQuickMeasure()" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--muted);font-size:14px;cursor:pointer">×</button>
     </div>
     <div style="display:flex;gap:0;flex:1;min-height:0">
-      <div id="qmMap" style="flex:1;min-height:400px;background:#0F1117"></div>
+      <div id="qmMap" style="flex:1;min-height:400px;height:100%;background:#0F1117"></div>
       <div style="width:240px;padding:14px;border-left:1px solid var(--border);background:#141927;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex-shrink:0">
         <div>
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Pitch (slope)</div>
@@ -4846,11 +4846,19 @@ function qmInitMap(lat, lng){
   __qmMarkers = [];
 
   __qmMap.on('load', () => {
+    // Force size recalc — modals can hide the container during init,
+    // so Mapbox starts with 0x0 dimensions and renders black until resized.
+    __qmMap.resize();
     // Polygon source/layer for the live shape
     __qmMap.addSource('qm-poly', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[]] }, properties:{} } });
     __qmMap.addLayer({ id:'qm-poly-fill', type:'fill', source:'qm-poly', paint:{ 'fill-color':'#4D9DE0', 'fill-opacity':0.25 }});
     __qmMap.addLayer({ id:'qm-poly-line', type:'line', source:'qm-poly', paint:{ 'line-color':'#4D9DE0', 'line-width':2 }});
   });
+
+  // Additional resize after a short delay — covers cases where the
+  // modal animation isn't fully done by the time map loads.
+  setTimeout(() => __qmMap && __qmMap.resize(), 200);
+  setTimeout(() => __qmMap && __qmMap.resize(), 600);
 
   __qmMap.on('click', e => qmAddPoint([e.lngLat.lng, e.lngLat.lat]));
   __qmMap.on('dblclick', e => { e.preventDefault(); });  // suppress zoom-in
