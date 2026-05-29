@@ -200,6 +200,19 @@ async function pushAllToSupabase() {
       data.forEach((row, i) => { if (window.jobs[i]) window.jobs[i].id = row.id; });
     }
 
+    // delete any jobs that exist in Supabase but no longer in our local array
+    {
+      const { data: remoteIds, error: idErr } = await sb.from('jobs').select('id');
+      if (!idErr) {
+        const localIds = new Set((window.jobs || []).map(j => j.id).filter(Boolean));
+        const toDelete = (remoteIds || []).map(r => r.id).filter(id => !localIds.has(id));
+        if (toDelete.length) {
+          const { error: delErr } = await sb.from('jobs').delete().in('id', toDelete);
+          if (delErr) console.error('[Supabase] delete jobs failed:', delErr);
+        }
+      }
+    }
+
     // children: simplest reliable strategy — replace per job
     for (const j of (window.jobs || [])) {
       if (!j.id) continue;
@@ -220,6 +233,50 @@ async function pushAllToSupabase() {
       });
       if (chkRows.length) await sb.from('stage_checklist_done').insert(chkRows);
     }
+
+    // ── Pipelines & stages: upsert current, delete what's gone ──
+    const localPipelines = window.pipelines || [];
+    if (localPipelines.length) {
+      const pipeRows = localPipelines.map((p, i) => ({
+        id: p.id, name: p.name, position: i,
+      }));
+      const { error: pipeErr } = await sb.from('pipelines').upsert(pipeRows);
+      if (pipeErr) console.error('[Supabase] pipelines upsert failed:', pipeErr);
+
+      // Stages: flatten all from all pipelines
+      const stageRows = [];
+      localPipelines.forEach(p => {
+        (p.columns || []).forEach((c, i) => {
+          stageRows.push({
+            id: c.id, pipeline_id: p.id, name: c.name,
+            icon: c.icon || null, color: c.color || null,
+            locked: !!c.locked, position: i,
+          });
+        });
+      });
+      if (stageRows.length) {
+        const { error: stageErr } = await sb.from('stages').upsert(stageRows);
+        if (stageErr) console.error('[Supabase] stages upsert failed:', stageErr);
+      }
+
+      // Delete pipelines not in local list
+      const { data: remotePipes } = await sb.from('pipelines').select('id');
+      const localPipeIds = new Set(localPipelines.map(p => p.id));
+      const pipesToDelete = (remotePipes || []).map(r => r.id).filter(id => !localPipeIds.has(id));
+      if (pipesToDelete.length) {
+        const { error: pdErr } = await sb.from('pipelines').delete().in('id', pipesToDelete);
+        if (pdErr) console.error('[Supabase] pipelines delete failed:', pdErr);
+      }
+
+      // Delete stages not in local list (across all pipelines)
+      const { data: remoteStages } = await sb.from('stages').select('id');
+      const localStageIds = new Set(stageRows.map(s => s.id));
+      const stagesToDelete = (remoteStages || []).map(r => r.id).filter(id => !localStageIds.has(id));
+      if (stagesToDelete.length) {
+        const { error: sdErr } = await sb.from('stages').delete().in('id', stagesToDelete);
+        if (sdErr) console.error('[Supabase] stages delete failed:', sdErr);
+      }
+    }
   } catch (e) {
     console.error('Supabase save failed', e);
     if (typeof toast === 'function') toast('Sync failed — changes saved locally');
@@ -233,7 +290,18 @@ async function pushTeamToSupabase() {
       id: t.id, name: t.name, email: t.email, phone: t.phone,
       role: t.role, color: t.color, status: t.status, permissions: t.permissions || [],
     }));
-    if (rows.length) await sb.from('team_members').upsert(rows);
+    if (rows.length) {
+      const { error } = await sb.from('team_members').upsert(rows);
+      if (error) console.error('[Supabase] team upsert failed:', error);
+    }
+    // Delete team rows not in local TEAM
+    const { data: remote } = await sb.from('team_members').select('id');
+    const localIds = new Set(rows.map(r => r.id));
+    const toDelete = (remote || []).map(r => r.id).filter(id => !localIds.has(id));
+    if (toDelete.length) {
+      const { error: delErr } = await sb.from('team_members').delete().in('id', toDelete);
+      if (delErr) console.error('[Supabase] team delete failed:', delErr);
+    }
   } catch (e) { console.error('team sync failed', e); }
 }
 
