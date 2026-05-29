@@ -145,6 +145,7 @@ async function loadAllFromSupabase() {
         priority:r.priority, user:r.assigned_to, col:r.stage_id, pipeline:r.pipeline_id,
         source:r.source, potVal:String(r.pot_val ?? '0'), paidVal:String(r.paid_val ?? '0'),
         carrier:r.carrier, claimNum:r.claim_num,
+        latitude:r.latitude, longitude:r.longitude,
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
@@ -186,6 +187,7 @@ async function pushAllToSupabase() {
       priority: j.priority, source: j.source,
       pot_val: parseFloat(j.potVal || 0), paid_val: parseFloat(j.paidVal || 0),
       carrier: j.carrier || null, claim_num: j.claimNum || null,
+      latitude: j.latitude ?? null, longitude: j.longitude ?? null,
     }));
     if (jobUpserts.length) {
       const { data, error } = await sb.from('jobs').upsert(jobUpserts).select();
@@ -230,6 +232,14 @@ async function pushTeamToSupabase() {
     if (rows.length) await sb.from('team_members').upsert(rows);
   } catch (e) { console.error('team sync failed', e); }
 }
+
+/* ---------- Fetch the public-safe map view (all jobs, addresses only) */
+async function fetchMapView() {
+  const { data, error } = await sb.from('jobs_map_view').select('*');
+  if (error) { console.error('[Supabase] jobs_map_view load failed:', error); return []; }
+  return data || [];
+}
+window.fetchMapView = fetchMapView;
 
 /* ---------- FILE upload helper (use in photo/contract tabs) */
 async function uploadJobFile(jobId, kind, section, file) {
