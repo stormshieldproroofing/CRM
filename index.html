@@ -4969,21 +4969,18 @@ async function qmAutoDetect(lat, lng, isInitial){
   if(btn) btn.disabled = true;
 
   try {
-    // Mapbox Tilequery — query the streets tileset for buildings within ~60m.
-    // Uses the same Mapbox token already set globally for the map.
-    const radius = 60;
-    const url = `https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/tilequery/`
-      + `${lng},${lat}.json`
-      + `?radius=${radius}`
-      + `&limit=20`
-      + `&geometry=polygon`
-      + `&layers=building`
-      + `&dedupe=true`
-      + `&access_token=${mapboxgl.accessToken}`;
-    const res  = await fetch(url);
+    // Overture Maps API — third-party free API exposing Overture's open dataset
+    // (union of OSM + Microsoft + Meta + Google + Esri building footprints).
+    // Demo key works for low-volume testing; replace with your own if you self-host later.
+    const radius = 100;  // meters
+    const url = `https://api.overturemapsapi.com/places/buildings`
+      + `?lat=${lat}&lng=${lng}`
+      + `&radius=${radius}`;
+    const res = await fetch(url, { headers: { 'x-api-key': 'DEMO-API-KEY' } });
     const data = await res.json();
-    // Mapbox returns Polygon features in `features`; some may be partial (clipped by tile boundaries).
-    const polys = (data.features || []).filter(f => {
+    // Overture API returns either an array of features OR an object with .features depending on the endpoint.
+    const raw = Array.isArray(data) ? data : (data?.features || data?.results || []);
+    const polys = raw.filter(f => {
       const g = f.geometry;
       return g && (g.type === 'Polygon' || g.type === 'MultiPolygon');
     });
@@ -4995,10 +4992,10 @@ async function qmAutoDetect(lat, lng, isInitial){
       return;
     }
 
-    // Sort by distance — Mapbox includes tilequery.distance for each feature
+    // Sort by distance from the click point (closest first)
     polys.sort((a, b) => {
-      const da = a.properties?.tilequery?.distance ?? 999;
-      const db = b.properties?.tilequery?.distance ?? 999;
+      const da = polygonMinDistanceM(a.geometry, lat, lng);
+      const db = polygonMinDistanceM(b.geometry, lat, lng);
       return da - db;
     });
 
@@ -5048,7 +5045,7 @@ async function qmAutoDetect(lat, lng, isInitial){
     setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
     toast('Buildings auto-traced. Verify outline + set pitch.');
   } catch(err){
-    console.warn('Mapbox Tilequery failed', err);
+    console.warn('Overture Maps fetch failed', err);
     if(lbl) lbl.textContent = 'Try again';
     setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
     if(isInitial && __qmSections.length === 0) qmNewSection();
@@ -5230,6 +5227,28 @@ function polygonAreaM2(coords){
     area += (lng2 - lng1) * Math.PI / 180 * (2 + Math.sin(lat1 * Math.PI / 180) + Math.sin(lat2 * Math.PI / 180));
   }
   return Math.abs(area * R * R / 2);
+}
+
+// Haversine distance in meters between two lat/lng points
+function haversineM(lat1, lng1, lat2, lng2){
+  const R = 6378137;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Minimum distance from a point to any vertex of a polygon/multipolygon geometry
+function polygonMinDistanceM(geom, lat, lng){
+  if(!geom) return 999999;
+  const rings = geom.type === 'MultiPolygon' ? geom.coordinates.flat() : geom.coordinates;
+  let min = 999999;
+  rings.forEach(ring => ring.forEach(([plng, plat]) => {
+    const d = haversineM(lat, lng, plat, plng);
+    if(d < min) min = d;
+  }));
+  return min;
 }
 
 // Escape closes the measure modal
