@@ -539,6 +539,57 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   </div>
 </div>
 
+<!-- QUICK MEASURE MODAL -->
+<div class="m-overlay" id="quickMeasureModal" style="align-items:center;padding:20px">
+  <div class="modal" style="width:min(900px,95vw);max-height:92vh;padding:0;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="modal-title" style="margin:0"><i class="ti ti-ruler-measure" style="color:var(--brand-light)"></i>Quick Measure Roof</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Click points around the roof perimeter · Double-click to finish</div>
+      </div>
+      <button onclick="closeQuickMeasure()" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--muted);font-size:14px;cursor:pointer">×</button>
+    </div>
+    <div style="display:flex;gap:0;flex:1;min-height:0">
+      <div id="qmMap" style="flex:1;min-height:400px;background:#0F1117"></div>
+      <div style="width:240px;padding:14px;border-left:1px solid var(--border);background:#141927;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex-shrink:0">
+        <div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Pitch (slope)</div>
+          <select id="qm-pitch" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;background:#1E253A;color:var(--brand);font-size:12px">
+            <option value="1.000">Flat (0/12)</option>
+            <option value="1.014">3/12</option>
+            <option value="1.054">4/12</option>
+            <option value="1.083">5/12</option>
+            <option value="1.118" selected>6/12 (typical)</option>
+            <option value="1.158">7/12</option>
+            <option value="1.202">8/12</option>
+            <option value="1.250">9/12</option>
+            <option value="1.302">10/12</option>
+            <option value="1.357">11/12</option>
+            <option value="1.414">12/12</option>
+          </select>
+        </div>
+        <div style="background:rgba(77,157,224,0.06);border:1px solid rgba(77,157,224,0.2);border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Footprint area</div>
+          <div id="qmFootprint" style="font-size:18px;font-weight:700;color:var(--brand)">— sq ft</div>
+          <div style="height:1px;background:var(--border);margin:10px 0"></div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Roof area (with pitch)</div>
+          <div id="qmRoofArea" style="font-size:20px;font-weight:700;color:var(--brand-light)">— sq ft</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">≈ <span id="qmSquares" style="font-weight:600;color:var(--brand-mid)">—</span> squares</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="qmUndo()" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--brand);font-size:11px;cursor:pointer"><i class="ti ti-arrow-back-up"></i> Undo</button>
+          <button onclick="qmReset()" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--brand);font-size:11px;cursor:pointer"><i class="ti ti-refresh"></i> Reset</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);line-height:1.4;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:6px;padding:8px">
+          <strong style="color:var(--warn)">Rough estimate only.</strong> For accurate quotes, material orders, or insurance, use an EagleView / RoofR / Hover report.
+        </div>
+        <div style="flex:1"></div>
+        <button onclick="qmSaveToNote()" style="padding:9px;border:none;border-radius:7px;background:var(--brand-light);color:#fff;font-weight:600;font-size:12px;cursor:pointer">Copy Estimate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="detail-overlay" id="detailOverlay">
   <div class="detail-panel" id="detailPanel"></div>
 </div>
@@ -1487,6 +1538,13 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:3px">Weather forecast will appear here</div>
             <div style="font-size:11px;color:var(--muted);line-height:1.5">Add a property address to see the 7-day forecast for this job site</div>
           </div>
+          <div class="dp-card" style="margin-top:10px">
+            <button id="quickMeasureBtn" onclick="openQuickMeasure()" style="width:100%;padding:9px;border:1px solid var(--brand-light);border-radius:7px;background:rgba(77,157,224,0.08);color:var(--brand-light);font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+              <i class="ti ti-ruler-measure" aria-hidden="true"></i>Quick Measure Roof
+            </button>
+            <div style="margin-top:6px;font-size:10px;color:var(--muted);text-align:center">Rough satellite estimate · use a measurement report for final quotes</div>
+          </div>
+
           <div class="dp-card" style="margin-top:10px">
             <table class="meta-table">
               <tr><td style="color:var(--muted);width:80px">Created By</td><td><div style="display:flex;align-items:center;gap:6px"><div class="user-dot" style="background:${u.color}">${u.id.toUpperCase()}</div><span style="font-weight:600;font-size:12px">${u.name}</span></div></td></tr>
@@ -4747,6 +4805,135 @@ async function renderMapPage(){
     });
   });
 })();
+
+// ═════════════════════════════════════════════════════════════
+// QUICK MEASURE — satellite roof polygon → approx roof area
+// ═════════════════════════════════════════════════════════════
+var __qmMap = null;
+var __qmPoints = [];   // array of [lng, lat]
+var __qmMarkers = [];
+
+function openQuickMeasure(){
+  const j = jobs.find(x => x.id === openJobId);
+  if(!j){ toast('Open a job first'); return; }
+  if(j.latitude == null || j.longitude == null){
+    toast('This job needs an address with coordinates. Re-pick the address from suggestions.');
+    return;
+  }
+  document.getElementById('quickMeasureModal').classList.add('open');
+  setTimeout(() => qmInitMap(j.latitude, j.longitude), 60);
+}
+
+function closeQuickMeasure(){
+  document.getElementById('quickMeasureModal').classList.remove('open');
+  // Tear down map so it re-inits cleanly next time (avoids the resize bug)
+  if(__qmMap){ __qmMap.remove(); __qmMap = null; }
+  __qmPoints = [];
+  __qmMarkers = [];
+}
+
+function qmInitMap(lat, lng){
+  const container = document.getElementById('qmMap');
+  if(!container) return;
+  __qmMap = new mapboxgl.Map({
+    container: 'qmMap',
+    style: 'mapbox://styles/mapbox/satellite-streets-v12',
+    center: [lng, lat],
+    zoom: 19,
+  });
+  __qmMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
+  __qmPoints = [];
+  __qmMarkers = [];
+
+  __qmMap.on('load', () => {
+    // Polygon source/layer for the live shape
+    __qmMap.addSource('qm-poly', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[]] }, properties:{} } });
+    __qmMap.addLayer({ id:'qm-poly-fill', type:'fill', source:'qm-poly', paint:{ 'fill-color':'#4D9DE0', 'fill-opacity':0.25 }});
+    __qmMap.addLayer({ id:'qm-poly-line', type:'line', source:'qm-poly', paint:{ 'line-color':'#4D9DE0', 'line-width':2 }});
+  });
+
+  __qmMap.on('click', e => qmAddPoint([e.lngLat.lng, e.lngLat.lat]));
+  __qmMap.on('dblclick', e => { e.preventDefault(); });  // suppress zoom-in
+  __qmMap.doubleClickZoom.disable();
+}
+
+function qmAddPoint(coord){
+  __qmPoints.push(coord);
+  const el = document.createElement('div');
+  el.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#4D9DE0;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5)';
+  const m = new mapboxgl.Marker(el).setLngLat(coord).addTo(__qmMap);
+  __qmMarkers.push(m);
+  qmUpdate();
+}
+
+function qmUpdate(){
+  if(!__qmMap || !__qmMap.getSource('qm-poly')) return;
+  const ring = __qmPoints.length >= 3 ? [...__qmPoints, __qmPoints[0]] : __qmPoints;
+  __qmMap.getSource('qm-poly').setData({
+    type:'Feature', geometry:{ type:'Polygon', coordinates:[ring] }, properties:{}
+  });
+  const sqM = (__qmPoints.length >= 3) ? polygonAreaM2(__qmPoints) : 0;
+  const sqFt = sqM * 10.7639;
+  const pitchMult = parseFloat(document.getElementById('qm-pitch').value) || 1.0;
+  const roofSqFt = sqFt * pitchMult;
+  const squares = roofSqFt / 100;
+  document.getElementById('qmFootprint').textContent = sqFt > 0 ? Math.round(sqFt).toLocaleString() + ' sq ft' : '— sq ft';
+  document.getElementById('qmRoofArea').textContent  = roofSqFt > 0 ? Math.round(roofSqFt).toLocaleString() + ' sq ft' : '— sq ft';
+  document.getElementById('qmSquares').textContent    = squares > 0 ? squares.toFixed(1) : '—';
+}
+
+function qmUndo(){
+  if(!__qmPoints.length) return;
+  __qmPoints.pop();
+  const m = __qmMarkers.pop();
+  if(m) m.remove();
+  qmUpdate();
+}
+
+function qmReset(){
+  __qmPoints = [];
+  __qmMarkers.forEach(m => m.remove());
+  __qmMarkers = [];
+  qmUpdate();
+}
+
+function qmSaveToNote(){
+  const fp = document.getElementById('qmFootprint').textContent;
+  const ra = document.getElementById('qmRoofArea').textContent;
+  const sq = document.getElementById('qmSquares').textContent;
+  const pitch = document.getElementById('qm-pitch').selectedOptions[0]?.text || '';
+  const txt = `Roof estimate (Quick Measure): ${ra} = ${sq} squares · pitch ${pitch} · footprint ${fp}`;
+  copyToClipboard(txt, 'Estimate');
+}
+
+// Spherical excess area for a small polygon in lng/lat (good enough at roof scale)
+// Returns area in square meters.
+function polygonAreaM2(coords){
+  if(coords.length < 3) return 0;
+  const R = 6378137; // earth radius in meters
+  let area = 0;
+  for(let i = 0; i < coords.length; i++){
+    const j = (i + 1) % coords.length;
+    const [lng1, lat1] = coords[i];
+    const [lng2, lat2] = coords[j];
+    area += (lng2 - lng1) * Math.PI / 180 * (2 + Math.sin(lat1 * Math.PI / 180) + Math.sin(lat2 * Math.PI / 180));
+  }
+  return Math.abs(area * R * R / 2);
+}
+
+// Pitch dropdown change → recalc
+(function wireQmPitch(){
+  document.addEventListener('change', e => {
+    if(e.target && e.target.id === 'qm-pitch') qmUpdate();
+  });
+})();
+
+// Escape closes the measure modal
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && document.getElementById('quickMeasureModal').classList.contains('open')){
+    closeQuickMeasure();
+  }
+});
 
 // Close team modals on overlay click
 document.getElementById('teamMemberModal').addEventListener('click', e => {
