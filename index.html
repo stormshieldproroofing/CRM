@@ -3287,6 +3287,14 @@ function renderAgentViewChrome(){
 function renderAgentViewDrop(){
   const drop=$('agentViewDrop');
   if(!drop) return;
+  const me = window.currentMember;
+  const userHeader = me ? `
+    <div style="padding:8px 10px 10px;border-bottom:1px solid var(--border);margin-bottom:6px">
+      <div style="font-size:13px;font-weight:700;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(me.name || '')}</div>
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${escapeHtml(me.email || '')}</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:3px">${escapeHtml(me.role || '')}</div>
+    </div>
+  ` : '';
   const teamSection = isAdmin() ? `
     <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:4px 7px 7px">View CRM As</div>
     <div class="filter-item${currentAgentViewId==='all'?' active':''}" data-agent-view="all">
@@ -3298,11 +3306,8 @@ function renderAgentViewDrop(){
       <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(u.name)}</span>
     </div>`).join('')}
     <div style="height:1px;background:var(--border);margin:6px 0"></div>
-  ` : `
-    <div style="font-size:10px;font-weight:700;color:var(--muted);padding:4px 7px 7px">${escapeHtml(window.currentMember?.name || '')}</div>
-    <div style="height:1px;background:var(--border);margin:6px 0"></div>
-  `;
-  drop.innerHTML = teamSection + `
+  ` : '';
+  drop.innerHTML = userHeader + teamSection + `
     <div class="filter-item" id="signOutItem">
       <i class="ti ti-logout" style="font-size:14px;flex-shrink:0;color:var(--danger)" aria-hidden="true"></i>
       <span style="flex:1;color:var(--danger)">Sign Out</span>
@@ -3963,7 +3968,21 @@ const ROLE_DEFAULT_PERMS = {
   manager:  ['view_jobs','edit_jobs','view_payments','manage_boards','view_reports'],
   salesman: ['view_jobs','edit_jobs'],
 };
-const AVATAR_COLORS = ['#1557A8','#0F7B5A','#8B3FA8','#C0510B','#0891B2','#B91C1C','#7C3AED','#0E7490','#A16207','#15803D'];
+
+// Format any input into (xxx) xxx-xxxx, preserving partial input as user types
+function formatPhone(raw){
+  if(!raw) return '';
+  const d = String(raw).replace(/\D/g,'').slice(0,10);
+  if(d.length === 0) return '';
+  if(d.length < 4)  return `(${d}`;
+  if(d.length < 7)  return `(${d.slice(0,3)}) ${d.slice(3)}`;
+  return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+}
+const AVATAR_COLORS = [
+  '#1557A8','#0F7B5A','#8B3FA8','#C0510B','#0891B2','#B91C1C','#7C3AED','#0E7490','#A16207','#15803D',
+  '#DB2777','#0369A1','#65A30D','#9333EA','#EA580C','#0D9488','#BE185D','#4338CA','#CA8A04','#059669',
+  '#7E22CE','#475569','#374151','#1E293B'
+];
 
 // Build TEAM from existing USERS, plus extra default info
 var TEAM = USERS.map((u, i) => ({
@@ -4200,7 +4219,7 @@ function renderTeamTable(){
         <td>
           <div class="tm-contact">
             <div class="tm-contact-line"><i class="ti ti-mail" aria-hidden="true"></i><a href="mailto:${escapeHtml(m.email)}">${escapeHtml(m.email)}</a></div>
-            <div class="tm-contact-line"><i class="ti ti-phone" aria-hidden="true"></i><a href="tel:${escapeHtml(m.phone)}">${escapeHtml(m.phone||'—')}</a></div>
+            <div class="tm-contact-line"><i class="ti ti-phone" aria-hidden="true"></i><a href="tel:${escapeHtml(m.phone||'')}">${escapeHtml(formatPhone(m.phone)||'—')}</a></div>
           </div>
         </td>
         <td><span class="role-badge role-${m.role}">${ROLE_LABELS[m.role]}</span></td>
@@ -4264,6 +4283,17 @@ function getCheckedPerms(){
   return Array.from(document.querySelectorAll('#tm-permsBox input[type=checkbox]:checked')).map(c => c.value);
 }
 
+function ensurePhoneFormatter(){
+  const el = document.getElementById('tm-phone');
+  if(!el || el.dataset.fmtAttached) return;
+  el.dataset.fmtAttached = '1';
+  el.addEventListener('input', () => {
+    const caretAtEnd = el.selectionStart === el.value.length;
+    el.value = formatPhone(el.value);
+    if(caretAtEnd){ el.setSelectionRange(el.value.length, el.value.length); }
+  });
+}
+
 function openAddTeamMember(){
   editingMemberId = null;
   document.getElementById('tmModalTitle').textContent = 'Add Team Member';
@@ -4279,6 +4309,7 @@ function openAddTeamMember(){
   renderPermsBox(ROLE_DEFAULT_PERMS.salesman);
   document.getElementById('teamMemberModal').classList.add('open');
   setTimeout(()=>document.getElementById('tm-name').focus(), 50);
+  ensurePhoneFormatter();
 }
 
 function openEditTeamMember(id){
@@ -4291,15 +4322,14 @@ function openEditTeamMember(id){
   document.getElementById('tm-deleteBtn').style.display = '';
   document.getElementById('tm-name').value = m.name;
   document.getElementById('tm-email').value = m.email;
-  document.getElementById('tm-phone').value = m.phone || '';
+  document.getElementById('tm-phone').value = formatPhone(m.phone) || '';
   document.getElementById('tm-role').value = m.role;
   modalColor = m.color;
   renderColorPicker();
   renderPermsBox(m.permissions);
   document.getElementById('teamMemberModal').classList.add('open');
-}
-
-function closeTeamMemberModal(){
+  ensurePhoneFormatter();
+}function closeTeamMemberModal(){
   document.getElementById('teamMemberModal').classList.remove('open');
   editingMemberId = null;
 }
