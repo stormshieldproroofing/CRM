@@ -3829,13 +3829,15 @@ $('globalSearch').addEventListener('input',function(){
   }
 });
 
-// ── Address Autocomplete (US Census geocoder — free, no key) ──
+// ── Address Autocomplete (Mapbox Geocoding) ──
 (function(){
+  const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
   const streetInput = document.getElementById('f-street');
   const sugBox      = document.getElementById('addr-suggestions');
   if(!streetInput || !sugBox) return;
   let debounceTimer = null;
   let lastQuery = '';
+  let sessionToken = Math.random().toString(36).slice(2);
 
   function closeSuggestions(){
     sugBox.classList.remove('open');
@@ -3846,16 +3848,22 @@ $('globalSearch').addEventListener('input',function(){
     setTimeout(()=>{ streetInput.style.borderColor = 'var(--border)'; }, 1400);
   }
 
-  // Parse a Census matched address like:
-  //   "123 MAIN ST, HOUSTON, TX, 77002"
-  // into street/city/state/zip. Census returns reliably comma-separated.
-  function parseCensusAddress(matchedAddress){
-    const parts = (matchedAddress || '').split(',').map(s => s.trim());
+  // Mapbox returns features with `context` array containing neighborhood, place (city),
+  // region (state), postcode (zip), and country. The `address` field is the house number,
+  // and the `text` field is the street name.
+  function parseMapboxFeature(f){
+    const context = f.context || [];
+    const ctx = (prefix) => {
+      const item = context.find(c => (c.id || '').startsWith(prefix + '.'));
+      return item ? (item.short_code?.replace(/^us-/i,'').toUpperCase() || item.text || '') : '';
+    };
+    const houseNum = f.address || '';
+    const streetName = f.text || '';
     return {
-      street: parts[0] || '',
-      city:   parts[1] || '',
-      state:  parts[2] || '',
-      zip:    parts[3] || '',
+      street: [houseNum, streetName].filter(Boolean).join(' '),
+      city:   ctx('place') || ctx('locality'),
+      state:  ctx('region'),
+      zip:    ctx('postcode'),
     };
   }
 
@@ -3865,37 +3873,41 @@ $('globalSearch').addEventListener('input',function(){
     sugBox.innerHTML = '<div class="addr-loading"><div class="addr-spinner"></div>Looking up address…</div>';
     sugBox.classList.add('open');
     try {
-      const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(query)}&benchmark=Public_AR_Current&format=json`;
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
+                + `?access_token=${MAPBOX_TOKEN}`
+                + `&country=us&types=address&autocomplete=true&limit=6`
+                + `&session_token=${sessionToken}`;
       const res  = await fetch(url);
       const data = await res.json();
-      // Bail if the user has typed more since we fired this request
-      if(query !== lastQuery) return;
-      const matches = (data?.result?.addressMatches || []).slice(0, 6);
-      if(!matches.length){
+      if(query !== lastQuery) return;   // user typed more; abandon stale result
+      const feats = (data?.features || []).slice(0, 6);
+      if(!feats.length){
         sugBox.innerHTML = '<div class="addr-loading"><i class="ti ti-map-off" style="font-size:13px;color:var(--muted)"></i><span>No matches — try adding city or ZIP</span></div>';
         return;
       }
-      sugBox.innerHTML = matches.map((m, i) => {
-        const parsed = parseCensusAddress(m.matchedAddress);
-        const sub = [parsed.city, parsed.state, parsed.zip].filter(Boolean).join(', ');
+      sugBox.innerHTML = feats.map((f, i) => {
+        const p = parseMapboxFeature(f);
+        const sub = [p.city, p.state, p.zip].filter(Boolean).join(', ');
         return `<div class="addr-sug-item" data-idx="${i}">
           <i class="ti ti-map-pin"></i>
           <div>
-            <div class="addr-sug-main">${parsed.street}</div>
-            <div class="addr-sug-sub">${sub}</div>
+            <div class="addr-sug-main">${escapeHtml(p.street || f.text)}</div>
+            <div class="addr-sug-sub">${escapeHtml(sub)}</div>
           </div>
         </div>`;
       }).join('');
       sugBox.querySelectorAll('[data-idx]').forEach((el, i) => {
         el.addEventListener('mousedown', e => {
           e.preventDefault();
-          const parsed = parseCensusAddress(matches[i].matchedAddress);
-          streetInput.value = parsed.street;
-          document.getElementById('f-city').value  = parsed.city;
-          document.getElementById('f-state').value = parsed.state;
-          document.getElementById('f-zip').value   = parsed.zip;
+          const p = parseMapboxFeature(feats[i]);
+          streetInput.value = p.street;
+          document.getElementById('f-city').value  = p.city;
+          document.getElementById('f-state').value = p.state;
+          document.getElementById('f-zip').value   = p.zip;
           setFieldGreen();
           closeSuggestions();
+          // rotate session token after a selection (Mapbox billing best practice)
+          sessionToken = Math.random().toString(36).slice(2);
           document.getElementById('f-apt').focus();
         });
       });
@@ -3907,8 +3919,8 @@ $('globalSearch').addEventListener('input',function(){
   streetInput.addEventListener('input', function(){
     const q = this.value.trim();
     clearTimeout(debounceTimer);
-    if(q.length < 5){ closeSuggestions(); lastQuery=''; return; }
-    debounceTimer = setTimeout(() => fetchSuggestions(q), 400);
+    if(q.length < 3){ closeSuggestions(); lastQuery=''; return; }
+    debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
   });
   streetInput.addEventListener('keydown', e => { if(e.key==='Escape') closeSuggestions(); });
   document.addEventListener('click', e => { if(!e.target.closest('.addr-autocomplete-wrap')) closeSuggestions(); });
