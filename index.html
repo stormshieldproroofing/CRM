@@ -539,52 +539,52 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   </div>
 </div>
 
+<div class="m-overlay" id="unsavedJobModal" style="align-items:center;padding-top:0;z-index:200">
+  <div class="modal" style="width:360px">
+    <div class="modal-title"><i class="ti ti-alert-circle" style="color:var(--warn)" aria-hidden="true"></i>Unsaved Changes</div>
+    <div style="font-size:12px;color:var(--brand);margin-bottom:14px;line-height:1.5">
+      You have unsaved changes. Are you sure you want to discard them?
+    </div>
+    <div class="m-actions">
+      <button class="btn-cancel" onclick="closeUnsavedChangesPrompt()">Keep Editing</button>
+      <button class="btn-danger-sm" onclick="discardJobChanges()">Discard</button>
+    </div>
+  </div>
+</div>
+
 <!-- QUICK MEASURE MODAL -->
 <div class="m-overlay" id="quickMeasureModal" style="align-items:center;padding:20px">
-  <div class="modal" style="width:min(900px,95vw);height:min(700px,92vh);padding:0;display:flex;flex-direction:column;overflow:hidden">
+  <div class="modal" style="width:min(1000px,95vw);height:min(720px,92vh);padding:0;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <div>
         <div class="modal-title" style="margin:0"><i class="ti ti-ruler-measure" style="color:var(--brand-light)"></i>Quick Measure Roof</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">Click points around the roof perimeter · Double-click to finish</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Trace each pitched section separately · Each section gets its own pitch</div>
       </div>
       <button onclick="closeQuickMeasure()" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--muted);font-size:14px;cursor:pointer">×</button>
     </div>
     <div style="display:flex;gap:0;flex:1;min-height:0">
       <div id="qmMap" style="flex:1;min-height:400px;height:100%;background:#0F1117"></div>
-      <div style="width:240px;padding:14px;border-left:1px solid var(--border);background:#141927;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex-shrink:0">
-        <div>
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Pitch (slope)</div>
-          <select id="qm-pitch" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:6px;background:#1E253A;color:var(--brand);font-size:12px">
-            <option value="1.000">Flat (0/12)</option>
-            <option value="1.014">3/12</option>
-            <option value="1.054">4/12</option>
-            <option value="1.083">5/12</option>
-            <option value="1.118" selected>6/12 (typical)</option>
-            <option value="1.158">7/12</option>
-            <option value="1.202">8/12</option>
-            <option value="1.250">9/12</option>
-            <option value="1.302">10/12</option>
-            <option value="1.357">11/12</option>
-            <option value="1.414">12/12</option>
-          </select>
+      <div style="width:280px;border-left:1px solid var(--border);background:#141927;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden">
+        <!-- Sections list -->
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700">Sections</div>
+          <button onclick="qmNewSection()" style="padding:4px 9px;border:1px solid var(--brand-light);border-radius:5px;background:rgba(77,157,224,0.1);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer"><i class="ti ti-plus"></i> Add</button>
         </div>
-        <div style="background:rgba(77,157,224,0.06);border:1px solid rgba(77,157,224,0.2);border-radius:8px;padding:12px">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Footprint area</div>
-          <div id="qmFootprint" style="font-size:18px;font-weight:700;color:var(--brand)">— sq ft</div>
-          <div style="height:1px;background:var(--border);margin:10px 0"></div>
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Roof area (with pitch)</div>
-          <div id="qmRoofArea" style="font-size:20px;font-weight:700;color:var(--brand-light)">— sq ft</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px">≈ <span id="qmSquares" style="font-weight:600;color:var(--brand-mid)">—</span> squares</div>
+        <div id="qmSections" style="overflow-y:auto;flex:1;padding:8px"></div>
+        <!-- Totals -->
+        <div style="padding:14px;border-top:1px solid var(--border);background:rgba(77,157,224,0.06)">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Estimated total</div>
+          <div id="qmTotalArea" style="font-size:22px;font-weight:700;color:var(--brand-light);line-height:1.1">— sq ft</div>
+          <div style="font-size:11px;color:var(--brand-mid);margin-top:3px">≈ <span id="qmTotalSquares" style="font-weight:700">—</span> squares</div>
+          <div id="qmTotalRange" style="font-size:10px;color:var(--muted);margin-top:6px"></div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button onclick="qmUndo()" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--brand);font-size:11px;cursor:pointer"><i class="ti ti-arrow-back-up"></i> Undo</button>
-          <button onclick="qmReset()" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--brand);font-size:11px;cursor:pointer"><i class="ti ti-refresh"></i> Reset</button>
+        <!-- Footer -->
+        <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:6px">
+          <button onclick="qmCopyEstimate()" style="flex:1;padding:8px;border:none;border-radius:6px;background:var(--brand-light);color:#fff;font-weight:600;font-size:11px;cursor:pointer">Copy Estimate</button>
         </div>
-        <div style="font-size:10px;color:var(--muted);line-height:1.4;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:6px;padding:8px">
-          <strong style="color:var(--warn)">Rough estimate only.</strong> For accurate quotes, material orders, or insurance, use an EagleView / RoofR / Hover report.
+        <div style="padding:8px 14px 12px;font-size:9px;color:var(--muted);line-height:1.4;background:rgba(245,158,11,0.04);border-top:1px solid rgba(245,158,11,0.15)">
+          <strong style="color:var(--warn)">Rough estimate.</strong> Use EagleView/RoofR/Hover for adjusters or material orders.
         </div>
-        <div style="flex:1"></div>
-        <button onclick="qmSaveToNote()" style="padding:9px;border:none;border-radius:7px;background:var(--brand-light);color:#fff;font-weight:600;font-size:12px;cursor:pointer">Copy Estimate</button>
       </div>
     </div>
   </div>
@@ -3687,10 +3687,62 @@ function toggleInsuranceSection(){
 
 // ── Job modal: create vs edit mode ──
 let editingJobId = null;
+var __ajSnapshot = null;     // captured form values when modal opens
+var __ajSaving = false;      // true while save is in flight; suppresses confirm
+
+// Capture current form values to detect "did anything change"
+function snapshotAddJobForm(){
+  const fields = ['f-firstname','f-lastname','f-phone','f-ext','f-email','f-source',
+    'f-street','f-apt','f-city','f-state','f-zip','f-stage',
+    'f-claimtype','f-claimstatus','f-carrier','f-policynum','f-claimnum','f-dol',
+    'f-rcv','f-deductible'];
+  const snap = {};
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) snap[id] = el.value || '';
+  });
+  return snap;
+}
+
+function isAddJobDirty(){
+  if(!__ajSnapshot) return false;
+  const now = snapshotAddJobForm();
+  return Object.keys(__ajSnapshot).some(k => (__ajSnapshot[k] || '') !== (now[k] || ''));
+}
 
 function closeJobModal(){
+  // If a save is happening, skip the confirm
+  if(__ajSaving){
+    __ajSaving = false;
+    $('addJobModal').classList.remove('open');
+    editingJobId = null;
+    __ajSnapshot = null;
+    return;
+  }
+  if(isAddJobDirty()){
+    openUnsavedChangesPrompt();
+    return;
+  }
   $('addJobModal').classList.remove('open');
   editingJobId = null;
+  __ajSnapshot = null;
+}
+
+function forceCloseJobModal(){
+  $('addJobModal').classList.remove('open');
+  editingJobId = null;
+  __ajSnapshot = null;
+}
+
+function openUnsavedChangesPrompt(){
+  document.getElementById('unsavedJobModal').classList.add('open');
+}
+function closeUnsavedChangesPrompt(){
+  document.getElementById('unsavedJobModal').classList.remove('open');
+}
+function discardJobChanges(){
+  closeUnsavedChangesPrompt();
+  forceCloseJobModal();
 }
 
 function setJobModalMode(mode){
@@ -3773,6 +3825,7 @@ function openEditJob(id){
   selectAssignUser(j.user || USERS[0]?.id || null);
 
   $('addJobModal').classList.add('open');
+  setTimeout(() => { __ajSnapshot = snapshotAddJobForm(); }, 30);
 }
 
 function setSelectByText(sel,val){
@@ -3833,6 +3886,7 @@ function openAddJobModal(){
   populateForms();
   populateAssignList();
   $('addJobModal').classList.add('open');
+  setTimeout(() => { __ajSnapshot = snapshotAddJobForm(); }, 30);
 }
 $('addJobBtn').onclick=openAddJobModal;
 $('cancelAdd').onclick=closeJobModal;
@@ -3866,8 +3920,10 @@ $('saveJob').onclick=()=>{
     if(j&&j.col!==claimData.col&&!canMoveToStage(j,claimData.col))return;
     if(j){ j.name=name; Object.assign(j,claimData); }
     saveToStorage();
+    __ajSaving = true;
     $('addJobModal').classList.remove('open');
     editingJobId=null;
+    __ajSnapshot = null;
     toast(`Job updated: ${name}`);
     renderBoard();
     if($('jobsPage')?.style.display!=='none') renderJobsPage();
@@ -3875,6 +3931,8 @@ $('saveJob').onclick=()=>{
   } else {
     jobs.push(Object.assign({id:'j'+Date.now(),name,priority:'low',docs:0,notes:0,tasks:0,tasksDone:0,potVal:'0.00',paidVal:'0.00',created:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})},claimData));
     saveToStorage();
+    __ajSaving = true;
+    __ajSnapshot = null;
     $('addJobModal').classList.remove('open');toast(`Job added: ${name}`);renderBoard();
     if($('jobsPage')?.style.display!=='none') renderJobsPage();
   }
@@ -3942,10 +4000,9 @@ $('agentViewAvatar').addEventListener('click',e=>{
 });
 $('agentViewDrop').addEventListener('click',e=>e.stopPropagation());
 
-['addJobModal','editBoardModal','editColModal','stageChecklistModal','deleteColModal'].forEach(id=>{
+['editBoardModal','editColModal','stageChecklistModal','deleteColModal'].forEach(id=>{
   $(id).addEventListener('click',function(e){
     if(e.target!==this) return;
-    if(id==='addJobModal' && editingJobId) return;
     this.classList.remove('open');
   });
 });
@@ -4810,12 +4867,39 @@ async function renderMapPage(){
   });
 })();
 
+
 // ═════════════════════════════════════════════════════════════
-// QUICK MEASURE — satellite roof polygon → approx roof area
+// QUICK MEASURE — multi-section roof tracing with per-section pitch
 // ═════════════════════════════════════════════════════════════
 var __qmMap = null;
-var __qmPoints = [];   // array of [lng, lat]
-var __qmMarkers = [];
+var __qmSections = [];   // [{id, name, pitchKey, points:[[lng,lat],...], markers:[]}]
+var __qmActiveId = null; // id of section currently being edited
+
+// Pitch options: key → {label, multiplier}
+const QM_PITCHES = {
+  '0/12':  { label: 'Flat (0/12)',     mult: 1.000 },
+  '3/12':  { label: '3/12',            mult: 1.014 },
+  '4/12':  { label: '4/12',            mult: 1.054 },
+  '5/12':  { label: '5/12',            mult: 1.083 },
+  '6/12':  { label: '6/12 (typical)',  mult: 1.118 },
+  '7/12':  { label: '7/12',            mult: 1.158 },
+  '8/12':  { label: '8/12',            mult: 1.202 },
+  '9/12':  { label: '9/12',            mult: 1.250 },
+  '10/12': { label: '10/12',           mult: 1.302 },
+  '11/12': { label: '11/12',           mult: 1.357 },
+  '12/12': { label: '12/12',           mult: 1.414 },
+};
+// Adjacent pitches for ± range display
+const QM_PITCH_ORDER = Object.keys(QM_PITCHES);
+function qmAdjacentMults(key){
+  const i = QM_PITCH_ORDER.indexOf(key);
+  const lo = QM_PITCHES[QM_PITCH_ORDER[Math.max(0, i-1)]].mult;
+  const hi = QM_PITCHES[QM_PITCH_ORDER[Math.min(QM_PITCH_ORDER.length-1, i+1)]].mult;
+  return { lo, hi };
+}
+
+const SECTION_COLORS = ['#4D9DE0','#34D399','#F59E0B','#A78BFA','#FB923C','#EC4899','#38BDF8','#A3E635'];
+function qmSectionColor(idx){ return SECTION_COLORS[idx % SECTION_COLORS.length]; }
 
 function openQuickMeasure(){
   const j = jobs.find(x => x.id === openJobId);
@@ -4825,20 +4909,20 @@ function openQuickMeasure(){
     return;
   }
   document.getElementById('quickMeasureModal').classList.add('open');
+  __qmSections = [];
+  __qmActiveId = null;
   setTimeout(() => qmInitMap(j.latitude, j.longitude), 60);
 }
 
 function closeQuickMeasure(){
   document.getElementById('quickMeasureModal').classList.remove('open');
-  // Tear down map so it re-inits cleanly next time (avoids the resize bug)
   if(__qmMap){ __qmMap.remove(); __qmMap = null; }
-  __qmPoints = [];
-  __qmMarkers = [];
+  __qmSections.forEach(s => s.markers.forEach(m => m.remove()));
+  __qmSections = [];
+  __qmActiveId = null;
 }
 
 function qmInitMap(lat, lng){
-  const container = document.getElementById('qmMap');
-  if(!container) return;
   __qmMap = new mapboxgl.Map({
     container: 'qmMap',
     style: 'mapbox://styles/mapbox/satellite-streets-v12',
@@ -4846,83 +4930,186 @@ function qmInitMap(lat, lng){
     zoom: 19,
   });
   __qmMap.addControl(new mapboxgl.NavigationControl(), 'top-right');
-  __qmPoints = [];
-  __qmMarkers = [];
+  __qmMap.doubleClickZoom.disable();
 
   __qmMap.on('load', () => {
-    // Force size recalc — modals can hide the container during init,
-    // so Mapbox starts with 0x0 dimensions and renders black until resized.
     __qmMap.resize();
-    // Polygon source/layer for the live shape
-    __qmMap.addSource('qm-poly', { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[]] }, properties:{} } });
-    __qmMap.addLayer({ id:'qm-poly-fill', type:'fill', source:'qm-poly', paint:{ 'fill-color':'#4D9DE0', 'fill-opacity':0.25 }});
-    __qmMap.addLayer({ id:'qm-poly-line', type:'line', source:'qm-poly', paint:{ 'line-color':'#4D9DE0', 'line-width':2 }});
+    qmNewSection();  // start with one empty section
   });
-
-  // Additional resize after a short delay — covers cases where the
-  // modal animation isn't fully done by the time map loads.
   setTimeout(() => __qmMap && __qmMap.resize(), 200);
   setTimeout(() => __qmMap && __qmMap.resize(), 600);
 
-  __qmMap.on('click', e => qmAddPoint([e.lngLat.lng, e.lngLat.lat]));
-  __qmMap.on('dblclick', e => { e.preventDefault(); });  // suppress zoom-in
-  __qmMap.doubleClickZoom.disable();
-}
-
-function qmAddPoint(coord){
-  __qmPoints.push(coord);
-  const el = document.createElement('div');
-  el.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#4D9DE0;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5)';
-  const m = new mapboxgl.Marker(el).setLngLat(coord).addTo(__qmMap);
-  __qmMarkers.push(m);
-  qmUpdate();
-}
-
-function qmUpdate(){
-  if(!__qmMap || !__qmMap.getSource('qm-poly')) return;
-  const ring = __qmPoints.length >= 3 ? [...__qmPoints, __qmPoints[0]] : __qmPoints;
-  __qmMap.getSource('qm-poly').setData({
-    type:'Feature', geometry:{ type:'Polygon', coordinates:[ring] }, properties:{}
+  __qmMap.on('click', e => {
+    if(!__qmActiveId) return;
+    qmAddPointToActive([e.lngLat.lng, e.lngLat.lat]);
   });
-  const sqM = (__qmPoints.length >= 3) ? polygonAreaM2(__qmPoints) : 0;
-  const sqFt = sqM * 10.7639;
-  const pitchMult = parseFloat(document.getElementById('qm-pitch').value) || 1.0;
-  const roofSqFt = sqFt * pitchMult;
-  const squares = roofSqFt / 100;
-  document.getElementById('qmFootprint').textContent = sqFt > 0 ? Math.round(sqFt).toLocaleString() + ' sq ft' : '— sq ft';
-  document.getElementById('qmRoofArea').textContent  = roofSqFt > 0 ? Math.round(roofSqFt).toLocaleString() + ' sq ft' : '— sq ft';
-  document.getElementById('qmSquares').textContent    = squares > 0 ? squares.toFixed(1) : '—';
 }
 
-function qmUndo(){
-  if(!__qmPoints.length) return;
-  __qmPoints.pop();
-  const m = __qmMarkers.pop();
+function qmNewSection(){
+  const idx = __qmSections.length;
+  const id = 'sec_' + Date.now() + '_' + idx;
+  const color = qmSectionColor(idx);
+  const sec = {
+    id, name: 'Section ' + (idx + 1),
+    pitchKey: '6/12',
+    color,
+    points: [],
+    markers: [],
+    sourceId: 'qm-src-' + id,
+    fillId:   'qm-fill-' + id,
+    lineId:   'qm-line-' + id,
+  };
+  __qmSections.push(sec);
+  // Add source/layers for this section
+  if(__qmMap && __qmMap.isStyleLoaded()){
+    qmAddSectionLayers(sec);
+  }
+  qmSetActive(id);
+}
+
+function qmAddSectionLayers(sec){
+  if(__qmMap.getSource(sec.sourceId)) return;
+  __qmMap.addSource(sec.sourceId, { type:'geojson', data:{ type:'Feature', geometry:{ type:'Polygon', coordinates:[[]] }, properties:{} } });
+  __qmMap.addLayer({ id: sec.fillId, type:'fill', source: sec.sourceId, paint:{ 'fill-color': sec.color, 'fill-opacity':0.28 }});
+  __qmMap.addLayer({ id: sec.lineId, type:'line', source: sec.sourceId, paint:{ 'line-color': sec.color, 'line-width': 2 }});
+}
+
+function qmSetActive(id){
+  __qmActiveId = id;
+  qmRenderSectionsList();
+}
+
+function qmDeleteSection(id){
+  const sec = __qmSections.find(s => s.id === id);
+  if(!sec) return;
+  sec.markers.forEach(m => m.remove());
+  if(__qmMap.getLayer(sec.fillId)) __qmMap.removeLayer(sec.fillId);
+  if(__qmMap.getLayer(sec.lineId)) __qmMap.removeLayer(sec.lineId);
+  if(__qmMap.getSource(sec.sourceId)) __qmMap.removeSource(sec.sourceId);
+  __qmSections = __qmSections.filter(s => s.id !== id);
+  if(__qmActiveId === id){
+    __qmActiveId = __qmSections[0]?.id || null;
+  }
+  qmUpdateAll();
+}
+
+function qmUndoActive(){
+  const sec = __qmSections.find(s => s.id === __qmActiveId);
+  if(!sec || !sec.points.length) return;
+  sec.points.pop();
+  const m = sec.markers.pop();
   if(m) m.remove();
-  qmUpdate();
+  qmUpdateAll();
 }
 
-function qmReset(){
-  __qmPoints = [];
-  __qmMarkers.forEach(m => m.remove());
-  __qmMarkers = [];
-  qmUpdate();
+function qmAddPointToActive(coord){
+  const sec = __qmSections.find(s => s.id === __qmActiveId);
+  if(!sec) return;
+  sec.points.push(coord);
+  const el = document.createElement('div');
+  el.style.cssText = `width:10px;height:10px;border-radius:50%;background:${sec.color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.5)`;
+  const m = new mapboxgl.Marker(el).setLngLat(coord).addTo(__qmMap);
+  sec.markers.push(m);
+  qmUpdateAll();
 }
 
-function qmSaveToNote(){
-  const fp = document.getElementById('qmFootprint').textContent;
-  const ra = document.getElementById('qmRoofArea').textContent;
-  const sq = document.getElementById('qmSquares').textContent;
-  const pitch = document.getElementById('qm-pitch').selectedOptions[0]?.text || '';
-  const txt = `Roof estimate (Quick Measure): ${ra} = ${sq} squares · pitch ${pitch} · footprint ${fp}`;
-  copyToClipboard(txt, 'Estimate');
+function qmUpdateAll(){
+  // Update each section's polygon on map
+  __qmSections.forEach(sec => {
+    if(!__qmMap.getSource(sec.sourceId)) qmAddSectionLayers(sec);
+    const ring = sec.points.length >= 3 ? [...sec.points, sec.points[0]] : sec.points;
+    __qmMap.getSource(sec.sourceId).setData({
+      type:'Feature', geometry:{ type:'Polygon', coordinates:[ring] }, properties:{}
+    });
+  });
+  qmRenderSectionsList();
+  qmRenderTotals();
+}
+
+function qmAreaSqFtFor(sec){
+  if(sec.points.length < 3) return 0;
+  return polygonAreaM2(sec.points) * 10.7639;
+}
+
+function qmRenderSectionsList(){
+  const wrap = document.getElementById('qmSections');
+  if(!wrap) return;
+  if(!__qmSections.length){
+    wrap.innerHTML = '<div style="padding:14px;text-align:center;font-size:11px;color:var(--muted)">No sections yet. Click "Add" to start.</div>';
+    return;
+  }
+  wrap.innerHTML = __qmSections.map((sec, i) => {
+    const isActive = sec.id === __qmActiveId;
+    const footprint = qmAreaSqFtFor(sec);
+    const mult = QM_PITCHES[sec.pitchKey].mult;
+    const roofArea = footprint * mult;
+    const sectionBorder = isActive ? sec.color : 'var(--border)';
+    return `<div data-secid="${sec.id}" style="border:1px solid ${sectionBorder};border-radius:7px;padding:9px;margin-bottom:7px;background:${isActive?'rgba(255,255,255,0.04)':'transparent'};cursor:pointer" onclick="qmSetActive('${sec.id}')">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <div style="width:10px;height:10px;border-radius:50%;background:${sec.color};flex-shrink:0"></div>
+        <div style="flex:1;font-size:11px;font-weight:600;color:var(--brand)">${escapeHtml(sec.name)}</div>
+        ${isActive?'<i class="ti ti-edit" style="font-size:11px;color:'+sec.color+'" title="Editing"></i>':''}
+        <button onclick="event.stopPropagation();qmDeleteSection('${sec.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;font-size:11px" title="Delete section"><i class="ti ti-x"></i></button>
+      </div>
+      <select onclick="event.stopPropagation()" onchange="qmSetPitch('${sec.id}', this.value)" style="width:100%;padding:5px;border:1px solid var(--border);border-radius:5px;background:#1E253A;color:var(--brand);font-size:11px;margin-bottom:5px">
+        ${QM_PITCH_ORDER.map(k=>`<option value="${k}"${sec.pitchKey===k?' selected':''}>${QM_PITCHES[k].label}</option>`).join('')}
+      </select>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted)">
+        <span>${footprint>0?Math.round(footprint).toLocaleString():'—'} sq ft footprint</span>
+        <span style="color:var(--brand);font-weight:600">${roofArea>0?Math.round(roofArea).toLocaleString():'—'} roof</span>
+      </div>
+    </div>`;
+  }).join('') +
+  (__qmActiveId ? `<div style="padding:6px 4px;display:flex;gap:6px">
+    <button onclick="qmUndoActive()" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--brand);font-size:10px;cursor:pointer"><i class="ti ti-arrow-back-up"></i> Undo Point</button>
+  </div>` : '');
+}
+
+function qmSetPitch(secId, key){
+  const sec = __qmSections.find(s => s.id === secId);
+  if(sec){ sec.pitchKey = key; qmUpdateAll(); }
+}
+
+function qmRenderTotals(){
+  let totalFootprint = 0, totalRoof = 0, totalLow = 0, totalHigh = 0;
+  __qmSections.forEach(sec => {
+    const fp = qmAreaSqFtFor(sec);
+    totalFootprint += fp;
+    const m = QM_PITCHES[sec.pitchKey].mult;
+    totalRoof += fp * m;
+    const adj = qmAdjacentMults(sec.pitchKey);
+    totalLow  += fp * adj.lo;
+    totalHigh += fp * adj.hi;
+  });
+  const squares = totalRoof / 100;
+  document.getElementById('qmTotalArea').textContent     = totalRoof > 0 ? Math.round(totalRoof).toLocaleString() + ' sq ft' : '— sq ft';
+  document.getElementById('qmTotalSquares').textContent  = squares > 0 ? squares.toFixed(1) : '—';
+  document.getElementById('qmTotalRange').textContent    = (totalLow > 0 && totalHigh > totalLow)
+    ? `Range with ±1/12 pitch uncertainty: ${Math.round(totalLow).toLocaleString()}–${Math.round(totalHigh).toLocaleString()} sq ft`
+    : '';
+}
+
+function qmCopyEstimate(){
+  if(!__qmSections.some(s => s.points.length >= 3)){ toast('Trace at least one section first'); return; }
+  const lines = ['Roof estimate (Quick Measure):'];
+  let totalRoof = 0;
+  __qmSections.forEach(sec => {
+    const fp = qmAreaSqFtFor(sec);
+    if(fp <= 0) return;
+    const m = QM_PITCHES[sec.pitchKey].mult;
+    const roof = fp * m;
+    totalRoof += roof;
+    lines.push(`  · ${sec.name} (${sec.pitchKey}): ${Math.round(roof).toLocaleString()} sq ft`);
+  });
+  lines.push(`Total: ${Math.round(totalRoof).toLocaleString()} sq ft = ${(totalRoof/100).toFixed(1)} squares`);
+  copyToClipboard(lines.join('\n'), 'Estimate');
 }
 
 // Spherical excess area for a small polygon in lng/lat (good enough at roof scale)
 // Returns area in square meters.
 function polygonAreaM2(coords){
   if(coords.length < 3) return 0;
-  const R = 6378137; // earth radius in meters
+  const R = 6378137;
   let area = 0;
   for(let i = 0; i < coords.length; i++){
     const j = (i + 1) % coords.length;
@@ -4932,13 +5119,6 @@ function polygonAreaM2(coords){
   }
   return Math.abs(area * R * R / 2);
 }
-
-// Pitch dropdown change → recalc
-(function wireQmPitch(){
-  document.addEventListener('change', e => {
-    if(e.target && e.target.id === 'qm-pitch') qmUpdate();
-  });
-})();
 
 // Escape closes the measure modal
 document.addEventListener('keydown', e => {
@@ -4961,6 +5141,8 @@ document.addEventListener('keydown', e => {
     if(document.getElementById('teamMemberModal').classList.contains('open')) closeTeamMemberModal();
     else if(document.getElementById('deleteTeamModal').classList.contains('open')) closeDeleteTeamModal();
     else if(document.getElementById('deleteJobModal').classList.contains('open')) closeDeleteJobModal();
+    else if(document.getElementById('addJobModal').classList.contains('open')) closeJobModal();
+    else if(document.getElementById('unsavedJobModal')?.classList.contains('open')) closeUnsavedChangesPrompt();
   }
 });
 
