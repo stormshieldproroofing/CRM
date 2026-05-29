@@ -3271,16 +3271,16 @@ function isAdmin(){ return (window.currentMember?.role) === 'admin'; }
 
 function renderAgentViewChrome(){
   const avatar=$('agentViewAvatar');
-  const agent=currentAgentView();
   if(!avatar) return;
-  if(agent){
-    avatar.textContent=agent.id.toUpperCase();
-    avatar.style.background=agent.color;
-    avatar.title=`View as ${agent.name}`;
+  const me = window.currentMember;
+  if(me){
+    avatar.textContent = (me.id || '').toUpperCase().slice(0,2) || (me.name||'?').slice(0,2).toUpperCase();
+    avatar.style.background = me.color || 'var(--brand-light)';
+    avatar.title = `Signed in as ${me.name}`;
   } else {
-    avatar.textContent='ALL';
-    avatar.style.background='var(--brand-light)';
-    avatar.title='View as all agents';
+    avatar.textContent = '?';
+    avatar.style.background = 'var(--brand-light)';
+    avatar.title = 'Not signed in';
   }
 }
 
