@@ -4975,7 +4975,7 @@ async function qmAutoDetect(lat, lng, isInitial){
     // Overture Maps API — third-party free API exposing Overture's open dataset
     // (union of OSM + Microsoft + Meta + Google + Esri building footprints).
     // Demo key works for low-volume testing; replace with your own if you self-host later.
-    const radius = 25;  // meters — tight radius to focus on the building at the address
+    const radius = 50;  // meters — wider to capture potential outbuildings; we filter by size+distance below
     const url = `https://api.overturemapsapi.com/buildings`
       + `?lat=${lat}&lng=${lng}`
       + `&radius=${radius}`;
@@ -5011,21 +5011,58 @@ async function qmAutoDetect(lat, lng, isInitial){
     });
     __qmSections = [];
 
-    // Take only the closest polygon to the address — simpler, avoids fragmented buildings
-    polys.slice(0, 1).forEach((feat) => {
-      const rings = feat.geometry.type === 'MultiPolygon'
-        ? feat.geometry.coordinates.flat()       // [[ring1], [ring2], ...]
-        : feat.geometry.coordinates;             // [[outerRing]]
-      const outer = rings[0];                    // outer ring only (ignore inner holes)
-      if(!outer || outer.length < 3) return;
+    // Take closest polygon as Main building
+    const mainFeat = polys[0];
+    const mainRings = mainFeat.geometry.type === 'MultiPolygon'
+      ? mainFeat.geometry.coordinates.flat()
+      : mainFeat.geometry.coordinates;
+    const mainOuter = mainRings[0];
+    if(mainOuter && mainOuter.length >= 3){
       qmNewSection();
       const sec = __qmSections[__qmSections.length - 1];
       sec.name = 'Main building';
-      // GeoJSON polygons close themselves (first === last); drop the duplicate
+      const pts = [...mainOuter];
+      if(pts.length > 1 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]){
+        pts.pop();
+      }
+      sec.points = pts;
+      pts.forEach(c => {
+        const el = document.createElement('div');
+        el.style.cssText = `width:8px;height:8px;border-radius:50%;background:${sec.color};border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,0.5)`;
+        const m = new mapboxgl.Marker(el).setLngLat(c).addTo(__qmMap);
+        sec.markers.push(m);
+      });
+    }
+
+    // Auto-include small outbuildings: under 1,000 sq ft AND within 30m of main building
+    const MAIN_PTS = __qmSections[0]?.points || [];
+    let outIdx = 0;
+    polys.slice(1).forEach(feat => {
+      const rings = feat.geometry.type === 'MultiPolygon'
+        ? feat.geometry.coordinates.flat()
+        : feat.geometry.coordinates;
+      const outer = rings[0];
+      if(!outer || outer.length < 3) return;
+      // Drop the closing duplicate point if present
       const pts = [...outer];
       if(pts.length > 1 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]){
         pts.pop();
       }
+      // SIZE FILTER — only include if under 1,000 sq ft
+      const sqFt = polygonAreaM2(pts) * 10.7639;
+      if(sqFt >= 1000) return;
+      // DISTANCE FILTER — only include if within 30m of any main-building point
+      if(MAIN_PTS.length){
+        const minDist = Math.min(...pts.flatMap(([clng, clat]) =>
+          MAIN_PTS.map(([mlng, mlat]) => haversineM(clat, clng, mlat, mlng))
+        ));
+        if(minDist > 30) return;
+      }
+      // It qualifies — add as outbuilding
+      qmNewSection();
+      const sec = __qmSections[__qmSections.length - 1];
+      outIdx++;
+      sec.name = 'Outbuilding ' + outIdx;
       sec.points = pts;
       pts.forEach(c => {
         const el = document.createElement('div');
@@ -5042,7 +5079,7 @@ async function qmAutoDetect(lat, lng, isInitial){
     }
     __qmActiveId = __qmSections[0].id;
     qmUpdateAll();
-    if(lbl) lbl.textContent = 'Found';
+    if(lbl) lbl.textContent = __qmSections.length > 1 ? `Found ${__qmSections.length}` : 'Found';
     setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
     toast('Buildings auto-traced. Verify outline + set pitch.');
   } catch(err){
