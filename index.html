@@ -523,6 +523,20 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   </div>
 </div>
 
+<div class="m-overlay" id="deleteJobModal" style="align-items:center;padding-top:0">
+  <div class="modal" style="width:380px">
+    <div class="modal-title"><i class="ti ti-alert-triangle" style="color:var(--danger)" aria-hidden="true"></i>Delete Job</div>
+    <div style="font-size:12px;color:var(--brand);margin-bottom:14px;line-height:1.5">
+      Are you sure you want to delete <strong id="delJobName" style="color:#fff"></strong>?
+      <div style="margin-top:8px;color:var(--muted);font-size:11px">All associated deposits, expenses, photos, and contracts will also be removed. This action cannot be undone.</div>
+    </div>
+    <div class="m-actions">
+      <button class="btn-cancel" onclick="closeDeleteJobModal()">Cancel</button>
+      <button class="btn-danger-sm" onclick="confirmDeleteJob()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div class="detail-overlay" id="detailOverlay">
   <div class="detail-panel" id="detailPanel"></div>
 </div>
@@ -2299,9 +2313,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       renderDetailPanel();
     }));
     $('dpDelete')&&$('dpDelete').addEventListener('click',()=>{
-      jobs=jobs.filter(x=>x.id!==openJobId);
-      saveToStorage();$('detailOverlay').classList.remove('open');toast('Job deleted');renderBoard();
-      if($('jobsPage')?.style.display!=='none') renderJobsPage();
+      openDeleteJobModal(openJobId);
     });
     $('jobPipelineSelector')&&$('jobPipelineSelector').addEventListener('click',()=>{
       const j=jobs.find(x=>x.id===openJobId);if(!j)return;
@@ -4501,6 +4513,39 @@ function deleteFromModal(){
   openDeleteTeamMember(editingMemberId);
 }
 
+// ── Delete Job confirmation ──
+var pendingDeleteJobId = null;
+
+function openDeleteJobModal(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  pendingDeleteJobId = jobId;
+  document.getElementById('delJobName').textContent = j.name || 'this job';
+  document.getElementById('deleteJobModal').classList.add('open');
+}
+
+function closeDeleteJobModal(){
+  document.getElementById('deleteJobModal').classList.remove('open');
+  pendingDeleteJobId = null;
+}
+
+function confirmDeleteJob(){
+  if(!pendingDeleteJobId) return;
+  const j = jobs.find(x => x.id === pendingDeleteJobId);
+  jobs = jobs.filter(x => x.id !== pendingDeleteJobId);
+  saveToStorage();
+  closeDeleteJobModal();
+  $('detailOverlay').classList.remove('open');
+  toast(`Job deleted${j?.name ? ': ' + j.name : ''}`);
+  renderBoard();
+  if($('jobsPage')?.style.display !== 'none') renderJobsPage();
+}
+
+// Close on overlay click
+document.getElementById('deleteJobModal').addEventListener('click', e => {
+  if(e.target.id === 'deleteJobModal') closeDeleteJobModal();
+});
+
 // ═════════════════════════════════════════════════════════════
 // MAP PAGE
 // ═════════════════════════════════════════════════════════════
@@ -4561,6 +4606,11 @@ function ensureMapInit(){
     zoom: 9,
   });
   __map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+  __map.addControl(new mapboxgl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showUserHeading: true,
+  }), 'top-right');
   return __map;
 }
 
@@ -4683,6 +4733,7 @@ document.addEventListener('keydown', e => {
   if(e.key === 'Escape'){
     if(document.getElementById('teamMemberModal').classList.contains('open')) closeTeamMemberModal();
     else if(document.getElementById('deleteTeamModal').classList.contains('open')) closeDeleteTeamModal();
+    else if(document.getElementById('deleteJobModal').classList.contains('open')) closeDeleteJobModal();
   }
 });
 
