@@ -4972,7 +4972,7 @@ async function qmAutoDetect(lat, lng, isInitial){
     // Overture Maps API — third-party free API exposing Overture's open dataset
     // (union of OSM + Microsoft + Meta + Google + Esri building footprints).
     // Demo key works for low-volume testing; replace with your own if you self-host later.
-    const radius = 100;  // meters
+    const radius = 25;  // meters — tight radius to focus on the building at the address
     const url = `https://api.overturemapsapi.com/buildings`
       + `?lat=${lat}&lng=${lng}`
       + `&radius=${radius}`;
@@ -5008,9 +5008,8 @@ async function qmAutoDetect(lat, lng, isInitial){
     });
     __qmSections = [];
 
-    // Build a section per polygon (handles MultiPolygon by flattening)
-    let secIdx = 0;
-    polys.slice(0, 4).forEach((feat) => {
+    // Take only the closest polygon to the address — simpler, avoids fragmented buildings
+    polys.slice(0, 1).forEach((feat) => {
       const rings = feat.geometry.type === 'MultiPolygon'
         ? feat.geometry.coordinates.flat()       // [[ring1], [ring2], ...]
         : feat.geometry.coordinates;             // [[outerRing]]
@@ -5018,8 +5017,7 @@ async function qmAutoDetect(lat, lng, isInitial){
       if(!outer || outer.length < 3) return;
       qmNewSection();
       const sec = __qmSections[__qmSections.length - 1];
-      sec.name = polys.length === 1 ? 'Main building' : (secIdx === 0 ? 'Main building' : ('Outbuilding ' + secIdx));
-      secIdx++;
+      sec.name = 'Main building';
       // GeoJSON polygons close themselves (first === last); drop the duplicate
       const pts = [...outer];
       if(pts.length > 1 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]){
@@ -5041,7 +5039,7 @@ async function qmAutoDetect(lat, lng, isInitial){
     }
     __qmActiveId = __qmSections[0].id;
     qmUpdateAll();
-    if(lbl) lbl.textContent = polys.length > 1 ? `Found ${Math.min(polys.length, 4)}` : 'Found 1';
+    if(lbl) lbl.textContent = 'Found';
     setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
     toast('Buildings auto-traced. Verify outline + set pitch.');
   } catch(err){
