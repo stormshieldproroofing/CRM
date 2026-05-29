@@ -291,6 +291,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
 <script src="supabase-crm.js"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -300,6 +302,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link active">Summary</span>
   <span class="nav-link">Boards</span>
   <span class="nav-link">Jobs</span>
+  <span class="nav-link">Map</span>
   <span class="nav-link">Team</span>
   <span class="nav-link">Calendar</span>
   <span class="nav-link">Contacts</span>
@@ -423,6 +426,36 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     </div>
   </div>
 </div>
+
+<!-- MAP PAGE -->
+<div id="mapPage" style="display:none">
+  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Jobs Map</div>
+    <select id="map-filter-salesman" class="map-filter">
+      <option value="all">All salesmen</option>
+    </select>
+    <select id="map-filter-pipeline" class="map-filter">
+      <option value="all">All pipelines</option>
+    </select>
+    <select id="map-filter-stage" class="map-filter">
+      <option value="all">All stages</option>
+    </select>
+    <div style="flex:1"></div>
+    <button class="icon-btn" onclick="renderMapPage()" title="Refresh"><i class="ti ti-refresh"></i></button>
+    <div id="map-count" style="font-size:11px;color:var(--muted);padding:0 6px"></div>
+  </div>
+  <div id="mapContainer" style="width:100%;height:calc(100vh - 110px);background:#0F1117"></div>
+</div>
+
+<style>
+.map-filter{background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer;min-width:140px}
+.map-filter:hover{border-color:var(--brand-light)}
+.map-popup{font-family:'Barlow',sans-serif}
+.map-popup .mp-name{font-weight:700;font-size:13px;color:#0F1117;margin-bottom:3px}
+.map-popup .mp-row{font-size:11px;color:#475569;margin-top:2px}
+.map-popup .mp-stage{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:11px;color:#fff;margin-top:5px;text-transform:uppercase;letter-spacing:.3px}
+.mapboxgl-popup-content{padding:10px 12px !important;border-radius:8px !important}
+</style>
 
 <!-- TEAM MEMBER MODAL (Add / Edit) -->
 <div class="m-overlay" id="teamMemberModal" style="align-items:flex-start;padding-top:50px">
@@ -3715,9 +3748,12 @@ $('saveJob').onclick=()=>{
   const addrParts=[street,apt,city&&st?`${city}, ${st}`:city||st,zip].filter(Boolean);
   const address=addrParts.join(', ')||'—';
   const userId = selectedUserId || USERS[0]?.id || null;
+  const picked = window.__pickedLngLat || {};
   const claimData={
     phone:$('f-phone').value||'—',email:$('f-email').value||'—',address,user:userId,col:$('f-stage').value,
     pipeline:currentPipelineId,
+    latitude: picked.lat ?? null,
+    longitude: picked.lng ?? null,
     source:$('f-source').value||'Manual Entry',
     carrier:($('f-carrier').value||'').trim(),claimNum:($('f-claimnum').value||'').trim(),
     policyNum:($('f-policynum')?$('f-policynum').value:'')||'',claimType:($('f-claimtype')?$('f-claimtype').value:'')||'',
@@ -3904,6 +3940,9 @@ $('globalSearch').addEventListener('input',function(){
           document.getElementById('f-city').value  = p.city;
           document.getElementById('f-state').value = p.state;
           document.getElementById('f-zip').value   = p.zip;
+          // capture coordinates for the map view
+          const coords = feats[i].center || [];
+          window.__pickedLngLat = { lng: coords[0], lat: coords[1] };
           setFieldGreen();
           closeSuggestions();
           // rotate session token after a selection (Mapbox billing best practice)
@@ -4109,6 +4148,7 @@ function switchPage(pageName){
   document.getElementById('summaryPage').style.display = (pageName === 'summary') ? '' : 'none';
   document.getElementById('boardsPage').style.display  = (pageName === 'boards') ? '' : 'none';
   document.getElementById('jobsPage').style.display    = (pageName === 'jobs')   ? '' : 'none';
+  document.getElementById('mapPage').style.display     = (pageName === 'map')    ? '' : 'none';
   document.getElementById('teamPage').style.display    = (pageName === 'team')   ? '' : 'none';
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
@@ -4116,6 +4156,7 @@ function switchPage(pageName){
   if(pageName === 'summary') renderBoardSalesSummary();
   if(pageName === 'jobs') renderJobsPage();
   if(pageName === 'team') renderTeamPage();
+  if(pageName === 'map')  renderMapPage();
 }
 
 // Wire up the nav links
@@ -4126,6 +4167,7 @@ function switchPage(pageName){
     if(txt === 'summary') l.dataset.page = 'summary';
     else if(txt === 'boards') l.dataset.page = 'boards';
     else if(txt === 'jobs') l.dataset.page = 'jobs';
+    else if(txt === 'map')  l.dataset.page = 'map';
     else if(txt === 'team') l.dataset.page = 'team';
     l.addEventListener('click', () => {
       if(l.dataset.page) switchPage(l.dataset.page);
@@ -4458,6 +4500,175 @@ function deleteFromModal(){
   if(!editingMemberId) return;
   openDeleteTeamMember(editingMemberId);
 }
+
+// ═════════════════════════════════════════════════════════════
+// MAP PAGE
+// ═════════════════════════════════════════════════════════════
+var __map = null;
+var __mapMarkers = [];
+var __mapFilters = { salesman: 'all', pipeline: 'all', stage: 'all' };
+
+function getStageColor(pipelineId, stageId){
+  const p = (pipelines || []).find(x => x.id === pipelineId) || (pipelines || [])[0];
+  if(!p) return '#4D9DE0';
+  const c = (p.columns || []).find(x => x.id === stageId);
+  return c?.color || '#4D9DE0';
+}
+function getStageName(pipelineId, stageId){
+  const p = (pipelines || []).find(x => x.id === pipelineId) || (pipelines || [])[0];
+  return p?.columns?.find(x => x.id === stageId)?.name || stageId || '—';
+}
+
+function populateMapFilters(){
+  const salesmanSel = document.getElementById('map-filter-salesman');
+  const pipelineSel = document.getElementById('map-filter-pipeline');
+  const stageSel    = document.getElementById('map-filter-stage');
+  if(!salesmanSel) return;
+  // Salesmen: hide the salesman filter (they don't need it, and it's clutter)
+  salesmanSel.style.display = canSeeJobDetails() ? '' : 'none';
+  // Salesman: from TEAM (or USERS)
+  salesmanSel.innerHTML = '<option value="all">All salesmen</option>' +
+    (TEAM || []).map(t => `<option value="${t.id}"${__mapFilters.salesman===t.id?' selected':''}>${escapeHtml(t.name||t.id)}</option>`).join('');
+  // Pipeline
+  pipelineSel.innerHTML = '<option value="all">All pipelines</option>' +
+    (pipelines || []).map(p => `<option value="${p.id}"${__mapFilters.pipeline===p.id?' selected':''}>${escapeHtml(p.name)}</option>`).join('');
+  // Stage: depends on selected pipeline
+  let stages = [];
+  if(__mapFilters.pipeline === 'all'){
+    const seen = new Set();
+    (pipelines || []).forEach(p => (p.columns||[]).forEach(c => {
+      if(!seen.has(c.id)){ seen.add(c.id); stages.push(c); }
+    }));
+  } else {
+    const p = (pipelines || []).find(x => x.id === __mapFilters.pipeline);
+    stages = p?.columns || [];
+  }
+  stageSel.innerHTML = '<option value="all">All stages</option>' +
+    stages.map(s => `<option value="${s.id}"${__mapFilters.stage===s.id?' selected':''}>${escapeHtml(s.name)}</option>`).join('');
+}
+
+function ensureMapInit(){
+  if(__map) return __map;
+  if(typeof mapboxgl === 'undefined'){
+    document.getElementById('mapContainer').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Map library failed to load. Check internet connection.</div>';
+    return null;
+  }
+  mapboxgl.accessToken = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
+  __map = new mapboxgl.Map({
+    container: 'mapContainer',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [-96.7970, 32.7767], // Dallas
+    zoom: 9,
+  });
+  __map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+  return __map;
+}
+
+function clearMarkers(){
+  __mapMarkers.forEach(m => m.remove());
+  __mapMarkers = [];
+}
+
+// Check if user is a manager or admin (sees full job details on map)
+function canSeeJobDetails(){
+  const role = window.currentMember?.role;
+  return role === 'admin' || role === 'manager';
+}
+
+async function renderMapPage(){
+  populateMapFilters();
+  const map = ensureMapInit();
+  if(!map) return;
+
+  // Salesmen: fetch the public-safe map view (all jobs, addresses only).
+  // Admins/managers: use the full local `jobs` array (which already has all jobs from RLS).
+  let source;
+  if(canSeeJobDetails()){
+    source = (jobs || []).filter(j => j.latitude != null && j.longitude != null)
+      .map(j => ({
+        id: j.id, address: j.address, name: j.name, phone: j.phone,
+        latitude: j.latitude, longitude: j.longitude,
+        pipeline_id: j.pipeline, stage_id: j.col, assigned_to: j.user,
+        _full: true,
+      }));
+  } else {
+    if(typeof fetchMapView !== 'function'){ source = []; }
+    else { source = await fetchMapView(); source.forEach(s => s._full = false); }
+  }
+
+  // Apply filters
+  const filtered = source.filter(j => {
+    if(__mapFilters.salesman !== 'all' && j.assigned_to !== __mapFilters.salesman) return false;
+    if(__mapFilters.pipeline !== 'all' && j.pipeline_id !== __mapFilters.pipeline) return false;
+    if(__mapFilters.stage    !== 'all' && j.stage_id    !== __mapFilters.stage)    return false;
+    return true;
+  });
+
+  // Count + missing-coord notice (admins/managers only — we know their job list)
+  const countEl = document.getElementById('map-count');
+  if(countEl){
+    let txt = `${filtered.length} on map`;
+    if(canSeeJobDetails()){
+      const missing = (jobs || []).filter(j => j.latitude == null || j.longitude == null).length;
+      if(missing) txt += ` · ${missing} missing coordinates`;
+    }
+    countEl.textContent = txt;
+  }
+
+  // Build markers
+  clearMarkers();
+  const bounds = new mapboxgl.LngLatBounds();
+  filtered.forEach(j => {
+    const color = getStageColor(j.pipeline_id, j.stage_id);
+    const el = document.createElement('div');
+    el.style.cssText = `width:22px;height:22px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700`;
+    const member = (TEAM || []).find(t => t.id === j.assigned_to);
+    el.textContent = (member?.id || '').toUpperCase().slice(0,2);
+
+    let popupHtml;
+    if(j._full){
+      popupHtml = `
+        <div class="map-popup">
+          <div class="mp-name">${escapeHtml(j.name || '')}</div>
+          <div class="mp-row"><i class="ti ti-map-pin"></i> ${escapeHtml(j.address || '')}</div>
+          ${j.phone && j.phone!=='—' ? `<div class="mp-row"><i class="ti ti-phone"></i> ${escapeHtml(j.phone)}</div>` : ''}
+          ${member ? `<div class="mp-row"><i class="ti ti-user"></i> ${escapeHtml(member.name)}</div>` : ''}
+          <span class="mp-stage" style="background:${color}">${escapeHtml(getStageName(j.pipeline_id, j.stage_id))}</span>
+        </div>`;
+    } else {
+      // Salesman view: address only, no name/phone/owner
+      popupHtml = `
+        <div class="map-popup">
+          <div class="mp-row" style="font-weight:600;color:#0F1117"><i class="ti ti-map-pin"></i> ${escapeHtml(j.address || '')}</div>
+          <span class="mp-stage" style="background:${color}">${escapeHtml(getStageName(j.pipeline_id, j.stage_id))}</span>
+        </div>`;
+    }
+    const marker = new mapboxgl.Marker(el)
+      .setLngLat([j.longitude, j.latitude])
+      .setPopup(new mapboxgl.Popup({offset: 18, closeButton: false}).setHTML(popupHtml))
+      .addTo(map);
+    __mapMarkers.push(marker);
+    bounds.extend([j.longitude, j.latitude]);
+  });
+  if(filtered.length){
+    map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 500 });
+  }
+}
+
+// Wire up filter dropdowns once
+(function wireMapFilters(){
+  ['map-filter-salesman','map-filter-pipeline','map-filter-stage'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('change', () => {
+      const key = id.replace('map-filter-','');
+      __mapFilters[key] = el.value;
+      // Reset stage if pipeline changes
+      if(key === 'pipeline') __mapFilters.stage = 'all';
+      renderMapPage();
+    });
+  });
+})();
 
 // Close team modals on overlay click
 document.getElementById('teamMemberModal').addEventListener('click', e => {
