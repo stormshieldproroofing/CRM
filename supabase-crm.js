@@ -184,9 +184,13 @@ function scheduleSave() {
 
 async function pushAllToSupabase() {
   try {
-    // jobs (parent rows only; children handled below)
-    const jobUpserts = (window.jobs || []).map(j => {
-      const row = {
+    // Build base rows without id, then categorize
+    const newJobs = [];        // no real UUID yet — needs insert without id
+    const newJobIndices = [];  // their index in window.jobs for writeback
+    const existingJobs = [];   // has UUID — safe to upsert with id
+
+    (window.jobs || []).forEach((j, i) => {
+      const base = {
         pipeline_id: j.pipeline || 'insurance',
         stage_id: j.col,
         assigned_to: j.user || null,
@@ -196,15 +200,27 @@ async function pushAllToSupabase() {
         carrier: j.carrier || null, claim_num: j.claimNum || null,
         latitude: j.latitude ?? null, longitude: j.longitude ?? null,
       };
-      // Only include id when it's a real UUID; otherwise let the database default generate one
-      if (typeof j.id === 'string' && j.id.length > 20) row.id = j.id;
-      return row;
+      if (typeof j.id === 'string' && j.id.length > 20) {
+        existingJobs.push({ ...base, id: j.id });
+      } else {
+        newJobs.push(base);
+        newJobIndices.push(i);
+      }
     });
-    if (jobUpserts.length) {
-      const { data, error } = await sb.from('jobs').upsert(jobUpserts).select();
+
+    // Insert new ones (no id column → database default generates UUIDs)
+    if (newJobs.length) {
+      const { data, error } = await sb.from('jobs').insert(newJobs).select();
       if (error) throw error;
-      // write back any newly-assigned ids so children link correctly
-      data.forEach((row, i) => { if (window.jobs[i]) window.jobs[i].id = row.id; });
+      data.forEach((row, k) => {
+        const localIdx = newJobIndices[k];
+        if (window.jobs[localIdx]) window.jobs[localIdx].id = row.id;
+      });
+    }
+    // Upsert existing ones (id column present and valid)
+    if (existingJobs.length) {
+      const { error } = await sb.from('jobs').upsert(existingJobs);
+      if (error) throw error;
     }
 
     // delete any jobs that exist in Supabase but no longer in our local array
