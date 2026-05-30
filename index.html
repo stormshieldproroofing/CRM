@@ -1572,7 +1572,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   Run <strong style="color:var(--brand)">Quick Measure Roof</strong> first to calculate the minimum profitable contract for this job.
                 </div>`
               : `<div style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.4">
-                  <strong style="color:var(--brand)">${j.roofEstimate.totalSquares.toFixed(1)} squares</strong> × $280/sq cost · 10% overhead on contract · 50/50 profit split
+                  <strong style="color:var(--brand)">${j.roofEstimate.totalSquares.toFixed(1)} squares</strong> × 1.15 waste × $280/sq cost · 10% overhead on contract
                 </div>
                 <!-- Profit slider -->
                 <div style="background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:8px">
@@ -1589,30 +1589,16 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <!-- Cost / Overhead / Contract breakdown -->
                 <div style="display:flex;flex-direction:column;gap:5px">
                   <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
-                    <span style="font-size:11px;color:var(--muted)">Job Cost (${j.roofEstimate.totalSquares.toFixed(1)} sq × $280)</span>
+                    <span style="font-size:11px;color:var(--muted)">Job Cost (${(j.roofEstimate.totalSquares * 1.15).toFixed(1)} sq × $280, incl. 15% waste)</span>
                     <span id="ccCost" style="font-size:12px;font-weight:600;color:var(--brand)">—</span>
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
                     <span style="font-size:11px;color:var(--muted)">+ Overhead (10% of contract)</span>
                     <span id="ccOverhead" style="font-size:12px;font-weight:600;color:var(--warn)">—</span>
                   </div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
-                    <span style="font-size:11px;color:var(--muted)">+ Profit Margin</span>
-                    <span id="ccProfit" style="font-size:12px;font-weight:600;color:#34D399">—</span>
-                  </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 11px;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);border-radius:6px;margin-top:2px">
                     <span style="font-size:11px;font-weight:700;color:var(--brand)">Minimum Contract</span>
                     <span id="ccContract" style="font-size:15px;font-weight:700;color:var(--brand-light)">—</span>
-                  </div>
-                  <div style="display:flex;gap:6px;margin-top:4px">
-                    <div style="flex:1;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px;text-align:center">
-                      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px">Company</div>
-                      <div id="ccCompany" style="font-size:12px;font-weight:600;color:var(--brand);margin-top:2px">—</div>
-                    </div>
-                    <div style="flex:1;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px;text-align:center">
-                      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px">Salesman</div>
-                      <div id="ccComm" style="font-size:12px;font-weight:600;color:#60C4FF;margin-top:2px">—</div>
-                    </div>
                   </div>
                 </div>`
             }
@@ -1862,24 +1848,19 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(slider){
         const updateContractCalc = () => {
           const squares = j.roofEstimate?.totalSquares || 0;
-          const cost = squares * 280;
+          const cost = squares * 1.15 * 280;  // 15% waste factor on materials
           const profit = parseFloat(slider.value) || 4000;
           const overheadRate = 0.10;
           // Solve for contract where overhead = 10% of contract:
           // contract = cost + 0.10 × contract + profit  →  contract = (cost + profit) / 0.90
           const contract = (cost + profit) / (1 - overheadRate);
           const overhead = contract * overheadRate;
-          const commission = profit / 2;  // 50/50 split
-          const company   = profit / 2;
           const fmt = n => '$' + Math.round(n).toLocaleString();
           const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
           setText('ccProfitVal', fmt(profit));
           setText('ccCost', fmt(cost));
           setText('ccOverhead', fmt(overhead));
-          setText('ccProfit', fmt(profit));
           setText('ccContract', fmt(contract));
-          setText('ccCompany', fmt(company));
-          setText('ccComm', fmt(commission));
           const pct = ((profit - 4000) / (25000 - 4000)) * 100;
           slider.style.background = `linear-gradient(to right, var(--brand-light) 0%, var(--brand-light) ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
         };
