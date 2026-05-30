@@ -759,6 +759,24 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
           </div>
         </div>
 
+        <!-- Depreciation row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Recoverable Depreciation</label>
+            <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
+              <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
+              <input id="f-recovdep" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Non-Recoverable Depreciation</label>
+            <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
+              <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
+              <input id="f-nonrecovdep" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+
         <!-- Adjuster name + phone -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <input id="f-adjname" style="background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--warn)'" onblur="this.style.borderColor='var(--border)'" placeholder="Adjuster name">
@@ -1576,17 +1594,17 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <span style="font-size:11px;font-weight:700;color:var(--brand)">Minimum Contract</span>
                   <span id="ccContract" style="font-size:13px;font-weight:700;color:var(--brand-light)">—</span>
                 </div>
-                <!-- Customer Adjusted Deductible -->
-                ${parseFloat(j.deductible || 0) > 0
+                <!-- Customer Contribution (out-of-pocket gap vs insurance coverage) -->
+                ${(parseFloat(j.rcv || 0) > 0 || parseFloat(j.deductible || 0) > 0)
                   ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(96,196,255,0.08);border:1px solid rgba(96,196,255,0.25);border-radius:6px;margin-bottom:8px">
                       <div style="display:flex;flex-direction:column">
-                        <span style="font-size:11px;font-weight:700;color:#60C4FF">Customer Adjusted Deductible</span>
-                        <span id="ccAdjNote" style="font-size:9px;color:var(--muted);margin-top:1px">Original: $${parseFloat(j.deductible).toLocaleString()}</span>
+                        <span style="font-size:11px;font-weight:700;color:#60C4FF">Customer Contribution</span>
+                        <span id="ccContribNote" style="font-size:9px;color:var(--muted);margin-top:1px">Out-of-pocket gap vs. insurance</span>
                       </div>
-                      <span id="ccAdjDeductible" style="font-size:13px;font-weight:700;color:#60C4FF">—</span>
+                      <span id="ccContribution" style="font-size:13px;font-weight:700;color:#60C4FF">—</span>
                     </div>`
                   : `<div style="padding:7px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.18);border-radius:6px;margin-bottom:8px;font-size:10px;color:var(--warn);line-height:1.4">
-                      Add a <strong>deductible</strong> to this job (in Edit Job) to enable adjusted-deductible calculations.
+                      Add insurance details (RCV, Deductible, Depreciation) to this job to see Customer Contribution.
                     </div>`
                 }
                 <!-- Breakdown -->
@@ -1867,26 +1885,36 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           const contract = (cost + profit) / (1 - overheadRate);
           const overhead = contract * overheadRate;
 
-          // Adjusted Deductible: profit above the $4,000 floor can absorb the customer's deductible
-          const deductible = parseFloat(j.deductible || 0);
-          const headroom = Math.max(0, profit - 4000);
-          const adjustedDeductible = Math.max(0, deductible - headroom);
+          // Customer Contribution = Contract − total insurance pays
+          // Total insurance pays = RCV − Non-Recoverable Depreciation − Deductible
+          // (Recoverable Dep is released after work; customer ends up with that money)
+          const rcv         = parseFloat(j.rcv || 0);
+          const deductible  = parseFloat(j.deductible || 0);
+          const nonRecovDep = parseFloat(j.nonRecoverableDep || 0);
+          const insurancePays = Math.max(0, rcv - nonRecovDep - deductible);
+          const customerContribution = contract - insurancePays;
 
-          const fmt = n => '$' + Math.round(n).toLocaleString();
+          const fmt = n => (n < 0 ? '−$' : '$') + Math.round(Math.abs(n)).toLocaleString();
           const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
           setText('ccProfitVal', fmt(profit));
           setText('ccCost', fmt(cost));
           setText('ccOverhead', fmt(overhead));
           setText('ccContract', fmt(contract));
-          // Adjusted deductible row only shows when deductible > 0
-          if(deductible > 0){
-            setText('ccAdjDeductible', fmt(adjustedDeductible));
-            const note = document.getElementById('ccAdjNote');
-            if(note){
-              const absorbed = deductible - adjustedDeductible;
-              note.textContent = absorbed > 0
-                ? `Original: ${fmt(deductible)} · You absorbed ${fmt(absorbed)}`
-                : `Original: ${fmt(deductible)}`;
+          // Customer Contribution row — only when insurance fields exist
+          const contribEl = document.getElementById('ccContribution');
+          const contribNote = document.getElementById('ccContribNote');
+          if(contribEl){
+            contribEl.textContent = fmt(customerContribution);
+            // Color the value based on whether contribution is positive or zero/negative
+            contribEl.style.color = customerContribution > 0 ? '#60C4FF' : '#34D399';
+            if(contribNote){
+              if(customerContribution <= 0){
+                contribNote.textContent = 'Insurance covers full contract';
+              } else if(insurancePays === 0){
+                contribNote.textContent = 'No insurance offset available';
+              } else {
+                contribNote.textContent = `Contract ${fmt(contract)} − Insurance ${fmt(insurancePays)}`;
+              }
             }
           }
           const pct = ((profit - 4000) / (25000 - 4000)) * 100;
@@ -3810,7 +3838,7 @@ function snapshotAddJobForm(){
   const fields = ['f-firstname','f-lastname','f-phone','f-ext','f-email','f-source',
     'f-street','f-apt','f-city','f-state','f-zip','f-stage',
     'f-claimtype','f-claimstatus','f-carrier','f-policynum','f-claimnum','f-dol',
-    'f-rcv','f-deductible'];
+    'f-rcv','f-deductible','f-recovdep','f-nonrecovdep'];
   const snap = {};
   fields.forEach(id => {
     const el = document.getElementById(id);
@@ -3925,6 +3953,8 @@ function openEditJob(id){
   if($('f-dol'))       $('f-dol').value       = j.dateOfLoss||'';
   if($('f-rcv'))       $('f-rcv').value       = j.rcv||'';
   if($('f-deductible'))$('f-deductible').value= j.deductible||'';
+  if($('f-recovdep'))  $('f-recovdep').value  = j.recoverableDep||'';
+  if($('f-nonrecovdep'))$('f-nonrecovdep').value= j.nonRecoverableDep||'';
   if($('f-adjname'))   $('f-adjname').value   = j.adjName||'';
   if($('f-adjphone'))  $('f-adjphone').value  = j.adjPhone||'';
   if($('f-inspdate'))  $('f-inspdate').value  = j.inspDate||'';
@@ -3933,7 +3963,7 @@ function openEditJob(id){
   if($('f-claimstatus'))setSelectByText($('f-claimstatus'), j.claimStatus);
 
   // Open insurance section if any insurance data is present
-  const hasIns = j.carrier||j.policyNum||j.claimNum||j.dateOfLoss||j.rcv||j.deductible||j.adjName||j.adjPhone||j.inspDate||j.claimNotes||j.claimType||j.claimStatus;
+  const hasIns = j.carrier||j.policyNum||j.claimNum||j.dateOfLoss||j.rcv||j.deductible||j.recoverableDep||j.nonRecoverableDep||j.adjName||j.adjPhone||j.inspDate||j.claimNotes||j.claimType||j.claimStatus;
   setInsuranceSection(!!hasIns);
 
   // Set assign dropdown to the job's assigned user
@@ -4026,6 +4056,8 @@ $('saveJob').onclick=()=>{
     policyNum:($('f-policynum')?$('f-policynum').value:'')||'',claimType:($('f-claimtype')?$('f-claimtype').value:'')||'',
     claimStatus:($('f-claimstatus')?$('f-claimstatus').value:'')||'',dateOfLoss:($('f-dol')?$('f-dol').value:'')||'',
     rcv:($('f-rcv')?$('f-rcv').value:'')||'',deductible:($('f-deductible')?$('f-deductible').value:'')||'',
+    recoverableDep:($('f-recovdep')?$('f-recovdep').value:'')||'',
+    nonRecoverableDep:($('f-nonrecovdep')?$('f-nonrecovdep').value:'')||'',
     adjName:($('f-adjname')?$('f-adjname').value:'')||'',adjPhone:($('f-adjphone')?$('f-adjphone').value:'')||'',
     inspDate:($('f-inspdate')?$('f-inspdate').value:'')||'',claimNotes:($('f-claimnotes')?$('f-claimnotes').value:'')||''
   };
