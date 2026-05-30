@@ -1624,11 +1624,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <span style="font-size:11px;color:var(--muted)">Profit Margin (drag to adjust)</span>
                     <span id="ccProfitVal" style="font-size:12px;font-weight:600;color:#34D399">$4,000</span>
                   </div>
-                  <input id="ccProfitSlider" type="range" min="4000" max="25000" step="250" value="4000"
-                    style="width:100%;-webkit-appearance:none;height:4px;background:linear-gradient(to right, #34D399 0%, #34D399 0%, var(--border) 0%, var(--border) 100%);border-radius:3px;outline:none;cursor:pointer;display:block">
-                  <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:3px">
-                    <span>$4,000 min</span><span>$25,000 max</span>
+                  <div id="ccSliderWrap" style="position:relative;padding:6px 0">
+                    <input id="ccProfitSlider" type="range" min="0" max="25000" step="100" value="4000"
+                      style="width:100%;-webkit-appearance:none;height:4px;background:linear-gradient(to right, #34D399 0%, #34D399 0%, var(--border) 0%, var(--border) 100%);border-radius:3px;outline:none;cursor:pointer;display:block">
+                    <!-- $4,000 company-floor placemark (positioned in JS) -->
+                    <div id="ccFloorMarker" style="position:absolute;top:0;height:18px;width:2px;background:var(--warn);pointer-events:none;display:none">
+                      <div style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--warn);white-space:nowrap;font-weight:700">$4K floor</div>
+                    </div>
                   </div>
+                  <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:3px">
+                    <span id="ccSliderMinLabel">$0</span><span id="ccSliderMaxLabel">$25,000</span>
+                  </div>
+                  <div id="ccFloorWarning" style="display:none;margin-top:6px;padding:5px 8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:5px;font-size:10px;color:var(--warn);line-height:1.3"></div>
                 </div>`
             }
           </div>
@@ -1875,37 +1882,89 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     {
       const slider = document.getElementById('ccProfitSlider');
       if(slider){
+        const squares = j.roofEstimate?.totalSquares || 0;
+        const cost = squares * 1.15 * 280;
+        const overheadRate = 0.10;
+        const FLOOR = 4000;
+        const ABS_MAX = 25000;
+
+        const rcv         = parseFloat(j.rcv || 0);
+        const deductible  = parseFloat(j.deductible || 0);
+        const nonRecovDep = parseFloat(j.nonRecoverableDep || 0);
+
+        // Slider max: cap profit so Customer Contribution ≤ Deductible
+        // Customer Contribution ≤ Deductible  ⇒  Contract ≤ RCV − NonRecovDep
+        // Profit_max = 0.90 × (RCV − NonRecovDep) − Cost
+        let sliderMax;
+        let capActive = false;
+        if(rcv > 0 && deductible > 0){
+          const contractCap = rcv - nonRecovDep;
+          const profitMax   = (1 - overheadRate) * contractCap - cost;
+          // Clamp to a sensible range — never less than $0, never more than ABS_MAX
+          sliderMax = Math.max(0, Math.min(ABS_MAX, profitMax));
+          capActive = true;
+        } else {
+          sliderMax = ABS_MAX;
+        }
+        // Floor at $0 — slider always goes to zero on the left
+        const sliderMin = 0;
+        // Default value: $4,000 if it fits; otherwise the max
+        const defaultVal = (FLOOR <= sliderMax) ? FLOOR : sliderMax;
+
+        slider.min = sliderMin;
+        slider.max = Math.max(sliderMin + 100, sliderMax);   // guard against max <= min
+        slider.value = defaultVal;
+        document.getElementById('ccSliderMinLabel').textContent = '$0';
+        document.getElementById('ccSliderMaxLabel').textContent = '$' + Math.round(sliderMax).toLocaleString() + ' max';
+
+        // Position the $4K floor placemark
+        const marker = document.getElementById('ccFloorMarker');
+        const warn   = document.getElementById('ccFloorWarning');
+        if(marker){
+          if(capActive && sliderMax < FLOOR){
+            // $4K floor is unreachable — hide marker, show warning
+            marker.style.display = 'none';
+            if(warn){
+              warn.style.display = 'block';
+              warn.innerHTML = `Company $4K profit floor is unreachable at this insurance settlement. Max profit here is <strong>$${Math.round(sliderMax).toLocaleString()}</strong>. Discuss with admin if you need to exceed customer's deductible.`;
+            }
+          } else {
+            // Position marker at $4,000 along the slider
+            const range = sliderMax - sliderMin;
+            const pct = range > 0 ? ((FLOOR - sliderMin) / range) * 100 : 0;
+            marker.style.display = 'block';
+            marker.style.left = `calc(${pct}% - 1px)`;
+            if(warn) warn.style.display = 'none';
+          }
+        }
+
         const updateContractCalc = () => {
-          const squares = j.roofEstimate?.totalSquares || 0;
-          const cost = squares * 1.15 * 280;  // 15% waste factor on materials
-          const profit = parseFloat(slider.value) || 4000;
-          const overheadRate = 0.10;
-          // Solve for contract where overhead = 10% of contract:
-          // contract = cost + 0.10 × contract + profit  →  contract = (cost + profit) / 0.90
+          const profit = parseFloat(slider.value) || 0;
+          // contract = (cost + profit) / 0.90
           const contract = (cost + profit) / (1 - overheadRate);
           const overhead = contract * overheadRate;
 
-          // Customer Contribution = Contract − total insurance pays
-          // Total insurance pays = RCV − Non-Recoverable Depreciation − Deductible
-          // (Recoverable Dep is released after work; customer ends up with that money)
-          const rcv         = parseFloat(j.rcv || 0);
-          const deductible  = parseFloat(j.deductible || 0);
-          const nonRecovDep = parseFloat(j.nonRecoverableDep || 0);
+          // Customer Contribution = Contract − Insurance Pays
           const insurancePays = Math.max(0, rcv - nonRecovDep - deductible);
           const customerContribution = contract - insurancePays;
 
           const fmt = n => (n < 0 ? '−$' : '$') + Math.round(Math.abs(n)).toLocaleString();
           const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
           setText('ccProfitVal', fmt(profit));
+          // Indicate when profit is below the company floor
+          const profitEl = document.getElementById('ccProfitVal');
+          if(profitEl){
+            profitEl.style.color = (profit < FLOOR) ? 'var(--warn)' : '#34D399';
+            profitEl.title = (profit < FLOOR) ? 'Below company minimum profit floor ($4K)' : '';
+          }
           setText('ccCost', fmt(cost));
           setText('ccOverhead', fmt(overhead));
           setText('ccContract', fmt(contract));
-          // Customer Contribution row — only when insurance fields exist
+
           const contribEl = document.getElementById('ccContribution');
           const contribNote = document.getElementById('ccContribNote');
           if(contribEl){
             contribEl.textContent = fmt(customerContribution);
-            // Color the value based on whether contribution is positive or zero/negative
             contribEl.style.color = customerContribution > 0 ? '#60C4FF' : '#34D399';
             if(contribNote){
               if(customerContribution <= 0){
@@ -1917,7 +1976,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               }
             }
           }
-          const pct = ((profit - 4000) / (25000 - 4000)) * 100;
+          const range = (slider.max - slider.min) || 1;
+          const pct = ((profit - slider.min) / range) * 100;
           slider.style.background = `linear-gradient(to right, #34D399 0%, #34D399 ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
         };
         slider.addEventListener('input', updateContractCalc);
