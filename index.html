@@ -134,6 +134,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .checklist-box{background:#141927;border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:12px}
 .two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .dp-card{background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px;margin-bottom:10px}
+#ccProfitSlider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--brand-light);border:2px solid #fff;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.4)}
+#ccProfitSlider::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--brand-light);border:2px solid #fff;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.4)}
 .dp-card-title{font-size:12px;font-weight:700;color:var(--brand);margin-bottom:8px;display:flex;align-items:center;gap:5px}
 .info-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:var(--brand)}
 .info-row i{font-size:13px;color:var(--muted)}
@@ -1556,13 +1558,64 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div style="margin-top:6px;font-size:10px;color:var(--muted);text-align:center">Rough satellite estimate · use a measurement report for final quotes</div>
           </div>
 
-          <div class="dp-card" style="margin-top:10px">
-            <table class="meta-table">
-              <tr><td style="color:var(--muted);width:80px">Created By</td><td><div style="display:flex;align-items:center;gap:6px"><div class="user-dot" style="background:${u.color}">${u.id.toUpperCase()}</div><span style="font-weight:600;font-size:12px">${u.name}</span></div></td></tr>
-              <tr><td style="color:var(--muted)">Assigned To</td><td><div style="display:flex;align-items:center;gap:6px"><div class="user-dot" style="background:${u.color}">${u.id.toUpperCase()}</div><span style="font-weight:600;font-size:12px">${u.name}</span></div></td></tr>
-              <tr><td style="color:var(--muted)">Date Created</td><td style="font-weight:600;font-size:12px;color:var(--brand)">${j.created}</td></tr>
-              <tr><td style="color:var(--muted)">Source</td><td style="font-weight:600;font-size:12px"><i class="ti ti-door-enter" style="font-size:12px;color:var(--muted);margin-right:4px" aria-hidden="true"></i>${j.source}</td></tr>
-            </table>
+          <div class="dp-card" id="contractCalcCard" style="margin-top:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:5px">
+                <i class="ti ti-calculator" style="color:var(--brand-light);font-size:14px"></i>
+                <span style="font-size:12px;font-weight:700;color:var(--brand)">Min. Contract Calculator</span>
+              </div>
+              <span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;background:rgba(77,157,224,0.06);padding:2px 6px;border-radius:4px">Tool</span>
+            </div>
+            ${(!j.roofEstimate || !j.roofEstimate.totalSquares)
+              ? `<div style="text-align:center;padding:14px 8px;color:var(--muted);font-size:11px;line-height:1.5">
+                  <i class="ti ti-ruler-measure" style="font-size:22px;color:var(--brand-light);display:block;margin-bottom:6px"></i>
+                  Run <strong style="color:var(--brand)">Quick Measure Roof</strong> first to calculate the minimum profitable contract for this job.
+                </div>`
+              : `<div style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.4">
+                  <strong style="color:var(--brand)">${j.roofEstimate.totalSquares.toFixed(1)} squares</strong> × $280/sq cost · 10% overhead on contract · 50/50 profit split
+                </div>
+                <!-- Profit slider -->
+                <div style="background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px">Profit Margin</span>
+                    <span id="ccProfitVal" style="font-size:14px;font-weight:700;color:var(--brand-light)">$4,000</span>
+                  </div>
+                  <input id="ccProfitSlider" type="range" min="4000" max="25000" step="250" value="4000"
+                    style="width:100%;-webkit-appearance:none;height:5px;background:linear-gradient(to right, var(--brand-light) 0%, var(--brand-light) 0%, var(--border) 0%, var(--border) 100%);border-radius:3px;outline:none;cursor:pointer">
+                  <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:3px">
+                    <span>$4,000 min</span><span>$25,000 max</span>
+                  </div>
+                </div>
+                <!-- Cost / Overhead / Contract breakdown -->
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
+                    <span style="font-size:11px;color:var(--muted)">Job Cost (${j.roofEstimate.totalSquares.toFixed(1)} sq × $280)</span>
+                    <span id="ccCost" style="font-size:12px;font-weight:600;color:var(--brand)">—</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
+                    <span style="font-size:11px;color:var(--muted)">+ Overhead (10% of contract)</span>
+                    <span id="ccOverhead" style="font-size:12px;font-weight:600;color:var(--warn)">—</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
+                    <span style="font-size:11px;color:var(--muted)">+ Profit Margin</span>
+                    <span id="ccProfit" style="font-size:12px;font-weight:600;color:#34D399">—</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 11px;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);border-radius:6px;margin-top:2px">
+                    <span style="font-size:11px;font-weight:700;color:var(--brand)">Minimum Contract</span>
+                    <span id="ccContract" style="font-size:15px;font-weight:700;color:var(--brand-light)">—</span>
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:4px">
+                    <div style="flex:1;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px;text-align:center">
+                      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px">Company</div>
+                      <div id="ccCompany" style="font-size:12px;font-weight:600;color:var(--brand);margin-top:2px">—</div>
+                    </div>
+                    <div style="flex:1;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px;text-align:center">
+                      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px">Salesman</div>
+                      <div id="ccComm" style="font-size:12px;font-weight:600;color:#60C4FF;margin-top:2px">—</div>
+                    </div>
+                  </div>
+                </div>`
+            }
           </div>
         </div>
         <div>
@@ -1776,6 +1829,16 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             </div>
           </div>
 
+          <!-- Job metadata (moved from left column) -->
+          <div class="dp-card" style="margin-top:8px;margin-bottom:8px">
+            <table class="meta-table">
+              <tr><td style="color:var(--muted);width:90px">Created By</td><td><div style="display:flex;align-items:center;gap:6px"><div class="user-dot" style="background:${u.color}">${u.id.toUpperCase()}</div><span style="font-weight:600;font-size:12px">${u.name}</span></div></td></tr>
+              <tr><td style="color:var(--muted)">Assigned To</td><td><div style="display:flex;align-items:center;gap:6px"><div class="user-dot" style="background:${u.color}">${u.id.toUpperCase()}</div><span style="font-weight:600;font-size:12px">${u.name}</span></div></td></tr>
+              <tr><td style="color:var(--muted)">Date Created</td><td style="font-weight:600;font-size:12px;color:var(--brand)">${j.created}</td></tr>
+              <tr><td style="color:var(--muted)">Source</td><td style="font-weight:600;font-size:12px"><i class="ti ti-door-enter" style="font-size:12px;color:var(--muted);margin-right:4px" aria-hidden="true"></i>${j.source}</td></tr>
+            </table>
+          </div>
+
           <div style="display:flex;gap:7px;margin-top:10px">
             <button class="btn-danger-sm" id="dpDelete" style="flex:1">Delete Job</button>
             <button class="btn-primary" id="dpMove" style="flex:1">Move to Next Stage</button>
@@ -1791,6 +1854,38 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         bdy.style.display=open?'none':'block';
         if(window.refreshCommUI) window.refreshCommUI();
       });
+    }
+
+    // ── Minimum Contract Calculator ──
+    {
+      const slider = document.getElementById('ccProfitSlider');
+      if(slider){
+        const updateContractCalc = () => {
+          const squares = j.roofEstimate?.totalSquares || 0;
+          const cost = squares * 280;
+          const profit = parseFloat(slider.value) || 4000;
+          const overheadRate = 0.10;
+          // Solve for contract where overhead = 10% of contract:
+          // contract = cost + 0.10 × contract + profit  →  contract = (cost + profit) / 0.90
+          const contract = (cost + profit) / (1 - overheadRate);
+          const overhead = contract * overheadRate;
+          const commission = profit / 2;  // 50/50 split
+          const company   = profit / 2;
+          const fmt = n => '$' + Math.round(n).toLocaleString();
+          const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+          setText('ccProfitVal', fmt(profit));
+          setText('ccCost', fmt(cost));
+          setText('ccOverhead', fmt(overhead));
+          setText('ccProfit', fmt(profit));
+          setText('ccContract', fmt(contract));
+          setText('ccCompany', fmt(company));
+          setText('ccComm', fmt(commission));
+          const pct = ((profit - 4000) / (25000 - 4000)) * 100;
+          slider.style.background = `linear-gradient(to right, var(--brand-light) 0%, var(--brand-light) ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
+        };
+        slider.addEventListener('input', updateContractCalc);
+        updateContractCalc();
+      }
     }
 
     // expAcc collapsible (separate so inner buttons don't bubble-collapse it)
