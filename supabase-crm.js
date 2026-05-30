@@ -153,6 +153,7 @@ async function loadAllFromSupabase() {
         source:r.source, potVal:String(r.pot_val ?? '0'), paidVal:String(r.paid_val ?? '0'),
         carrier:r.carrier, claimNum:r.claim_num,
         latitude:r.latitude, longitude:r.longitude,
+        roofEstimate: r.roof_estimate || null,
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
@@ -199,6 +200,7 @@ async function pushAllToSupabase() {
         pot_val: parseFloat(j.potVal || 0), paid_val: parseFloat(j.paidVal || 0),
         carrier: j.carrier || null, claim_num: j.claimNum || null,
         latitude: j.latitude ?? null, longitude: j.longitude ?? null,
+        roof_estimate: j.roofEstimate ?? null,
       };
       if (typeof j.id === 'string' && j.id.length > 20) {
         existingJobs.push({ ...base, id: j.id });

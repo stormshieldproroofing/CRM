@@ -1548,7 +1548,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           </div>
           <div class="dp-card" style="margin-top:10px">
             <button id="quickMeasureBtn" onclick="openQuickMeasure()" style="width:100%;padding:9px;border:1px solid var(--brand-light);border-radius:7px;background:rgba(77,157,224,0.08);color:var(--brand-light);font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
-              <i class="ti ti-ruler-measure" aria-hidden="true"></i>Quick Measure Roof
+              <i class="ti ti-ruler-measure" aria-hidden="true"></i>
+              ${j.roofEstimate && j.roofEstimate.totalSqFt > 0
+                ? `<span>${Math.round(j.roofEstimate.totalSqFt).toLocaleString()} sq ft · ${j.roofEstimate.totalSquares.toFixed(1)} sqs</span><span style="color:var(--muted);font-weight:400;margin-left:4px">· Re-measure</span>`
+                : `Quick Measure Roof`}
             </button>
             <div style="margin-top:6px;font-size:10px;color:var(--muted);text-align:center">Rough satellite estimate · use a measurement report for final quotes</div>
           </div>
@@ -4926,11 +4929,50 @@ function openQuickMeasure(){
 }
 
 function closeQuickMeasure(){
+  // Auto-save current sections to the job before tearing down state
+  qmPersistToJob();
   document.getElementById('quickMeasureModal').classList.remove('open');
   if(__qmMap){ __qmMap.remove(); __qmMap = null; }
   __qmSections.forEach(s => s.markers.forEach(m => m.remove()));
   __qmSections = [];
   __qmActiveId = null;
+}
+
+// Persist current __qmSections state to the open job's roofEstimate.
+// Used by closeQuickMeasure (auto-save) and by Copy Estimate.
+function qmPersistToJob(){
+  const j = jobs.find(x => x.id === openJobId);
+  if(!j) return;
+  let totalRoof = 0;
+  const sectionsData = [];
+  __qmSections.forEach(sec => {
+    if(sec.points.length < 3) return;
+    const fp = polygonAreaM2(sec.points) * 10.7639;
+    const m = QM_PITCHES[sec.pitchKey]?.mult ?? 1.118;
+    const roof = fp * m;
+    totalRoof += roof;
+    sectionsData.push({
+      name: sec.name,
+      pitchKey: sec.pitchKey,
+      color: sec.color,
+      points: sec.points.map(p => [...p]),
+      footprintSqFt: Math.round(fp),
+      roofSqFt: Math.round(roof),
+    });
+  });
+  if(sectionsData.length){
+    j.roofEstimate = {
+      totalSqFt: Math.round(totalRoof),
+      totalSquares: totalRoof / 100,
+      sections: sectionsData,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    // No usable sections — clear any previous estimate
+    delete j.roofEstimate;
+  }
+  saveToStorage();
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
 }
 
 const GEOAPIFY_KEY = 'cffb7a7c4225478b80647d5539985398'; // (unused — kept for reference)
@@ -4947,7 +4989,13 @@ function qmInitMap(lat, lng){
 
   __qmMap.on('load', () => {
     __qmMap.resize();
-    qmAutoDetect(lat, lng, true);   // auto-detect on first open; falls back to empty section
+    // If the job already has a saved roof estimate, restore those sections instead of auto-detecting.
+    const j = jobs.find(x => x.id === openJobId);
+    if(j && j.roofEstimate && Array.isArray(j.roofEstimate.sections) && j.roofEstimate.sections.length){
+      qmRestoreFromSaved(j.roofEstimate);
+    } else {
+      qmAutoDetect(lat, lng, true);   // first-time: auto-detect; fallback creates an empty section
+    }
   });
   setTimeout(() => __qmMap && __qmMap.resize(), 200);
   setTimeout(() => __qmMap && __qmMap.resize(), 600);
@@ -5034,15 +5082,15 @@ async function qmAutoDetect(lat, lng, isInitial){
       });
     }
 
-    // Auto-include small outbuildings: under 1,000 sq ft AND within 30m of main building
-    const MAIN_PTS = __qmSections[0]?.points || [];
-    let outIdx = 0;
-    polys.slice(1).forEach(feat => {
+    // Auto-include AT MOST ONE outbuilding — the closest qualifying one.
+    // Since polys is already sorted by distance, the first match wins.
+    const MAIN_PTS_FOR_FILTER = __qmSections[0]?.points || [];
+    for(const feat of polys.slice(1)){
       const rings = feat.geometry.type === 'MultiPolygon'
         ? feat.geometry.coordinates.flat()
         : feat.geometry.coordinates;
       const outer = rings[0];
-      if(!outer || outer.length < 3) return;
+      if(!outer || outer.length < 3) continue;
       // Drop the closing duplicate point if present
       const pts = [...outer];
       if(pts.length > 1 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]){
@@ -5050,19 +5098,18 @@ async function qmAutoDetect(lat, lng, isInitial){
       }
       // SIZE FILTER — only include if under 1,000 sq ft
       const sqFt = polygonAreaM2(pts) * 10.7639;
-      if(sqFt >= 1000) return;
+      if(sqFt >= 1000) continue;
       // DISTANCE FILTER — only include if within 30m of any main-building point
-      if(MAIN_PTS.length){
+      if(MAIN_PTS_FOR_FILTER.length){
         const minDist = Math.min(...pts.flatMap(([clng, clat]) =>
-          MAIN_PTS.map(([mlng, mlat]) => haversineM(clat, clng, mlat, mlng))
+          MAIN_PTS_FOR_FILTER.map(([mlng, mlat]) => haversineM(clat, clng, mlat, mlng))
         ));
-        if(minDist > 30) return;
+        if(minDist > 30) continue;
       }
-      // It qualifies — add as outbuilding
+      // It qualifies — add as outbuilding and stop searching
       qmNewSection();
       const sec = __qmSections[__qmSections.length - 1];
-      outIdx++;
-      sec.name = 'Outbuilding ' + outIdx;
+      sec.name = 'Outbuilding 1';
       sec.points = pts;
       pts.forEach(c => {
         const el = document.createElement('div');
@@ -5070,7 +5117,8 @@ async function qmAutoDetect(lat, lng, isInitial){
         const m = new mapboxgl.Marker(el).setLngLat(c).addTo(__qmMap);
         sec.markers.push(m);
       });
-    });
+      break;  // only one outbuilding auto-included
+    }
     if(!__qmSections.length){
       if(lbl) lbl.textContent = 'Not found';
       setTimeout(() => { if(lbl) lbl.textContent = 'Auto-detect'; }, 2500);
@@ -5190,6 +5238,27 @@ function qmNewSection(){
     qmAddSectionLayers(sec);
   }
   qmSetActive(id);
+}
+
+// Restore a previously-saved estimate into the modal so the user can refine it.
+function qmRestoreFromSaved(estimate){
+  if(!estimate || !Array.isArray(estimate.sections)) return;
+  estimate.sections.forEach(saved => {
+    qmNewSection();
+    const sec = __qmSections[__qmSections.length - 1];
+    sec.name = saved.name || sec.name;
+    sec.pitchKey = (saved.pitchKey && QM_PITCHES[saved.pitchKey]) ? saved.pitchKey : '6/12';
+    sec.points = Array.isArray(saved.points) ? saved.points.map(p => [...p]) : [];
+    // Re-create the marker dots
+    sec.points.forEach(c => {
+      const el = document.createElement('div');
+      el.style.cssText = `width:8px;height:8px;border-radius:50%;background:${sec.color};border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,0.5)`;
+      const m = new mapboxgl.Marker(el).setLngLat(c).addTo(__qmMap);
+      sec.markers.push(m);
+    });
+  });
+  __qmActiveId = __qmSections[0]?.id || null;
+  qmUpdateAll();
 }
 
 function qmAddSectionLayers(sec){
@@ -5328,6 +5397,8 @@ function qmCopyEstimate(){
   });
   lines.push(`Total: ${Math.round(totalRoof).toLocaleString()} sq ft = ${(totalRoof/100).toFixed(1)} squares`);
   copyToClipboard(lines.join('\n'), 'Estimate');
+  // Also save — covers users who use Copy as their "save" action
+  qmPersistToJob();
 }
 
 // Spherical excess area for a small polygon in lng/lat (good enough at roof scale)
