@@ -1571,13 +1571,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <i class="ti ti-ruler-measure" style="font-size:22px;color:var(--brand-light);display:block;margin-bottom:6px"></i>
                   Run <strong style="color:var(--brand)">Quick Measure Roof</strong> first to calculate the minimum profitable contract for this job.
                 </div>`
-              : `<div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.4">
-                  <strong style="color:var(--brand)">${j.roofEstimate.totalSquares.toFixed(1)} squares</strong> × 1.15 waste × $280/sq cost · 10% overhead on contract
-                </div>
-                <!-- Minimum Contract (top, prominent) -->
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 11px;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);border-radius:6px;margin-bottom:8px">
+              : `<!-- Minimum Contract (top, prominent) -->
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);border-radius:6px;margin-bottom:8px">
                   <span style="font-size:11px;font-weight:700;color:var(--brand)">Minimum Contract</span>
-                  <span id="ccContract" style="font-size:16px;font-weight:700;color:var(--brand-light)">—</span>
+                  <span id="ccContract" style="font-size:13px;font-weight:700;color:var(--brand-light)">—</span>
                 </div>
                 <!-- Breakdown -->
                 <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
@@ -1594,7 +1591,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <div style="padding:8px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                     <span style="font-size:11px;color:var(--muted)">Profit Margin (drag to adjust)</span>
-                    <span id="ccProfitVal" style="font-size:13px;font-weight:700;color:#34D399">$4,000</span>
+                    <span id="ccProfitVal" style="font-size:12px;font-weight:600;color:#34D399">$4,000</span>
                   </div>
                   <input id="ccProfitSlider" type="range" min="4000" max="25000" step="250" value="4000"
                     style="width:100%;-webkit-appearance:none;height:4px;background:linear-gradient(to right, #34D399 0%, #34D399 0%, var(--border) 0%, var(--border) 100%);border-radius:3px;outline:none;cursor:pointer;display:block">
