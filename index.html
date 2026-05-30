@@ -1576,6 +1576,19 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <span style="font-size:11px;font-weight:700;color:var(--brand)">Minimum Contract</span>
                   <span id="ccContract" style="font-size:13px;font-weight:700;color:var(--brand-light)">—</span>
                 </div>
+                <!-- Customer Adjusted Deductible -->
+                ${parseFloat(j.deductible || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(96,196,255,0.08);border:1px solid rgba(96,196,255,0.25);border-radius:6px;margin-bottom:8px">
+                      <div style="display:flex;flex-direction:column">
+                        <span style="font-size:11px;font-weight:700;color:#60C4FF">Customer Adjusted Deductible</span>
+                        <span id="ccAdjNote" style="font-size:9px;color:var(--muted);margin-top:1px">Original: $${parseFloat(j.deductible).toLocaleString()}</span>
+                      </div>
+                      <span id="ccAdjDeductible" style="font-size:13px;font-weight:700;color:#60C4FF">—</span>
+                    </div>`
+                  : `<div style="padding:7px 10px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.18);border-radius:6px;margin-bottom:8px;font-size:10px;color:var(--warn);line-height:1.4">
+                      Add a <strong>deductible</strong> to this job (in Edit Job) to enable adjusted-deductible calculations.
+                    </div>`
+                }
                 <!-- Breakdown -->
                 <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
                   <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
@@ -1853,12 +1866,29 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           // contract = cost + 0.10 × contract + profit  →  contract = (cost + profit) / 0.90
           const contract = (cost + profit) / (1 - overheadRate);
           const overhead = contract * overheadRate;
+
+          // Adjusted Deductible: profit above the $4,000 floor can absorb the customer's deductible
+          const deductible = parseFloat(j.deductible || 0);
+          const headroom = Math.max(0, profit - 4000);
+          const adjustedDeductible = Math.max(0, deductible - headroom);
+
           const fmt = n => '$' + Math.round(n).toLocaleString();
           const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
           setText('ccProfitVal', fmt(profit));
           setText('ccCost', fmt(cost));
           setText('ccOverhead', fmt(overhead));
           setText('ccContract', fmt(contract));
+          // Adjusted deductible row only shows when deductible > 0
+          if(deductible > 0){
+            setText('ccAdjDeductible', fmt(adjustedDeductible));
+            const note = document.getElementById('ccAdjNote');
+            if(note){
+              const absorbed = deductible - adjustedDeductible;
+              note.textContent = absorbed > 0
+                ? `Original: ${fmt(deductible)} · You absorbed ${fmt(absorbed)}`
+                : `Original: ${fmt(deductible)}`;
+            }
+          }
           const pct = ((profit - 4000) / (25000 - 4000)) * 100;
           slider.style.background = `linear-gradient(to right, #34D399 0%, #34D399 ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
         };
