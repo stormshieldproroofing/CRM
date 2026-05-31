@@ -87,6 +87,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .col-body{padding:7px;min-height:70px}
 .col-body.drag-over{background:rgba(77,157,224,0.12);border-radius:7px}
 .job-card{background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:6px;cursor:grab;user-select:none;transition:border-color 0.12s}
+.job-card.card-closed{opacity:0.62;background:#161B2A}
+.job-card.card-closed .card-name{color:var(--muted)}
+.job-card.card-closed:hover{opacity:0.92}
 .job-card:hover{border-color:var(--brand-light)}
 .job-card:active{cursor:grabbing}
 .job-card.dragging{opacity:0.35}
@@ -943,8 +946,30 @@ const DEFAULT_COLUMNS=[
   {id:'approved',name:'Approved',icon:'ti-shield-check',locked:false,color:'#34D399'},
   {id:'contract',name:'Contract Signed',icon:'ti-writing-sign',locked:false,color:'#A78BFA'},
   {id:'invoiced',name:'Invoiced',icon:'ti-cash',locked:false,color:'#FB923C'},
-  {id:'completed',name:'Job Completed',icon:'ti-rosette-discount-check',locked:false,color:'#38BDF8'},
+  {id:'completed',name:'Job Completed',icon:'ti-rosette-discount-check',locked:false,color:'#38BDF8',closed:true},
+  // ── Fork: denial / off-track / closed paths ──
+  {id:'denied',name:'Denied',icon:'ti-shield-x',locked:false,color:'#EF4444',closed:true},
+  {id:'appeal',name:'Appeal in Progress',icon:'ti-refresh-alert',locked:false,color:'#F59E0B'},
+  {id:'retail',name:'Going Retail',icon:'ti-cash-banknote',locked:false,color:'#0EA5E9'},
+  {id:'closed-denied',name:'Closed – Denied',icon:'ti-folder-off',locked:false,color:'#6B7280',closed:true},
 ];
+
+// Backfill: when loading a stored pipeline, make sure newer default stages exist + closed flags are applied.
+function backfillDefaultStages(){
+  pipelines.forEach(p => {
+    if(!Array.isArray(p.columns)) return;
+    DEFAULT_COLUMNS.forEach(def => {
+      const existing = p.columns.find(c => c.id === def.id);
+      if(!existing){
+        // Add any missing default stages
+        p.columns.push({...def});
+      } else if(def.closed && existing.closed !== true){
+        // Backfill the closed flag on stages that should have it
+        existing.closed = true;
+      }
+    });
+  });
+}
 
 var pipelines=[
   {id:'insurance',name:'Insurance',columns:cloneColumns(DEFAULT_COLUMNS)}
@@ -991,6 +1016,9 @@ function saveToStorage(){
     }
     syncActivePipeline();
   }catch(e){console.warn('load failed',e);}
+  // After loading, ensure any newer default stages (Denied/Appeal/Retail/Closed-Denied) exist
+  // and that closed-flag is applied to legacy stages like "completed".
+  try { backfillDefaultStages(); } catch(e){ console.warn('backfill failed', e); }
 })();
 
 syncActivePipeline();
@@ -1483,18 +1511,37 @@ function renderCard(j){
   const ageDays=daysSinceCreated(j);
   const progress=stageChecklistProgress(j,col);
   const taskMeta=progress.total?`${progress.done}/${progress.total}`:(j.tasks>0?`${j.tasksDone}/${j.tasks}`:'');
-  return `<div class="job-card" draggable="true" data-jid="${j.id}">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+  // Split address: first comma divides street from city/state/zip
+  const addrSplit = (a) => {
+    if(!a) return { street: '', rest: '' };
+    const i = a.indexOf(',');
+    return i > -1
+      ? { street: a.slice(0, i).trim(), rest: a.slice(i+1).trim() }
+      : { street: a.trim(), rest: '' };
+  };
+  const _a = addrSplit(j.address);
+  const isClosed = !!col?.closed;
+  // Badge text for the four fork/closed stages
+  const stageBadgeMap = {
+    'denied': { label: 'DENIED', bg: 'rgba(239,68,68,0.15)', fg: '#EF4444' },
+    'appeal': { label: 'APPEAL', bg: 'rgba(245,158,11,0.15)', fg: '#F59E0B' },
+    'retail': { label: 'RETAIL', bg: 'rgba(14,165,233,0.15)', fg: '#0EA5E9' },
+    'closed-denied': { label: 'CLOSED', bg: 'rgba(107,114,128,0.20)', fg: '#9CA3AF' },
+    'completed': { label: 'DONE', bg: 'rgba(56,189,248,0.15)', fg: '#38BDF8' },
+  };
+  const badge = stageBadgeMap[col?.id];
+  return `<div class="job-card${isClosed?' card-closed':''}" draggable="true" data-jid="${j.id}">
+    ${badge ? `<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:999px;background:${badge.bg};color:${badge.fg};margin-bottom:5px">${badge.label}</div>` : ''}    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
       <div style="flex:1;min-width:0">
         <div class="card-name">${j.name}</div>
-        <div class="card-sub" style="margin-top:2px;line-height:1.4">${j.address}</div>
+        <div class="card-sub" style="margin-top:2px;line-height:1.4">${_a.street ? escapeHtml(_a.street) : ''}${_a.rest ? `<br>${escapeHtml(_a.rest)}` : ''}</div>
       </div>
       ${hasInsurance?`<div style="flex-shrink:0;text-align:right">
         ${j.carrier?`<div style="font-size:9px;font-weight:700;color:var(--brand-light);white-space:nowrap">${j.carrier}</div>`:''}
         ${j.claimNum?`<div style="font-size:9px;color:var(--muted);white-space:nowrap">#${j.claimNum}</div>`:''}
       </div>`:''}
     </div>
-    <div class="card-phone" style="margin-top:5px"><i class="ti ti-phone" aria-hidden="true"></i>${j.phone}</div>
+    <div class="card-phone" style="margin-top:5px"><i class="ti ti-phone" aria-hidden="true"></i>${formatPhone(j.phone) || j.phone || ''}</div>
     <div class="card-footer">
       <div class="card-meta" title="Days since created"><i class="ti ti-clock" aria-hidden="true"></i>${ageDays}d</div>
       <div class="card-meta"><i class="ti ti-message" aria-hidden="true"></i>${j.notes}</div>
@@ -3848,7 +3895,13 @@ function renderBoardPipelineTabs(){
 
 function pipelineJobCount(id){
   const userId=activeBoardUserId();
-  return jobs.filter(j=>(j.pipeline||'insurance')===id && (!userId||j.user===userId)).length;
+  const cols = columnsForPipeline(id);
+  const closedStageIds = new Set(cols.filter(c=>c.closed).map(c=>c.id));
+  return jobs.filter(j =>
+    (j.pipeline||'insurance')===id
+    && !closedStageIds.has(j.col)
+    && (!userId||j.user===userId)
+  ).length;
 }
 
 function renderBoardPipelineDrop(){ /* replaced by tabs */ }
