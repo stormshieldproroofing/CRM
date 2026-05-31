@@ -1034,6 +1034,23 @@ let filterUser=null,draggingId=null,editingColId=null,openJobId=null,activeTab='
 function $(id){return document.getElementById(id)}
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)}
 
+// ── Activity log / Timeline ──
+// Append an event to a job's timeline. type is for icon/style routing.
+// Common types: 'created', 'stage', 'pipeline', 'assigned', 'deposit_add', 'deposit_remove',
+//   'expense_add', 'expense_remove', 'measurement', 'insurance', 'file'.
+function logActivity(jobOrId, type, label, detail){
+  const j = (typeof jobOrId === 'string') ? jobs.find(x => x.id === jobOrId) : jobOrId;
+  if(!j) return;
+  if(!Array.isArray(j.timeline)) j.timeline = [];
+  const by = (window.currentMember && window.currentMember.name) || (window.currentMember && window.currentMember.id) || 'system';
+  j.timeline.push({
+    type, label, detail: detail || '',
+    at: new Date().toISOString(),
+    by,
+  });
+}
+window.logActivity = logActivity;
+
 // Copy text to clipboard with toast feedback
 function copyToClipboard(text, label){
   if(!text || text === '—'){ toast('Nothing to copy'); return; }
@@ -1063,6 +1080,29 @@ function mapsHref(address){
 // Parse OCR text from a check photo. Returns {amount, checkNum}.
 // Heuristics: find the largest plausible dollar amount near a "$" or near the right edge,
 // and find a 3-5 digit "Check #" or top-right number.
+// Geocode a street address via Mapbox. Returns {lat, lng} or null.
+// Used as a fallback when the salesman typed an address without picking a suggestion.
+async function geocodeAddress(addressText){
+  if(!addressText || addressText === '—') return null;
+  // mapboxgl.accessToken is set at script load
+  const token = (typeof mapboxgl !== 'undefined' && mapboxgl.accessToken) ? mapboxgl.accessToken : null;
+  if(!token) return null;
+  try {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(addressText)}.json`
+              + `?access_token=${token}&limit=1&country=us&types=address`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    const feat = data?.features?.[0];
+    const c    = feat?.center;
+    if(Array.isArray(c) && c.length === 2 && isFinite(c[0]) && isFinite(c[1])){
+      return { lng: c[0], lat: c[1] };
+    }
+  } catch(e){
+    console.warn('geocodeAddress failed', e);
+  }
+  return null;
+}
+
 function parseCheckText(text){
   if(!text) return { amount: null, checkNum: null };
   // Normalize: split into lines, strip extra whitespace
@@ -1526,7 +1566,7 @@ function renderBoard(){
       const tc=cb.closest('.col').dataset.col;
       const cdef=columns.find(c=>c.id===tc);
       if(cdef&&cdef.locked){toast('This stage is locked');return}
-      if(draggingId){const j=jobs.find(x=>x.id===draggingId);if(j){if(j.col!==tc&&!canMoveToStage(j,tc)){draggingId=null;return}j.col=tc;saveToStorage();toast(`Moved to ${cdef.name}`);renderBoard()}draggingId=null}
+      if(draggingId){const j=jobs.find(x=>x.id===draggingId);if(j){if(j.col!==tc&&!canMoveToStage(j,tc)){draggingId=null;return}const fromStage=columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name||j.col;j.col=tc;logActivity(j,'stage','Stage changed',`${fromStage} → ${cdef.name}`);saveToStorage();toast(`Moved to ${cdef.name}`);renderBoard()}draggingId=null}
     });
   });
   document.querySelectorAll('.job-card').forEach(c=>{
@@ -1605,6 +1645,7 @@ function renderDetailPanel(){
   const col=jobColumns.find(c=>c.id===j.col)||jobColumns[0];
   const tabs=[
     {id:'overview',icon:'ti-layout-2',label:'Overview'},
+    {id:'timeline',icon:'ti-history',label:'Timeline'},
     {id:'photos',icon:'ti-camera',label:'Photos'},
     {id:'contract',icon:'ti-writing',label:'Contract'},
     {id:'checks',icon:'ti-writing-sign',label:'Checks'},
@@ -2370,6 +2411,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const timeStr=now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
       j2.deposits.push({amount:amt.toFixed(2),desc,date:dateStr,time:timeStr});
       j2.paidVal=(j2.deposits.reduce((s,d)=>s+parseFloat(d.amount),0)).toFixed(2);
+      logActivity(j2, 'deposit_add', 'Deposit added', `$${amt.toLocaleString()} · ${desc}`);
       $('depAddForm').style.display='none';
       $('depAddToggle').style.display='flex';
       $('depAmtInput').value='';
@@ -2380,8 +2422,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     // Edit / delete deposit (global so onclick= works)
     window.depDelete=function(i){
       const j2=curJob();
+      const removed = j2.deposits[i];
       j2.deposits.splice(i,1);
       j2.paidVal=(j2.deposits.reduce((s,d)=>s+parseFloat(d.amount),0)).toFixed(2);
+      if(removed) logActivity(j2, 'deposit_remove', 'Deposit removed', `$${parseFloat(removed.amount).toLocaleString()} · ${removed.desc}`);
       saveToStorage();refreshDepositUI();renderBoard();
     };
     window.depEditOpen=function(i){
@@ -2879,7 +2923,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(!next){toast('Already at final stage');return}
       if(next.locked){toast(`${next.name} is locked`);return}
       if(!canMoveToStage(j,next.id))return;
-      j.col=next.id;saveToStorage();toast(`Moved to ${next.name}`);renderBoard();
+      const fromStageName = jobColumns.find(c=>c.id===j.col)?.name||j.col;
+      j.col=next.id;logActivity(j,'stage','Stage changed',`${fromStageName} → ${next.name}`);saveToStorage();toast(`Moved to ${next.name}`);renderBoard();
       if($('jobsPage')?.style.display!=='none') renderJobsPage();
       renderDetailPanel();
     });
@@ -2897,6 +2942,83 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
     });
 
+  } else if(activeTab==='timeline'){
+    // ── Timeline / Activity log ──
+    const timeline = Array.isArray(j.timeline) ? [...j.timeline] : [];
+    // Most recent first
+    timeline.sort((a, b) => new Date(b.at) - new Date(a.at));
+    const iconForType = (t) => ({
+      created:      'ti-flag',
+      stage:        'ti-arrow-right',
+      pipeline:     'ti-route',
+      assigned:     'ti-user-check',
+      deposit_add:  'ti-cash-banknote',
+      deposit_remove:'ti-cash-off',
+      expense_add:  'ti-receipt',
+      expense_remove:'ti-receipt-off',
+      measurement:  'ti-ruler-measure',
+      insurance:    'ti-shield-check',
+      file:         'ti-file',
+    }[t] || 'ti-circle-dot');
+    const colorForType = (t) => ({
+      created:      '#34D399',
+      stage:        '#4D9DE0',
+      pipeline:     '#A78BFA',
+      assigned:     '#60C4FF',
+      deposit_add:  '#34D399',
+      deposit_remove:'#EF4444',
+      expense_add:  '#F59E0B',
+      expense_remove:'#EF4444',
+      measurement:  '#4D9DE0',
+      insurance:    '#34D399',
+      file:         '#A78BFA',
+    }[t] || 'var(--muted)');
+    const fmtAt = (iso) => {
+      try {
+        const d = new Date(iso);
+        const now = new Date();
+        const sameDay = d.toDateString() === now.toDateString();
+        const dateStr = sameDay
+          ? d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+          : d.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+        return dateStr;
+      } catch(e){ return iso; }
+    };
+
+    $('dpBody').innerHTML = `
+      <div style="padding:16px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Activity Timeline</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${timeline.length} ${timeline.length === 1 ? 'event' : 'events'} tracked on this job</div>
+          </div>
+        </div>
+        ${timeline.length === 0
+          ? `<div style="text-align:center;padding:30px 10px;color:var(--muted);font-size:12px;line-height:1.5">
+              <i class="ti ti-history" style="font-size:30px;color:var(--brand-light);display:block;margin-bottom:8px"></i>
+              No activity yet.<br>Stage changes, deposits, and measurements will appear here as they happen.
+            </div>`
+          : `<div style="position:relative">
+              <!-- Vertical line connecting events -->
+              <div style="position:absolute;left:11px;top:6px;bottom:6px;width:2px;background:var(--border)"></div>
+              ${timeline.map(ev => `
+                <div style="display:flex;gap:11px;align-items:flex-start;margin-bottom:14px;position:relative">
+                  <div style="width:24px;height:24px;border-radius:50%;background:#141927;border:2px solid ${colorForType(ev.type)};display:flex;align-items:center;justify-content:center;flex-shrink:0;z-index:1">
+                    <i class="ti ${iconForType(ev.type)}" style="font-size:12px;color:${colorForType(ev.type)}"></i>
+                  </div>
+                  <div style="flex:1;min-width:0;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:7px;padding:8px 11px">
+                    <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;margin-bottom:${ev.detail?'4px':'0'}">
+                      <span style="font-size:12px;font-weight:700;color:var(--brand)">${escapeHtml(ev.label || '')}</span>
+                      <span style="font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0">${escapeHtml(fmtAt(ev.at))}</span>
+                    </div>
+                    ${ev.detail ? `<div style="font-size:11px;color:var(--brand-light);line-height:1.4">${escapeHtml(ev.detail)}</div>` : ''}
+                    ${ev.by && ev.by !== 'system' ? `<div style="font-size:10px;color:var(--muted);margin-top:3px">by ${escapeHtml(ev.by)}</div>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>`
+        }
+      </div>`;
   } else if(activeTab==='photos'){
     // init photo store on job
     if(!j.photos) j.photos={before:[],during:[],after:[]};
@@ -4429,7 +4551,7 @@ $('cancelAdd').onclick=closeJobModal;
   };
 })();
 
-$('saveJob').onclick=()=>{
+$('saveJob').onclick=async ()=>{
   const fn=($('f-firstname').value||'').trim(),ln=($('f-lastname').value||'').trim();
   const name=[fn,ln].filter(Boolean).join(' ');
   if(!name){toast('Customer name is required');return}
@@ -4439,11 +4561,41 @@ $('saveJob').onclick=()=>{
   const address=addrParts.join(', ')||'—';
   const userId = selectedUserId || USERS[0]?.id || null;
   const picked = window.__pickedLngLat || {};
+
+  // Coordinates: prefer what the user picked from suggestions.
+  // If they typed manually without picking, try a silent geocode so the job still shows on the map.
+  // Only run the geocode call when needed — specifically:
+  //   - New job with no picked coords, OR
+  //   - Existing job where the address actually changed AND no fresh pick was made
+  let lat = picked.lat ?? null;
+  let lng = picked.lng ?? null;
+  const existingJob = editingJobId ? jobs.find(x => x.id === editingJobId) : null;
+  const addressChanged = existingJob ? (existingJob.address !== address) : true;
+  const havePicked = (lat != null && lng != null);
+  const needsGeocode = !havePicked && addressChanged && address !== '—';
+
+  if(needsGeocode){
+    const btn = $('saveJob');
+    const orig = btn ? btn.textContent : '';
+    if(btn){ btn.disabled = true; btn.textContent = 'Locating…'; }
+    const geocoded = await geocodeAddress(address);
+    if(btn){ btn.disabled = false; btn.textContent = orig; }
+    if(geocoded){
+      lat = geocoded.lat;
+      lng = geocoded.lng;
+    }
+    // If geocoding fails, lat/lng stay null and the job saves without a map pin.
+  } else if(!havePicked && existingJob){
+    // Address unchanged and no fresh pick — keep whatever coords the job already had.
+    lat = existingJob.latitude ?? null;
+    lng = existingJob.longitude ?? null;
+  }
+
   const claimData={
     phone:$('f-phone').value||'—',email:$('f-email').value||'—',address,user:userId,col:$('f-stage').value,
     pipeline:currentPipelineId,
-    latitude: picked.lat ?? null,
-    longitude: picked.lng ?? null,
+    latitude: lat,
+    longitude: lng,
     source:$('f-source').value||'Manual Entry',
     carrier:($('f-carrier').value||'').trim(),claimNum:($('f-claimnum').value||'').trim(),
     policyNum:($('f-policynum')?$('f-policynum').value:'')||'',claimType:($('f-claimtype')?$('f-claimtype').value:'')||'',
@@ -4459,7 +4611,30 @@ $('saveJob').onclick=()=>{
   if(editingJobId){
     const j=jobs.find(x=>x.id===editingJobId);
     if(j&&j.col!==claimData.col&&!canMoveToStage(j,claimData.col))return;
-    if(j){ j.name=name; Object.assign(j,claimData); }
+    if(j){
+      // ── Activity log: detect what changed ──
+      const oldStage = j.col, newStage = claimData.col;
+      const oldUser  = j.user, newUser  = claimData.user;
+      const oldPipeline = j.pipeline, newPipeline = claimData.pipeline;
+      const stages = columnsForPipeline(newPipeline || j.pipeline);
+      const stageName = id => stages.find(c => c.id === id)?.name || id;
+      const userName  = id => USERS.find(u => u.id === id)?.name || id;
+      const pipeName  = id => pipelines.find(p => p.id === id)?.name || id;
+      // Insurance/claim numeric change detection — once per save
+      const insChanged =
+        (j.rcv||'') !== (claimData.rcv||'') ||
+        (j.deductible||'') !== (claimData.deductible||'') ||
+        (j.recoverableDep||'') !== (claimData.recoverableDep||'') ||
+        (j.nonRecoverableDep||'') !== (claimData.nonRecoverableDep||'') ||
+        (j.netClaim||'') !== (claimData.netClaim||'');
+
+      j.name=name; Object.assign(j,claimData);
+
+      if(oldStage !== newStage) logActivity(j, 'stage', 'Stage changed', `${stageName(oldStage)} → ${stageName(newStage)}`);
+      if(oldUser  !== newUser)  logActivity(j, 'assigned', 'Reassigned',   `${userName(oldUser) || '—'} → ${userName(newUser) || '—'}`);
+      if(oldPipeline !== newPipeline) logActivity(j, 'pipeline', 'Pipeline changed', `${pipeName(oldPipeline)} → ${pipeName(newPipeline)}`);
+      if(insChanged) logActivity(j, 'insurance', 'Insurance details updated', '');
+    }
     saveToStorage();
     __ajSaving = true;
     $('addJobModal').classList.remove('open');
@@ -4471,7 +4646,10 @@ $('saveJob').onclick=()=>{
     if($('jobsPage')?.style.display!=='none') renderJobsPage();
     if($('detailOverlay').classList.contains('open')) renderDetailPanel();
   } else {
-    jobs.push(Object.assign({id:'j'+Date.now(),name,priority:'low',docs:0,notes:0,tasks:0,tasksDone:0,potVal:'0.00',paidVal:'0.00',created:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})},claimData));
+    const newJob = Object.assign({id:'j'+Date.now(),name,priority:'low',docs:0,notes:0,tasks:0,tasksDone:0,potVal:'0.00',paidVal:'0.00',created:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})},claimData);
+    newJob.timeline = [];
+    jobs.push(newJob);
+    logActivity(newJob, 'created', 'Job created', `Stage: ${columnsForPipeline(newJob.pipeline).find(c=>c.id===newJob.col)?.name || newJob.col}`);
     saveToStorage();
     __ajSaving = true;
     __ajSnapshot = null;
@@ -5489,6 +5667,7 @@ function qmPersistToJob(){
       sections: sectionsData,
       updatedAt: new Date().toISOString(),
     };
+    logActivity(j, 'measurement', 'Roof measurement saved', `${(totalRoof/100).toFixed(1)} squares · ${Math.round(totalRoof).toLocaleString()} sq ft`);
   } else {
     // No usable sections — clear any previous estimate
     delete j.roofEstimate;
