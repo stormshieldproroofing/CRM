@@ -58,6 +58,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .opportunity-tag{text-align:right;font-size:10px;font-weight:700;color:var(--brand-light)}
 .subbar{background:#141927;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:46px;gap:7px;flex-wrap:wrap}
 .subbar-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff;margin-right:8px}
+#boardPipelineTabs::-webkit-scrollbar{display:none}
+.pipe-tab{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:7px 7px 0 0;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;transition:color 0.12s, border-color 0.12s, background 0.12s}
+.pipe-tab:hover{color:var(--brand);background:rgba(77,157,224,0.06)}
+.pipe-tab.active{color:#fff;border-bottom-color:var(--brand-light);background:rgba(77,157,224,0.08)}
+.pipe-tab-count{font-family:'Barlow',sans-serif;font-size:10px;font-weight:700;border-radius:999px;padding:2px 7px;background:rgba(255,255,255,0.05);color:var(--muted);transition:color 0.12s, background 0.12s, border-color 0.12s;border:1px solid transparent}
+.pipe-tab.active .pipe-tab-count{color:var(--brand-light);background:rgba(77,157,224,0.12);border-color:rgba(77,157,224,0.3)}
 .icon-btn{width:28px;height:28px;border-radius:5px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--muted);cursor:pointer;font-size:14px}
 .icon-btn:hover{background:rgba(255,255,255,0.08);color:var(--brand)}
 .pill-btn{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--brand);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;font-family:'Barlow',sans-serif}
@@ -327,14 +333,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <!-- BOARDS PAGE -->
 <div id="boardsPage" style="display:none">
 <div class="subbar">
-  <div class="filter-wrap">
-    <button id="boardPipelineBtn" class="subbar-title" style="border:none;background:none;padding:0;margin-right:8px;display:flex;align-items:center;gap:7px;cursor:pointer">
-      <span id="boardPipelineName">Pipeline</span>
-      <span id="boardPipelineCount" style="font-family:'Barlow',sans-serif;font-size:10px;font-weight:700;color:var(--brand-light);border:1px solid rgba(77,157,224,0.3);background:rgba(77,157,224,0.1);border-radius:999px;padding:2px 7px">0</span>
-      <i class="ti ti-chevron-down" style="font-size:14px;color:var(--muted)" aria-hidden="true"></i>
-    </button>
-    <div class="filter-drop" id="boardPipelineDrop" style="display:none;width:230px"></div>
-  </div>
+  <div id="boardPipelineTabs" style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-right:8px"></div>
   <button class="icon-btn" title="Refresh"><i class="ti ti-refresh" aria-hidden="true"></i></button>
   <button class="icon-btn" title="Lock all"><i class="ti ti-lock" aria-hidden="true"></i></button>
   <button class="icon-btn" title="Automation"><i class="ti ti-bolt" aria-hidden="true"></i></button>
@@ -3827,13 +3826,24 @@ function renderPipelineChrome(){
   const p=currentPipeline();
   const label=$('pipelineBtnLabel');
   if(label) label.textContent='Edit Pipeline';
-  const name=$('boardPipelineName');
-  const count=$('boardPipelineCount');
-  if(name && p) name.textContent=p.name;
-  if(count && p){
-    const total=pipelineJobCount(p.id);
-    count.textContent=total;
-  }
+  // Render pipeline tabs (replaces the old single-name + dropdown setup)
+  renderBoardPipelineTabs();
+}
+
+function renderBoardPipelineTabs(){
+  const wrap = $('boardPipelineTabs');
+  if(!wrap) return;
+  wrap.innerHTML = pipelines.map(p => {
+    const count = pipelineJobCount(p.id);
+    const active = p.id === currentPipelineId;
+    return `<button class="pipe-tab${active?' active':''}" data-pipe-tab="${p.id}">
+      <span>${escapeHtml(p.name)}</span>
+      <span class="pipe-tab-count">${count}</span>
+    </button>`;
+  }).join('');
+  wrap.querySelectorAll('[data-pipe-tab]').forEach(btn => {
+    btn.addEventListener('click', () => switchPipeline(btn.dataset.pipeTab));
+  });
 }
 
 function pipelineJobCount(id){
@@ -3841,23 +3851,7 @@ function pipelineJobCount(id){
   return jobs.filter(j=>(j.pipeline||'insurance')===id && (!userId||j.user===userId)).length;
 }
 
-function renderBoardPipelineDrop(){
-  const drop=$('boardPipelineDrop');
-  drop.innerHTML=`
-    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:4px 7px 7px">Select Pipeline</div>
-    ${pipelines.map(p=>{
-      const count=pipelineJobCount(p.id);
-      return `<div class="filter-item${p.id===currentPipelineId?' active':''}" data-board-pipeline="${p.id}">
-        <i class="ti ${p.id===currentPipelineId?'ti-circle-check':'ti-layout-kanban'}" style="font-size:14px;flex-shrink:0" aria-hidden="true"></i>
-        <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.name)}</span>
-        <span style="font-size:10px;color:inherit;opacity:.75">${count}</span>
-      </div>`;
-    }).join('')}
-  `;
-  drop.querySelectorAll('[data-board-pipeline]').forEach(item=>item.addEventListener('click',()=>{
-    switchPipeline(item.dataset.boardPipeline);
-  }));
-}
+function renderBoardPipelineDrop(){ /* replaced by tabs */ }
 
 function renderPipelineDrop(editingPipelineId=null){
   const drop=$('pipelineDrop');
@@ -3953,7 +3947,7 @@ function createPipelineFromInput(){
   filterUser=null;
   $('filterBtn').classList.remove('active');
   $('pipelineDrop').style.display='none';
-  $('boardPipelineDrop').style.display='none';
+  {const d=document.getElementById('boardPipelineDrop'); if(d) d.style.display='none';}
   saveToStorage();
   toast(`Pipeline added: ${name}`);
   renderBoard();
@@ -3965,7 +3959,7 @@ function switchPipeline(id){
   filterUser=null;
   $('filterBtn').classList.remove('active');
   $('pipelineDrop').style.display='none';
-  $('boardPipelineDrop').style.display='none';
+  {const d=document.getElementById('boardPipelineDrop'); if(d) d.style.display='none';}
   $('detailOverlay').classList.remove('open');
   openJobId=null;
   syncActivePipeline();
@@ -4430,12 +4424,6 @@ $('filterBtn').addEventListener('click',e=>{
   $('filterDrop').style.display=open?'none':'block';
   if(!open)renderFilterDrop();
 });
-$('boardPipelineBtn').addEventListener('click',e=>{
-  e.stopPropagation();
-  const open=$('boardPipelineDrop').style.display!=='none';
-  $('boardPipelineDrop').style.display=open?'none':'block';
-  if(!open)renderBoardPipelineDrop();
-});
 $('pipelineBtn').addEventListener('click',e=>{
   e.stopPropagation();
   const open=$('pipelineDrop').style.display!=='none';
@@ -4444,12 +4432,10 @@ $('pipelineBtn').addEventListener('click',e=>{
 });
 document.addEventListener('click',()=>{
   $('filterDrop').style.display='none';
-  $('boardPipelineDrop').style.display='none';
   $('pipelineDrop').style.display='none';
   $('agentViewDrop').style.display='none';
 });
 $('filterDrop').addEventListener('click',e=>e.stopPropagation());
-$('boardPipelineDrop').addEventListener('click',e=>e.stopPropagation());
 $('pipelineDrop').addEventListener('click',e=>e.stopPropagation());
 $('agentViewAvatar').addEventListener('click',e=>{
   e.stopPropagation();
