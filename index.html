@@ -355,6 +355,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <div class="board-wrap">
   <div class="board" id="board"></div>
+  <div id="forkBoardLabel" style="display:none;margin:18px 0 6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;gap:8px">
+    <span style="height:1px;flex:1;background:linear-gradient(to right, transparent, var(--border) 30%)"></span>
+    <span style="white-space:nowrap"><i class="ti ti-git-fork" style="font-size:13px;margin-right:4px;color:var(--warn)"></i>Off-Track / Closed</span>
+    <span style="height:1px;flex:1;background:linear-gradient(to left, transparent, var(--border) 30%)"></span>
+  </div>
+  <div class="board" id="forkBoard" style="display:none"></div>
 </div>
 </div>
 
@@ -1461,20 +1467,44 @@ function renderBoard(){
   renderAgentViewChrome();
   renderPipelineChrome();
   renderBoardSalesSummary();
-  const board=$('board');board.innerHTML='';
-  columns.forEach(col=>{
-    const colJobs=filteredJobs().filter(j=>j.col===col.id);
-    const d=document.createElement('div');
-    d.className='col'+(col.locked?' locked':'');d.dataset.col=col.id;
-    d.innerHTML=`<div class="col-header">
+  // Stages marked closed (or stages on the "fork" path: denied/appeal/retail/closed-denied) render in a separate bottom strip.
+  // We use both the `closed` flag AND a hardcoded set of fork-stage IDs so this works even when Supabase doesn't store the flag.
+  const FORK_STAGE_IDS = new Set(['denied','appeal','retail','closed-denied']);
+  const isForkStage = (col) => col.closed === true || FORK_STAGE_IDS.has(col.id);
+  const activeCols = columns.filter(c => !isForkStage(c));
+  const forkCols   = columns.filter(c =>  isForkStage(c));
+
+  const renderColumnInto = (container, col) => {
+    const colJobs = filteredJobs().filter(j => j.col === col.id);
+    const d = document.createElement('div');
+    d.className = 'col' + (col.locked ? ' locked' : '');
+    d.dataset.col = col.id;
+    d.innerHTML = `<div class="col-header">
       <div class="col-title" style="color:${col.color||'var(--brand)'}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col.color||'var(--brand-light)'};flex-shrink:0;margin-right:2px"></span>${col.name.toUpperCase()}</div>
       <span class="col-count" style="border-color:${col.color||'var(--border)'}20;color:${col.color||'var(--muted)'}">${colJobs.length}</span>
       ${col.locked?'<i class="ti ti-lock col-lock" aria-hidden="true"></i>':''}
       <div class="col-menu-btn" data-col-menu="${col.id}" title="Edit stage checklist"><i class="ti ti-list-check" aria-hidden="true"></i></div>
     </div>
     <div class="col-body" id="cb-${col.id}">${colJobs.length===0?`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80px;gap:6px"><i class="ti ti-inbox" style="font-size:22px;color:rgba(255,255,255,0.07)" aria-hidden="true"></i><span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.07);letter-spacing:0.08em;text-transform:uppercase">No Jobs</span></div>`:colJobs.map(renderCard).join('')}</div>`;
-    board.appendChild(d);
-  });
+    container.appendChild(d);
+  };
+
+  // Active stages → top strip
+  const board = $('board'); board.innerHTML = '';
+  activeCols.forEach(col => renderColumnInto(board, col));
+
+  // Fork stages → bottom strip (only show the label/strip if any fork stages exist)
+  const forkBoard = $('forkBoard');
+  const forkLabel = $('forkBoardLabel');
+  forkBoard.innerHTML = '';
+  if(forkCols.length){
+    forkLabel.style.display = 'flex';
+    forkBoard.style.display = 'flex';
+    forkCols.forEach(col => renderColumnInto(forkBoard, col));
+  } else {
+    forkLabel.style.display = 'none';
+    forkBoard.style.display = 'none';
+  }
   const ab=document.createElement('div');ab.className='add-col-btn';ab.title='Add stage';
   ab.innerHTML='<i class="ti ti-plus" aria-hidden="true"></i>';
   ab.onclick=()=>{$('editBoardModal').classList.add('open');renderBoardList()};
