@@ -1498,8 +1498,16 @@ function renderBoard(){
   const forkLabel = $('forkBoardLabel');
   forkBoard.innerHTML = '';
   if(forkCols.length){
+    // Compute indent so the first fork column lines up under the "Approved" column on the top strip.
+    // Column width + gap come from CSS: .col{width:220px} + .board{gap:12px}.
+    const COL_W = 220, GAP = 12;
+    const branchAfterId = 'approved';   // fork branches off this top-strip column
+    const branchIdx = activeCols.findIndex(c => c.id === branchAfterId);
+    const indentPx = branchIdx > 0 ? branchIdx * (COL_W + GAP) : 0;
     forkLabel.style.display = 'flex';
+    forkLabel.style.paddingLeft = indentPx + 'px';
     forkBoard.style.display = 'flex';
+    forkBoard.style.paddingLeft = indentPx + 'px';
     forkCols.forEach(col => renderColumnInto(forkBoard, col));
   } else {
     forkLabel.style.display = 'none';
