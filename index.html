@@ -1026,6 +1026,59 @@ function mapsHref(address){
   if(!address || address === '—') return '#';
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address);
 }
+
+// Parse OCR text from a check photo. Returns {amount, checkNum}.
+// Heuristics: find the largest plausible dollar amount near a "$" or near the right edge,
+// and find a 3-5 digit "Check #" or top-right number.
+function parseCheckText(text){
+  if(!text) return { amount: null, checkNum: null };
+  // Normalize: split into lines, strip extra whitespace
+  const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+  // ── Amount detection ──
+  // Pattern: optional $, digits with optional commas, then a decimal portion (or whole dollars)
+  const amountRe = /\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2}|[0-9]{2,6}(?!\.))/g;
+  const candidates = [];
+  lines.forEach((line, idx) => {
+    let m;
+    while((m = amountRe.exec(line)) !== null){
+      const raw = m[1].replace(/,/g, '');
+      const num = parseFloat(raw);
+      if(!isFinite(num) || num <= 0) continue;
+      // Score: prefer values $50–$50,000 (typical check range), prefer those near a $ sign,
+      // prefer those with a decimal (real check amounts almost always have .XX)
+      let score = 0;
+      if(num >= 50 && num <= 50000) score += 10;
+      if(num >= 200 && num <= 25000) score += 5;
+      if(line.includes('$')) score += 5;
+      if(m[1].includes('.')) score += 8;
+      if(/dollars?/i.test(line)) score += 3;
+      // Penalize routing/account-style runs (very long all-digits)
+      if(raw.length >= 8 && !m[1].includes('.')) score -= 10;
+      candidates.push({ num, score, raw: m[1], line });
+    }
+  });
+  // Pick highest score; tie-break by largest amount
+  candidates.sort((a, b) => b.score - a.score || b.num - a.num);
+  const amount = candidates.length ? candidates[0].num : null;
+
+  // ── Check number detection ──
+  // Check numbers are usually 3–6 digits, isolated, often near "No." or in top-right area.
+  let checkNum = null;
+  for(const line of lines){
+    const noMatch = line.match(/(?:check\s*#|no\.?|number)\s*([0-9]{3,6})/i);
+    if(noMatch){ checkNum = noMatch[1]; break; }
+  }
+  if(!checkNum){
+    // Fallback: a short standalone number in the first few lines (top of check)
+    for(const line of lines.slice(0, 4)){
+      const m = line.match(/^\s*([0-9]{3,6})\s*$/);
+      if(m){ checkNum = m[1]; break; }
+    }
+  }
+
+  return { amount, checkNum };
+}
 function currentAgentView(){return currentAgentViewId==='all'?null:(USERS.find(u=>u.id===currentAgentViewId)||USERS[0])}
 function activeBoardUserId(){return filterUser || (currentAgentViewId==='all'?null:currentAgentViewId)}
 
@@ -1721,6 +1774,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add Deposit
                   </button>
                   <div id="depAddForm" style="display:none;margin-top:8px;padding:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px">
+                    <!-- OCR check upload -->
+                    <div style="margin-bottom:10px;padding:8px;background:rgba(77,157,224,0.05);border:1px dashed rgba(77,157,224,0.3);border-radius:6px">
+                      <button id="depUploadCheckBtn" type="button" style="width:100%;padding:7px;border:none;border-radius:5px;background:rgba(77,157,224,0.15);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif">
+                        <i class="ti ti-camera" style="font-size:13px"></i>
+                        <span id="depUploadCheckLabel">Scan Check Photo</span>
+                      </button>
+                      <input id="depCheckFile" type="file" accept="image/*" capture="environment" style="display:none">
+                      <div id="depCheckStatus" style="display:none;margin-top:6px;font-size:10px;line-height:1.4"></div>
+                    </div>
                     <div style="margin-bottom:8px">
                       <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Description</label>
                       <select id="depDescSel" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
@@ -2128,11 +2190,90 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       $('depAddToggle').style.display='none';
       $('depAmtInput').focus();
     });
+
+    // ── Check photo OCR via Google Vision API ──
+    const checkBtn   = $('depUploadCheckBtn');
+    const checkInput = $('depCheckFile');
+    const checkLbl   = $('depUploadCheckLabel');
+    const checkStat  = $('depCheckStatus');
+    if(checkBtn && checkInput){
+      checkBtn.addEventListener('click', e => { e.stopPropagation(); checkInput.click(); });
+      checkInput.addEventListener('click', e => e.stopPropagation());
+      checkInput.addEventListener('change', async e => {
+        e.stopPropagation();
+        const file = e.target.files?.[0];
+        if(!file) return;
+        // Show "reading…" state
+        checkBtn.disabled = true;
+        if(checkLbl) checkLbl.textContent = 'Reading check…';
+        if(checkStat){ checkStat.style.display = 'block'; checkStat.style.color = 'var(--muted)'; checkStat.textContent = 'Processing photo…'; }
+
+        try {
+          // 1. Read file as base64
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload  = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = () => reject(new Error('Could not read file'));
+            reader.readAsDataURL(file);
+          });
+          // 2. Call Google Vision API
+          const apiKey = 'AIzaSyAkwB1-yQIBajaxb6HLo-3tMwHX8gCsReU';
+          const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              requests: [{
+                image: { content: base64 },
+                features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+              }],
+            }),
+          });
+          const data = await res.json();
+          if(data.error || data.responses?.[0]?.error){
+            throw new Error(data.error?.message || data.responses[0].error.message || 'OCR failed');
+          }
+          const fullText = data.responses?.[0]?.fullTextAnnotation?.text || '';
+          if(!fullText){ throw new Error('No text detected in image'); }
+
+          // 3. Parse for amount and check number
+          const parsed = parseCheckText(fullText);
+
+          // 4. Pre-fill fields
+          let prefilled = [];
+          if(parsed.amount != null){
+            $('depAmtInput').value = parsed.amount.toFixed(2);
+            prefilled.push(`amount $${parsed.amount.toLocaleString()}`);
+          }
+          if(parsed.checkNum && $('depDescSel')){
+            // Just leave the dropdown as-is (deductible/net claim/etc.), but show check # in status
+            prefilled.push(`check #${parsed.checkNum}`);
+          }
+          if(prefilled.length){
+            checkStat.style.color = '#34D399';
+            checkStat.innerHTML = `Found: ${prefilled.join(' · ')}<br><span style="color:var(--muted)">Verify before saving</span>`;
+          } else {
+            checkStat.style.color = 'var(--warn)';
+            checkStat.textContent = 'Could not find amount automatically. Please enter manually.';
+          }
+        } catch(err){
+          console.warn('Check OCR failed', err);
+          checkStat.style.display = 'block';
+          checkStat.style.color = 'var(--danger)';
+          checkStat.textContent = 'OCR failed: ' + (err.message || 'unknown error');
+        } finally {
+          checkBtn.disabled = false;
+          if(checkLbl) checkLbl.textContent = 'Scan Check Photo';
+          checkInput.value = '';   // allow re-uploading same file
+        }
+      });
+    }
+
     $('depCancelNew')&&$('depCancelNew').addEventListener('click',e=>{
       e.stopPropagation();
       $('depAddForm').style.display='none';
       $('depAddToggle').style.display='flex';
       $('depAmtInput').value='';
+      if(checkStat){ checkStat.style.display = 'none'; checkStat.textContent = ''; }
     });
     $('depSaveNew')&&$('depSaveNew').addEventListener('click',e=>{
       e.stopPropagation();
