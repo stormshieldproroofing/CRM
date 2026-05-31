@@ -777,6 +777,21 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
           </div>
         </div>
 
+        <!-- Net Claim (derived or directly entered) -->
+        <div style="margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Net Claim (ACV − Deductible)</label>
+            <span id="f-netclaim-status" style="font-size:9px;color:var(--muted);font-style:italic"></span>
+          </div>
+          <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
+            <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
+            <input id="f-netclaim" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+          </div>
+          <div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.4">
+            Auto-calculates from the other fields. Fill in any 4 of {RCV, Deductible, Recov Dep, Non-Recov Dep, Net Claim} and the 5th computes automatically.
+          </div>
+        </div>
+
         <!-- Adjuster name + phone -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <input id="f-adjname" style="background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--warn)'" onblur="this.style.borderColor='var(--border)'" placeholder="Adjuster name">
@@ -3898,7 +3913,7 @@ function snapshotAddJobForm(){
   const fields = ['f-firstname','f-lastname','f-phone','f-ext','f-email','f-source',
     'f-street','f-apt','f-city','f-state','f-zip','f-stage',
     'f-claimtype','f-claimstatus','f-carrier','f-policynum','f-claimnum','f-dol',
-    'f-rcv','f-deductible','f-recovdep','f-nonrecovdep'];
+    'f-rcv','f-deductible','f-recovdep','f-nonrecovdep','f-netclaim'];
   const snap = {};
   fields.forEach(id => {
     const el = document.getElementById(id);
@@ -4015,6 +4030,8 @@ function openEditJob(id){
   if($('f-deductible'))$('f-deductible').value= j.deductible||'';
   if($('f-recovdep'))  $('f-recovdep').value  = j.recoverableDep||'';
   if($('f-nonrecovdep'))$('f-nonrecovdep').value= j.nonRecoverableDep||'';
+  if($('f-netclaim'))  $('f-netclaim').value  = j.netClaim||'';
+  if(window.__resetInsuranceInterlock) window.__resetInsuranceInterlock();
   if($('f-adjname'))   $('f-adjname').value   = j.adjName||'';
   if($('f-adjphone'))  $('f-adjphone').value  = j.adjPhone||'';
   if($('f-inspdate'))  $('f-inspdate').value  = j.inspDate||'';
@@ -4023,7 +4040,7 @@ function openEditJob(id){
   if($('f-claimstatus'))setSelectByText($('f-claimstatus'), j.claimStatus);
 
   // Open insurance section if any insurance data is present
-  const hasIns = j.carrier||j.policyNum||j.claimNum||j.dateOfLoss||j.rcv||j.deductible||j.recoverableDep||j.nonRecoverableDep||j.adjName||j.adjPhone||j.inspDate||j.claimNotes||j.claimType||j.claimStatus;
+  const hasIns = j.carrier||j.policyNum||j.claimNum||j.dateOfLoss||j.rcv||j.deductible||j.recoverableDep||j.nonRecoverableDep||j.netClaim||j.adjName||j.adjPhone||j.inspDate||j.claimNotes||j.claimType||j.claimStatus;
   setInsuranceSection(!!hasIns);
 
   // Set assign dropdown to the job's assigned user
@@ -4096,6 +4113,96 @@ function openAddJobModal(){
 $('addJobBtn').onclick=openAddJobModal;
 $('cancelAdd').onclick=closeJobModal;
 
+// ── Insurance fields auto-calc interlock ──
+// Identity: RCV = Net Claim + Deductible + Recoverable Dep + Non-Recoverable Dep
+// Behavior: when 4 of 5 fields have values, the 5th auto-fills.
+// After all 5 are filled, the field that was MOST RECENTLY blank continues to auto-derive
+// when the others change. User can override by typing into the derived field.
+(function setupInsuranceInterlock(){
+  const FIELDS = ['f-rcv','f-deductible','f-recovdep','f-nonrecovdep','f-netclaim'];
+  // Stack of fields in order they were filled (most recent at the end).
+  // The "derived" field is the one NOT in this stack, or the oldest entry if all 5 are filled.
+  let fillOrder = [];
+
+  const val = id => {
+    const el = document.getElementById(id);
+    const v = el ? parseFloat(el.value) : NaN;
+    return isFinite(v) ? v : null;
+  };
+  const setVal = (id, num) => {
+    const el = document.getElementById(id);
+    if(!el || document.activeElement === el) return;  // don't overwrite while user is typing
+    el.value = (num != null && isFinite(num)) ? num.toFixed(2).replace(/\.00$/, '') : '';
+  };
+
+  // Compute the derived field's value from the other four
+  // RCV = NetClaim + Deductible + RecovDep + NonRecovDep
+  function deriveFor(targetId){
+    const rcv = val('f-rcv'), ded = val('f-deductible'),
+          rdep = val('f-recovdep'), nrdep = val('f-nonrecovdep'),
+          nc = val('f-netclaim');
+    switch(targetId){
+      case 'f-rcv':       return (nc != null && ded != null && rdep != null && nrdep != null) ? (nc + ded + rdep + nrdep) : null;
+      case 'f-netclaim':  return (rcv != null && ded != null && rdep != null && nrdep != null) ? (rcv - ded - rdep - nrdep) : null;
+      case 'f-deductible':return (rcv != null && nc != null && rdep != null && nrdep != null) ? (rcv - nc - rdep - nrdep) : null;
+      case 'f-recovdep':  return (rcv != null && nc != null && ded != null && nrdep != null) ? (rcv - nc - ded - nrdep) : null;
+      case 'f-nonrecovdep':return (rcv != null && nc != null && ded != null && rdep != null) ? (rcv - nc - ded - rdep) : null;
+    }
+    return null;
+  }
+
+  // Which field should currently be derived?
+  function deriveTarget(){
+    const filled = FIELDS.filter(id => val(id) != null);
+    // If <4 filled, no derivation yet
+    if(filled.length < 4) return null;
+    // If exactly 4 filled, the empty one is derived
+    if(filled.length === 4){
+      return FIELDS.find(id => val(id) == null) || null;
+    }
+    // All 5 filled — derive the field that was filled FIRST (least recent)
+    // i.e. the field least represented in fillOrder
+    for(const id of FIELDS){
+      if(!fillOrder.includes(id)) return id;
+    }
+    return fillOrder[0] || null;
+  }
+
+  function recompute(){
+    const target = deriveTarget();
+    const status = document.getElementById('f-netclaim-status');
+    if(!target){ if(status) status.textContent = ''; return; }
+    const derived = deriveFor(target);
+    if(derived != null && derived >= 0){
+      setVal(target, derived);
+    }
+    // Visual hint on Net Claim if it's currently the derived field
+    if(status){
+      status.textContent = (target === 'f-netclaim') ? 'auto-calculated' : '';
+    }
+  }
+
+  // Wire each field
+  FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', () => {
+      // Update the fill order — move this field to "most recent typed"
+      fillOrder = fillOrder.filter(x => x !== id);
+      if(val(id) != null) fillOrder.push(id);
+      recompute();
+    });
+    // Also recompute on blur in case the user pastes/edits without firing input correctly
+    el.addEventListener('blur', recompute);
+  });
+
+  // Reset state when modal opens (re-detect order from currently-populated values)
+  window.__resetInsuranceInterlock = () => {
+    fillOrder = FIELDS.filter(id => val(id) != null);
+    recompute();
+  };
+})();
+
 $('saveJob').onclick=()=>{
   const fn=($('f-firstname').value||'').trim(),ln=($('f-lastname').value||'').trim();
   const name=[fn,ln].filter(Boolean).join(' ');
@@ -4118,6 +4225,7 @@ $('saveJob').onclick=()=>{
     rcv:($('f-rcv')?$('f-rcv').value:'')||'',deductible:($('f-deductible')?$('f-deductible').value:'')||'',
     recoverableDep:($('f-recovdep')?$('f-recovdep').value:'')||'',
     nonRecoverableDep:($('f-nonrecovdep')?$('f-nonrecovdep').value:'')||'',
+    netClaim:($('f-netclaim')?$('f-netclaim').value:'')||'',
     adjName:($('f-adjname')?$('f-adjname').value:'')||'',adjPhone:($('f-adjphone')?$('f-adjphone').value:'')||'',
     inspDate:($('f-inspdate')?$('f-inspdate').value:'')||'',claimNotes:($('f-claimnotes')?$('f-claimnotes').value:'')||''
   };
