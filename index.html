@@ -463,10 +463,15 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <div id="calendarPage" style="display:none">
   <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Production Schedule</div>
-    <button id="calPrev" class="icon-btn" title="Previous week"><i class="ti ti-chevron-left"></i></button>
+    <button id="calPrev" class="icon-btn" title="Previous"><i class="ti ti-chevron-left"></i></button>
     <div id="calWeekLabel" style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;color:#fff;min-width:200px;text-align:center"></div>
-    <button id="calNext" class="icon-btn" title="Next week"><i class="ti ti-chevron-right"></i></button>
+    <button id="calNext" class="icon-btn" title="Next"><i class="ti ti-chevron-right"></i></button>
     <button id="calToday" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">Today</button>
+    <!-- Week / Month toggle -->
+    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-left:6px">
+      <button id="calViewMonth" class="cal-view-btn" data-view="month" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">Month</button>
+      <button id="calViewWeek"  class="cal-view-btn" data-view="week"  style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">Week</button>
+    </div>
     <div style="flex:1"></div>
     <div id="calCrewBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted)">
       <i class="ti ti-users-group" style="font-size:13px;color:var(--brand-light)"></i>
@@ -514,6 +519,34 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-job-card .cjc-name{font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-job-card .cjc-addr{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-job-card .cjc-pill{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px;background:rgba(77,157,224,0.15);color:var(--brand-light);margin-top:4px}
+
+/* Month view */
+#calWeekGrid.cal-month{grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(96px,1fr)}
+.cal-month-dow{background:#0F1117;padding:6px 8px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)}
+.cal-mday{background:#141927;padding:5px 6px;display:flex;flex-direction:column;gap:3px;overflow:hidden;min-height:0;position:relative;transition:background 0.15s}
+.cal-mday.cal-mday-other{opacity:0.42}
+.cal-mday.cal-mday-today{background:#181F30;box-shadow:inset 0 0 0 1px rgba(77,157,224,0.4)}
+.cal-mday.cal-mday-full{background:#1A1216}
+.cal-mday.cal-drop-ok{background:rgba(52,211,153,0.10);box-shadow:inset 0 0 0 2px var(--success)}
+.cal-mday.cal-drop-bad{background:rgba(239,68,68,0.08);box-shadow:inset 0 0 0 2px var(--danger);cursor:not-allowed}
+.cal-mday-head{display:flex;justify-content:space-between;align-items:center;gap:4px;flex-shrink:0}
+.cal-mday-num{font-family:'Barlow',sans-serif;font-weight:700;font-size:13px;color:#fff;line-height:1}
+.cal-mday-today .cal-mday-num{color:var(--brand-light)}
+.cal-mday-cap{font-size:9px;font-weight:700;padding:1px 5px;border-radius:999px;background:rgba(255,255,255,0.05);color:var(--muted)}
+.cal-mday-cap.cap-open{background:rgba(52,211,153,0.12);color:var(--success)}
+.cal-mday-cap.cap-full{background:rgba(239,68,68,0.12);color:var(--danger)}
+.cal-mchip{font-size:10px;padding:2px 6px;border-radius:4px;background:#1E253A;border:1px solid var(--border);color:#fff;cursor:grab;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.cal-mchip:hover{border-color:var(--brand-light)}
+.cal-mchip.dragging{opacity:0.4}
+.cal-mmore{font-size:9px;color:var(--brand-light);cursor:pointer;padding:1px 4px;font-weight:600}
+.cal-mmore:hover{text-decoration:underline}
+
+/* Day popup */
+.cal-day-popup-bg{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:none;align-items:center;justify-content:center}
+.cal-day-popup-bg.open{display:flex}
+.cal-day-popup{background:#141927;border:1px solid var(--border);border-radius:10px;width:380px;max-width:92vw;max-height:80vh;overflow:hidden;display:flex;flex-direction:column}
+.cal-day-popup-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.cal-day-popup-body{padding:12px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .map-popup .mp-name{font-weight:700;font-size:13px;color:#0F1117;margin-bottom:3px}
 .map-popup .mp-row{font-size:11px;color:#475569;margin-top:2px}
 .map-popup .mp-stage{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:11px;color:#fff;margin-top:5px;text-transform:uppercase;letter-spacing:.3px}
@@ -989,6 +1022,20 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Calendar day-detail popup (month view click) -->
+<div class="cal-day-popup-bg" id="calDayPopupBg">
+  <div class="cal-day-popup">
+    <div class="cal-day-popup-head">
+      <div>
+        <div id="calDayPopupDate" style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff"></div>
+        <div id="calDayPopupCap" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+      </div>
+      <button id="calDayPopupClose" class="icon-btn" title="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cal-day-popup-body" id="calDayPopupBody"></div>
+  </div>
+</div>
 </div>
 
 <script>
@@ -5143,29 +5190,52 @@ function isAdmin(){
   return (window.currentMember && window.currentMember.role === 'admin');
 }
 
-function renderCalendarPage(){
-  if(!calWeekStart) calWeekStart = calStartOfWeek(new Date());
-  const grid  = document.getElementById('calWeekGrid');
-  const label = document.getElementById('calWeekLabel');
-  const crewCount = document.getElementById('calCrewCount');
-  if(!grid) return;
+// View state: 'month' default, 'week' alternate. Anchor date drives navigation.
+let calView = localStorage.getItem('stormshield_cal_view') || 'month';
+let calAnchor = null;  // First-of-month for month view, Monday for week view
 
+function renderCalendarPage(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  if(!calAnchor){
+    calAnchor = calView === 'month'
+      ? new Date(today.getFullYear(), today.getMonth(), 1)
+      : calStartOfWeek(today);
+  }
+  // Sync toggle button styles
+  ['calViewMonth','calViewWeek'].forEach(id => {
+    const b = document.getElementById(id);
+    if(!b) return;
+    const isActive = b.dataset.view === calView;
+    b.style.background = isActive ? 'rgba(77,157,224,0.15)' : 'transparent';
+    b.style.color = isActive ? 'var(--brand-light)' : 'var(--muted)';
+  });
+  const crewCount = document.getElementById('calCrewCount');
   if(crewCount) crewCount.textContent = calCrewsPerDay;
 
-  // Build 6 days: Mon..Sat
+  if(calView === 'month') renderCalendarMonth();
+  else renderCalendarWeek();
+  renderCalendarSidebar();
+}
+
+function renderCalendarWeek(){
+  const grid = document.getElementById('calWeekGrid');
+  const label = document.getElementById('calWeekLabel');
+  if(!grid) return;
+  grid.classList.remove('cal-month');
+  grid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+  grid.style.gridAutoRows = '';
+  // calAnchor in week view is the Monday
+  const monday = calStartOfWeek(calAnchor);
+  calAnchor = monday;
   const days = [];
-  for(let i = 0; i < 6; i++){
-    const d = new Date(calWeekStart);
-    d.setDate(calWeekStart.getDate() + i);
-    days.push(d);
+  for(let i=0;i<6;i++){
+    const d = new Date(monday); d.setDate(monday.getDate()+i); days.push(d);
   }
-  // Week label "May 27 – Jun 1, 2026"
-  const fmt = (d, opts) => d.toLocaleDateString('en-US', opts);
+  const fmt = (d,opts) => d.toLocaleDateString('en-US', opts);
   const sameMonth = days[0].getMonth() === days[5].getMonth();
   label.textContent = sameMonth
     ? `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[5],{day:'numeric',year:'numeric'})}`
     : `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[5],{month:'short',day:'numeric',year:'numeric'})}`;
-
   const today = new Date(); today.setHours(0,0,0,0);
 
   grid.innerHTML = days.map(d => {
@@ -5191,11 +5261,77 @@ function renderCalendarPage(){
         <div class="cal-day-body" data-cal-body="${key}">
           ${dayJobs.map(j => renderCalJobCard(j)).join('')}
         </div>
-      </div>
-    `;
+      </div>`;
+  }).join('');
+  wireCalDragDrop();
+}
+
+function renderCalendarMonth(){
+  const grid = document.getElementById('calWeekGrid');
+  const label = document.getElementById('calWeekLabel');
+  if(!grid) return;
+  grid.classList.add('cal-month');
+  grid.style.gridTemplateColumns = '';   // CSS class takes over
+  // calAnchor in month view is the 1st of the displayed month
+  const first = new Date(calAnchor.getFullYear(), calAnchor.getMonth(), 1);
+  calAnchor = first;
+  label.textContent = first.toLocaleDateString('en-US', {month:'long', year:'numeric'});
+
+  // Build a 6-week grid starting from the Monday before/on the 1st
+  const gridStart = calStartOfWeek(first);
+  const cells = [];
+  for(let i=0;i<42;i++){   // 6 weeks * 7 days
+    const d = new Date(gridStart); d.setDate(gridStart.getDate()+i);
+    cells.push(d);
+  }
+  // Trim trailing weeks that are entirely in the next month (so the grid isn't too tall)
+  // Keep at least 5 rows; drop the 6th only if the entire 6th row is in next month.
+  const row6Start = cells[35];
+  const trimRow6 = row6Start.getMonth() !== first.getMonth();
+  const visibleCells = trimRow6 ? cells.slice(0, 35) : cells;
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dows = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+
+  const dowHtml = dows.map(n => `<div class="cal-month-dow">${n}</div>`).join('');
+  const cellHtml = visibleCells.map(d => {
+    const key = calDateKey(d);
+    const dayJobs = calJobsOnDay(key);
+    const inMonth = d.getMonth() === first.getMonth();
+    const isToday = calSameDay(d, today);
+    const isFull  = dayJobs.length >= calCrewsPerDay;
+    const cls = ['cal-mday'];
+    if(!inMonth) cls.push('cal-mday-other');
+    if(isToday)  cls.push('cal-mday-today');
+    if(isFull)   cls.push('cal-mday-full');
+    const capCls = isFull ? 'cap-full' : (dayJobs.length ? 'cap-open' : '');
+    // Show up to 2 chips; rest as "+N more"
+    const MAX_CHIPS = 2;
+    const visibleJobs = dayJobs.slice(0, MAX_CHIPS);
+    const moreCount = dayJobs.length - visibleJobs.length;
+    const chipsHtml = visibleJobs.map(j => {
+      const last = (j.name || '').split(' ').slice(-1)[0] || j.name || '—';
+      return `<div class="cal-mchip" draggable="true" data-cal-job="${j.id}" title="${escapeHtml(j.name||'')}">${escapeHtml(last)}</div>`;
+    }).join('');
+    const moreHtml = moreCount > 0 ? `<div class="cal-mmore" data-cal-more="${key}">+${moreCount} more</div>` : '';
+    return `
+      <div class="${cls.join(' ')}" data-cal-day="${key}">
+        <div class="cal-mday-head">
+          <span class="cal-mday-num">${d.getDate()}</span>
+          ${dayJobs.length ? `<span class="cal-mday-cap ${capCls}">${dayJobs.length}/${calCrewsPerDay}</span>` : ''}
+        </div>
+        ${chipsHtml}
+        ${moreHtml}
+      </div>`;
   }).join('');
 
-  // Unscheduled jobs sidebar — active jobs with no build date and not closed
+  grid.innerHTML = dowHtml + cellHtml;
+  wireCalDragDrop();
+  wireCalMonthInteractions();
+}
+
+function renderCalendarSidebar(){
+  // Unscheduled jobs sidebar (shared between views)
   const unsched = jobs.filter(j => {
     if(j.buildDate) return false;
     const cols = columnsForPipeline(j.pipeline || 'insurance');
@@ -5214,8 +5350,60 @@ function renderCalendarPage(){
           All active jobs are scheduled.
         </div>`;
   }
-
+  // Bind drag handlers on sidebar cards
   wireCalDragDrop();
+}
+
+// Wire month-view click behavior: empty area opens day popup; chips open job detail.
+function wireCalMonthInteractions(){
+  document.querySelectorAll('[data-cal-more]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      openCalDayPopup(el.dataset.calMore);
+    });
+  });
+  document.querySelectorAll('.cal-mchip').forEach(chip => {
+    chip.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = chip.dataset.calJob;
+      const j = jobs.find(x => x.id === id);
+      if(j && typeof openDetail === 'function') openDetail(j.id);
+    });
+  });
+  document.querySelectorAll('.cal-mday').forEach(cell => {
+    cell.addEventListener('click', e => {
+      // Click on empty cell area (not on chip/more) opens the day popup
+      if(e.target.classList.contains('cal-mday') || e.target.classList.contains('cal-mday-head') || e.target.classList.contains('cal-mday-num') || e.target.classList.contains('cal-mday-cap')){
+        openCalDayPopup(cell.dataset.calDay);
+      }
+    });
+  });
+}
+
+function openCalDayPopup(dateKey){
+  const date = calParseKey(dateKey);
+  if(!date) return;
+  const dayJobs = calJobsOnDay(dateKey);
+  const fmt = date.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+  document.getElementById('calDayPopupDate').textContent = fmt;
+  document.getElementById('calDayPopupCap').textContent  = `${dayJobs.length} of ${calCrewsPerDay} crews booked`;
+  const body = document.getElementById('calDayPopupBody');
+  body.innerHTML = dayJobs.length
+    ? dayJobs.map(j => `
+        <div style="background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:9px 11px;cursor:pointer" data-cal-popup-job="${j.id}">
+          <div style="font-size:13px;font-weight:600;color:#fff">${escapeHtml(j.name||'—')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${escapeHtml((j.address||'').split(',')[0]||'—')}</div>
+          ${j.carrier?`<div style="font-size:10px;color:var(--brand-light);margin-top:3px">${escapeHtml(j.carrier)}${j.claimNum?' · '+escapeHtml(j.claimNum):''}</div>`:''}
+        </div>`).join('')
+    : `<div style="text-align:center;padding:20px 8px;color:var(--muted);font-size:12px">No jobs scheduled on this day.</div>`;
+  body.querySelectorAll('[data-cal-popup-job]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.calPopupJob;
+      document.getElementById('calDayPopupBg').classList.remove('open');
+      if(typeof openDetail === 'function') openDetail(id);
+    });
+  });
+  document.getElementById('calDayPopupBg').classList.add('open');
 }
 
 function renderCalJobCard(j){
@@ -5233,24 +5421,23 @@ function renderCalJobCard(j){
 let calDraggingId = null;
 
 function wireCalDragDrop(){
-  // Cards
-  document.querySelectorAll('.cal-job-card').forEach(card => {
+  // Draggable cards — both week-view full cards and month-view chips
+  document.querySelectorAll('.cal-job-card, .cal-mchip').forEach(card => {
     card.addEventListener('dragstart', e => {
       calDraggingId = card.dataset.calJob;
       card.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
-      // Some browsers require setData to allow drop
       try { e.dataTransfer.setData('text/plain', calDraggingId); } catch(_){}
     });
     card.addEventListener('dragend', () => {
       calDraggingId = null;
-      document.querySelectorAll('.cal-day').forEach(d => d.classList.remove('cal-drop-ok','cal-drop-bad'));
+      document.querySelectorAll('.cal-day, .cal-mday').forEach(d => d.classList.remove('cal-drop-ok','cal-drop-bad'));
       card.classList.remove('dragging');
     });
   });
 
-  // Day cells — drop targets
-  document.querySelectorAll('.cal-day').forEach(day => {
+  // Drop targets — week-view day columns AND month-view day cells
+  document.querySelectorAll('.cal-day, .cal-mday').forEach(day => {
     const key = day.dataset.calDay;
     day.addEventListener('dragover', e => {
       if(!calDraggingId) return;
@@ -5309,9 +5496,50 @@ function wireCalDragDrop(){
   const next = document.getElementById('calNext');
   const today = document.getElementById('calToday');
   const editCrews = document.getElementById('calEditCrews');
-  if(prev) prev.addEventListener('click', () => { calWeekStart.setDate(calWeekStart.getDate() - 7); renderCalendarPage(); });
-  if(next) next.addEventListener('click', () => { calWeekStart.setDate(calWeekStart.getDate() + 7); renderCalendarPage(); });
-  if(today) today.addEventListener('click', () => { calWeekStart = calStartOfWeek(new Date()); renderCalendarPage(); });
+  const navStep = (forward) => {
+    const dir = forward ? 1 : -1;
+    if(calView === 'month'){
+      calAnchor = new Date(calAnchor.getFullYear(), calAnchor.getMonth() + dir, 1);
+    } else {
+      calAnchor.setDate(calAnchor.getDate() + dir * 7);
+    }
+    renderCalendarPage();
+  };
+  if(prev) prev.addEventListener('click', () => navStep(false));
+  if(next) next.addEventListener('click', () => navStep(true));
+  if(today) today.addEventListener('click', () => {
+    const t = new Date(); t.setHours(0,0,0,0);
+    calAnchor = calView === 'month'
+      ? new Date(t.getFullYear(), t.getMonth(), 1)
+      : calStartOfWeek(t);
+    renderCalendarPage();
+  });
+
+  // View toggle (Month / Week)
+  ['calViewMonth','calViewWeek'].forEach(id => {
+    const b = document.getElementById(id);
+    if(!b) return;
+    b.addEventListener('click', () => {
+      const newView = b.dataset.view;
+      if(newView === calView) return;
+      const t = new Date(); t.setHours(0,0,0,0);
+      // Convert anchor between views (keep "today" anchored)
+      calAnchor = newView === 'month'
+        ? new Date(calAnchor.getFullYear(), calAnchor.getMonth(), 1)
+        : calStartOfWeek(calAnchor);
+      calView = newView;
+      localStorage.setItem('stormshield_cal_view', calView);
+      renderCalendarPage();
+    });
+  });
+
+  // Day popup close
+  const popupBg = document.getElementById('calDayPopupBg');
+  const popupClose = document.getElementById('calDayPopupClose');
+  if(popupBg) popupBg.addEventListener('click', e => {
+    if(e.target === popupBg) popupBg.classList.remove('open');
+  });
+  if(popupClose) popupClose.addEventListener('click', () => popupBg.classList.remove('open'));
   if(editCrews) editCrews.addEventListener('click', () => {
     if(!isAdmin()){ toast('Only admins can change crew count'); return; }
     const cur = calCrewsPerDay;
