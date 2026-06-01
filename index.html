@@ -485,6 +485,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <div style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
         <div id="calUnschedCount" style="font-size:10px;color:var(--muted);margin-top:2px">0 jobs awaiting build date</div>
+        <div class="cal-unsched-search-wrap">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input id="calUnschedSearch" class="cal-unsched-search" placeholder="Search jobs..." autocomplete="off">
+        </div>
       </div>
       <div id="calUnschedList" style="padding:8px 10px"></div>
     </div>
@@ -516,9 +520,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-job-card{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;cursor:grab;user-select:none}
 .cal-job-card:hover{border-color:var(--brand-light)}
 .cal-job-card.dragging{opacity:0.4}
+.cal-job-card .cjc-top{display:flex;align-items:flex-start;gap:7px;min-width:0}
+.cal-sales-avatar{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px}
+.cjc-main{min-width:0;flex:1}
 .cal-job-card .cjc-name{font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-job-card .cjc-addr{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-job-card .cjc-pill{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px;background:rgba(77,157,224,0.15);color:var(--brand-light);margin-top:4px}
+.cal-unsched-search-wrap{position:relative;margin-top:9px}
+.cal-unsched-search-wrap i{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);pointer-events:none}
+.cal-unsched-search{width:100%;height:30px;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 9px 7px 28px;color:var(--brand);font-size:12px;font-family:'Barlow',sans-serif;outline:none}
+.cal-unsched-search:focus{border-color:var(--brand-light)}
+.cal-unsched-search::placeholder{color:rgba(226,232,244,0.32)}
 
 /* Month view */
 #calWeekGrid.cal-month{grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(96px,1fr)}
@@ -535,9 +547,13 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-mday-cap{font-size:9px;font-weight:700;padding:1px 5px;border-radius:999px;background:rgba(255,255,255,0.05);color:var(--muted)}
 .cal-mday-cap.cap-open{background:rgba(52,211,153,0.12);color:var(--success)}
 .cal-mday-cap.cap-full{background:rgba(239,68,68,0.12);color:var(--danger)}
-.cal-mchip{font-size:10px;padding:2px 6px;border-radius:4px;background:#1E253A;border:1px solid var(--border);color:#fff;cursor:grab;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.cal-mchip{display:flex;align-items:flex-start;gap:5px;min-width:0;font-size:10px;padding:4px 5px;border-radius:5px;background:#1E253A;border:1px solid var(--border);color:#fff;cursor:grab;user-select:none;line-height:1.25}
 .cal-mchip:hover{border-color:var(--brand-light)}
 .cal-mchip.dragging{opacity:0.4}
+.cal-mchip .cal-sales-avatar{width:18px;height:18px;font-size:7px;margin-top:0}
+.cal-mchip-main{min-width:0;flex:1}
+.cal-mchip-name{font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-mchip-addr{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .cal-mmore{font-size:9px;color:var(--brand-light);cursor:pointer;padding:1px 4px;font-weight:600}
 .cal-mmore:hover{text-decoration:underline}
 
@@ -5189,6 +5205,59 @@ function calCanScheduleOnDay(dateKey){
 function isAdmin(){
   return (window.currentMember && window.currentMember.role === 'admin');
 }
+function calSalesmanForJob(j){
+  return (TEAM || []).find(t => t.id === j?.user) || (USERS || []).find(u => u.id === j?.user) || null;
+}
+function calInitialsForSalesman(member){
+  const source = member?.name || member?.id || '?';
+  return String(source).trim().split(/\s+/).map(p => p[0] || '').slice(0,2).join('').toUpperCase() || '?';
+}
+function calSalesAvatarHtml(j, sizeClass=''){
+  const member = calSalesmanForJob(j);
+  const label = calInitialsForSalesman(member);
+  const color = member?.color || 'var(--muted)';
+  const title = member?.name ? ` title="${escapeHtml(member.name)}"` : '';
+  return `<div class="cal-sales-avatar ${sizeClass}" style="background:${color}"${title}>${escapeHtml(label)}</div>`;
+}
+function calJobAddressShort(j){
+  return (j?.address || '').split(',')[0] || '';
+}
+function calIsAfterApprovedStage(j){
+  const cols = columnsForPipeline(j?.pipeline || 'insurance');
+  const approvedIndex = cols.findIndex(c => c.id === 'approved');
+  const jobIndex = cols.findIndex(c => c.id === j?.col);
+  if(approvedIndex < 0 || jobIndex < 0) return false;
+  const stage = cols[jobIndex];
+  return jobIndex > approvedIndex && stage?.closed !== true;
+}
+let calUnschedSearch = '';
+function calUnscheduledJobs(){
+  const q = calUnschedSearch.trim().toLowerCase();
+  return jobs.filter(j => {
+    if(j.buildDate) return false;
+    if(!calIsAfterApprovedStage(j)) return false;
+    if(!q) return true;
+    const salesman = calSalesmanForJob(j);
+    const haystack = [
+      j.name, j.address, j.carrier, j.claimNum, j.phone,
+      salesman?.name, salesman?.id,
+      jobStageInfo(j)?.name
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+}
+function renderCalMonthChip(j){
+  const addr = calJobAddressShort(j);
+  const title = [j.name, addr, calSalesmanForJob(j)?.name].filter(Boolean).join(' - ');
+  return `
+    <div class="cal-mchip" draggable="true" data-cal-job="${j.id}" title="${escapeHtml(title)}">
+      ${calSalesAvatarHtml(j)}
+      <div class="cal-mchip-main">
+        <div class="cal-mchip-name">${escapeHtml(j.name || 'Job')}</div>
+        <div class="cal-mchip-addr">${escapeHtml(addr || 'No address')}</div>
+      </div>
+    </div>`;
+}
 
 // View state: 'month' default, 'week' alternate. Anchor date drives navigation.
 let calView = localStorage.getItem('stormshield_cal_view') || 'month';
@@ -5309,10 +5378,7 @@ function renderCalendarMonth(){
     const MAX_CHIPS = 2;
     const visibleJobs = dayJobs.slice(0, MAX_CHIPS);
     const moreCount = dayJobs.length - visibleJobs.length;
-    const chipsHtml = visibleJobs.map(j => {
-      const last = (j.name || '').split(' ').slice(-1)[0] || j.name || '—';
-      return `<div class="cal-mchip" draggable="true" data-cal-job="${j.id}" title="${escapeHtml(j.name||'')}">${escapeHtml(last)}</div>`;
-    }).join('');
+    const chipsHtml = visibleJobs.map(j => renderCalMonthChip(j)).join('');
     const moreHtml = moreCount > 0 ? `<div class="cal-mmore" data-cal-more="${key}">+${moreCount} more</div>` : '';
     return `
       <div class="${cls.join(' ')}" data-cal-day="${key}">
@@ -5332,22 +5398,18 @@ function renderCalendarMonth(){
 
 function renderCalendarSidebar(){
   // Unscheduled jobs sidebar (shared between views)
-  const unsched = jobs.filter(j => {
-    if(j.buildDate) return false;
-    const cols = columnsForPipeline(j.pipeline || 'insurance');
-    const stage = cols.find(c => c.id === j.col);
-    if(stage && stage.closed === true) return false;
-    return true;
-  });
+  const unsched = calUnscheduledJobs();
   const list = document.getElementById('calUnschedList');
   const countEl = document.getElementById('calUnschedCount');
-  if(countEl) countEl.textContent = `${unsched.length} ${unsched.length === 1 ? 'job' : 'jobs'} awaiting build date`;
+  const searchEl = document.getElementById('calUnschedSearch');
+  if(searchEl && searchEl.value !== calUnschedSearch) searchEl.value = calUnschedSearch;
+  if(countEl) countEl.textContent = `${unsched.length} ${unsched.length === 1 ? 'job' : 'jobs'} after approval`;
   if(list){
     list.innerHTML = unsched.length
       ? unsched.map(j => renderCalJobCard(j)).join('')
       : `<div style="text-align:center;padding:24px 8px;color:var(--muted);font-size:11px;line-height:1.5">
           <i class="ti ti-calendar-check" style="font-size:24px;display:block;margin-bottom:6px;color:var(--brand-light)"></i>
-          All active jobs are scheduled.
+          ${calUnschedSearch ? 'No unscheduled jobs match your search.' : 'No approved jobs are waiting for a build date.'}
         </div>`;
   }
   // Bind drag handlers on sidebar cards
@@ -5407,13 +5469,18 @@ function openCalDayPopup(dateKey){
 }
 
 function renderCalJobCard(j){
-  const addr = (j.address || '').split(',')[0];
+  const addr = calJobAddressShort(j);
   const carrier = j.carrier ? `<span class="cjc-pill">${escapeHtml(j.carrier)}</span>` : '';
   return `
     <div class="cal-job-card" draggable="true" data-cal-job="${j.id}">
-      <div class="cjc-name">${escapeHtml(j.name || '—')}</div>
-      <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
-      ${carrier}
+      <div class="cjc-top">
+        ${calSalesAvatarHtml(j)}
+        <div class="cjc-main">
+          <div class="cjc-name">${escapeHtml(j.name || '—')}</div>
+          <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
+          ${carrier}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -5496,6 +5563,7 @@ function wireCalDragDrop(){
   const next = document.getElementById('calNext');
   const today = document.getElementById('calToday');
   const editCrews = document.getElementById('calEditCrews');
+  const unschedSearch = document.getElementById('calUnschedSearch');
   const navStep = (forward) => {
     const dir = forward ? 1 : -1;
     if(calView === 'month'){
@@ -5540,6 +5608,10 @@ function wireCalDragDrop(){
     if(e.target === popupBg) popupBg.classList.remove('open');
   });
   if(popupClose) popupClose.addEventListener('click', () => popupBg.classList.remove('open'));
+  if(unschedSearch) unschedSearch.addEventListener('input', () => {
+    calUnschedSearch = unschedSearch.value || '';
+    renderCalendarSidebar();
+  });
   if(editCrews) editCrews.addEventListener('click', () => {
     if(!isAdmin()){ toast('Only admins can change crew count'); return; }
     const cur = calCrewsPerDay;
