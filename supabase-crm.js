@@ -155,6 +155,7 @@ async function loadAllFromSupabase() {
         latitude:r.latitude, longitude:r.longitude,
         roofEstimate: r.roof_estimate || null,
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
+        buildDate: r.build_date || null,
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
@@ -203,6 +204,7 @@ async function pushAllToSupabase() {
         latitude: j.latitude ?? null, longitude: j.longitude ?? null,
         roof_estimate: j.roofEstimate ?? null,
         timeline: Array.isArray(j.timeline) ? j.timeline : [],
+        build_date: j.buildDate || null,
       };
       if (typeof j.id === 'string' && j.id.length > 20) {
         existingJobs.push({ ...base, id: j.id });

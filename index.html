@@ -459,10 +459,61 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <div id="mapContainer" style="width:100%;height:calc(100vh - 110px);background:#0F1117"></div>
 </div>
 
+<!-- CALENDAR / PRODUCTION SCHEDULE PAGE -->
+<div id="calendarPage" style="display:none">
+  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Production Schedule</div>
+    <button id="calPrev" class="icon-btn" title="Previous week"><i class="ti ti-chevron-left"></i></button>
+    <div id="calWeekLabel" style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;color:#fff;min-width:200px;text-align:center"></div>
+    <button id="calNext" class="icon-btn" title="Next week"><i class="ti ti-chevron-right"></i></button>
+    <button id="calToday" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">Today</button>
+    <div style="flex:1"></div>
+    <div id="calCrewBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted)">
+      <i class="ti ti-users-group" style="font-size:13px;color:var(--brand-light)"></i>
+      <span><span id="calCrewCount" style="color:#fff;font-weight:600">3</span> crews/day</span>
+      <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
+    </div>
+  </div>
+  <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
+    <!-- Unscheduled jobs sidebar -->
+    <div style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
+        <div id="calUnschedCount" style="font-size:10px;color:var(--muted);margin-top:2px">0 jobs awaiting build date</div>
+      </div>
+      <div id="calUnschedList" style="padding:8px 10px"></div>
+    </div>
+    <!-- Week grid -->
+    <div id="calWeekGrid" style="flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--border);overflow:auto"></div>
+  </div>
+</div>
+
 <style>
 .map-filter{background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer;min-width:140px}
 .map-filter:hover{border-color:var(--brand-light)}
 .map-popup{font-family:'Barlow',sans-serif}
+
+/* Production calendar */
+.cal-day{background:#141927;display:flex;flex-direction:column;min-height:0;transition:background 0.15s}
+.cal-day.cal-today{background:#181F30}
+.cal-day.cal-past{opacity:0.55}
+.cal-day.cal-full{background:#1A1216}
+.cal-day.cal-drop-ok{background:rgba(52,211,153,0.07);box-shadow:inset 0 0 0 2px var(--success)}
+.cal-day.cal-drop-bad{background:rgba(239,68,68,0.06);box-shadow:inset 0 0 0 2px var(--danger);cursor:not-allowed}
+.cal-day-header{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-shrink:0}
+.cal-day-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)}
+.cal-day.cal-today .cal-day-name{color:var(--brand-light)}
+.cal-day-date{font-family:'Barlow',sans-serif;font-weight:700;font-size:18px;color:#fff;line-height:1}
+.cal-day-cap{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid transparent}
+.cal-day-cap.cap-open{background:rgba(52,211,153,0.12);color:var(--success);border-color:rgba(52,211,153,0.3)}
+.cal-day-cap.cap-full{background:rgba(239,68,68,0.12);color:var(--danger);border-color:rgba(239,68,68,0.3)}
+.cal-day-body{flex:1;padding:8px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:120px}
+.cal-job-card{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;cursor:grab;user-select:none}
+.cal-job-card:hover{border-color:var(--brand-light)}
+.cal-job-card.dragging{opacity:0.4}
+.cal-job-card .cjc-name{font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-job-card .cjc-addr{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-job-card .cjc-pill{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px;background:rgba(77,157,224,0.15);color:var(--brand-light);margin-top:4px}
 .map-popup .mp-name{font-weight:700;font-size:13px;color:#0F1117;margin-bottom:3px}
 .map-popup .mp-row{font-size:11px;color:#475569;margin-top:2px}
 .map-popup .mp-stage{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:11px;color:#fff;margin-top:5px;text-transform:uppercase;letter-spacing:.3px}
@@ -5019,6 +5070,8 @@ function switchPage(pageName){
   document.getElementById('jobsPage').style.display    = (pageName === 'jobs')   ? '' : 'none';
   document.getElementById('mapPage').style.display     = (pageName === 'map')    ? '' : 'none';
   document.getElementById('teamPage').style.display    = (pageName === 'team')   ? '' : 'none';
+  const calPage = document.getElementById('calendarPage');
+  if(calPage) calPage.style.display = (pageName === 'calendar') ? '' : 'none';
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
   });
@@ -5026,6 +5079,7 @@ function switchPage(pageName){
   if(pageName === 'jobs') renderJobsPage();
   if(pageName === 'team') renderTeamPage();
   if(pageName === 'map')  renderMapPage();
+  if(pageName === 'calendar') renderCalendarPage();
 }
 
 // Wire up the nav links
@@ -5038,6 +5092,7 @@ function switchPage(pageName){
     else if(txt === 'jobs') l.dataset.page = 'jobs';
     else if(txt === 'map')  l.dataset.page = 'map';
     else if(txt === 'team') l.dataset.page = 'team';
+    else if(txt === 'calendar') l.dataset.page = 'calendar';
     l.addEventListener('click', () => {
       if(l.dataset.page) switchPage(l.dataset.page);
     });
@@ -5046,6 +5101,230 @@ function switchPage(pageName){
 })();
 
 // ── RENDERING ──
+// ── PRODUCTION CALENDAR ──
+// Crew capacity is stored on `window` and persisted in localStorage so it survives reloads.
+const CAL_CREWS_KEY = 'stormshield_crews_per_day';
+let calCrewsPerDay = parseInt(localStorage.getItem(CAL_CREWS_KEY)) || 3;
+// Currently-displayed week — Monday of the week shown.
+let calWeekStart = null;
+
+function calStartOfWeek(d){
+  // Roll back to Monday
+  const dt = new Date(d);
+  dt.setHours(0,0,0,0);
+  const day = dt.getDay();              // 0=Sun, 1=Mon, ... 6=Sat
+  const diff = (day === 0 ? -6 : 1 - day);
+  dt.setDate(dt.getDate() + diff);
+  return dt;
+}
+function calSameDay(a, b){
+  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+}
+// ISO yyyy-mm-dd in local time (NOT UTC) — used as job.buildDate
+function calDateKey(d){
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function calParseKey(key){
+  if(!key) return null;
+  const m = String(key).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return null;
+  return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+}
+function calJobsOnDay(dateKey){
+  return jobs.filter(j => j.buildDate === dateKey);
+}
+function calCanScheduleOnDay(dateKey){
+  // For salesmen: respect crew capacity. Admins can always override.
+  if(isAdmin()) return true;
+  return calJobsOnDay(dateKey).length < calCrewsPerDay;
+}
+function isAdmin(){
+  return (window.currentMember && window.currentMember.role === 'admin');
+}
+
+function renderCalendarPage(){
+  if(!calWeekStart) calWeekStart = calStartOfWeek(new Date());
+  const grid  = document.getElementById('calWeekGrid');
+  const label = document.getElementById('calWeekLabel');
+  const crewCount = document.getElementById('calCrewCount');
+  if(!grid) return;
+
+  if(crewCount) crewCount.textContent = calCrewsPerDay;
+
+  // Build 6 days: Mon..Sat
+  const days = [];
+  for(let i = 0; i < 6; i++){
+    const d = new Date(calWeekStart);
+    d.setDate(calWeekStart.getDate() + i);
+    days.push(d);
+  }
+  // Week label "May 27 – Jun 1, 2026"
+  const fmt = (d, opts) => d.toLocaleDateString('en-US', opts);
+  const sameMonth = days[0].getMonth() === days[5].getMonth();
+  label.textContent = sameMonth
+    ? `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[5],{day:'numeric',year:'numeric'})}`
+    : `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[5],{month:'short',day:'numeric',year:'numeric'})}`;
+
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  grid.innerHTML = days.map(d => {
+    const key = calDateKey(d);
+    const dayJobs = calJobsOnDay(key);
+    const isPast = d < today;
+    const isToday = calSameDay(d, today);
+    const isFull = dayJobs.length >= calCrewsPerDay;
+    const cls = ['cal-day'];
+    if(isToday) cls.push('cal-today');
+    if(isPast)  cls.push('cal-past');
+    if(isFull && !isPast) cls.push('cal-full');
+    const capCls = isFull ? 'cap-full' : 'cap-open';
+    return `
+      <div class="${cls.join(' ')}" data-cal-day="${key}">
+        <div class="cal-day-header">
+          <div>
+            <div class="cal-day-name">${fmt(d,{weekday:'short'})}</div>
+            <div class="cal-day-date">${d.getDate()}</div>
+          </div>
+          <div class="cal-day-cap ${capCls}">${dayJobs.length} / ${calCrewsPerDay}</div>
+        </div>
+        <div class="cal-day-body" data-cal-body="${key}">
+          ${dayJobs.map(j => renderCalJobCard(j)).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Unscheduled jobs sidebar — active jobs with no build date and not closed
+  const unsched = jobs.filter(j => {
+    if(j.buildDate) return false;
+    const cols = columnsForPipeline(j.pipeline || 'insurance');
+    const stage = cols.find(c => c.id === j.col);
+    if(stage && stage.closed === true) return false;
+    return true;
+  });
+  const list = document.getElementById('calUnschedList');
+  const countEl = document.getElementById('calUnschedCount');
+  if(countEl) countEl.textContent = `${unsched.length} ${unsched.length === 1 ? 'job' : 'jobs'} awaiting build date`;
+  if(list){
+    list.innerHTML = unsched.length
+      ? unsched.map(j => renderCalJobCard(j)).join('')
+      : `<div style="text-align:center;padding:24px 8px;color:var(--muted);font-size:11px;line-height:1.5">
+          <i class="ti ti-calendar-check" style="font-size:24px;display:block;margin-bottom:6px;color:var(--brand-light)"></i>
+          All active jobs are scheduled.
+        </div>`;
+  }
+
+  wireCalDragDrop();
+}
+
+function renderCalJobCard(j){
+  const addr = (j.address || '').split(',')[0];
+  const carrier = j.carrier ? `<span class="cjc-pill">${escapeHtml(j.carrier)}</span>` : '';
+  return `
+    <div class="cal-job-card" draggable="true" data-cal-job="${j.id}">
+      <div class="cjc-name">${escapeHtml(j.name || '—')}</div>
+      <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
+      ${carrier}
+    </div>
+  `;
+}
+
+let calDraggingId = null;
+
+function wireCalDragDrop(){
+  // Cards
+  document.querySelectorAll('.cal-job-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      calDraggingId = card.dataset.calJob;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Some browsers require setData to allow drop
+      try { e.dataTransfer.setData('text/plain', calDraggingId); } catch(_){}
+    });
+    card.addEventListener('dragend', () => {
+      calDraggingId = null;
+      document.querySelectorAll('.cal-day').forEach(d => d.classList.remove('cal-drop-ok','cal-drop-bad'));
+      card.classList.remove('dragging');
+    });
+  });
+
+  // Day cells — drop targets
+  document.querySelectorAll('.cal-day').forEach(day => {
+    const key = day.dataset.calDay;
+    day.addEventListener('dragover', e => {
+      if(!calDraggingId) return;
+      e.preventDefault();
+      const ok = calCanScheduleOnDay(key);
+      day.classList.add(ok ? 'cal-drop-ok' : 'cal-drop-bad');
+    });
+    day.addEventListener('dragleave', () => day.classList.remove('cal-drop-ok','cal-drop-bad'));
+    day.addEventListener('drop', e => {
+      e.preventDefault();
+      day.classList.remove('cal-drop-ok','cal-drop-bad');
+      if(!calDraggingId) return;
+      const j = jobs.find(x => x.id === calDraggingId);
+      if(!j) return;
+      if(!calCanScheduleOnDay(key)){
+        toast(`Day is full (${calCrewsPerDay} crews booked). Ask admin to override.`);
+        return;
+      }
+      const prev = j.buildDate || null;
+      j.buildDate = key;
+      if(prev !== key){
+        const fromLabel = prev ? prev : 'unscheduled';
+        if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}`);
+      }
+      saveToStorage();
+      toast(`Scheduled ${j.name} for ${key}`);
+      renderCalendarPage();
+    });
+  });
+
+  // Sidebar (unscheduled) is itself a drop target so dragging a scheduled card back removes the date
+  const list = document.getElementById('calUnschedList');
+  if(list){
+    list.addEventListener('dragover', e => {
+      if(!calDraggingId) return;
+      e.preventDefault();
+    });
+    list.addEventListener('drop', e => {
+      e.preventDefault();
+      if(!calDraggingId) return;
+      const j = jobs.find(x => x.id === calDraggingId);
+      if(!j || !j.buildDate) return;
+      const prev = j.buildDate;
+      delete j.buildDate;
+      if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date removed', `was ${prev}`);
+      saveToStorage();
+      toast(`Unscheduled ${j.name}`);
+      renderCalendarPage();
+    });
+  }
+}
+
+// Wire calendar controls
+(function wireCalendarControls(){
+  const prev = document.getElementById('calPrev');
+  const next = document.getElementById('calNext');
+  const today = document.getElementById('calToday');
+  const editCrews = document.getElementById('calEditCrews');
+  if(prev) prev.addEventListener('click', () => { calWeekStart.setDate(calWeekStart.getDate() - 7); renderCalendarPage(); });
+  if(next) next.addEventListener('click', () => { calWeekStart.setDate(calWeekStart.getDate() + 7); renderCalendarPage(); });
+  if(today) today.addEventListener('click', () => { calWeekStart = calStartOfWeek(new Date()); renderCalendarPage(); });
+  if(editCrews) editCrews.addEventListener('click', () => {
+    if(!isAdmin()){ toast('Only admins can change crew count'); return; }
+    const cur = calCrewsPerDay;
+    const raw = prompt('How many crews per day? (recommended 1–10)', cur);
+    if(raw == null) return;
+    const n = parseInt(raw);
+    if(!isFinite(n) || n < 1 || n > 50){ toast('Enter a number between 1 and 50'); return; }
+    calCrewsPerDay = n;
+    localStorage.setItem(CAL_CREWS_KEY, String(n));
+    renderCalendarPage();
+  });
+})();
+
 function renderTeamPage(){
   const addBtn = document.getElementById('addTeamMemberBtn');
   if(addBtn) addBtn.style.display = isAdmin() ? '' : 'none';
