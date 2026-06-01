@@ -5222,20 +5222,23 @@ function calSalesAvatarHtml(j, sizeClass=''){
 function calJobAddressShort(j){
   return (j?.address || '').split(',')[0] || '';
 }
-function calIsAfterApprovedStage(j){
+function calJobAddressFull(j){
+  return j?.address || '';
+}
+function calIsApprovedOrAfterStage(j){
   const cols = columnsForPipeline(j?.pipeline || 'insurance');
   const approvedIndex = cols.findIndex(c => c.id === 'approved');
   const jobIndex = cols.findIndex(c => c.id === j?.col);
   if(approvedIndex < 0 || jobIndex < 0) return false;
   const stage = cols[jobIndex];
-  return jobIndex > approvedIndex && stage?.closed !== true;
+  return jobIndex >= approvedIndex && stage?.closed !== true;
 }
 let calUnschedSearch = '';
 function calUnscheduledJobs(){
   const q = calUnschedSearch.trim().toLowerCase();
   return jobs.filter(j => {
     if(j.buildDate) return false;
-    if(!calIsAfterApprovedStage(j)) return false;
+    if(!calIsApprovedOrAfterStage(j)) return false;
     if(!q) return true;
     const salesman = calSalesmanForJob(j);
     const haystack = [
@@ -5247,7 +5250,7 @@ function calUnscheduledJobs(){
   });
 }
 function renderCalMonthChip(j){
-  const addr = calJobAddressShort(j);
+  const addr = calJobAddressFull(j);
   const title = [j.name, addr, calSalesmanForJob(j)?.name].filter(Boolean).join(' - ');
   return `
     <div class="cal-mchip" draggable="true" data-cal-job="${j.id}" title="${escapeHtml(title)}">
