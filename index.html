@@ -318,6 +318,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link">Map</span>
   <span class="nav-link">Team</span>
   <span class="nav-link">Calendar</span>
+  <span class="nav-link">Insurance</span>
+  <span class="nav-link" id="navProfits" style="display:none">Profits</span>
   <span class="nav-link">Contacts</span>
   <span class="nav-link">Payments</span>
   <div style="flex:1"></div>
@@ -497,10 +499,143 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   </div>
 </div>
 
+<!-- PROFITS / P&L PAGE (admin-only) -->
+<div id="profitsPage" style="display:none">
+  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Profits &amp; Loss</div>
+    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <button class="pl-range-btn" data-range="this-month" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">This Month</button>
+      <button class="pl-range-btn" data-range="last-month" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">Last Month</button>
+      <button class="pl-range-btn" data-range="ytd" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">Year to Date</button>
+      <button class="pl-range-btn" data-range="last-12" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">Last 12 Months</button>
+      <button class="pl-range-btn" data-range="all" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">All Time</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-left:6px">
+      <input id="plFrom" type="date" style="background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+      <span style="color:var(--muted);font-size:11px">to</span>
+      <input id="plTo" type="date" style="background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+    </div>
+    <div style="flex:1"></div>
+    <button id="plExportCsv" style="background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:var(--success);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;gap:5px">
+      <i class="ti ti-download" style="font-size:12px"></i>Export CSV
+    </button>
+  </div>
+  <div id="plBody" style="padding:18px 20px;overflow:auto;height:calc(100vh - 110px)"></div>
+</div>
+
+<!-- INSURANCE CARRIERS DIRECTORY PAGE -->
+<div id="insurancePage" style="display:none">
+  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Insurance Directory</div>
+    <div style="position:relative;flex:1;max-width:320px">
+      <i class="ti ti-search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);pointer-events:none"></i>
+      <input id="insSearchInput" type="text" placeholder="Search carrier name..." style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 9px 7px 30px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
+    </div>
+    <div style="flex:1"></div>
+    <button id="insAddBtn" style="display:none;background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;align-items:center;gap:5px">
+      <i class="ti ti-plus" style="font-size:12px"></i>Add Carrier
+    </button>
+  </div>
+  <div id="insBody" style="padding:18px 20px;overflow:auto;height:calc(100vh - 110px)"></div>
+</div>
+
+<!-- Carrier edit modal -->
+<div class="modal-bg" id="insModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#141927;border:1px solid var(--border);border-radius:10px;width:440px;max-width:92vw;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div id="insModalTitle" style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Add Carrier</div>
+      <button id="insModalClose" class="icon-btn"><i class="ti ti-x"></i></button>
+    </div>
+    <input id="insModalId" type="hidden" value="">
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div>
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Carrier Name *</label>
+        <input id="insModalName" type="text" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none" placeholder="e.g. State Farm">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Claims Phone *</label>
+        <input id="insModalPhone" type="tel" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none" placeholder="800-555-1212">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Alt / Catastrophe Phone</label>
+        <input id="insModalAlt" type="tel" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none" placeholder="optional">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Website</label>
+        <input id="insModalWeb" type="url" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none" placeholder="https://example.com">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Notes</label>
+        <textarea id="insModalNotes" rows="2" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical" placeholder="24/7 line · regional carrier · etc."></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button id="insModalDelete" style="display:none;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--danger);font-size:11px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">Delete</button>
+      <div style="flex:1"></div>
+      <button id="insModalCancel" class="btn-cancel" style="font-size:12px;padding:7px 14px">Cancel</button>
+      <button id="insModalSave" class="btn-primary" style="font-size:12px;padding:7px 14px">Save</button>
+    </div>
+  </div>
+</div>
+
 <style>
 .map-filter{background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer;min-width:140px}
 .map-filter:hover{border-color:var(--brand-light)}
 .map-popup{font-family:'Barlow',sans-serif}
+
+/* Profits & Loss */
+.pl-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.pl-kpi{background:#141927;border:1px solid var(--border);border-radius:9px;padding:14px 16px}
+.pl-kpi-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
+.pl-kpi-val{font-family:'Barlow',sans-serif;font-weight:700;font-size:22px;color:#fff;line-height:1.1}
+.pl-kpi-sub{font-size:10px;color:var(--muted);margin-top:5px}
+.pl-kpi.kpi-rev .pl-kpi-val{color:var(--brand-light)}
+.pl-kpi.kpi-cost .pl-kpi-val{color:var(--warn)}
+.pl-kpi.kpi-profit .pl-kpi-val{color:var(--success)}
+.pl-kpi.kpi-profit.neg .pl-kpi-val{color:var(--danger)}
+.pl-section{background:#141927;border:1px solid var(--border);border-radius:9px;padding:14px 16px;margin-bottom:14px}
+.pl-section-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.pl-trend{display:flex;align-items:flex-end;gap:6px;height:160px;padding:0 4px 6px;border-bottom:1px solid var(--border)}
+.pl-trend-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.pl-trend-bars{display:flex;align-items:flex-end;gap:2px;height:140px;width:100%;justify-content:center}
+.pl-trend-bar{width:8px;border-radius:2px 2px 0 0;transition:opacity 0.15s}
+.pl-trend-bar.bar-rev{background:var(--brand-light)}
+.pl-trend-bar.bar-cost{background:var(--warn)}
+.pl-trend-bar.bar-profit{background:var(--success)}
+.pl-trend-bar:hover{opacity:0.7}
+.pl-trend-label{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-top:6px;white-space:nowrap}
+.pl-table{width:100%;border-collapse:collapse;font-size:12px}
+.pl-table th{text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding:8px 10px;border-bottom:1px solid var(--border)}
+.pl-table th.num{text-align:right}
+.pl-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.04);color:#fff}
+.pl-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+.pl-table td.muted{color:var(--muted)}
+.pl-table tr:hover td{background:rgba(255,255,255,0.02)}
+.pl-table tr.clickable{cursor:pointer}
+.pl-empty{text-align:center;padding:30px 10px;color:var(--muted);font-size:12px;line-height:1.6}
+.pl-range-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
+
+/* Insurance directory */
+.ins-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.ins-card{background:#141927;border:1px solid var(--border);border-radius:9px;padding:14px 16px;transition:border-color 0.15s}
+.ins-card:hover{border-color:rgba(77,157,224,0.3)}
+.ins-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px}
+.ins-card-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:#fff;line-height:1.2}
+.ins-card-edit{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px;line-height:1}
+.ins-card-edit:hover{color:var(--brand-light)}
+.ins-card-call{display:flex;align-items:center;gap:8px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);border-radius:6px;padding:9px 11px;color:var(--success);text-decoration:none;font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;letter-spacing:0.02em;transition:background 0.15s, border-color 0.15s;margin-bottom:6px}
+.ins-card-call:hover{background:rgba(52,211,153,0.15);border-color:rgba(52,211,153,0.5)}
+.ins-card-call-alt{display:flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:11px;padding:3px 0 6px 2px}
+.ins-card-call-alt:hover{color:var(--brand-light)}
+.ins-card-notes{font-size:11px;color:var(--muted);line-height:1.4;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.04)}
+.ins-card-web{display:inline-block;font-size:10px;color:var(--brand-light);text-decoration:none;margin-top:4px}
+.ins-card-web:hover{text-decoration:underline}
+.ins-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;line-height:1.6}
+
+/* Quick-call button next to job's carrier field */
+.dp-claim-call{display:inline-flex;align-items:center;gap:4px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);border-radius:4px;padding:2px 7px;color:var(--success);text-decoration:none;font-family:'Barlow',sans-serif;font-size:10px;font-weight:600;margin-left:6px;transition:background 0.12s}
+.dp-claim-call:hover{background:rgba(52,211,153,0.2)}
+.dp-claim-call i{font-size:11px}
 
 /* Production calendar */
 .cal-day{background:#141927;display:flex;flex-direction:column;min-height:0;transition:background 0.15s}
@@ -1866,7 +2001,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><a href="${mapsHref(j.address)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--brand-mid);text-decoration:none" title="Open in Maps">${escapeHtml(j.address||'—')}</a><i class="ti ti-copy copy-ic" title="Copy address" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.address||'').replace(/"/g,'&quot;')}, 'Address')"></i></div>
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>${j.email && j.email!=='—' ? `<a href="mailto:${escapeHtml(j.email)}" style="font-size:11px;color:var(--brand-mid);text-decoration:none" title="Send email">${escapeHtml(j.email)}</a>` : `<span style="font-size:11px;color:var(--muted)">—</span>`}<i class="ti ti-copy copy-ic" title="Copy email" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.email||'').replace(/"/g,'&quot;')}, 'Email')"></i></div>
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.16 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16z"/></svg>${j.phone && j.phone!=='—' ? `<a href="tel:${escapeHtml(j.phone)}" style="font-size:12px;color:var(--brand);text-decoration:none" title="Call">${escapeHtml(formatPhone(j.phone)||j.phone)}</a>` : `<span style="font-size:12px;color:var(--muted)">—</span>`}<i class="ti ti-copy copy-ic" title="Copy phone" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(formatPhone(j.phone)||j.phone||'').replace(/"/g,'&quot;')}, 'Phone')"></i></div>
-            <div class="info-row" style="margin-bottom:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum)?`<span style="font-size:11px;color:var(--brand)"><strong>${escapeHtml(j.carrier||'')}</strong>${j.carrier&&j.claimNum?' · ':''}${j.claimNum?'Claim #'+escapeHtml(j.claimNum):''}</span><i class="ti ti-copy copy-ic" title="Copy claim #" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"></i>`:`<span style="font-size:11px;color:var(--brand-light)">Add insurance info</span>`}</div>
+            <div class="info-row" style="margin-bottom:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum)?`<span style="font-size:11px;color:var(--brand)"><strong>${escapeHtml(j.carrier||'')}</strong>${j.carrier&&j.claimNum?' · ':''}${j.claimNum?'Claim #'+escapeHtml(j.claimNum):''}</span>${j.claimNum?`<i class="ti ti-copy copy-ic" title="Copy claim #" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"></i>`:''}${(typeof carrierCallButtonFor==='function')?carrierCallButtonFor(j.carrier):''}`:`<span style="font-size:11px;color:var(--brand-light)">Add insurance info</span>`}</div>
           </div>
           <div class="weather-box">
             <i class="ti ti-cloud" style="font-size:28px;color:#93C5FD;display:block;margin-bottom:5px" aria-hidden="true"></i>
@@ -5128,6 +5263,10 @@ function wireJobsPage(){
 
 // ── PAGE SWITCHING ──
 function switchPage(pageName){
+  // Admin gate: non-admins requesting profits silently get redirected to summary
+  if(pageName === 'profits' && !isAdmin()){
+    pageName = 'summary';
+  }
   document.getElementById('summaryPage').style.display = (pageName === 'summary') ? '' : 'none';
   document.getElementById('boardsPage').style.display  = (pageName === 'boards') ? '' : 'none';
   document.getElementById('jobsPage').style.display    = (pageName === 'jobs')   ? '' : 'none';
@@ -5135,6 +5274,10 @@ function switchPage(pageName){
   document.getElementById('teamPage').style.display    = (pageName === 'team')   ? '' : 'none';
   const calPage = document.getElementById('calendarPage');
   if(calPage) calPage.style.display = (pageName === 'calendar') ? '' : 'none';
+  const profitsPg = document.getElementById('profitsPage');
+  if(profitsPg) profitsPg.style.display = (pageName === 'profits') ? '' : 'none';
+  const insPg = document.getElementById('insurancePage');
+  if(insPg) insPg.style.display = (pageName === 'insurance') ? '' : 'none';
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
   });
@@ -5143,6 +5286,8 @@ function switchPage(pageName){
   if(pageName === 'team') renderTeamPage();
   if(pageName === 'map')  renderMapPage();
   if(pageName === 'calendar') renderCalendarPage();
+  if(pageName === 'profits') renderProfitsPage();
+  if(pageName === 'insurance') renderInsurancePage();
 }
 
 // Wire up the nav links
@@ -5156,12 +5301,21 @@ function switchPage(pageName){
     else if(txt === 'map')  l.dataset.page = 'map';
     else if(txt === 'team') l.dataset.page = 'team';
     else if(txt === 'calendar') l.dataset.page = 'calendar';
+    else if(txt === 'profits') l.dataset.page = 'profits';
+    else if(txt === 'insurance') l.dataset.page = 'insurance';
     l.addEventListener('click', () => {
       if(l.dataset.page) switchPage(l.dataset.page);
     });
   });
   wireJobsPage();
 })();
+
+// Show/hide the Profits nav link based on role (call after auth completes)
+function updateProfitsNavVisibility(){
+  const el = document.getElementById('navProfits');
+  if(el) el.style.display = isAdmin() ? '' : 'none';
+}
+window.updateProfitsNavVisibility = updateProfitsNavVisibility;
 
 // ── RENDERING ──
 // ── PRODUCTION CALENDAR ──
@@ -5627,6 +5781,557 @@ function wireCalDragDrop(){
     renderCalendarPage();
   });
 })();
+
+// ── PROFITS & LOSS DASHBOARD (admin-only) ──
+// Cash-basis revenue: deposits collected (j.deposits[].amount with d.date)
+// Costs: j.expenses[].amount, by category. (Expenses have no date field — see below.)
+//
+// HONEST CAVEAT: Expenses in this CRM do NOT currently have a `date` field — they were
+// stored as {cat, desc, amount}. For date-range filtering of costs we treat ALL expenses
+// for any job that had a deposit in the range as in-range. This is a coarse approximation.
+// If you want precise expense timing, add a date field to the expense entry form.
+
+let plRangeKey = 'this-month';
+let plCustomFrom = null;   // 'yyyy-mm-dd'
+let plCustomTo   = null;
+
+function plComputeRange(){
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  let from, to;
+  if(plRangeKey === 'custom' && plCustomFrom && plCustomTo){
+    from = plCustomFrom; to = plCustomTo;
+  } else if(plRangeKey === 'this-month'){
+    from = ymd(new Date(today.getFullYear(), today.getMonth(), 1));
+    to   = ymd(today);
+  } else if(plRangeKey === 'last-month'){
+    const f = new Date(today.getFullYear(), today.getMonth()-1, 1);
+    const t = new Date(today.getFullYear(), today.getMonth(), 0); // last day of previous month
+    from = ymd(f); to = ymd(t);
+  } else if(plRangeKey === 'ytd'){
+    from = ymd(new Date(today.getFullYear(), 0, 1));
+    to   = ymd(today);
+  } else if(plRangeKey === 'last-12'){
+    const f = new Date(today.getFullYear(), today.getMonth()-11, 1);
+    from = ymd(f); to = ymd(today);
+  } else { // 'all'
+    from = '1970-01-01'; to = '2999-12-31';
+  }
+  return { from, to };
+}
+
+// Parse a deposit's date string into 'yyyy-mm-dd' for comparison.
+// Deposits store `date` as 'M/D/YYYY' format from toLocaleDateString.
+function plDepositDateKey(d){
+  if(!d || !d.date) return null;
+  const m = d.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!m) return null;
+  return `${m[3]}-${String(parseInt(m[1])).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+}
+
+function plAggregate(from, to){
+  // Build a map: month -> {rev, cost}
+  const monthly = {};
+  const byPipeline = {};
+  const bySalesman = {};
+  const byCategory = {};
+  const jobRows = [];   // per-job rollup
+
+  // Build a quick index: for each job, the deposits that fall in range
+  const inRange = (key) => key && key >= from && key <= to;
+
+  jobs.forEach(j => {
+    const deposits = Array.isArray(j.deposits) ? j.deposits : [];
+    const inRangeDeposits = deposits.filter(d => inRange(plDepositDateKey(d)));
+    const jobRevenue = inRangeDeposits.reduce((s,d) => s + (parseFloat(d.amount) || 0), 0);
+    if(jobRevenue === 0 && (!j.expenses || !j.expenses.length)) return;   // nothing to show
+    // Expenses: since they have no date, we attribute them to the job (not a date).
+    // Include them if the job had any in-range revenue, OR if the range is 'all'.
+    const expenses = Array.isArray(j.expenses) ? j.expenses : [];
+    const includeExpenses = jobRevenue > 0 || plRangeKey === 'all';
+    const jobCost = includeExpenses ? expenses.reduce((s,e) => s + (parseFloat(e.amount) || 0), 0) : 0;
+
+    if(jobRevenue === 0 && jobCost === 0) return;
+    jobRows.push({
+      id: j.id, name: j.name || '—', address: (j.address||'').split(',')[0] || '—',
+      pipeline: j.pipeline || 'insurance',
+      salesman: j.user || null,
+      revenue: jobRevenue, cost: jobCost, profit: jobRevenue - jobCost,
+    });
+    // Monthly breakdown — by deposit date
+    inRangeDeposits.forEach(d => {
+      const k = plDepositDateKey(d).slice(0,7);   // 'yyyy-mm'
+      if(!monthly[k]) monthly[k] = { rev: 0, cost: 0 };
+      monthly[k].rev += parseFloat(d.amount) || 0;
+    });
+    // For monthly costs: attribute to the month of the FIRST in-range deposit
+    if(includeExpenses && jobCost > 0){
+      const firstDep = inRangeDeposits.map(plDepositDateKey).filter(Boolean).sort()[0];
+      const k = firstDep ? firstDep.slice(0,7) : 'unknown';
+      if(!monthly[k]) monthly[k] = { rev: 0, cost: 0 };
+      monthly[k].cost += jobCost;
+    }
+    // By pipeline
+    const pk = j.pipeline || 'insurance';
+    if(!byPipeline[pk]) byPipeline[pk] = { rev: 0, cost: 0 };
+    byPipeline[pk].rev += jobRevenue;
+    byPipeline[pk].cost += jobCost;
+    // By salesman
+    const sk = j.user || 'unassigned';
+    if(!bySalesman[sk]) bySalesman[sk] = { rev: 0, cost: 0 };
+    bySalesman[sk].rev += jobRevenue;
+    bySalesman[sk].cost += jobCost;
+    // By category (for costs only)
+    if(includeExpenses){
+      expenses.forEach(e => {
+        const c = e.cat || 'Uncategorized';
+        if(!byCategory[c]) byCategory[c] = 0;
+        byCategory[c] += parseFloat(e.amount) || 0;
+      });
+    }
+  });
+
+  const totals = jobRows.reduce((s, r) => {
+    s.rev += r.revenue; s.cost += r.cost; s.profit += r.profit; return s;
+  }, { rev: 0, cost: 0, profit: 0 });
+
+  return { monthly, byPipeline, bySalesman, byCategory, jobRows, totals };
+}
+
+function plFmt(n){
+  const sign = n < 0 ? '−' : '';
+  return sign + '$' + Math.abs(Math.round(n)).toLocaleString();
+}
+
+function renderProfitsPage(){
+  if(!isAdmin()){
+    const body = document.getElementById('plBody');
+    if(body) body.innerHTML = `<div class="pl-empty">This page is restricted to admins.</div>`;
+    return;
+  }
+  // Update range button styles
+  document.querySelectorAll('.pl-range-btn').forEach(b => {
+    const isActive = b.dataset.range === plRangeKey;
+    b.classList.toggle('active', isActive);
+  });
+
+  const { from, to } = plComputeRange();
+  const fromInput = document.getElementById('plFrom');
+  const toInput   = document.getElementById('plTo');
+  if(fromInput) fromInput.value = from === '1970-01-01' ? '' : from;
+  if(toInput)   toInput.value   = to === '2999-12-31' ? '' : to;
+
+  const data = plAggregate(from, to);
+  const { totals, jobRows, byPipeline, bySalesman, byCategory, monthly } = data;
+  const margin = totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0;
+
+  // Build trend chart — sort months ascending, show up to last 12
+  const sortedMonths = Object.keys(monthly).sort();
+  const trendMonths  = sortedMonths.slice(-12);
+  const maxBar = Math.max(1, ...trendMonths.flatMap(k => [monthly[k].rev, monthly[k].cost, Math.abs(monthly[k].rev - monthly[k].cost)]));
+
+  const trendHtml = trendMonths.length
+    ? `<div class="pl-trend">${trendMonths.map(k => {
+        const m = monthly[k];
+        const prof = m.rev - m.cost;
+        const h = (v) => Math.max(2, Math.round((Math.abs(v) / maxBar) * 130));
+        const [yr, mo] = k.split('-');
+        const monLabel = new Date(parseInt(yr), parseInt(mo)-1, 1).toLocaleDateString('en-US', { month: 'short' });
+        return `<div class="pl-trend-col" title="${escapeHtml(k)} · Rev ${plFmt(m.rev)} · Cost ${plFmt(m.cost)} · Profit ${plFmt(prof)}">
+          <div class="pl-trend-bars">
+            <div class="pl-trend-bar bar-rev"    style="height:${h(m.rev)}px"></div>
+            <div class="pl-trend-bar bar-cost"   style="height:${h(m.cost)}px"></div>
+            <div class="pl-trend-bar bar-profit" style="height:${h(prof)}px;${prof<0?'background:var(--danger)':''}"></div>
+          </div>
+          <div class="pl-trend-label">${monLabel} ${yr.slice(2)}</div>
+        </div>`;
+      }).join('')}</div>`
+    : `<div class="pl-empty">No monthly data in this range.</div>`;
+
+  // Pipeline breakdown
+  const pipelineRows = Object.entries(byPipeline).sort((a,b) => b[1].rev - a[1].rev);
+  const pipelineHtml = pipelineRows.length
+    ? `<table class="pl-table"><thead><tr><th>Pipeline</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
+        ${pipelineRows.map(([pid, v]) => {
+          const p = pipelines.find(x => x.id === pid);
+          const profit = v.rev - v.cost;
+          const marg = v.rev > 0 ? (profit / v.rev * 100).toFixed(1) + '%' : '—';
+          return `<tr><td>${escapeHtml(p?.name || pid)}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td></tr>`;
+        }).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">No revenue in this range yet.</div>`;
+
+  // Salesman breakdown
+  const salesmanRows = Object.entries(bySalesman).sort((a,b) => b[1].rev - a[1].rev);
+  const salesmanHtml = salesmanRows.length
+    ? `<table class="pl-table"><thead><tr><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
+        ${salesmanRows.map(([uid, v]) => {
+          const u = USERS.find(x => x.id === uid);
+          const profit = v.rev - v.cost;
+          const marg = v.rev > 0 ? (profit / v.rev * 100).toFixed(1) + '%' : '—';
+          return `<tr><td>${escapeHtml(u?.name || 'Unassigned')}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td></tr>`;
+        }).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">No salesman activity in this range.</div>`;
+
+  // Cost-by-category breakdown
+  const catRows = Object.entries(byCategory).sort((a,b) => b[1] - a[1]);
+  const totalCat = catRows.reduce((s,[,v]) => s+v, 0);
+  const catHtml = catRows.length
+    ? `<table class="pl-table"><thead><tr><th>Category</th><th class="num">Amount</th><th class="num">% of costs</th></tr></thead><tbody>
+        ${catRows.map(([cat, v]) => {
+          const pct = totalCat > 0 ? (v / totalCat * 100).toFixed(1) + '%' : '—';
+          return `<tr><td>${escapeHtml(cat)}</td><td class="num">${plFmt(v)}</td><td class="num muted">${pct}</td></tr>`;
+        }).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">No expenses logged in this range.</div>`;
+
+  // Per-job table (sorted by profit desc)
+  jobRows.sort((a, b) => b.profit - a.profit);
+  const jobsHtml = jobRows.length
+    ? `<table class="pl-table"><thead><tr><th>Job</th><th>Pipeline</th><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
+        ${jobRows.map(r => {
+          const u = USERS.find(x => x.id === r.salesman);
+          const p = pipelines.find(x => x.id === r.pipeline);
+          const profit = r.profit;
+          const marg = r.revenue > 0 ? (profit / r.revenue * 100).toFixed(1) + '%' : '—';
+          return `<tr class="clickable" data-pl-job="${r.id}">
+            <td>
+              <div style="font-weight:600">${escapeHtml(r.name)}</div>
+              <div class="muted" style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(r.address)}</div>
+            </td>
+            <td class="muted">${escapeHtml(p?.name || r.pipeline)}</td>
+            <td class="muted">${escapeHtml(u?.name || '—')}</td>
+            <td class="num">${plFmt(r.revenue)}</td>
+            <td class="num">${plFmt(r.cost)}</td>
+            <td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td>
+            <td class="num muted">${marg}</td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">No jobs in this range. Try a wider date range or All Time.</div>`;
+
+  const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
+  const toLabel   = to === '2999-12-31' ? 'Today' : to;
+
+  document.getElementById('plBody').innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Showing ${fromLabel} → ${toLabel} · cash basis (revenue = deposits collected)</div>
+    <div class="pl-kpi-row">
+      <div class="pl-kpi kpi-rev">
+        <div class="pl-kpi-label">Revenue</div>
+        <div class="pl-kpi-val">${plFmt(totals.rev)}</div>
+        <div class="pl-kpi-sub">${jobRows.length} ${jobRows.length === 1 ? 'job' : 'jobs'}</div>
+      </div>
+      <div class="pl-kpi kpi-cost">
+        <div class="pl-kpi-label">Costs</div>
+        <div class="pl-kpi-val">${plFmt(totals.cost)}</div>
+        <div class="pl-kpi-sub">${catRows.length} ${catRows.length === 1 ? 'category' : 'categories'}</div>
+      </div>
+      <div class="pl-kpi kpi-profit${totals.profit < 0 ? ' neg' : ''}">
+        <div class="pl-kpi-label">Profit</div>
+        <div class="pl-kpi-val">${plFmt(totals.profit)}</div>
+        <div class="pl-kpi-sub">${totals.profit >= 0 ? 'Net positive' : 'Net loss'}</div>
+      </div>
+      <div class="pl-kpi kpi-profit${margin < 0 ? ' neg' : ''}">
+        <div class="pl-kpi-label">Margin</div>
+        <div class="pl-kpi-val">${margin.toFixed(1)}%</div>
+        <div class="pl-kpi-sub">profit ÷ revenue</div>
+      </div>
+    </div>
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-chart-bar"></i>Monthly Trend</div>
+      ${trendHtml}
+      <div style="display:flex;gap:14px;font-size:10px;color:var(--muted);margin-top:8px;justify-content:center">
+        <span><span style="display:inline-block;width:8px;height:8px;background:var(--brand-light);border-radius:1px;margin-right:4px"></span>Revenue</span>
+        <span><span style="display:inline-block;width:8px;height:8px;background:var(--warn);border-radius:1px;margin-right:4px"></span>Costs</span>
+        <span><span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:1px;margin-right:4px"></span>Profit</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="pl-section" style="margin-bottom:0">
+        <div class="pl-section-title"><i class="ti ti-layout-kanban"></i>By Pipeline</div>
+        ${pipelineHtml}
+      </div>
+      <div class="pl-section" style="margin-bottom:0">
+        <div class="pl-section-title"><i class="ti ti-user"></i>By Salesman</div>
+        ${salesmanHtml}
+      </div>
+    </div>
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-tag"></i>Costs by Category</div>
+      ${catHtml}
+    </div>
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-list-details"></i>Per-Job Detail (${jobRows.length})</div>
+      ${jobsHtml}
+    </div>
+  `;
+
+  // Wire per-job click → open detail
+  document.querySelectorAll('[data-pl-job]').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = row.dataset.plJob;
+      if(typeof openDetail === 'function') openDetail(id);
+    });
+  });
+}
+
+// Wire profits controls
+(function wireProfitsControls(){
+  document.querySelectorAll('.pl-range-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      plRangeKey = b.dataset.range;
+      plCustomFrom = null; plCustomTo = null;
+      renderProfitsPage();
+    });
+  });
+  ['plFrom','plTo'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('change', () => {
+      const f = document.getElementById('plFrom').value;
+      const t = document.getElementById('plTo').value;
+      if(f && t){
+        plCustomFrom = f; plCustomTo = t; plRangeKey = 'custom';
+        renderProfitsPage();
+      }
+    });
+  });
+  const exportBtn = document.getElementById('plExportCsv');
+  if(exportBtn) exportBtn.addEventListener('click', plExportCsv);
+})();
+
+function plExportCsv(){
+  const { from, to } = plComputeRange();
+  const data = plAggregate(from, to);
+  const rows = [['Job','Address','Pipeline','Salesman','Revenue','Costs','Profit','Margin %']];
+  data.jobRows.forEach(r => {
+    const u = USERS.find(x => x.id === r.salesman);
+    const p = pipelines.find(x => x.id === r.pipeline);
+    const marg = r.revenue > 0 ? (r.profit / r.revenue * 100).toFixed(1) : '';
+    rows.push([
+      r.name, r.address,
+      p?.name || r.pipeline,
+      u?.name || 'Unassigned',
+      r.revenue.toFixed(2), r.cost.toFixed(2), r.profit.toFixed(2),
+      marg,
+    ]);
+  });
+  rows.push([]);
+  rows.push(['TOTALS','','','', data.totals.rev.toFixed(2), data.totals.cost.toFixed(2), data.totals.profit.toFixed(2), data.totals.rev > 0 ? (data.totals.profit / data.totals.rev * 100).toFixed(1) : '']);
+  // CSV escape
+  const esc = v => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const csv = rows.map(r => r.map(esc).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `stormshield-pl-${from}-to-${to}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('CSV exported');
+}
+
+// ── INSURANCE CARRIERS DIRECTORY ──
+// Data is fetched from Supabase on first page open and cached in window.insCarriers.
+// Salesmen see read-only view; admins see edit/add/delete.
+
+window.insCarriers = window.insCarriers || null;   // array or null = not loaded yet
+let insSearchQuery = '';
+
+async function loadInsuranceCarriers(force){
+  if(window.insCarriers && !force) return window.insCarriers;
+  if(!window.sb){ window.insCarriers = []; return []; }
+  try {
+    const { data, error } = await window.sb.from('insurance_carriers').select('*').order('name', { ascending: true });
+    if(error){ console.warn('insurance_carriers load failed', error); window.insCarriers = []; return []; }
+    window.insCarriers = (data || []).map(r => ({
+      id: r.id, name: r.name, phone: r.claims_phone || '',
+      alt: r.alt_phone || '', website: r.website || '', notes: r.notes || '',
+    }));
+    return window.insCarriers;
+  } catch(e){
+    console.warn('insurance_carriers load error', e);
+    window.insCarriers = [];
+    return [];
+  }
+}
+
+function fmtPhoneDisplay(p){
+  if(!p) return '';
+  const digits = String(p).replace(/\D/g,'');
+  if(digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  if(digits.length === 11 && digits[0] === '1') return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  return String(p);
+}
+function fmtPhoneTel(p){
+  return 'tel:+1' + (String(p||'').replace(/\D/g,'').replace(/^1/, ''));
+}
+
+async function renderInsurancePage(){
+  const body = document.getElementById('insBody');
+  const addBtn = document.getElementById('insAddBtn');
+  if(addBtn) addBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
+  if(body) body.innerHTML = `<div class="ins-empty"><i class="ti ti-loader-2" style="font-size:24px;color:var(--brand-light);display:block;margin-bottom:6px"></i>Loading carriers…</div>`;
+  const list = await loadInsuranceCarriers();
+  renderInsuranceList(list);
+}
+
+function renderInsuranceList(allList){
+  const body = document.getElementById('insBody');
+  if(!body) return;
+  const q = (insSearchQuery || '').trim().toLowerCase();
+  const filtered = q
+    ? allList.filter(c => c.name.toLowerCase().includes(q))
+    : allList;
+  if(!filtered.length){
+    body.innerHTML = `<div class="ins-empty">
+      <i class="ti ti-shield-search" style="font-size:30px;color:var(--brand-light);display:block;margin-bottom:8px"></i>
+      ${q ? `No carriers matching "${escapeHtml(q)}"` : 'No carriers yet.'}
+      ${isAdmin() && !q ? `<div style="margin-top:10px"><button onclick="openInsModal()" class="btn-primary" style="font-size:11px;padding:6px 12px">+ Add the first carrier</button></div>` : ''}
+    </div>`;
+    return;
+  }
+  body.innerHTML = `<div class="ins-grid">${filtered.map(c => `
+    <div class="ins-card">
+      <div class="ins-card-head">
+        <div class="ins-card-name">${escapeHtml(c.name)}</div>
+        ${isAdmin() ? `<button class="ins-card-edit" onclick="openInsModal('${c.id}')" title="Edit"><i class="ti ti-edit"></i></button>` : ''}
+      </div>
+      ${c.phone ? `<a class="ins-card-call" href="${fmtPhoneTel(c.phone)}">
+        <i class="ti ti-phone" style="font-size:14px"></i>
+        <span>${escapeHtml(fmtPhoneDisplay(c.phone))}</span>
+      </a>` : ''}
+      ${c.alt ? `<a class="ins-card-call-alt" href="${fmtPhoneTel(c.alt)}">
+        <i class="ti ti-phone-plus" style="font-size:12px"></i>
+        <span>Alt: ${escapeHtml(fmtPhoneDisplay(c.alt))}</span>
+      </a>` : ''}
+      ${c.website ? `<a class="ins-card-web" href="${escapeHtml(c.website)}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:10px"></i> ${escapeHtml(c.website.replace(/^https?:\/\//,'').replace(/\/.*$/,''))}</a>` : ''}
+      ${c.notes ? `<div class="ins-card-notes">${escapeHtml(c.notes)}</div>` : ''}
+    </div>
+  `).join('')}</div>`;
+}
+
+function openInsModal(id){
+  const bg = document.getElementById('insModalBg');
+  const title = document.getElementById('insModalTitle');
+  const delBtn = document.getElementById('insModalDelete');
+  if(!bg) return;
+  const carrier = id ? (window.insCarriers || []).find(c => c.id === id) : null;
+  document.getElementById('insModalId').value     = carrier ? carrier.id : '';
+  document.getElementById('insModalName').value   = carrier ? carrier.name : '';
+  document.getElementById('insModalPhone').value  = carrier ? carrier.phone : '';
+  document.getElementById('insModalAlt').value    = carrier ? carrier.alt : '';
+  document.getElementById('insModalWeb').value    = carrier ? carrier.website : '';
+  document.getElementById('insModalNotes').value  = carrier ? carrier.notes : '';
+  if(title) title.textContent = carrier ? 'Edit Carrier' : 'Add Carrier';
+  if(delBtn) delBtn.style.display = carrier ? 'inline-block' : 'none';
+  bg.style.display = 'flex';
+}
+window.openInsModal = openInsModal;
+
+function closeInsModal(){
+  const bg = document.getElementById('insModalBg');
+  if(bg) bg.style.display = 'none';
+}
+
+async function saveInsCarrier(){
+  if(!isAdmin()){ toast('Only admins can edit carriers'); return; }
+  const id    = document.getElementById('insModalId').value || null;
+  const name  = (document.getElementById('insModalName').value || '').trim();
+  const phone = (document.getElementById('insModalPhone').value || '').trim();
+  const alt   = (document.getElementById('insModalAlt').value || '').trim();
+  const web   = (document.getElementById('insModalWeb').value || '').trim();
+  const notes = (document.getElementById('insModalNotes').value || '').trim();
+  if(!name){ toast('Carrier name is required'); return; }
+  if(!window.sb){ toast('Not connected to Supabase'); return; }
+  const row = {
+    name, claims_phone: phone || null, alt_phone: alt || null,
+    website: web || null, notes: notes || null, updated_at: new Date().toISOString(),
+  };
+  try {
+    if(id){
+      const { error } = await window.sb.from('insurance_carriers').update(row).eq('id', id);
+      if(error) throw error;
+      toast(`${name} updated`);
+    } else {
+      const { error } = await window.sb.from('insurance_carriers').insert(row);
+      if(error) throw error;
+      toast(`${name} added`);
+    }
+    closeInsModal();
+    await loadInsuranceCarriers(true);
+    renderInsuranceList(window.insCarriers);
+  } catch(e){
+    console.warn('saveInsCarrier failed', e);
+    toast('Save failed: ' + (e.message || 'unknown error'));
+  }
+}
+
+async function deleteInsCarrier(){
+  if(!isAdmin()){ toast('Only admins can delete carriers'); return; }
+  const id = document.getElementById('insModalId').value;
+  if(!id) return;
+  const carrier = (window.insCarriers || []).find(c => c.id === id);
+  if(!confirm(`Delete carrier "${carrier?.name || 'this carrier'}"? This cannot be undone.`)) return;
+  try {
+    const { error } = await window.sb.from('insurance_carriers').delete().eq('id', id);
+    if(error) throw error;
+    toast('Carrier deleted');
+    closeInsModal();
+    await loadInsuranceCarriers(true);
+    renderInsuranceList(window.insCarriers);
+  } catch(e){
+    console.warn('deleteInsCarrier failed', e);
+    toast('Delete failed: ' + (e.message || 'unknown error'));
+  }
+}
+
+// Wire insurance controls
+(function wireInsuranceControls(){
+  const search = document.getElementById('insSearchInput');
+  if(search){
+    search.addEventListener('input', () => {
+      insSearchQuery = search.value;
+      if(window.insCarriers) renderInsuranceList(window.insCarriers);
+    });
+  }
+  const addBtn = document.getElementById('insAddBtn');
+  if(addBtn) addBtn.addEventListener('click', () => openInsModal());
+  ['insModalCancel','insModalClose'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('click', closeInsModal);
+  });
+  const saveBtn = document.getElementById('insModalSave');
+  if(saveBtn) saveBtn.addEventListener('click', saveInsCarrier);
+  const delBtn = document.getElementById('insModalDelete');
+  if(delBtn) delBtn.addEventListener('click', deleteInsCarrier);
+  // Close on outside click
+  const bg = document.getElementById('insModalBg');
+  if(bg){
+    bg.addEventListener('click', e => { if(e.target === bg) closeInsModal(); });
+  }
+})();
+
+// Helper used by the in-job detail panel to add a "Call claims" button next to the carrier name.
+// Returns an HTML snippet (or '') based on whether a matching carrier is in the directory.
+function carrierCallButtonFor(carrierName){
+  if(!carrierName) return '';
+  if(!window.insCarriers) return '';   // Not loaded yet; will appear after directory is visited once
+  const norm = String(carrierName).toLowerCase().trim();
+  // Match on full name or substring (e.g. "State Farm Mutual" → "State Farm")
+  const found = window.insCarriers.find(c => {
+    const cn = c.name.toLowerCase();
+    return cn === norm || norm.includes(cn) || cn.includes(norm);
+  });
+  if(!found || !found.phone) return '';
+  return `<a class="dp-claim-call" href="${fmtPhoneTel(found.phone)}" title="Call ${escapeHtml(found.name)} claims · ${escapeHtml(fmtPhoneDisplay(found.phone))}"><i class="ti ti-phone"></i><span>Call claims</span></a>`;
+}
+window.carrierCallButtonFor = carrierCallButtonFor;
 
 function renderTeamPage(){
   const addBtn = document.getElementById('addTeamMemberBtn');
@@ -6751,5 +7456,5 @@ document.addEventListener('keydown', e => {
 saveTeam();
 // One-time cleanup of pre-Supabase team data lingering in localStorage
 try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
-bootSupabase().then(ok => { if (ok) { syncActivePipeline(); renderBoard(); renderTeamPage?.(); } });
+bootSupabase().then(ok => { if (ok) { syncActivePipeline(); renderBoard(); renderTeamPage?.(); updateProfitsNavVisibility?.(); loadInsuranceCarriers?.(); } });
 </script>
