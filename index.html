@@ -1475,6 +1475,7 @@ function getUncheckedMandatoryItems(j, col){
 
 // Gate function: can this job leave its current stage?
 // Returns {ok: bool, reason?: string, missing?: [items]}
+// Note: applies to EVERYONE including admins (per explicit user choice).
 function canJobLeaveStage(j){
   if(!j) return {ok:true};
   const cols = (typeof columnsForPipeline === 'function') ? columnsForPipeline(j.pipeline || 'insurance') : (window.columns || []);
@@ -1482,10 +1483,6 @@ function canJobLeaveStage(j){
   if(!col) return {ok:true};
   const missing = getUncheckedMandatoryItems(j, col);
   if(!missing.length) return {ok:true};
-  // Admins can override — they get a warning toast but no block.
-  if(typeof isAdmin === 'function' && isAdmin()){
-    return {ok:true, adminOverride:true, missing};
-  }
   return {
     ok: false,
     missing,
@@ -1793,14 +1790,8 @@ function isForwardStageMove(j,targetColId){
 function canMoveToStage(j,targetColId){
   // Same stage → no gate
   if(!j || j.col === targetColId) return true;
-  // Use the required-items gate. Admins get an override but still see a warning.
   const gate = canJobLeaveStage(j);
-  if(gate.ok){
-    if(gate.adminOverride && gate.missing?.length){
-      toast(`Admin override · ${gate.missing.length} required item${gate.missing.length===1?'':'s'} still unchecked`);
-    }
-    return true;
-  }
+  if(gate.ok) return true;
   toast(gate.reason);
   return false;
 }
