@@ -1439,8 +1439,58 @@ function daysSinceCreated(j){
 function getStageChecklist(col){
   if(!col) return [];
   if(!col.checklist) col.checklist=[];
-  col.checklist=col.checklist.map((item,i)=>typeof item==='string'?{id:`item-${i}-${Date.now()}`,text:item}:item);
+  col.checklist=col.checklist.map((item,i)=>{
+    if(typeof item==='string') return {id:`item-${i}-${Date.now()}`,text:item,required:false};
+    // Existing items default to required=false unless explicitly set true
+    if(typeof item.required !== 'boolean') item.required = false;
+    return item;
+  });
   return col.checklist;
+}
+
+// Per-job optional items added in the field. Stored as j.stageChecklistExtra[colId] = [{id,text,by,at}]
+function getJobChecklistExtras(j, colId){
+  if(!j || !colId) return [];
+  if(!j.stageChecklistExtra) j.stageChecklistExtra = {};
+  if(!Array.isArray(j.stageChecklistExtra[colId])) j.stageChecklistExtra[colId] = [];
+  return j.stageChecklistExtra[colId];
+}
+
+// Combined view: mandatory items from the stage template + per-job optional items
+function getCombinedChecklistItems(j, col){
+  if(!col) return [];
+  const tpl = getStageChecklist(col).map(it => ({...it, scope: 'template'}));
+  const extras = getJobChecklistExtras(j, col.id).map(it => ({...it, required: false, scope: 'extra'}));
+  return [...tpl, ...extras];
+}
+
+// Are there any unchecked MANDATORY items on the job's current stage?
+function getUncheckedMandatoryItems(j, col){
+  if(!j || !col) return [];
+  const items = getStageChecklist(col).filter(it => it.required === true);
+  if(!items.length) return [];
+  const doneMap = j.stageChecklistDone?.[col.id] || {};
+  return items.filter(it => !doneMap[it.id]);
+}
+
+// Gate function: can this job leave its current stage?
+// Returns {ok: bool, reason?: string, missing?: [items]}
+function canJobLeaveStage(j){
+  if(!j) return {ok:true};
+  const cols = (typeof columnsForPipeline === 'function') ? columnsForPipeline(j.pipeline || 'insurance') : (window.columns || []);
+  const col = cols.find(c => c.id === j.col);
+  if(!col) return {ok:true};
+  const missing = getUncheckedMandatoryItems(j, col);
+  if(!missing.length) return {ok:true};
+  // Admins can override — they get a warning toast but no block.
+  if(typeof isAdmin === 'function' && isAdmin()){
+    return {ok:true, adminOverride:true, missing};
+  }
+  return {
+    ok: false,
+    missing,
+    reason: `Complete ${missing.length} required item${missing.length===1?'':'s'} in "${col.name}" first: ${missing.map(m=>m.text).join(' · ')}`,
+  };
 }
 
 function stageChecklistProgress(j,col){
@@ -1741,14 +1791,18 @@ function isForwardStageMove(j,targetColId){
 }
 
 function canMoveToStage(j,targetColId){
-  if(!isForwardStageMove(j,targetColId)) return true;
-  const col=columns.find(c=>c.id===j?.col);
-  const progress=stageChecklistProgress(j,col);
-  if(progress.total && progress.done<progress.total){
-    toast(`Complete ${col.name} checklist first`);
-    return false;
+  // Same stage → no gate
+  if(!j || j.col === targetColId) return true;
+  // Use the required-items gate. Admins get an override but still see a warning.
+  const gate = canJobLeaveStage(j);
+  if(gate.ok){
+    if(gate.adminOverride && gate.missing?.length){
+      toast(`Admin override · ${gate.missing.length} required item${gate.missing.length===1?'':'s'} still unchecked`);
+    }
+    return true;
   }
-  return true;
+  toast(gate.reason);
+  return false;
 }
 
 function renderBoard(){
@@ -1946,22 +2000,34 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
   }
 
   if(activeTab==='overview'){
-    const checklist=stageChecklistProgress(j,col);
-    const checklistItems=checklist.total?checklist.items.map(item=>{
-      const completed=j.stageChecklistDone?.[col.id]?.[item.id];
-      const details=checklistCompletionDetails(j,col.id,item.id);
+    const combined = getCombinedChecklistItems(j, col);
+    const doneMap = j.stageChecklistDone?.[col.id] || {};
+    const reqItems = combined.filter(it => it.required);
+    const reqDone  = reqItems.filter(it => doneMap[it.id]).length;
+    const totalDone = combined.filter(it => doneMap[it.id]).length;
+    const totalCount = combined.length;
+    const checklistItems = totalCount ? combined.map(item=>{
+      const completed = !!doneMap[item.id];
+      const details = checklistCompletionDetails(j,col.id,item.id);
+      const isReq = item.required === true;
+      const isExtra = item.scope === 'extra';
       return `
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--brand);padding:5px 0;cursor:pointer">
-            <input type="checkbox" data-job-stage-check="${item.id}" ${j.stageChecklistDone?.[col.id]?.[item.id]?'checked':''} style="width:14px;height:14px;accent-color:var(--brand-light);cursor:pointer;flex-shrink:0">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--brand);padding:5px 0;cursor:pointer;${isReq ? 'border-left:2px solid var(--danger);padding-left:8px;margin-left:-2px':''}">
+            <input type="checkbox" data-job-stage-check="${item.id}" ${completed?'checked':''} style="width:14px;height:14px;accent-color:${isReq?'var(--danger)':'var(--brand-light)'};cursor:pointer;flex-shrink:0">
             <span style="min-width:0;display:flex;align-items:center;gap:8px;flex:1">
               <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.text)}</span>
+              ${isReq ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--danger);padding:1px 4px;border:1px solid rgba(248,113,113,0.4);border-radius:3px;flex-shrink:0">REQ</span>`:''}
               ${completed?`<span style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);line-height:1.35;white-space:nowrap;text-align:right;flex-shrink:0"><i class="ti ti-user-check" style="font-size:11px;color:var(--success)" aria-hidden="true"></i>${escapeHtml(details)}</span>`:''}
+              ${isExtra?`<button data-job-extra-delete="${item.id}" title="Remove this task" style="margin-left:auto;width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" onmouseover="this.style.color='var(--danger)';this.style.borderColor='rgba(248,113,113,0.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='rgba(255,255,255,0.08)'"><i class="ti ti-x" style="font-size:11px" aria-hidden="true"></i></button>`:''}
             </span>
           </label>
         `;
-    }).join(''):`<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)">
+    }).join('') : `<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)">
           <i class="ti ti-list-check" style="font-size:13px" aria-hidden="true"></i>No checklist items for this stage
         </div>`;
+    const reqStatusHtml = reqItems.length
+      ? `<span style="font-size:10px;font-weight:700;letter-spacing:0.04em;color:${reqDone===reqItems.length?'var(--success)':'var(--danger)'};padding:2px 6px;border:1px solid ${reqDone===reqItems.length?'rgba(52,211,153,0.3)':'rgba(248,113,113,0.35)'};border-radius:4px">${reqDone}/${reqItems.length} REQUIRED</span>`
+      : '';
     body.innerHTML=`
       <div class="action-pills" style="margin-bottom:12px">
         <span class="ap-pill" style="background:rgba(139,92,246,0.15);border-color:rgba(139,92,246,0.35);color:#A78BFA"><i class="ti ti-sparkles" style="font-size:12px" aria-hidden="true"></i>AI Summary</span>
@@ -1989,10 +2055,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           <i class="ti ti-checkbox" style="font-size:14px;color:var(--brand-mid)" aria-hidden="true"></i>
           <span style="font-weight:700;font-size:12px;color:var(--brand)">${col.name} Checklist</span>
           <div style="flex:1"></div>
-          <span style="font-size:11px;color:var(--muted)">${checklist.done}/${checklist.total||0}</span>
-          <i class="ti ti-chevron-down" style="font-size:13px;color:var(--muted)" aria-hidden="true"></i>
+          ${reqStatusHtml}
+          <span style="font-size:11px;color:var(--muted)">${totalDone}/${totalCount||0}</span>
         </div>
         ${checklistItems}
+        <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.06)">
+          <input id="jobExtraTaskInput" type="text" placeholder="Add a task for this job..." style="flex:1;background:#1A1F2E;border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
+          <button id="jobExtraTaskAdd" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">+ Add</button>
+        </div>
       </div>
       <div class="two-col">
         <div>
@@ -3134,6 +3204,46 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       renderBoard();
       renderDetailPanel();
     }));
+    // Add a job-specific (optional) task to the current stage
+    const taskAdd = document.getElementById('jobExtraTaskAdd');
+    const taskInput = document.getElementById('jobExtraTaskInput');
+    const addExtraTask = () => {
+      const j=jobs.find(x=>x.id===openJobId); if(!j) return;
+      const text = (taskInput?.value || '').trim();
+      if(!text){ toast('Type a task first'); return; }
+      const arr = getJobChecklistExtras(j, col.id);
+      arr.push({
+        id: 'extra-' + Date.now() + '-' + Math.random().toString(36).slice(2,7),
+        text,
+        by: (window.currentMember?.name) || 'Someone',
+        at: new Date().toISOString(),
+      });
+      if(taskInput) taskInput.value = '';
+      if(typeof logActivity === 'function') logActivity(j, 'task', 'Task added', `${col.name}: ${text}`);
+      saveToStorage();
+      renderBoard();
+      renderDetailPanel();
+    };
+    if(taskAdd) taskAdd.addEventListener('click', addExtraTask);
+    if(taskInput) taskInput.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addExtraTask(); }});
+    // Delete a job-specific optional task
+    document.querySelectorAll('[data-job-extra-delete]').forEach(btn => btn.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      const j = jobs.find(x => x.id === openJobId); if(!j) return;
+      const itemId = btn.dataset.jobExtraDelete;
+      const arr = getJobChecklistExtras(j, col.id);
+      const idx = arr.findIndex(it => it.id === itemId);
+      if(idx >= 0){
+        const removed = arr[idx];
+        arr.splice(idx, 1);
+        // Also clear any checked state for this item
+        if(j.stageChecklistDone?.[col.id]) delete j.stageChecklistDone[col.id][itemId];
+        if(typeof logActivity === 'function') logActivity(j, 'task', 'Task removed', `${col.name}: ${removed.text}`);
+        saveToStorage();
+        renderBoard();
+        renderDetailPanel();
+      }
+    }));
     $('dpDelete')&&$('dpDelete').addEventListener('click',()=>{
       openDeleteJobModal(openJobId);
     });
@@ -4163,6 +4273,16 @@ function openStageChecklistModal(id){
   const c=columns.find(x=>x.id===id);if(!c)return;
   $('stageChecklistSub').textContent=`${c.name} checklist`;
   $('newStageChecklistItem').value='';
+  // Only admins/managers can edit stage checklist items (they sync to all team members).
+  // For salesmen, show items read-only with a hint.
+  const role = window.currentMember?.role;
+  const canEdit = (role === 'admin' || role === 'manager');
+  const addRow = $('newStageChecklistItem').parentElement;
+  if(addRow){
+    addRow.style.display = canEdit ? '' : 'none';
+  }
+  // Stash readonly state for renderStageChecklistItems to consult
+  window.__checklistReadOnly = !canEdit;
   renderStageChecklistItems();
   $('stageChecklistModal').classList.add('open');
 }
@@ -4170,16 +4290,34 @@ function openStageChecklistModal(id){
 function renderStageChecklistItems(){
   const c=columns.find(x=>x.id===editingChecklistColId);if(!c)return;
   const items=getStageChecklist(c);
+  const readOnly = !!window.__checklistReadOnly;
   $('stageChecklistItems').innerHTML=items.length?items.map(item=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--border);background:#141927;border-radius:7px;margin-bottom:7px">
-      <i class="ti ti-grip-vertical" style="color:var(--muted);font-size:14px" aria-hidden="true"></i>
-      <input data-stage-check-text="${item.id}" value="${escapeHtml(item.text)}" style="min-width:0;flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 8px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
-      <button data-stage-check-delete="${item.id}" title="Delete item" style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px" aria-hidden="true"></i></button>
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid ${item.required?'rgba(248,113,113,0.35)':'var(--border)'};background:${item.required?'rgba(248,113,113,0.04)':'#141927'};border-radius:7px;margin-bottom:7px">
+      <i class="ti ti-${readOnly?'list-check':'grip-vertical'}" style="color:var(--muted);font-size:14px" aria-hidden="true"></i>
+      <input data-stage-check-text="${item.id}" value="${escapeHtml(item.text)}" ${readOnly?'readonly':''} style="min-width:0;flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 8px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none${readOnly?';cursor:default;opacity:0.85':''}">
+      ${readOnly
+        ? (item.required ? `<span style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:var(--danger);padding:3px 6px;border:1px solid rgba(248,113,113,0.4);border-radius:4px;flex-shrink:0">REQUIRED</span>` : '')
+        : `<label style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:${item.required?'var(--danger)':'var(--muted)'};cursor:pointer;user-select:none;flex-shrink:0;padding:0 4px" title="Mark as mandatory — salesmen cannot move jobs to the next stage until this is checked">
+            <input type="checkbox" data-stage-check-required="${item.id}" ${item.required?'checked':''} style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">
+            Required
+          </label>
+          <button data-stage-check-delete="${item.id}" title="Delete item" style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px" aria-hidden="true"></i></button>`}
     </div>
-  `).join(''):`<div style="padding:22px 10px;text-align:center;color:var(--muted);font-size:12px">No checklist items yet.</div>`;
+  `).join(''):`<div style="padding:22px 10px;text-align:center;color:var(--muted);font-size:12px">No checklist items yet.${readOnly?'<br><span style="font-size:11px">Ask an admin to add items.</span>':''}</div>`;
+  if(readOnly) return;
   $('stageChecklistItems').querySelectorAll('[data-stage-check-text]').forEach(input=>input.addEventListener('input',()=>{
     const item=items.find(x=>x.id===input.dataset.stageCheckText);
     if(item){item.text=input.value;saveToStorage();renderBoard();if($('detailOverlay').classList.contains('open'))renderDetailPanel();}
+  }));
+  $('stageChecklistItems').querySelectorAll('[data-stage-check-required]').forEach(box=>box.addEventListener('change',()=>{
+    const item=items.find(x=>x.id===box.dataset.stageCheckRequired);
+    if(item){
+      item.required = box.checked;
+      saveToStorage();
+      renderStageChecklistItems();
+      renderBoard();
+      if($('detailOverlay').classList.contains('open')) renderDetailPanel();
+    }
   }));
   $('stageChecklistItems').querySelectorAll('[data-stage-check-delete]').forEach(btn=>btn.addEventListener('click',()=>{
     c.checklist=getStageChecklist(c).filter(item=>item.id!==btn.dataset.stageCheckDelete);

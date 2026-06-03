@@ -100,6 +100,10 @@ async function loadAllFromSupabase() {
       window.TEAM.forEach(m => window.USERS.push({ id:m.id, name:m.name, color:m.color }));
     }
     console.log('[Supabase] loaded', window.TEAM.length, 'team members; you are:', window.currentMember?.role || 'unknown');
+    // Show/hide admin-only nav links now that we know the role
+    if (typeof window.updateProfitsNavVisibility === 'function') {
+      window.updateProfitsNavVisibility();
+    }
   }
 
   // pipelines + stages
@@ -111,6 +115,7 @@ async function loadAllFromSupabase() {
       id: p.id, name: p.name,
       columns: (stages || []).filter(s => s.pipeline_id === p.id).map(s => ({
         id: s.id, name: s.name, icon: s.icon, color: s.color, locked: s.locked,
+        checklist: Array.isArray(s.checklist) ? s.checklist : [],
       })),
     }));
     if (Array.isArray(window.pipelines)) {
@@ -156,6 +161,7 @@ async function loadAllFromSupabase() {
         roofEstimate: r.roof_estimate || null,
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
         buildDate: r.build_date || null,
+        stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
@@ -205,6 +211,7 @@ async function pushAllToSupabase() {
         roof_estimate: j.roofEstimate ?? null,
         timeline: Array.isArray(j.timeline) ? j.timeline : [],
         build_date: j.buildDate || null,
+        stage_checklist_extra: (j.stageChecklistExtra && typeof j.stageChecklistExtra === 'object') ? j.stageChecklistExtra : {},
       };
       if (typeof j.id === 'string' && j.id.length > 20) {
         existingJobs.push({ ...base, id: j.id });
@@ -284,6 +291,7 @@ async function pushAllToSupabase() {
             id: c.id, pipeline_id: p.id, name: c.name,
             icon: c.icon || null, color: c.color || null,
             locked: !!c.locked, position: i,
+            checklist: Array.isArray(c.checklist) ? c.checklist : [],
           });
         });
       });
