@@ -318,6 +318,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link">Map</span>
   <span class="nav-link">Team</span>
   <span class="nav-link">Calendar</span>
+  <span class="nav-link">My To-Do</span>
   <span class="nav-link">Insurance</span>
   <span class="nav-link" id="navProfits" style="display:none">Profits</span>
   <span class="nav-link">Contacts</span>
@@ -524,6 +525,28 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 </div>
 
 <!-- INSURANCE CARRIERS DIRECTORY PAGE -->
+<!-- MY TO-DO PAGE: consolidated checklist items across all jobs -->
+<div id="todoPage" style="display:none">
+  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">My To-Do</div>
+    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <button class="todo-filter-btn" data-todo-filter="mine" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">My Jobs</button>
+      <button class="todo-filter-btn" data-todo-filter="all" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">All Jobs</button>
+    </div>
+    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <button class="todo-scope-btn" data-todo-scope="open" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">Open</button>
+      <button class="todo-scope-btn" data-todo-scope="all" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">All</button>
+    </div>
+    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <button class="todo-role-btn" data-todo-role="actionable" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif" title="Items I am allowed to check">Actionable</button>
+      <button class="todo-role-btn" data-todo-role="all" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">Everything</button>
+    </div>
+    <div style="flex:1"></div>
+    <div id="todoStats" style="font-size:11px;color:var(--muted)"></div>
+  </div>
+  <div id="todoBody" style="padding:14px 18px;overflow:auto;height:calc(100vh - 110px)"></div>
+</div>
+
 <div id="insurancePage" style="display:none">
   <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Insurance Directory</div>
@@ -636,6 +659,26 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .dp-claim-call{display:inline-flex;align-items:center;gap:4px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);border-radius:4px;padding:2px 7px;color:var(--success);text-decoration:none;font-family:'Barlow',sans-serif;font-size:10px;font-weight:600;margin-left:6px;transition:background 0.12s}
 .dp-claim-call:hover{background:rgba(52,211,153,0.2)}
 .dp-claim-call i{font-size:11px}
+
+/* To-Do page */
+.todo-filter-btn.active, .todo-scope-btn.active, .todo-role-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
+.todo-job-card{background:#141927;border:1px solid var(--border);border-radius:9px;padding:0;margin-bottom:12px;overflow:hidden}
+.todo-job-head{display:flex;align-items:center;gap:10px;padding:11px 14px;background:#181F30;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.12s}
+.todo-job-head:hover{background:#1E253A}
+.todo-job-name{font-family:'Barlow',sans-serif;font-weight:700;font-size:14px;color:#fff;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.todo-job-meta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap}
+.todo-stage-pill{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:0.06em;text-transform:uppercase;flex-shrink:0}
+.todo-counts{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--muted);margin-left:auto;flex-shrink:0}
+.todo-counts .req-c{color:var(--danger)}
+.todo-counts .req-c.ok{color:var(--success)}
+.todo-items{padding:6px 14px 12px}
+.todo-item{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px;color:var(--brand);border-bottom:1px solid rgba(255,255,255,0.04)}
+.todo-item:last-child{border-bottom:none}
+.todo-item.req{border-left:2px solid var(--danger);padding-left:8px;margin-left:-2px}
+.todo-item.locked{opacity:0.5;cursor:not-allowed}
+.todo-item input[type="checkbox"]{width:14px;height:14px;cursor:pointer;flex-shrink:0}
+.todo-item.req input[type="checkbox"]{accent-color:var(--danger)}
+.todo-empty{text-align:center;padding:50px 20px;color:var(--muted);font-size:13px;line-height:1.7}
 
 /* Production calendar */
 .cal-day{background:#141927;display:flex;flex-direction:column;min-height:0;transition:background 0.15s}
@@ -1440,9 +1483,11 @@ function getStageChecklist(col){
   if(!col) return [];
   if(!col.checklist) col.checklist=[];
   col.checklist=col.checklist.map((item,i)=>{
-    if(typeof item==='string') return {id:`item-${i}-${Date.now()}`,text:item,required:false};
+    if(typeof item==='string') return {id:`item-${i}-${Date.now()}`,text:item,required:false,role:'either'};
     // Existing items default to required=false unless explicitly set true
     if(typeof item.required !== 'boolean') item.required = false;
+    // Role: 'either' (anyone), 'salesman' (only sales can check; admin can also), 'admin' (only admin can check)
+    if(!item.role || !['either','salesman','admin'].includes(item.role)) item.role = 'either';
     return item;
   });
   return col.checklist;
@@ -1454,6 +1499,21 @@ function getJobChecklistExtras(j, colId){
   if(!j.stageChecklistExtra) j.stageChecklistExtra = {};
   if(!Array.isArray(j.stageChecklistExtra[colId])) j.stageChecklistExtra[colId] = [];
   return j.stageChecklistExtra[colId];
+}
+
+// Can the current logged-in user check this item? Rule:
+// - 'either' / no role  → anyone
+// - 'salesman' → salesman OR admin (admins can always check anything)
+// - 'admin' → admin only
+function canCurrentUserCheckItem(item){
+  if(!item) return false;
+  const role = item.role || 'either';
+  if(role === 'either') return true;
+  const cm = window.currentMember;
+  const isAdminUser = cm?.role === 'admin';
+  if(isAdminUser) return true;       // admin can always check anything
+  if(role === 'salesman' && (cm?.role === 'salesman' || cm?.role === 'manager')) return true;
+  return false;
 }
 
 // Combined view: mandatory items from the stage template + per-job optional items
@@ -1508,12 +1568,15 @@ function formatChecklistCompletedAt(value){
 }
 
 function checklistCompletionRecord(j){
-  const agent=USERS.find(x=>x.id===j?.user);
+  // Capture the logged-in user (the person actually clicking the box), not the job's assignee.
+  const cm = window.currentMember;
+  const fallback = USERS.find(x => x.id === j?.user);
   return {
-    completed:true,
-    agentId:agent?.id||j?.user||'',
-    agentName:agent?.name||'Unassigned',
-    completedAt:Date.now()
+    completed: true,
+    agentId:   cm?.id   || fallback?.id   || j?.user || '',
+    agentName: cm?.name || fallback?.name || 'Unassigned',
+    agentRole: cm?.role || '',
+    completedAt: Date.now(),
   };
 }
 
@@ -1941,6 +2004,7 @@ function renderDetailPanel(){
     {id:'overview',icon:'ti-layout-2',label:'Overview'},
     {id:'timeline',icon:'ti-history',label:'Timeline'},
     {id:'photos',icon:'ti-camera',label:'Photos'},
+    {id:'quote',icon:'ti-file-invoice',label:'Quote'},
     {id:'contract',icon:'ti-writing',label:'Contract'},
     {id:'checks',icon:'ti-writing-sign',label:'Checks'},
     {id:'loss',icon:'ti-file-alert',label:'Loss Statement'},
@@ -1997,19 +2061,28 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     const reqDone  = reqItems.filter(it => doneMap[it.id]).length;
     const totalDone = combined.filter(it => doneMap[it.id]).length;
     const totalCount = combined.length;
+    const renderRoleBadge = (role) => {
+      if(role === 'admin')    return `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:#A78BFA;padding:1px 4px;border:1px solid rgba(167,139,250,0.35);border-radius:3px;flex-shrink:0">ADMIN</span>`;
+      if(role === 'salesman') return `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:#4D9DE0;padding:1px 4px;border:1px solid rgba(77,157,224,0.35);border-radius:3px;flex-shrink:0">SALES</span>`;
+      return '';
+    };
     const checklistItems = totalCount ? combined.map(item=>{
       const completed = !!doneMap[item.id];
       const details = checklistCompletionDetails(j,col.id,item.id);
       const isReq = item.required === true;
       const isExtra = item.scope === 'extra';
+      const canCheck = canCurrentUserCheckItem(item);
+      const disabledAttr = (!canCheck && !completed) ? 'disabled' : '';
+      const lockTitle = !canCheck ? `Only ${item.role === 'admin' ? 'admins' : (item.role === 'salesman' ? 'sales/admin' : 'team')} can check this` : '';
       return `
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--brand);padding:5px 0;cursor:pointer;${isReq ? 'border-left:2px solid var(--danger);padding-left:8px;margin-left:-2px':''}">
-            <input type="checkbox" data-job-stage-check="${item.id}" ${completed?'checked':''} style="width:14px;height:14px;accent-color:${isReq?'var(--danger)':'var(--brand-light)'};cursor:pointer;flex-shrink:0">
-            <span style="min-width:0;display:flex;align-items:center;gap:8px;flex:1">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--brand);padding:5px 0;cursor:${canCheck?'pointer':'not-allowed'};${isReq ? 'border-left:2px solid var(--danger);padding-left:8px;margin-left:-2px':''};${!canCheck && !completed ? 'opacity:0.55' : ''}" title="${lockTitle}">
+            <input type="checkbox" data-job-stage-check="${item.id}" ${completed?'checked':''} ${disabledAttr} style="width:14px;height:14px;accent-color:${isReq?'var(--danger)':'var(--brand-light)'};cursor:${canCheck?'pointer':'not-allowed'};flex-shrink:0">
+            <span style="min-width:0;display:flex;align-items:center;gap:6px;flex:1">
               <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.text)}</span>
               ${isReq ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--danger);padding:1px 4px;border:1px solid rgba(248,113,113,0.4);border-radius:3px;flex-shrink:0">REQ</span>`:''}
+              ${renderRoleBadge(item.role)}
               ${completed?`<span style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);line-height:1.35;white-space:nowrap;text-align:right;flex-shrink:0"><i class="ti ti-user-check" style="font-size:11px;color:var(--success)" aria-hidden="true"></i>${escapeHtml(details)}</span>`:''}
-              ${isExtra?`<button data-job-extra-delete="${item.id}" title="Remove this task" style="margin-left:auto;width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" onmouseover="this.style.color='var(--danger)';this.style.borderColor='rgba(248,113,113,0.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='rgba(255,255,255,0.08)'"><i class="ti ti-x" style="font-size:11px" aria-hidden="true"></i></button>`:''}
+              ${isExtra && canCheck?`<button data-job-extra-delete="${item.id}" title="Remove this task" style="margin-left:auto;width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" onmouseover="this.style.color='var(--danger)';this.style.borderColor='rgba(248,113,113,0.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='rgba(255,255,255,0.08)'"><i class="ti ti-x" style="font-size:11px" aria-hidden="true"></i></button>`:''}
             </span>
           </label>
         `;
@@ -3187,10 +3260,21 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     cpRenderSummary();
     document.querySelectorAll('[data-job-stage-check]').forEach(box=>box.addEventListener('change',()=>{
       const j=jobs.find(x=>x.id===openJobId);if(!j)return;
+      const itemId = box.dataset.jobStageCheck;
+      // Look up the item from the combined list to check permissions
+      const combined = getCombinedChecklistItems(j, col);
+      const item = combined.find(it => it.id === itemId);
+      if(item && !canCurrentUserCheckItem(item)){
+        // Revert the visual change
+        box.checked = !box.checked;
+        const who = item.role === 'admin' ? 'admins' : (item.role === 'salesman' ? 'sales/admin' : 'team');
+        toast(`Only ${who} can check this item`);
+        return;
+      }
       if(!j.stageChecklistDone) j.stageChecklistDone={};
       if(!j.stageChecklistDone[col.id]) j.stageChecklistDone[col.id]={};
-      if(box.checked) j.stageChecklistDone[col.id][box.dataset.jobStageCheck]=checklistCompletionRecord(j);
-      else delete j.stageChecklistDone[col.id][box.dataset.jobStageCheck];
+      if(box.checked) j.stageChecklistDone[col.id][itemId]=checklistCompletionRecord(j);
+      else delete j.stageChecklistDone[col.id][itemId];
       saveToStorage();
       renderBoard();
       renderDetailPanel();
@@ -3592,6 +3676,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.phOpenLightbox=function(sk,i){const p=j.photos[sk][i];document.getElementById('ph-lb-img').src=p.url;document.getElementById('ph-lb-cap').textContent=p.name;document.getElementById('ph-lightbox').classList.add('open')};
     function wirePhFns(){const lb=document.getElementById('ph-lightbox');if(lb)lb.addEventListener('click',e=>{if(e.target===lb)lb.classList.remove('open')})}
     wirePhFns();
+
+  } else if(activeTab==='quote'){
+    renderQuoteTab(j);
 
   } else if(activeTab==='contract'){
     if(!j.contracts) j.contracts=[];
@@ -4282,15 +4369,25 @@ function renderStageChecklistItems(){
   const c=columns.find(x=>x.id===editingChecklistColId);if(!c)return;
   const items=getStageChecklist(c);
   const readOnly = !!window.__checklistReadOnly;
+  const roleBadge = (role) => {
+    if(role === 'admin')    return `<span style="font-size:9px;font-weight:700;letter-spacing:0.06em;color:#A78BFA;padding:2px 5px;border:1px solid rgba(167,139,250,0.35);border-radius:4px;flex-shrink:0">ADMIN</span>`;
+    if(role === 'salesman') return `<span style="font-size:9px;font-weight:700;letter-spacing:0.06em;color:#4D9DE0;padding:2px 5px;border:1px solid rgba(77,157,224,0.35);border-radius:4px;flex-shrink:0">SALES</span>`;
+    return '';
+  };
   $('stageChecklistItems').innerHTML=items.length?items.map(item=>`
     <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid ${item.required?'rgba(248,113,113,0.35)':'var(--border)'};background:${item.required?'rgba(248,113,113,0.04)':'#141927'};border-radius:7px;margin-bottom:7px">
       <i class="ti ti-${readOnly?'list-check':'grip-vertical'}" style="color:var(--muted);font-size:14px" aria-hidden="true"></i>
       <input data-stage-check-text="${item.id}" value="${escapeHtml(item.text)}" ${readOnly?'readonly':''} style="min-width:0;flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 8px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none${readOnly?';cursor:default;opacity:0.85':''}">
       ${readOnly
-        ? (item.required ? `<span style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:var(--danger);padding:3px 6px;border:1px solid rgba(248,113,113,0.4);border-radius:4px;flex-shrink:0">REQUIRED</span>` : '')
-        : `<label style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:${item.required?'var(--danger)':'var(--muted)'};cursor:pointer;user-select:none;flex-shrink:0;padding:0 4px" title="Mark as mandatory — salesmen cannot move jobs to the next stage until this is checked">
+        ? `${roleBadge(item.role)}${item.required ? `<span style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:var(--danger);padding:2px 5px;border:1px solid rgba(248,113,113,0.4);border-radius:4px;flex-shrink:0">REQUIRED</span>` : ''}`
+        : `<select data-stage-check-role="${item.id}" title="Who is responsible for this item" style="background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:10px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer;flex-shrink:0">
+            <option value="either"   ${item.role==='either'?'selected':''}>Any</option>
+            <option value="salesman" ${item.role==='salesman'?'selected':''}>Sales</option>
+            <option value="admin"    ${item.role==='admin'?'selected':''}>Admin</option>
+          </select>
+          <label style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:${item.required?'var(--danger)':'var(--muted)'};cursor:pointer;user-select:none;flex-shrink:0;padding:0 4px" title="Mark as mandatory — jobs cannot move to next stage until this is checked">
             <input type="checkbox" data-stage-check-required="${item.id}" ${item.required?'checked':''} style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">
-            Required
+            Req
           </label>
           <button data-stage-check-delete="${item.id}" title="Delete item" style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px" aria-hidden="true"></i></button>`}
     </div>
@@ -4306,6 +4403,15 @@ function renderStageChecklistItems(){
       item.required = box.checked;
       saveToStorage();
       renderStageChecklistItems();
+      renderBoard();
+      if($('detailOverlay').classList.contains('open')) renderDetailPanel();
+    }
+  }));
+  $('stageChecklistItems').querySelectorAll('[data-stage-check-role]').forEach(sel=>sel.addEventListener('change',()=>{
+    const item=items.find(x=>x.id===sel.dataset.stageCheckRole);
+    if(item){
+      item.role = sel.value;
+      saveToStorage();
       renderBoard();
       if($('detailOverlay').classList.contains('open')) renderDetailPanel();
     }
@@ -5407,6 +5513,8 @@ function switchPage(pageName){
   if(profitsPg) profitsPg.style.display = (pageName === 'profits') ? '' : 'none';
   const insPg = document.getElementById('insurancePage');
   if(insPg) insPg.style.display = (pageName === 'insurance') ? '' : 'none';
+  const todoPg = document.getElementById('todoPage');
+  if(todoPg) todoPg.style.display = (pageName === 'todo') ? '' : 'none';
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
   });
@@ -5417,6 +5525,7 @@ function switchPage(pageName){
   if(pageName === 'calendar') renderCalendarPage();
   if(pageName === 'profits') renderProfitsPage();
   if(pageName === 'insurance') renderInsurancePage();
+  if(pageName === 'todo') renderTodoPage();
 }
 
 // Wire up the nav links
@@ -5432,6 +5541,7 @@ function switchPage(pageName){
     else if(txt === 'calendar') l.dataset.page = 'calendar';
     else if(txt === 'profits') l.dataset.page = 'profits';
     else if(txt === 'insurance') l.dataset.page = 'insurance';
+    else if(txt === 'my to-do') l.dataset.page = 'todo';
     l.addEventListener('click', () => {
       if(l.dataset.page) switchPage(l.dataset.page);
     });
@@ -6300,6 +6410,640 @@ function fmtPhoneDisplay(p){
 function fmtPhoneTel(p){
   return 'tel:+1' + (String(p||'').replace(/\D/g,'').replace(/^1/, ''));
 }
+
+// ── MY TO-DO PAGE ──
+// Consolidates all checklist items across all jobs into one focused view.
+// Default filters: My Jobs (current user's jobs), Open items (not yet checked), Actionable (items the user can check).
+// Admins default to All Jobs since they oversee everything.
+
+// ── QUOTE / AGREEMENT BUILDER ──
+// Stored on the job as j.quote = {scope, materials, lineItems[], terms, signatureDate, customerSignature, repName}
+// Company info stored in localStorage so admin enters it once.
+
+const COMPANY_INFO_KEY = 'stormshield_company_info_v1';
+function getCompanyInfo(){
+  try {
+    const raw = localStorage.getItem(COMPANY_INFO_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      return Object.assign({}, defaultCompanyInfo(), parsed);
+    }
+  } catch(e){}
+  return defaultCompanyInfo();
+}
+function defaultCompanyInfo(){
+  return {
+    name: 'StormShield Pro Roofing',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
+    license: '',
+    logoDataUrl: '',
+  };
+}
+function saveCompanyInfo(info){
+  try { localStorage.setItem(COMPANY_INFO_KEY, JSON.stringify(info)); } catch(e){ toast('Could not save company info'); }
+}
+
+// Default scope-of-work template — admin can edit per job
+function defaultScopeText(){
+  return [
+    'Tear off existing roof down to decking; inspect and replace deteriorated decking as needed (additional cost per sheet).',
+    'Install ice & water shield in valleys and around all penetrations per code.',
+    'Install synthetic underlayment over entire roof deck.',
+    'Install new architectural composition shingles (manufacturer/color as selected).',
+    'Install new pipe boots, drip edge, and ridge cap shingles.',
+    'Install new lead flashings around plumbing vents.',
+    'Re-flash chimneys and skylights as needed.',
+    'Clean up all debris, magnetic sweep of yard and driveway.',
+    'Provide manufacturer\'s warranty and 5-year workmanship warranty.',
+  ].join('\n');
+}
+
+function defaultTermsText(){
+  return [
+    'Payment Schedule: First insurance check (ACV) due upon contract signing. Depreciation check due upon job completion. Customer deductible and any out-of-pocket costs due no later than day of completion.',
+    'Color and material selections must be confirmed in writing prior to material order. Changes after material is ordered may incur restocking fees.',
+    'Customer is responsible for moving fragile items, vehicles, and outdoor furniture away from the work area prior to start date.',
+    'This agreement supersedes any verbal agreements. Cancellation must be made in writing within 3 business days of signing per Texas law.',
+    'Contractor is fully insured. Certificate of Insurance available upon request.',
+  ].join('\n\n');
+}
+
+function getJobQuote(j){
+  if(!j.quote || typeof j.quote !== 'object'){
+    j.quote = {
+      scope: '',
+      shingleBrand: '',
+      shingleModel: '',
+      shingleColor: '',
+      contractAmount: '',
+      depositAmount: '',
+      deductible: '',
+      terms: '',
+      repName: '',
+      quoteDate: '',
+    };
+  }
+  return j.quote;
+}
+
+function renderQuoteTab(j){
+  const q = getJobQuote(j);
+  const ci = getCompanyInfo();
+  // Pre-fill from insurance fields if available
+  if(!q.contractAmount && j.potVal) q.contractAmount = String(j.potVal);
+  if(!q.deductible && j.deductible) q.deductible = String(j.deductible);
+  if(!q.quoteDate) q.quoteDate = new Date().toISOString().slice(0,10);
+  if(!q.repName && window.currentMember?.name) q.repName = window.currentMember.name;
+  if(!q.scope) q.scope = defaultScopeText();
+  if(!q.terms) q.terms = defaultTermsText();
+
+  const body = document.getElementById('dpBody');
+  if(!body) return;
+
+  const companyComplete = ci.name && ci.address && ci.phone;
+
+  body.innerHTML = `
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+      <!-- Company Info card -->
+      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <i class="ti ti-building" style="color:var(--brand-light);font-size:14px"></i>
+          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Company Info</span>
+          ${!companyComplete?'<span style="font-size:9px;font-weight:700;color:var(--warn);padding:1px 5px;border:1px solid rgba(245,158,11,0.4);border-radius:3px">SETUP</span>':''}
+          <div style="flex:1"></div>
+          <button id="quoteEditCompanyBtn" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;cursor:pointer">Edit</button>
+        </div>
+        <div style="font-size:12px;color:var(--brand);line-height:1.5">
+          <strong>${escapeHtml(ci.name)}</strong>
+          ${ci.address?`<br>${escapeHtml(ci.address)}`:''}
+          ${ci.phone?`<br>${escapeHtml(ci.phone)}`:''}
+          ${ci.email?` · ${escapeHtml(ci.email)}`:''}
+          ${ci.website?`<br>${escapeHtml(ci.website)}`:''}
+          ${ci.license?`<br><span style="color:var(--muted);font-size:11px">${escapeHtml(ci.license)}</span>`:''}
+          ${!companyComplete?`<div style="margin-top:6px;font-size:11px;color:var(--warn)"><i class="ti ti-alert-triangle"></i> Click Edit to add company address/phone before generating quotes.</div>`:''}
+        </div>
+      </div>
+
+      <!-- Materials / Job Details -->
+      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <i class="ti ti-package" style="color:var(--brand-light);font-size:14px"></i>
+          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Materials</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Shingle Brand</label><input id="qShingleBrand" value="${escapeHtml(q.shingleBrand||'')}" placeholder="e.g. GAF" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Model</label><input id="qShingleModel" value="${escapeHtml(q.shingleModel||'')}" placeholder="e.g. Timberline HDZ" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Color</label><input id="qShingleColor" value="${escapeHtml(q.shingleColor||'')}" placeholder="e.g. Weathered Wood" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        </div>
+      </div>
+
+      <!-- Scope of Work -->
+      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <i class="ti ti-list-details" style="color:var(--brand-light);font-size:14px"></i>
+          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Scope of Work</span>
+          <div style="flex:1"></div>
+          <button id="quoteResetScopeBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Reset to default scope">Reset</button>
+        </div>
+        <textarea id="qScope" rows="9" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical;line-height:1.5">${escapeHtml(q.scope||'')}</textarea>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">One bullet point per line. Edit freely.</div>
+      </div>
+
+      <!-- Pricing -->
+      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <i class="ti ti-currency-dollar" style="color:var(--brand-light);font-size:14px"></i>
+          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Pricing</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount</label><input id="qContract" type="number" value="${escapeHtml(String(q.contractAmount||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="number" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deposit at Signing</label><input id="qDeposit" type="number" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">For insurance jobs, contract amount typically = RCV. Deductible = customer's out-of-pocket.</div>
+      </div>
+
+      <!-- Terms -->
+      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <i class="ti ti-file-text" style="color:var(--brand-light);font-size:14px"></i>
+          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Terms &amp; Conditions</span>
+          <div style="flex:1"></div>
+          <button id="quoteResetTermsBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Reset to default terms">Reset</button>
+        </div>
+        <textarea id="qTerms" rows="6" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical;line-height:1.5">${escapeHtml(q.terms||'')}</textarea>
+      </div>
+
+      <!-- Signature row -->
+      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <i class="ti ti-signature" style="color:var(--brand-light);font-size:14px"></i>
+          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Quote Details</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Quote Date</label><input id="qDate" type="date" value="${escapeHtml(q.quoteDate||'')}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Sales Rep</label><input id="qRep" value="${escapeHtml(q.repName||'')}" placeholder="Your name" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="quoteSaveBtn" style="background:rgba(77,157,224,0.15);border:1px solid rgba(77,157,224,0.35);color:var(--brand-light);font-size:12px;font-weight:600;padding:9px 14px;border-radius:7px;cursor:pointer;flex:1;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-device-floppy"></i>Save</button>
+        <button id="quotePreviewBtn" style="background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:var(--success);font-size:12px;font-weight:600;padding:9px 14px;border-radius:7px;cursor:pointer;flex:1;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-eye"></i>Preview &amp; Print</button>
+      </div>
+    </div>
+  `;
+
+  // Save handler — collect all fields into j.quote
+  function collectQuote(){
+    const qq = getJobQuote(j);
+    qq.shingleBrand = $('qShingleBrand').value;
+    qq.shingleModel = $('qShingleModel').value;
+    qq.shingleColor = $('qShingleColor').value;
+    qq.scope = $('qScope').value;
+    qq.contractAmount = $('qContract').value;
+    qq.deductible = $('qDeductible').value;
+    qq.depositAmount = $('qDeposit').value;
+    qq.terms = $('qTerms').value;
+    qq.quoteDate = $('qDate').value;
+    qq.repName = $('qRep').value;
+    return qq;
+  }
+  $('quoteSaveBtn').addEventListener('click', () => {
+    collectQuote();
+    saveToStorage();
+    if(typeof logActivity === 'function') logActivity(j, 'quote', 'Quote saved', `Contract: $${parseFloat($('qContract').value||0).toLocaleString()}`);
+    toast('Quote saved');
+  });
+  $('quotePreviewBtn').addEventListener('click', () => {
+    collectQuote();
+    saveToStorage();
+    openQuotePreview(j);
+  });
+  $('quoteEditCompanyBtn').addEventListener('click', openCompanyInfoModal);
+  $('quoteResetScopeBtn').addEventListener('click', () => {
+    if(confirm('Reset scope of work to default template? Your edits will be lost.')){
+      $('qScope').value = defaultScopeText();
+    }
+  });
+  $('quoteResetTermsBtn').addEventListener('click', () => {
+    if(confirm('Reset terms to default template? Your edits will be lost.')){
+      $('qTerms').value = defaultTermsText();
+    }
+  });
+}
+
+// Open a clean printable quote in a new window for browser print → PDF
+function openQuotePreview(j){
+  const q = getJobQuote(j);
+  const ci = getCompanyInfo();
+  const fmt = (n) => '$' + (parseFloat(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const dateText = q.quoteDate ? new Date(q.quoteDate + 'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const quoteNo = `Q-${(j.id || '').slice(-6).toUpperCase()}-${(q.quoteDate||'').replace(/-/g,'').slice(2,8)}`;
+
+  const contract = parseFloat(q.contractAmount) || 0;
+  const deductible = parseFloat(q.deductible) || 0;
+  const deposit = parseFloat(q.depositAmount) || 0;
+  // Calc insurance pays (best-effort, will be 0 if not insurance job)
+  const insurance = Math.max(0, contract - deductible);
+
+  const scopeHtml = (q.scope || '').split('\n').filter(s => s.trim()).map(line => `<li>${escapeHtml(line.trim())}</li>`).join('');
+  const termsHtml = (q.terms || '').split('\n\n').filter(s => s.trim()).map(p => `<p>${escapeHtml(p.trim())}</p>`).join('');
+
+  const customerAddr = j.address || '—';
+  const customerLine2 = [j.phone, j.email].filter(x => x && x !== '—').join(' · ');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${escapeHtml(quoteNo)} · ${escapeHtml(j.name||'')}</title>
+<style>
+  @page { size: letter; margin: 0.5in; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 0; padding: 0; line-height: 1.45; }
+  .q-wrap { max-width: 7.5in; margin: 0 auto; padding: 0.3in 0.4in; }
+  .q-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1a3a6a; padding-bottom: 14px; margin-bottom: 18px; }
+  .q-head-left { flex: 1; }
+  .q-head-right { text-align: right; }
+  .q-logo { max-height: 60px; max-width: 200px; margin-bottom: 8px; }
+  .q-company-name { font-size: 18pt; font-weight: 800; color: #1a3a6a; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .q-company-detail { font-size: 9pt; color: #555; line-height: 1.5; }
+  .q-title { font-size: 22pt; font-weight: 900; color: #1a3a6a; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .q-meta { font-size: 9pt; color: #555; line-height: 1.6; }
+  .q-meta strong { color: #1a1a1a; }
+  .q-section { margin-bottom: 18px; }
+  .q-section-title { font-size: 10pt; font-weight: 800; color: #1a3a6a; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 8px; }
+  .q-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .q-customer { font-size: 10pt; line-height: 1.55; }
+  .q-customer strong { font-size: 11pt; color: #1a1a1a; }
+  .q-property { font-size: 10pt; line-height: 1.55; }
+  .q-scope { font-size: 10pt; line-height: 1.55; padding-left: 18px; margin: 0; }
+  .q-scope li { margin-bottom: 4px; }
+  .q-materials { font-size: 10pt; line-height: 1.7; }
+  .q-materials .label { display: inline-block; min-width: 90px; font-weight: 600; color: #555; }
+  .q-price-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .q-price-table td { padding: 7px 10px; font-size: 10pt; border-bottom: 1px solid #eee; }
+  .q-price-table td.label { color: #555; }
+  .q-price-table td.val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .q-price-table tr.total td { font-size: 12pt; font-weight: 800; color: #1a3a6a; border-top: 2px solid #1a3a6a; border-bottom: none; padding-top: 9px; }
+  .q-price-table tr.due td { background: #fef3c7; font-weight: 700; }
+  .q-terms { font-size: 9pt; line-height: 1.55; color: #333; }
+  .q-terms p { margin: 0 0 7px; }
+  .q-signature { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; page-break-inside: avoid; }
+  .q-sig-block { font-size: 9pt; color: #555; }
+  .q-sig-line { border-bottom: 1px solid #333; height: 36px; margin-bottom: 4px; }
+  .q-footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 8pt; color: #888; text-align: center; }
+  .q-print-btn { position: fixed; top: 12px; right: 12px; background: #1a3a6a; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+  @media print { .q-print-btn { display: none; } body { background: white; } }
+</style>
+</head><body>
+<button class="q-print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
+<div class="q-wrap">
+  <div class="q-head">
+    <div class="q-head-left">
+      ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="q-logo" alt="${escapeHtml(ci.name)}">`:''}
+      <div class="q-company-name">${escapeHtml(ci.name||'')}</div>
+      <div class="q-company-detail">
+        ${ci.address?escapeHtml(ci.address)+'<br>':''}
+        ${ci.phone?escapeHtml(ci.phone):''}${ci.email?' · '+escapeHtml(ci.email):''}
+        ${ci.website?'<br>'+escapeHtml(ci.website):''}
+        ${ci.license?'<br>'+escapeHtml(ci.license):''}
+      </div>
+    </div>
+    <div class="q-head-right">
+      <div class="q-title">Quote &amp; Agreement</div>
+      <div class="q-meta">
+        <strong>Quote #:</strong> ${escapeHtml(quoteNo)}<br>
+        <strong>Date:</strong> ${escapeHtml(dateText)}<br>
+        <strong>Prepared by:</strong> ${escapeHtml(q.repName||'—')}
+      </div>
+    </div>
+  </div>
+
+  <div class="q-section q-two-col">
+    <div>
+      <div class="q-section-title">Customer</div>
+      <div class="q-customer">
+        <strong>${escapeHtml(j.name||'—')}</strong><br>
+        ${customerLine2?escapeHtml(customerLine2):''}
+      </div>
+    </div>
+    <div>
+      <div class="q-section-title">Property Address</div>
+      <div class="q-property">${escapeHtml(customerAddr)}</div>
+      ${j.carrier?`<div style="margin-top:8px;font-size:9pt;color:#555"><strong>Insurance:</strong> ${escapeHtml(j.carrier)}${j.claimNum?' · Claim #'+escapeHtml(j.claimNum):''}</div>`:''}
+    </div>
+  </div>
+
+  ${(q.shingleBrand||q.shingleModel||q.shingleColor)?`
+  <div class="q-section">
+    <div class="q-section-title">Materials</div>
+    <div class="q-materials">
+      ${q.shingleBrand?`<div><span class="label">Brand:</span> ${escapeHtml(q.shingleBrand)}</div>`:''}
+      ${q.shingleModel?`<div><span class="label">Model:</span> ${escapeHtml(q.shingleModel)}</div>`:''}
+      ${q.shingleColor?`<div><span class="label">Color:</span> ${escapeHtml(q.shingleColor)}</div>`:''}
+    </div>
+  </div>`:''}
+
+  <div class="q-section">
+    <div class="q-section-title">Scope of Work</div>
+    <ul class="q-scope">${scopeHtml || '<li>—</li>'}</ul>
+  </div>
+
+  <div class="q-section">
+    <div class="q-section-title">Pricing</div>
+    <table class="q-price-table">
+      <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
+      ${j.carrier?`
+      <tr><td class="label">Less: Estimated Insurance Coverage</td><td class="val">−${fmt(insurance).replace('$','$')}</td></tr>
+      <tr class="due"><td class="label">Customer Responsibility (Deductible)</td><td class="val">${fmt(deductible)}</td></tr>`:''}
+      ${deposit>0?`<tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>`:''}
+      <tr class="total"><td>TOTAL DUE</td><td class="val">${fmt(j.carrier?deductible:contract)}</td></tr>
+    </table>
+  </div>
+
+  <div class="q-section">
+    <div class="q-section-title">Terms &amp; Conditions</div>
+    <div class="q-terms">${termsHtml}</div>
+  </div>
+
+  <div class="q-signature">
+    <div class="q-sig-block">
+      <div class="q-sig-line"></div>
+      <div><strong>Customer Signature</strong></div>
+      <div style="margin-top:4px">Date: _________________</div>
+    </div>
+    <div class="q-sig-block">
+      <div class="q-sig-line"></div>
+      <div><strong>${escapeHtml(ci.name||'Contractor')} Representative</strong></div>
+      <div style="margin-top:4px">${escapeHtml(q.repName||'')} · Date: _________________</div>
+    </div>
+  </div>
+
+  <div class="q-footer">
+    By signing above, customer agrees to the scope of work, pricing, and terms set forth in this document.
+    ${ci.license?'<br>'+escapeHtml(ci.license):''}
+  </div>
+</div>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+// Company info edit modal
+function openCompanyInfoModal(){
+  const ci = getCompanyInfo();
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:10px;width:480px;max-width:100%;padding:20px;max-height:90vh;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Company Info</div>
+        <button id="ciClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">This appears on every quote. Stored locally in your browser. <strong>You'll need to set this on each device that generates quotes.</strong></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Company Name *</label><input id="ciName" value="${escapeHtml(ci.name||'')}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Address</label><input id="ciAddress" value="${escapeHtml(ci.address||'')}" placeholder="123 Main St, City, State ZIP" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Phone</label><input id="ciPhone" value="${escapeHtml(ci.phone||'')}" placeholder="(555) 555-1234" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Email</label><input id="ciEmail" value="${escapeHtml(ci.email||'')}" placeholder="info@yourroofing.com" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        </div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Website</label><input id="ciWebsite" value="${escapeHtml(ci.website||'')}" placeholder="yourroofing.com" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">License / Cert (optional)</label><input id="ciLicense" value="${escapeHtml(ci.license||'')}" placeholder="TX Lic. #..." style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div>
+          <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Logo (optional)</label>
+          ${ci.logoDataUrl?`<div style="margin-bottom:6px"><img src="${ci.logoDataUrl}" style="max-height:50px;max-width:140px;background:#fff;padding:4px;border-radius:4px"></div>`:''}
+          <input id="ciLogoFile" type="file" accept="image/*" style="font-size:11px;color:var(--muted)">
+          ${ci.logoDataUrl?`<button id="ciLogoClear" style="background:transparent;border:1px solid rgba(248,113,113,0.3);color:var(--danger);font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer;margin-left:8px">Remove</button>`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px">
+        <div style="flex:1"></div>
+        <button id="ciCancel" class="btn-cancel" style="font-size:12px;padding:7px 14px">Cancel</button>
+        <button id="ciSave" class="btn-primary" style="font-size:12px;padding:7px 14px">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#ciClose').addEventListener('click', close);
+  overlay.querySelector('#ciCancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+  let logoData = ci.logoDataUrl || '';
+  const logoFile = overlay.querySelector('#ciLogoFile');
+  if(logoFile){
+    logoFile.addEventListener('change', () => {
+      const f = logoFile.files?.[0];
+      if(!f) return;
+      if(f.size > 200 * 1024){ toast('Logo too large — keep under 200 KB'); return; }
+      const reader = new FileReader();
+      reader.onload = e => { logoData = e.target.result; };
+      reader.readAsDataURL(f);
+    });
+  }
+  const logoClear = overlay.querySelector('#ciLogoClear');
+  if(logoClear) logoClear.addEventListener('click', () => { logoData = ''; toast('Logo will be cleared on save'); });
+  overlay.querySelector('#ciSave').addEventListener('click', () => {
+    const info = {
+      name: overlay.querySelector('#ciName').value.trim(),
+      address: overlay.querySelector('#ciAddress').value.trim(),
+      phone: overlay.querySelector('#ciPhone').value.trim(),
+      email: overlay.querySelector('#ciEmail').value.trim(),
+      website: overlay.querySelector('#ciWebsite').value.trim(),
+      license: overlay.querySelector('#ciLicense').value.trim(),
+      logoDataUrl: logoData,
+    };
+    saveCompanyInfo(info);
+    toast('Company info saved');
+    close();
+    if(activeTab === 'quote') renderDetailPanel();
+  });
+}
+
+let todoFilter = 'mine';       // 'mine' or 'all'
+let todoScope  = 'open';       // 'open' or 'all'
+let todoRole   = 'actionable'; // 'actionable' or 'all'
+
+function renderTodoPage(){
+  const body = document.getElementById('todoBody');
+  if(!body) return;
+
+  // Admins default to All Jobs view; salesmen default to My Jobs
+  if(isAdmin() && todoFilter === 'mine' && !window.__todoFilterTouched){
+    todoFilter = 'all';
+  }
+
+  // Update button styles
+  document.querySelectorAll('.todo-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.todoFilter === todoFilter));
+  document.querySelectorAll('.todo-scope-btn').forEach(b => b.classList.toggle('active', b.dataset.todoScope === todoScope));
+  document.querySelectorAll('.todo-role-btn').forEach(b => b.classList.toggle('active', b.dataset.todoRole === todoRole));
+
+  const cm = window.currentMember;
+  // Filter jobs
+  let visibleJobs = jobs.slice();
+  if(todoFilter === 'mine' && cm){
+    visibleJobs = visibleJobs.filter(j => j.user === cm.id);
+  }
+  // Exclude jobs whose current stage is closed (end states like Closed-Denied, Job Completed if marked closed)
+  visibleJobs = visibleJobs.filter(j => {
+    const cols = columnsForPipeline(j.pipeline || 'insurance');
+    const stage = cols.find(c => c.id === j.col);
+    return !(stage && stage.closed === true);
+  });
+
+  // Build per-job todo data
+  const cards = [];
+  let totalOpen = 0, totalReqOpen = 0;
+  visibleJobs.forEach(j => {
+    const cols = columnsForPipeline(j.pipeline || 'insurance');
+    const col = cols.find(c => c.id === j.col);
+    if(!col) return;
+    const combined = getCombinedChecklistItems(j, col);
+    if(!combined.length) return;
+    const doneMap = j.stageChecklistDone?.[col.id] || {};
+    // Apply scope filter (open vs all)
+    let items = combined;
+    if(todoScope === 'open') items = items.filter(it => !doneMap[it.id]);
+    // Apply role filter (actionable vs all)
+    if(todoRole === 'actionable') items = items.filter(it => canCurrentUserCheckItem(it));
+    if(!items.length) return;
+    // Sort: required first, then non-required
+    items.sort((a, b) => (b.required?1:0) - (a.required?1:0));
+    const reqItems = combined.filter(it => it.required);
+    const reqDone  = reqItems.filter(it => doneMap[it.id]).length;
+    const openCount = combined.filter(it => !doneMap[it.id]).length;
+    const reqOpen   = reqItems.filter(it => !doneMap[it.id]).length;
+    totalOpen += openCount;
+    totalReqOpen += reqOpen;
+    cards.push({ j, col, items, doneMap, reqItems, reqDone, openCount, reqOpen });
+  });
+
+  // Sort cards: jobs with required-open first, then by openCount desc
+  cards.sort((a, b) => {
+    if((b.reqOpen>0?1:0) !== (a.reqOpen>0?1:0)) return (b.reqOpen>0?1:0) - (a.reqOpen>0?1:0);
+    return b.openCount - a.openCount;
+  });
+
+  // Stats line
+  const statsEl = document.getElementById('todoStats');
+  if(statsEl) statsEl.textContent = `${totalOpen} open item${totalOpen===1?'':'s'} · ${totalReqOpen} required`;
+
+  if(!cards.length){
+    body.innerHTML = `<div class="todo-empty">
+      <i class="ti ti-checks" style="font-size:36px;color:var(--success);display:block;margin-bottom:10px"></i>
+      <div style="font-weight:600;font-size:14px;color:#fff;margin-bottom:6px">All clear!</div>
+      <div>No open checklist items matching your filters.</div>
+    </div>`;
+    return;
+  }
+
+  const renderRoleBadge = (role) => {
+    if(role === 'admin')    return `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:#A78BFA;padding:1px 4px;border:1px solid rgba(167,139,250,0.35);border-radius:3px;flex-shrink:0">ADMIN</span>`;
+    if(role === 'salesman') return `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:#4D9DE0;padding:1px 4px;border:1px solid rgba(77,157,224,0.35);border-radius:3px;flex-shrink:0">SALES</span>`;
+    return '';
+  };
+
+  body.innerHTML = cards.map(c => {
+    const { j, col, items, doneMap, reqItems, reqDone, openCount, reqOpen } = c;
+    const stageColor = col.color || '#4D9DE0';
+    const owner = USERS.find(u => u.id === j.user);
+    const addrLine = (j.address || '—').split(',')[0];
+    const reqClass = reqOpen === 0 && reqItems.length > 0 ? ' ok' : '';
+    return `
+      <div class="todo-job-card">
+        <div class="todo-job-head" data-todo-open-job="${j.id}">
+          <div style="min-width:0;flex:1">
+            <div class="todo-job-name">${escapeHtml(j.name || '—')}</div>
+            <div class="todo-job-meta">
+              <span>${escapeHtml(addrLine)}</span>
+              ${owner ? `<span>· ${escapeHtml(owner.name)}</span>` : ''}
+              ${j.carrier ? `<span>· ${escapeHtml(j.carrier)}</span>` : ''}
+            </div>
+          </div>
+          <span class="todo-stage-pill" style="background:${stageColor}22;color:${stageColor};border:1px solid ${stageColor}55">${escapeHtml(col.name)}</span>
+          <div class="todo-counts">
+            ${reqItems.length ? `<span class="req-c${reqClass}">${reqDone}/${reqItems.length} REQ</span>` : ''}
+            <span>${combinedCountText(doneMap, c)}</span>
+          </div>
+        </div>
+        <div class="todo-items">
+          ${items.map(item => {
+            const completed = !!doneMap[item.id];
+            const canCheck  = canCurrentUserCheckItem(item);
+            const isReq     = item.required === true;
+            const details   = completed ? checklistCompletionDetails(j, col.id, item.id) : '';
+            return `<label class="todo-item${isReq?' req':''}${(!canCheck && !completed)?' locked':''}" title="${!canCheck?'You cannot check this item':''}">
+              <input type="checkbox" data-todo-check="${j.id}|${col.id}|${item.id}" ${completed?'checked':''} ${(!canCheck && !completed)?'disabled':''}>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.text)}</span>
+              ${isReq ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--danger);padding:1px 4px;border:1px solid rgba(248,113,113,0.4);border-radius:3px;flex-shrink:0">REQ</span>` : ''}
+              ${renderRoleBadge(item.role)}
+              ${completed ? `<span style="font-size:10px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:4px;flex-shrink:0"><i class="ti ti-user-check" style="font-size:11px;color:var(--success)"></i>${escapeHtml(details)}</span>` : ''}
+            </label>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Wire interactions
+  body.querySelectorAll('[data-todo-open-job]').forEach(el => {
+    el.addEventListener('click', e => {
+      if(e.target.closest('[data-todo-check]') || e.target.closest('input')) return;  // don't open job when toggling
+      if(typeof openDetail === 'function') openDetail(el.dataset.todoOpenJob);
+    });
+  });
+  body.querySelectorAll('[data-todo-check]').forEach(box => {
+    box.addEventListener('change', () => {
+      const [jobId, colId, itemId] = box.dataset.todoCheck.split('|');
+      const j = jobs.find(x => x.id === jobId);
+      if(!j) return;
+      const cols = columnsForPipeline(j.pipeline || 'insurance');
+      const colObj = cols.find(c => c.id === colId);
+      const combined = getCombinedChecklistItems(j, colObj);
+      const item = combined.find(it => it.id === itemId);
+      if(item && !canCurrentUserCheckItem(item)){
+        box.checked = !box.checked;
+        const who = item.role === 'admin' ? 'admins' : (item.role === 'salesman' ? 'sales/admin' : 'team');
+        toast(`Only ${who} can check this item`);
+        return;
+      }
+      if(!j.stageChecklistDone) j.stageChecklistDone = {};
+      if(!j.stageChecklistDone[colId]) j.stageChecklistDone[colId] = {};
+      if(box.checked) j.stageChecklistDone[colId][itemId] = checklistCompletionRecord(j);
+      else delete j.stageChecklistDone[colId][itemId];
+      saveToStorage();
+      renderBoard();
+      renderTodoPage();   // re-render to update counts and possibly remove the item from the open list
+    });
+  });
+}
+
+function combinedCountText(doneMap, card){
+  const done = card.items.filter(it => doneMap[it.id]).length;
+  return `${done}/${card.items.length}`;
+}
+
+// Wire To-Do filter buttons
+(function wireTodoControls(){
+  document.querySelectorAll('.todo-filter-btn').forEach(b => b.addEventListener('click', () => {
+    todoFilter = b.dataset.todoFilter;
+    window.__todoFilterTouched = true;
+    renderTodoPage();
+  }));
+  document.querySelectorAll('.todo-scope-btn').forEach(b => b.addEventListener('click', () => {
+    todoScope = b.dataset.todoScope;
+    renderTodoPage();
+  }));
+  document.querySelectorAll('.todo-role-btn').forEach(b => b.addEventListener('click', () => {
+    todoRole = b.dataset.todoRole;
+    renderTodoPage();
+  }));
+})();
 
 async function renderInsurancePage(){
   const body = document.getElementById('insBody');
