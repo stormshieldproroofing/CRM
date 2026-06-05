@@ -318,7 +318,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link">Map</span>
   <span class="nav-link">Team</span>
   <span class="nav-link">Calendar</span>
-  <span class="nav-link">Commissions</span>
+  <span class="nav-link">Payroll</span>
   <span class="nav-link">My To-Do</span>
   <span class="nav-link">Insurance</span>
   <span class="nav-link" id="navProfits" style="display:none">Profits</span>
@@ -531,15 +531,20 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- INSURANCE CARRIERS DIRECTORY PAGE -->
 <!-- MY TO-DO PAGE: consolidated checklist items across all jobs -->
-<!-- COMMISSIONS PAGE -->
-<div id="commissionsPage" style="display:none">
+<!-- PAYROLL PAGE (was Commissions; now unified) -->
+<div id="payrollPage" style="display:none">
   <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Commissions</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Payroll</div>
+    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <button class="pay-tab-btn" data-pay-tab="sales" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-user" style="font-size:12px;margin-right:3px"></i>Sales</button>
+      <button class="pay-tab-btn" data-pay-tab="pm" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)"><i class="ti ti-clipboard-check" style="font-size:12px;margin-right:3px"></i>PM Fees</button>
+      <button class="pay-tab-btn" data-pay-tab="subs" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)"><i class="ti ti-hammer" style="font-size:12px;margin-right:3px"></i>Subs</button>
+    </div>
     <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
       <button class="comm-range-btn" data-comm-range="this-month" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">This Month</button>
       <button class="comm-range-btn" data-comm-range="last-month" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">Last Month</button>
       <button class="comm-range-btn" data-comm-range="ytd" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">YTD</button>
-      <button class="comm-range-btn" data-comm-range="all" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">All Time</button>
+      <button class="comm-range-btn" data-comm-range="all" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">All</button>
     </div>
     <div style="flex:1"></div>
     <button id="commExportCsv" style="background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:var(--success);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;gap:5px">
@@ -694,6 +699,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 /* Commissions page */
 .comm-range-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
+.pay-tab-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
 .comm-status-pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.05em;padding:2px 7px;border-radius:4px;text-transform:uppercase}
 .comm-status-pending{background:rgba(245,158,11,0.12);color:#F59E0B;border:1px solid rgba(245,158,11,0.3)}
 .comm-status-owed   {background:rgba(239,68,68,0.12);color:#EF4444;border:1px solid rgba(239,68,68,0.3)}
@@ -1051,6 +1057,20 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
         <div>
           <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Starting Stage</div>
           <select id="f-stage" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;appearance:none;cursor:pointer;height:40px;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--brand-light)'" onblur="this.style.borderColor='var(--border)'"></select>
+        </div>
+      </div>
+
+      <!-- Project Manager + Fee row -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Project Manager <span style="font-weight:400;opacity:.6">(optional)</span></div>
+          <select id="f-pm" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;appearance:none;cursor:pointer;height:40px;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--brand-light)'" onblur="this.style.borderColor='var(--border)'">
+            <option value="">— No PM —</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">PM Fee</div>
+          <input id="f-pmFee" type="number" value="250" step="any" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;height:40px;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--brand-light)'" onblur="this.style.borderColor='var(--border)'">
         </div>
       </div>
 
@@ -2501,6 +2521,12 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Description</label>
                     <input id="expDescInput" type="text" placeholder="e.g. GAF Timberline shingles" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
                   </div>
+                  <div style="margin-bottom:8px">
+                    <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Vendor / Sub <span style="font-weight:400;opacity:0.6">(optional · for tracking payables)</span></label>
+                    <select id="expVendorSel" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+                      <option value="">— No vendor —</option>
+                    </select>
+                  </div>
                   <div style="margin-bottom:10px">
                     <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Amount</label>
                     <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
@@ -3184,6 +3210,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       e.stopPropagation();
       $('expAddForm').style.display='block';
       $('expAddToggle').style.display='none';
+      // Populate vendor dropdown with active subs
+      const vendorSel = $('expVendorSel');
+      if(vendorSel){
+        const subs = (window.subcontractors || []).filter(s => s.active !== false);
+        vendorSel.innerHTML = `<option value="">— No vendor —</option>` +
+          subs.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+        vendorSel.value = '';
+      }
       $('expDescInput').focus();
     });
     $('expCancelNew')&&$('expCancelNew').addEventListener('click',e=>{
@@ -3191,6 +3225,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       $('expAddForm').style.display='none';
       $('expAddToggle').style.display='flex';
       $('expDescInput').value='';$('expAmtInput').value='';
+      if($('expVendorSel')) $('expVendorSel').value = '';
     });
     $('expSaveNew')&&$('expSaveNew').addEventListener('click',e=>{
       e.stopPropagation();
@@ -3199,10 +3234,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(!amt||isNaN(amt)){$('expAmtInput').style.outline='1px solid var(--danger)';setTimeout(()=>$('expAmtInput').style.outline='',800);return;}
       const cat=$('expCatSel').value;
       const desc=$('expDescInput').value.trim()||cat;
-      j2.expenses.push({cat,desc,amount:amt.toFixed(2)});
+      const vendorId = $('expVendorSel')?.value || '';
+      const vendorObj = (window.subcontractors || []).find(s => s.id === vendorId);
+      const exp = { cat, desc, amount: amt.toFixed(2), paid: false };
+      if(vendorId){
+        exp.vendor = vendorId;
+        exp.vendorName = vendorObj?.name || '';
+      }
+      j2.expenses.push(exp);
       $('expAddForm').style.display='none';
       $('expAddToggle').style.display='flex';
       $('expDescInput').value='';$('expAmtInput').value='';
+      if($('expVendorSel')) $('expVendorSel').value = '';
       refreshExpenseUI();
     });
 
@@ -4846,6 +4889,13 @@ function switchPipeline(id){
 
 function populateForms(){
   $('f-stage').innerHTML=columns.map(c=>`<option value="${c.id}">${c.name.toUpperCase()}</option>`).join('');
+  // PM dropdown — all team members, regardless of role
+  const pmSel = $('f-pm');
+  if(pmSel){
+    const team = window.TEAM || window.USERS || [];
+    pmSel.innerHTML = `<option value="">— No PM —</option>` +
+      team.map(u => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  }
 }
 
 // ── Assign dropdown ──
@@ -5032,6 +5082,8 @@ function openEditJob(id){
 
   if($('f-source')) setSelectByText($('f-source'), j.source);
   if($('f-stage'))  $('f-stage').value = j.col;
+  if($('f-pm'))     $('f-pm').value    = j.projectManager || '';
+  if($('f-pmFee'))  $('f-pmFee').value = (j.pmFee != null) ? j.pmFee : 250;
 
   // Insurance fields
   if($('f-carrier'))   $('f-carrier').value   = j.carrier||'';
@@ -5258,6 +5310,8 @@ $('saveJob').onclick=async ()=>{
   const claimData={
     phone:$('f-phone').value||'—',email:$('f-email').value||'—',address,user:userId,col:$('f-stage').value,
     pipeline:currentPipelineId,
+    projectManager: ($('f-pm')?.value || '') || null,
+    pmFee: parseFloat($('f-pmFee')?.value) || 250,
     latitude: lat,
     longitude: lng,
     source:$('f-source').value||'Manual Entry',
@@ -5695,8 +5749,8 @@ function switchPage(pageName){
   if(insPg) insPg.style.display = (pageName === 'insurance') ? '' : 'none';
   const todoPg = document.getElementById('todoPage');
   if(todoPg) todoPg.style.display = (pageName === 'todo') ? '' : 'none';
-  const commPg = document.getElementById('commissionsPage');
-  if(commPg) commPg.style.display = (pageName === 'commissions') ? '' : 'none';
+  const commPg = document.getElementById('payrollPage');
+  if(commPg) commPg.style.display = (pageName === 'payroll') ? '' : 'none';
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
   });
@@ -5708,7 +5762,7 @@ function switchPage(pageName){
   if(pageName === 'profits') renderProfitsPage();
   if(pageName === 'insurance') renderInsurancePage();
   if(pageName === 'todo') renderTodoPage();
-  if(pageName === 'commissions') renderCommissionsPage();
+  if(pageName === 'payroll') renderPayrollPage();
 }
 
 // Wire up the nav links
@@ -5725,7 +5779,7 @@ function switchPage(pageName){
     else if(txt === 'profits') l.dataset.page = 'profits';
     else if(txt === 'insurance') l.dataset.page = 'insurance';
     else if(txt === 'my to-do') l.dataset.page = 'todo';
-    else if(txt === 'commissions') l.dataset.page = 'commissions';
+    else if(txt === 'payroll') l.dataset.page = 'payroll';
     l.addEventListener('click', () => {
       if(l.dataset.page) switchPage(l.dataset.page);
     });
@@ -6890,6 +6944,150 @@ function plExportCsv(){
 window.insCarriers = window.insCarriers || null;   // array or null = not loaded yet
 let insSearchQuery = '';
 
+// ── SUBCONTRACTORS DIRECTORY ──
+window.subcontractors = window.subcontractors || null;
+
+async function loadSubcontractors(force){
+  if(window.subcontractors && !force) return window.subcontractors;
+  if(!window.sb){ window.subcontractors = []; return []; }
+  try {
+    const { data, error } = await window.sb.from('subcontractors').select('*').order('name', { ascending: true });
+    if(error){ console.warn('subcontractors load failed', error); window.subcontractors = []; return []; }
+    window.subcontractors = (data || []).map(r => ({
+      id: r.id, name: r.name, phone: r.phone || '', email: r.email || '',
+      specialty: r.specialty || '', notes: r.notes || '', active: r.active !== false,
+    }));
+    return window.subcontractors;
+  } catch(e){
+    console.warn('subcontractors load error', e);
+    window.subcontractors = [];
+    return [];
+  }
+}
+
+function openSubsDirectoryModal(){
+  if(!isAdmin()){ toast('Admin only'); return; }
+  const subs = window.subcontractors || [];
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:10px;width:560px;max-width:100%;padding:0;max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Subcontractors</div>
+        <div style="display:flex;gap:8px">
+          <button id="subsAddBtn" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:5px 11px;border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:4px"><i class="ti ti-plus"></i>Add</button>
+          <button id="subsClose" class="icon-btn"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+      <div id="subsList" style="overflow:auto;padding:10px 14px 14px;flex:1"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#subsClose').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  overlay.querySelector('#subsAddBtn').addEventListener('click', () => {
+    overlay.remove();
+    openSubEditModal();
+  });
+  const list = overlay.querySelector('#subsList');
+  list.innerHTML = subs.length
+    ? subs.map(s => `
+      <div style="background:#1A1F2E;border:1px solid var(--border);border-radius:7px;padding:9px 12px;margin-bottom:7px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;color:#fff">${escapeHtml(s.name)} ${!s.active?'<span style="font-size:9px;color:var(--muted);font-weight:400;margin-left:6px">(inactive)</span>':''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">
+            ${s.specialty?escapeHtml(s.specialty):''}${s.specialty&&s.phone?' · ':''}${s.phone?escapeHtml(s.phone):''}${(s.phone||s.specialty)&&s.email?' · ':''}${s.email?escapeHtml(s.email):''}
+          </div>
+        </div>
+        <button class="icon-btn" data-sub-edit="${s.id}" title="Edit"><i class="ti ti-edit"></i></button>
+      </div>`).join('')
+    : `<div style="text-align:center;padding:30px 10px;color:var(--muted);font-size:12px">No subcontractors yet. Click + Add to create one.</div>`;
+  list.querySelectorAll('[data-sub-edit]').forEach(b => b.addEventListener('click', () => {
+    overlay.remove();
+    openSubEditModal(b.dataset.subEdit);
+  }));
+}
+window.openSubsDirectoryModal = openSubsDirectoryModal;
+
+function openSubEditModal(id){
+  if(!isAdmin()){ toast('Admin only'); return; }
+  const sub = id ? (window.subcontractors || []).find(s => s.id === id) : null;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:301;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:10px;width:440px;max-width:100%;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">${sub?'Edit':'Add'} Subcontractor</div>
+        <button id="subEditClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Name *</label><input id="seName" value="${escapeHtml(sub?.name||'')}" placeholder="e.g. Garcia Roofing Crew" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Phone</label><input id="sePhone" value="${escapeHtml(sub?.phone||'')}" placeholder="(555) 555-1234" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Email</label><input id="seEmail" value="${escapeHtml(sub?.email||'')}" placeholder="optional" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        </div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Specialty</label><input id="seSpec" value="${escapeHtml(sub?.specialty||'')}" placeholder="e.g. Tear-off, Install, Full crew" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Notes</label><textarea id="seNotes" rows="2" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none;resize:vertical">${escapeHtml(sub?.notes||'')}</textarea></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--brand);cursor:pointer"><input id="seActive" type="checkbox" ${(!sub||sub.active!==false)?'checked':''} style="cursor:pointer"> Active (show in vendor dropdowns)</label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        ${sub?`<button id="seDelete" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--danger);font-size:11px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer">Delete</button>`:''}
+        <div style="flex:1"></div>
+        <button id="seCancel" class="btn-cancel" style="font-size:12px;padding:7px 14px">Cancel</button>
+        <button id="seSave" class="btn-primary" style="font-size:12px;padding:7px 14px">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#subEditClose').addEventListener('click', close);
+  overlay.querySelector('#seCancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+  overlay.querySelector('#seSave').addEventListener('click', async () => {
+    const name = overlay.querySelector('#seName').value.trim();
+    if(!name){ toast('Name required'); return; }
+    const row = {
+      name,
+      phone: overlay.querySelector('#sePhone').value.trim() || null,
+      email: overlay.querySelector('#seEmail').value.trim() || null,
+      specialty: overlay.querySelector('#seSpec').value.trim() || null,
+      notes: overlay.querySelector('#seNotes').value.trim() || null,
+      active: overlay.querySelector('#seActive').checked,
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      if(id){
+        const { error } = await window.sb.from('subcontractors').update(row).eq('id', id);
+        if(error) throw error;
+        toast(`${name} updated`);
+      } else {
+        const { error } = await window.sb.from('subcontractors').insert(row);
+        if(error) throw error;
+        toast(`${name} added`);
+      }
+      close();
+      await loadSubcontractors(true);
+      renderPayrollPage();
+    } catch(e){
+      console.warn('save sub failed', e);
+      toast('Save failed: ' + (e.message || 'unknown error'));
+    }
+  });
+  const delBtn = overlay.querySelector('#seDelete');
+  if(delBtn) delBtn.addEventListener('click', async () => {
+    if(!confirm(`Delete "${sub.name}"? This cannot be undone.`)) return;
+    try {
+      const { error } = await window.sb.from('subcontractors').delete().eq('id', id);
+      if(error) throw error;
+      toast('Subcontractor deleted');
+      close();
+      await loadSubcontractors(true);
+      renderPayrollPage();
+    } catch(e){
+      console.warn('delete sub failed', e);
+      toast('Delete failed: ' + (e.message || 'unknown error'));
+    }
+  });
+}
+
 async function loadInsuranceCarriers(force){
   if(window.insCarriers && !force) return window.insCarriers;
   if(!window.sb){ window.insCarriers = []; return []; }
@@ -7464,12 +7662,12 @@ function openCompanyInfoModal(){
   });
 }
 
-// ── COMMISSIONS PAGE ──
-// Shows commission earned, paid, and owed across jobs.
-// Salesmen see their own; admins see everyone.
-// Uses existing helpers: estimatedCommissionForUser(), jobFullyPaid(), commissionPaidToUser(), etc.
+// ── PAYROLL PAGE ──
+// Unified view of three payment types: Sales Commission, PM Fees, Sub Payments.
+// Salesmen see their own commissions/PM only; admins see everyone + subs.
 
 let commRange = 'this-month';
+let payTab = 'sales';   // 'sales' | 'pm' | 'subs'
 
 function commComputeRange(){
   const today = new Date(); today.setHours(0,0,0,0);
@@ -7491,14 +7689,34 @@ function commComputeRange(){
   return { from, to };
 }
 
-// Build the data set for the page. Returns rows + totals.
-function commGatherData(range){
+function fmtMoney(n){
+  const sign = n < 0 ? '−' : '';
+  return sign + '$' + Math.abs(Math.round(n)).toLocaleString();
+}
+
+// Top-level page render — dispatches to the right tab renderer
+function renderPayrollPage(){
+  const body = document.getElementById('commBody');
+  if(!body) return;
+  document.querySelectorAll('.comm-range-btn').forEach(b => b.classList.toggle('active', b.dataset.commRange === commRange));
+  document.querySelectorAll('.pay-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.payTab === payTab));
+  if(payTab === 'sales')   return renderPayrollSales();
+  if(payTab === 'pm')      return renderPayrollPM();
+  if(payTab === 'subs')    return renderPayrollSubs();
+}
+
+// Backward-compat alias (old code may still call it)
+function renderCommissionsPage(){ return renderPayrollPage(); }
+window.renderPayrollPage = renderPayrollPage;
+window.renderCommissionsPage = renderCommissionsPage;
+
+// ── TAB 1: Sales Commission ──
+function commGatherData(){
   const cm = window.currentMember;
   const isAdminUser = isAdmin();
-  // Decide which users to show
   const userPool = (window.TEAM || window.USERS || []);
   const visibleUsers = isAdminUser ? userPool : (cm ? [cm] : []);
-  const rows = [];   // {user, job, status, estimated, paid, owed, payoutDates[]}
+  const rows = [];
   visibleUsers.forEach(user => {
     jobs.forEach(j => {
       const estimated = estimatedCommissionForUser(j, user);
@@ -7507,7 +7725,6 @@ function commGatherData(range){
       const status = commissionStatusForUser(j, user);
       const earnedAmount = jobFullyPaid(j) ? estimated : 0;
       const owed = Math.max(0, earnedAmount - paid);
-      // Payouts to this user on this job
       const payouts = jobCommissionPayouts(j).filter(p => p.paidTo === user.id);
       rows.push({ user, job: j, status, estimated, earnedAmount, paid, owed, payouts });
     });
@@ -7515,39 +7732,21 @@ function commGatherData(range){
   return rows;
 }
 
-function fmtMoney(n){
-  const sign = n < 0 ? '−' : '';
-  return sign + '$' + Math.abs(Math.round(n)).toLocaleString();
-}
-
-function renderCommissionsPage(){
+function renderPayrollSales(){
   const body = document.getElementById('commBody');
-  if(!body) return;
-  document.querySelectorAll('.comm-range-btn').forEach(b => b.classList.toggle('active', b.dataset.commRange === commRange));
   const { from, to } = commComputeRange();
   const isAdminUser = isAdmin();
   const allRows = commGatherData();
 
-  // KPIs (based on selected date range for "paid this period"; owed/pending are point-in-time)
-  let totalEarned = 0;     // total commission earned (job fully paid) for visible users
-  let totalPaidPeriod = 0; // commission paid IN this period
-  let totalOwed = 0;       // owed right now (earned − paid)
-  let totalPending = 0;    // commission accruing on jobs not yet fully paid
+  let totalEarned = 0, totalPaidPeriod = 0, totalOwed = 0, totalPending = 0;
   allRows.forEach(r => {
-    if(r.earnedAmount > 0){
-      totalEarned += r.earnedAmount;
-      totalOwed   += r.owed;
-    } else {
-      totalPending += r.estimated;
-    }
+    if(r.earnedAmount > 0){ totalEarned += r.earnedAmount; totalOwed += r.owed; }
+    else totalPending += r.estimated;
     r.payouts.forEach(p => {
-      if((p.date || '') >= from && (p.date || '') <= to){
-        totalPaidPeriod += moneyValue(p.amount) || 0;
-      }
+      if((p.date || '') >= from && (p.date || '') <= to) totalPaidPeriod += moneyValue(p.amount) || 0;
     });
   });
 
-  // Sort rows: Owed first (most pressing), then Pending, then Paid
   const order = { owed: 0, partial: 1, pending: 2, paid: 3, none: 4 };
   allRows.sort((a, b) => {
     const o = (order[a.status]||9) - (order[b.status]||9);
@@ -7555,7 +7754,6 @@ function renderCommissionsPage(){
     return b.owed - a.owed;
   });
 
-  // Per-salesman summary (admin only)
   let perSalesmanHtml = '';
   if(isAdminUser){
     const bySalesman = {};
@@ -7572,7 +7770,7 @@ function renderCommissionsPage(){
       <div class="pl-section">
         <div class="pl-section-title"><i class="ti ti-users"></i>By Salesman</div>
         <table class="pl-table">
-          <thead><tr><th>Salesman</th><th class="num">Earned (Total)</th><th class="num">Paid</th><th class="num">Owed</th><th class="num">Pending</th></tr></thead>
+          <thead><tr><th>Salesman</th><th class="num">Earned (Cumulative)</th><th class="num">Paid</th><th class="num">Owed</th><th class="num">Pending</th></tr></thead>
           <tbody>${salesmenRows.map(s => `<tr>
             <td><strong>${escapeHtml(s.user.name)}</strong></td>
             <td class="num">${fmtMoney(s.earned)}</td>
@@ -7584,7 +7782,6 @@ function renderCommissionsPage(){
       </div>` : '';
   }
 
-  // Per-job detail table
   const jobTable = allRows.length ? `
     <div class="pl-section">
       <div class="pl-section-title"><i class="ti ti-list-details"></i>Detail by Job</div>
@@ -7624,33 +7821,17 @@ function renderCommissionsPage(){
           }).join('')}
         </tbody>
       </table>
-    </div>` : `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">No commission data yet. Commissions appear here once jobs have contract amounts and salesmen are assigned.</div>`;
+    </div>` : `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">No commission data yet.</div>`;
 
   const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
   const toLabel   = to === '2999-12-31' ? 'Today' : to;
   body.innerHTML = `
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">${isAdminUser ? 'Admin view · all salesmen' : 'Your commissions only'} · "Paid in period" = ${fromLabel} → ${toLabel} · Earned only counts when contract is fully paid</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">${isAdminUser ? 'Admin · all salesmen' : 'Your commissions only'} · Earned counts when contract fully paid · "Paid this period" = ${fromLabel} → ${toLabel}</div>
     <div class="pl-kpi-row">
-      <div class="pl-kpi kpi-rev">
-        <div class="pl-kpi-label">Earned (Cumulative)</div>
-        <div class="pl-kpi-val">${fmtMoney(totalEarned)}</div>
-        <div class="pl-kpi-sub">on fully paid jobs</div>
-      </div>
-      <div class="pl-kpi kpi-profit">
-        <div class="pl-kpi-label">Paid This Period</div>
-        <div class="pl-kpi-val">${fmtMoney(totalPaidPeriod)}</div>
-        <div class="pl-kpi-sub">${fromLabel} → ${toLabel}</div>
-      </div>
-      <div class="pl-kpi kpi-cost">
-        <div class="pl-kpi-label">Owed Right Now</div>
-        <div class="pl-kpi-val" style="color:${totalOwed>0?'#EF4444':'var(--success)'}">${fmtMoney(totalOwed)}</div>
-        <div class="pl-kpi-sub">earned − paid</div>
-      </div>
-      <div class="pl-kpi">
-        <div class="pl-kpi-label">Pending</div>
-        <div class="pl-kpi-val" style="color:#F59E0B">${fmtMoney(totalPending)}</div>
-        <div class="pl-kpi-sub">on jobs not fully paid</div>
-      </div>
+      <div class="pl-kpi kpi-rev"><div class="pl-kpi-label">Earned (Cumulative)</div><div class="pl-kpi-val">${fmtMoney(totalEarned)}</div><div class="pl-kpi-sub">on fully paid jobs</div></div>
+      <div class="pl-kpi kpi-profit"><div class="pl-kpi-label">Paid This Period</div><div class="pl-kpi-val">${fmtMoney(totalPaidPeriod)}</div><div class="pl-kpi-sub">${fromLabel} → ${toLabel}</div></div>
+      <div class="pl-kpi kpi-cost"><div class="pl-kpi-label">Owed Right Now</div><div class="pl-kpi-val" style="color:${totalOwed>0?'#EF4444':'var(--success)'}">${fmtMoney(totalOwed)}</div><div class="pl-kpi-sub">earned − paid</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Pending</div><div class="pl-kpi-val" style="color:#F59E0B">${fmtMoney(totalPending)}</div><div class="pl-kpi-sub">on jobs not fully paid</div></div>
     </div>
     ${perSalesmanHtml}
     ${jobTable}
@@ -7666,6 +7847,316 @@ function renderCommissionsPage(){
   }));
 }
 
+// ── TAB 2: PM Fees ──
+function pmGatherData(){
+  const cm = window.currentMember;
+  const isAdminUser = isAdmin();
+  const rows = [];
+  jobs.forEach(j => {
+    const pmId = j.projectManager;
+    if(!pmId) return;
+    const pmUser = (window.TEAM || window.USERS || []).find(u => u.id === pmId);
+    if(!pmUser) return;
+    // Salesman/PM-only view: only show rows for the current user
+    if(!isAdminUser && cm && pmUser.id !== cm.id) return;
+    const fee = parseFloat(j.pmFee != null ? j.pmFee : 250) || 0;
+    const fullyPaid = jobFullyPaid(j);
+    const feePaid   = !!j.pmFeePaid;
+    let status;
+    if(!fullyPaid)     status = 'pending';
+    else if(feePaid)   status = 'paid';
+    else               status = 'owed';
+    rows.push({
+      job: j, user: pmUser, fee, fullyPaid, feePaid,
+      paidDate: j.pmFeePaidDate || '',
+      paidMethod: j.pmFeePaidMethod || '',
+      paidNotes: j.pmFeePaidNotes || '',
+      status,
+    });
+  });
+  return rows;
+}
+
+function renderPayrollPM(){
+  const body = document.getElementById('commBody');
+  const { from, to } = commComputeRange();
+  const isAdminUser = isAdmin();
+  const rows = pmGatherData();
+
+  let totalEarned = 0, totalPaidPeriod = 0, totalOwed = 0, totalPending = 0;
+  rows.forEach(r => {
+    if(r.fullyPaid) totalEarned += r.fee;
+    if(r.fullyPaid && !r.feePaid) totalOwed += r.fee;
+    if(!r.fullyPaid) totalPending += r.fee;
+    if(r.feePaid && r.paidDate >= from && r.paidDate <= to) totalPaidPeriod += r.fee;
+  });
+
+  const order = { owed: 0, pending: 1, paid: 2 };
+  rows.sort((a,b) => (order[a.status]||9) - (order[b.status]||9));
+
+  let perPmHtml = '';
+  if(isAdminUser){
+    const byPm = {};
+    rows.forEach(r => {
+      const k = r.user.id;
+      if(!byPm[k]) byPm[k] = { user: r.user, earned: 0, paid: 0, owed: 0, pending: 0, count: 0 };
+      byPm[k].count++;
+      if(r.fullyPaid) byPm[k].earned += r.fee;
+      if(r.feePaid) byPm[k].paid += r.fee;
+      if(r.fullyPaid && !r.feePaid) byPm[k].owed += r.fee;
+      if(!r.fullyPaid) byPm[k].pending += r.fee;
+    });
+    const pmRows = Object.values(byPm).sort((a,b) => b.owed - a.owed);
+    perPmHtml = pmRows.length ? `
+      <div class="pl-section">
+        <div class="pl-section-title"><i class="ti ti-users"></i>By Project Manager</div>
+        <table class="pl-table">
+          <thead><tr><th>Project Manager</th><th class="num">Jobs</th><th class="num">Earned</th><th class="num">Paid</th><th class="num">Owed</th><th class="num">Pending</th></tr></thead>
+          <tbody>${pmRows.map(s => `<tr>
+            <td><strong>${escapeHtml(s.user.name)}</strong></td>
+            <td class="num muted">${s.count}</td>
+            <td class="num">${fmtMoney(s.earned)}</td>
+            <td class="num" style="color:#34D399">${fmtMoney(s.paid)}</td>
+            <td class="num" style="color:${s.owed>0?'#EF4444':'var(--muted)'}">${fmtMoney(s.owed)}</td>
+            <td class="num muted">${fmtMoney(s.pending)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>` : '';
+  }
+
+  const jobTable = rows.length ? `
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-list-details"></i>Detail by Job</div>
+      <table class="pl-table">
+        <thead><tr>
+          <th>Job</th>
+          ${isAdminUser?'<th>PM</th>':''}
+          <th class="num">Contract</th>
+          <th class="num">PM Fee</th>
+          <th>Status</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const addr = (r.job.address || '').split(',')[0] || '—';
+            const statusLabel = { pending: 'PENDING', owed: 'OWED', paid: 'PAID' }[r.status] || '—';
+            const statusCls = 'comm-status-' + r.status;
+            const showPayBtn = isAdminUser && r.status === 'owed';
+            return `<tr>
+              <td>
+                <div style="font-weight:600;cursor:pointer" data-comm-open-job="${r.job.id}">${escapeHtml(r.job.name||'—')}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(addr)}</div>
+              </td>
+              ${isAdminUser?`<td class="muted">${escapeHtml(r.user.name)}</td>`:''}
+              <td class="num">${fmtMoney(moneyValue(r.job.potVal))}</td>
+              <td class="num">${fmtMoney(r.fee)}</td>
+              <td><span class="comm-status-pill ${statusCls}">${statusLabel}</span>${r.paidDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">Paid ${r.paidDate}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>`:''}</td>
+              <td>${showPayBtn ? `<button class="comm-pay-btn" data-pm-pay="${r.job.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">No PM assignments yet. Open a job's Edit modal to assign a Project Manager.</div>`;
+
+  const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
+  const toLabel   = to === '2999-12-31' ? 'Today' : to;
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">${isAdminUser ? 'Admin · all PMs' : 'Your PM fees only'} · Flat fee per job (default $250) · Earned counts when contract fully paid</div>
+    <div class="pl-kpi-row">
+      <div class="pl-kpi kpi-rev"><div class="pl-kpi-label">Earned (Cumulative)</div><div class="pl-kpi-val">${fmtMoney(totalEarned)}</div></div>
+      <div class="pl-kpi kpi-profit"><div class="pl-kpi-label">Paid This Period</div><div class="pl-kpi-val">${fmtMoney(totalPaidPeriod)}</div><div class="pl-kpi-sub">${fromLabel} → ${toLabel}</div></div>
+      <div class="pl-kpi kpi-cost"><div class="pl-kpi-label">Owed Right Now</div><div class="pl-kpi-val" style="color:${totalOwed>0?'#EF4444':'var(--success)'}">${fmtMoney(totalOwed)}</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Pending</div><div class="pl-kpi-val" style="color:#F59E0B">${fmtMoney(totalPending)}</div><div class="pl-kpi-sub">on jobs not fully paid</div></div>
+    </div>
+    ${perPmHtml}
+    ${jobTable}
+  `;
+  body.querySelectorAll('[data-pm-pay]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    openPmPaidModal(b.dataset.pmPay);
+  }));
+  body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', () => {
+    if(typeof openDetail === 'function') openDetail(el.dataset.commOpenJob);
+  }));
+}
+
+// PM Fee Pay modal — reuses the commission modal infrastructure but writes to job.pmFee* fields
+function openPmPaidModal(jobId){
+  if(!isAdmin()){ toast('Only admins can record PM payments'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  const pmId = j.projectManager;
+  const pm = (window.TEAM || window.USERS || []).find(u => u.id === pmId);
+  if(!pm){ toast('No PM assigned to this job'); return; }
+  const fee = parseFloat(j.pmFee != null ? j.pmFee : 250) || 0;
+  document.getElementById('commPaidJobId').value = jobId;
+  document.getElementById('commPaidUserId').value = '__PM__';   // sentinel
+  document.getElementById('commPaidJobInfo').innerHTML = `
+    <div style="font-weight:600;color:#fff">${escapeHtml(j.name||'')} · PM: ${escapeHtml(pm.name)}</div>
+    <div style="margin-top:4px">PM Fee: <strong style="color:var(--brand-light)">${fmtMoney(fee)}</strong></div>
+  `;
+  document.getElementById('commPaidAmount').value = fee.toFixed(2);
+  document.getElementById('commPaidDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('commPaidMethod').value = 'Check';
+  document.getElementById('commPaidNotes').value = '';
+  document.getElementById('commPaidModalBg').style.display = 'flex';
+}
+
+// ── TAB 3: Subcontractor Payments ──
+// Built from expense lines tagged with a vendor. Each expense row tracks paid/unpaid.
+function subsGatherData(){
+  const rows = [];
+  jobs.forEach(j => {
+    (j.expenses || []).forEach((e, idx) => {
+      if(!e.vendor && !e.vendorName) return;  // only show expenses with a vendor
+      const amount = moneyValue(e.amount) || 0;
+      if(amount <= 0) return;
+      const vendorName = e.vendorName || (window.subcontractors || []).find(s => s.id === e.vendor)?.name || e.vendor || 'Unknown';
+      rows.push({
+        job: j, expenseIdx: idx, expense: e,
+        vendorId: e.vendor || '',
+        vendorName,
+        amount,
+        paid: !!e.paid,
+        paidDate: e.paidDate || '',
+        paidMethod: e.paidMethod || '',
+        paidNotes: e.paidNotes || '',
+        cat: e.cat || '',
+      });
+    });
+  });
+  return rows;
+}
+
+async function renderPayrollSubs(){
+  const body = document.getElementById('commBody');
+  if(!isAdmin()){
+    body.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">Subcontractor payment tracking is admin-only.</div>`;
+    return;
+  }
+  const { from, to } = commComputeRange();
+  // Ensure subs are loaded
+  if(!window.subcontractors) await loadSubcontractors();
+  const rows = subsGatherData();
+
+  let totalCharged = 0, totalPaidPeriod = 0, totalOwed = 0;
+  rows.forEach(r => {
+    totalCharged += r.amount;
+    if(r.paid) {
+      if(r.paidDate >= from && r.paidDate <= to) totalPaidPeriod += r.amount;
+    } else {
+      totalOwed += r.amount;
+    }
+  });
+
+  // Sort: unpaid first, biggest first; then paid
+  rows.sort((a,b) => {
+    if(a.paid !== b.paid) return a.paid ? 1 : -1;
+    return b.amount - a.amount;
+  });
+
+  // Per-vendor summary
+  const byVendor = {};
+  rows.forEach(r => {
+    const k = r.vendorId || r.vendorName;
+    if(!byVendor[k]) byVendor[k] = { name: r.vendorName, charged: 0, paid: 0, owed: 0, count: 0 };
+    byVendor[k].count++;
+    byVendor[k].charged += r.amount;
+    if(r.paid) byVendor[k].paid += r.amount;
+    else byVendor[k].owed += r.amount;
+  });
+  const vendorRows = Object.values(byVendor).sort((a,b) => b.owed - a.owed);
+
+  // Header: "Manage Subs" link + KPIs
+  const perVendorHtml = vendorRows.length ? `
+    <div class="pl-section">
+      <div class="pl-section-title">
+        <i class="ti ti-users"></i>By Subcontractor
+        <div style="flex:1"></div>
+        <button id="subsManageBtn" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer">Manage Subs</button>
+      </div>
+      <table class="pl-table">
+        <thead><tr><th>Subcontractor</th><th class="num">Jobs</th><th class="num">Charged</th><th class="num">Paid</th><th class="num">Owed</th></tr></thead>
+        <tbody>${vendorRows.map(v => `<tr>
+          <td><strong>${escapeHtml(v.name)}</strong></td>
+          <td class="num muted">${v.count}</td>
+          <td class="num">${fmtMoney(v.charged)}</td>
+          <td class="num" style="color:#34D399">${fmtMoney(v.paid)}</td>
+          <td class="num" style="color:${v.owed>0?'#EF4444':'var(--muted)'}">${fmtMoney(v.owed)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : `<div class="pl-section"><div class="pl-section-title"><i class="ti ti-users"></i>By Subcontractor<div style="flex:1"></div><button id="subsManageBtn" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer">Manage Subs</button></div><div style="text-align:center;padding:18px 10px;color:var(--muted);font-size:12px">No vendor-tagged expenses yet. Add a vendor to job expenses to track payables here.</div></div>`;
+
+  const detailTable = rows.length ? `
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-list-details"></i>Detail by Expense</div>
+      <table class="pl-table">
+        <thead><tr><th>Job</th><th>Vendor</th><th>Category</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows.map(r => {
+          const addr = (r.job.address || '').split(',')[0] || '';
+          return `<tr>
+            <td>
+              <div style="font-weight:600;cursor:pointer" data-comm-open-job="${r.job.id}">${escapeHtml(r.job.name||'—')}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(addr)}</div>
+            </td>
+            <td>${escapeHtml(r.vendorName)}</td>
+            <td class="muted">${escapeHtml(r.cat || '—')}</td>
+            <td class="num">${fmtMoney(r.amount)}</td>
+            <td>${r.paid ? `<span class="comm-status-pill comm-status-paid">PAID</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.paidDate)}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>` : `<span class="comm-status-pill comm-status-owed">OWED</span>`}</td>
+            <td>${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : ''}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>` : '';
+
+  const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
+  const toLabel   = to === '2999-12-31' ? 'Today' : to;
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Admin · expense lines tagged with a vendor name. Tag job expenses with a vendor to track them as payables here.</div>
+    <div class="pl-kpi-row">
+      <div class="pl-kpi kpi-rev"><div class="pl-kpi-label">Total Billed</div><div class="pl-kpi-val">${fmtMoney(totalCharged)}</div></div>
+      <div class="pl-kpi kpi-profit"><div class="pl-kpi-label">Paid This Period</div><div class="pl-kpi-val">${fmtMoney(totalPaidPeriod)}</div><div class="pl-kpi-sub">${fromLabel} → ${toLabel}</div></div>
+      <div class="pl-kpi kpi-cost"><div class="pl-kpi-label">Owed Right Now</div><div class="pl-kpi-val" style="color:${totalOwed>0?'#EF4444':'var(--success)'}">${fmtMoney(totalOwed)}</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Outstanding Lines</div><div class="pl-kpi-val">${rows.filter(r=>!r.paid).length}</div><div class="pl-kpi-sub">unpaid expense items</div></div>
+    </div>
+    ${perVendorHtml}
+    ${detailTable}
+  `;
+  const subsManage = document.getElementById('subsManageBtn');
+  if(subsManage) subsManage.addEventListener('click', openSubsDirectoryModal);
+  body.querySelectorAll('[data-sub-pay]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [jobId, idxStr] = b.dataset.subPay.split('|');
+    openSubPaidModal(jobId, parseInt(idxStr));
+  }));
+  body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', () => {
+    if(typeof openDetail === 'function') openDetail(el.dataset.commOpenJob);
+  }));
+}
+
+// Sub payment — marks an expense line as paid
+function openSubPaidModal(jobId, expenseIdx){
+  if(!isAdmin()){ toast('Only admins can mark sub payments'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  const e = j.expenses?.[expenseIdx];
+  if(!e) return;
+  const vendorName = e.vendorName || (window.subcontractors||[]).find(s=>s.id===e.vendor)?.name || e.vendor || 'Vendor';
+  const amount = moneyValue(e.amount) || 0;
+  document.getElementById('commPaidJobId').value = jobId;
+  document.getElementById('commPaidUserId').value = '__SUB__' + expenseIdx;   // sentinel
+  document.getElementById('commPaidJobInfo').innerHTML = `
+    <div style="font-weight:600;color:#fff">${escapeHtml(j.name||'')} · ${escapeHtml(vendorName)}</div>
+    <div style="margin-top:4px">${escapeHtml(e.desc||e.cat||'Labor')}: <strong style="color:var(--brand-light)">${fmtMoney(amount)}</strong></div>
+  `;
+  document.getElementById('commPaidAmount').value = amount.toFixed(2);
+  document.getElementById('commPaidDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('commPaidMethod').value = 'Check';
+  document.getElementById('commPaidNotes').value = '';
+  document.getElementById('commPaidModalBg').style.display = 'flex';
+}
+
+// Existing commission Pay modal — used by Sales tab
 function openCommPaidModal(jobId, userId){
   if(!isAdmin()){ toast('Only admins can record commission payments'); return; }
   const j = jobs.find(x => x.id === jobId);
@@ -7702,12 +8193,52 @@ function saveCommPayment(){
   if(!date){ toast('Enter a payment date'); return; }
   const j = jobs.find(x => x.id === jobId);
   if(!j) return;
+
+  // Branch by sentinel type stored in userId field
+  if(userId === '__PM__'){
+    // PM Fee payment — store on the job's pmFee* fields
+    j.pmFeePaid = true;
+    j.pmFeePaidDate = date;
+    j.pmFeePaidMethod = method;
+    j.pmFeePaidNotes = notes;
+    // Also record amount paid; if different from default fee, store it
+    if(amount !== (parseFloat(j.pmFee) || 250)) j.pmFee = amount;
+    if(typeof logActivity === 'function'){
+      const pm = (window.TEAM || window.USERS || []).find(u => u.id === j.projectManager);
+      logActivity(j, 'pmfee', 'PM fee paid', `${pm?.name || 'PM'}: ${fmtMoney(amount)} · ${method}`);
+    }
+    saveToStorage();
+    closeCommPaidModal();
+    toast(`Recorded ${fmtMoney(amount)} PM fee payment`);
+    renderPayrollPage();
+    return;
+  }
+
+  if(userId.startsWith('__SUB__')){
+    // Sub payment — mark expense as paid
+    const idx = parseInt(userId.slice(7));
+    if(!j.expenses?.[idx]){ toast('Expense not found'); return; }
+    const exp = j.expenses[idx];
+    exp.paid = true;
+    exp.paidDate = date;
+    exp.paidMethod = method;
+    exp.paidNotes = notes;
+    if(typeof logActivity === 'function'){
+      const vendorName = exp.vendorName || (window.subcontractors||[]).find(s=>s.id===exp.vendor)?.name || 'Vendor';
+      logActivity(j, 'subpay', 'Sub payment', `${vendorName}: ${fmtMoney(amount)} · ${method}`);
+    }
+    saveToStorage();
+    closeCommPaidModal();
+    toast(`Recorded ${fmtMoney(amount)} sub payment`);
+    renderPayrollPage();
+    return;
+  }
+
+  // Default: salesman commission payment (uses existing commission_payouts array)
   if(!Array.isArray(j.commissionPayouts)) j.commissionPayouts = [];
   j.commissionPayouts.push({
     amount: amount.toFixed(2),
-    date,
-    method,
-    notes,
+    date, method, notes,
     paidTo: userId,
     paidAt: new Date().toISOString(),
     paidBy: window.currentMember?.id || '',
@@ -7719,27 +8250,43 @@ function saveCommPayment(){
   saveToStorage();
   closeCommPaidModal();
   toast(`Recorded ${fmtMoney(amount)} commission payment`);
-  renderCommissionsPage();
+  renderPayrollPage();
 }
 
 function commExportCsv(){
+  // Export depends on the active tab
+  if(payTab === 'pm'){
+    const rows = [['Job','PM','Contract','PM Fee','Status','Paid Date','Method']];
+    pmGatherData().forEach(r => rows.push([
+      r.job.name || '', r.user.name, moneyValue(r.job.potVal).toFixed(2),
+      r.fee.toFixed(2), r.status, r.paidDate, r.paidMethod,
+    ]));
+    return downloadCsv(rows, 'pm-fees');
+  }
+  if(payTab === 'subs'){
+    const rows = [['Job','Vendor','Category','Description','Amount','Status','Paid Date','Method']];
+    subsGatherData().forEach(r => rows.push([
+      r.job.name || '', r.vendorName, r.cat, r.expense.desc || '',
+      r.amount.toFixed(2), r.paid ? 'PAID' : 'OWED', r.paidDate, r.paidMethod,
+    ]));
+    return downloadCsv(rows, 'subs');
+  }
+  // Default: sales commission
   const rows = [['Job','Salesman','Pipeline','Contract','Profit after OH','Earned','Paid','Owed','Status','Payouts']];
-  const data = commGatherData();
-  data.forEach(r => {
+  commGatherData().forEach(r => {
     const payoutSummary = r.payouts.map(p => `${p.date}:${fmtMoney(moneyValue(p.amount))}:${p.method}`).join(' | ');
     rows.push([
-      r.job.name || '',
-      r.user.name,
-      r.job.pipeline || '',
+      r.job.name || '', r.user.name, r.job.pipeline || '',
       moneyValue(r.job.potVal).toFixed(2),
       jobNetAfterOverhead(r.job).toFixed(2),
-      r.estimated.toFixed(2),
-      r.paid.toFixed(2),
-      r.owed.toFixed(2),
-      r.status,
-      payoutSummary,
+      r.estimated.toFixed(2), r.paid.toFixed(2), r.owed.toFixed(2),
+      r.status, payoutSummary,
     ]);
   });
+  downloadCsv(rows, 'commissions');
+}
+
+function downloadCsv(rows, kind){
   const esc = v => {
     const s = String(v ?? '');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
@@ -7750,17 +8297,21 @@ function commExportCsv(){
   const a    = document.createElement('a');
   a.href = url;
   const today = new Date().toISOString().slice(0,10);
-  a.download = `stormshield-commissions-${today}.csv`;
+  a.download = `stormshield-${kind}-${today}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
-  toast('Commissions CSV exported');
+  toast(`${kind} CSV exported`);
 }
 
-// Wire commission controls
+// Wire commission/payroll controls
 (function wireCommissionsControls(){
   document.querySelectorAll('.comm-range-btn').forEach(b => b.addEventListener('click', () => {
     commRange = b.dataset.commRange;
-    renderCommissionsPage();
+    renderPayrollPage();
+  }));
+  document.querySelectorAll('.pay-tab-btn').forEach(b => b.addEventListener('click', () => {
+    payTab = b.dataset.payTab;
+    renderPayrollPage();
   }));
   const exportBtn = document.getElementById('commExportCsv');
   if(exportBtn) exportBtn.addEventListener('click', commExportCsv);

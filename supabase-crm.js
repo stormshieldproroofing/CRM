@@ -164,12 +164,18 @@ async function loadAllFromSupabase() {
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         commissionPayouts: Array.isArray(r.commission_payouts) ? r.commission_payouts : [],
+        projectManager: r.project_manager || null,
+        pmFee: (r.pm_fee != null) ? r.pm_fee : 250,
+        pmFeePaid: !!r.pm_fee_paid,
+        pmFeePaidDate: r.pm_fee_paid_date || null,
+        pmFeePaidMethod: r.pm_fee_paid_method || null,
+        pmFeePaidNotes: r.pm_fee_paid_notes || null,
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
           .map(d=>({amount:String(d.amount),desc:d.description})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount)})),
+          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         stageChecklistDone,
@@ -216,6 +222,12 @@ async function pushAllToSupabase() {
         stage_checklist_extra: (j.stageChecklistExtra && typeof j.stageChecklistExtra === 'object') ? j.stageChecklistExtra : {},
         quote: (j.quote && typeof j.quote === 'object') ? j.quote : null,
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
+        project_manager: j.projectManager || null,
+        pm_fee: (j.pmFee != null) ? j.pmFee : 250,
+        pm_fee_paid: !!j.pmFeePaid,
+        pm_fee_paid_date: j.pmFeePaidDate || null,
+        pm_fee_paid_method: j.pmFeePaidMethod || null,
+        pm_fee_paid_notes: j.pmFeePaidNotes || null,
       };
       if (typeof j.id === 'string' && j.id.length > 20) {
         existingJobs.push({ ...base, id: j.id });
@@ -262,7 +274,18 @@ async function pushAllToSupabase() {
 
       await sb.from('expenses').delete().eq('job_id', j.id);
       if (j.expenses?.length) await sb.from('expenses').insert(
-        j.expenses.map(e => ({ job_id:j.id, category:e.cat, description:e.desc, amount:parseFloat(e.amount||0) })));
+        j.expenses.map(e => ({
+          job_id: j.id,
+          category: e.cat,
+          description: e.desc,
+          amount: parseFloat(e.amount||0),
+          vendor: e.vendor || null,
+          vendor_name: e.vendorName || null,
+          paid: !!e.paid,
+          paid_date: e.paidDate || null,
+          paid_method: e.paidMethod || null,
+          paid_notes: e.paidNotes || null,
+        })));
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
       const chkRows = [];
