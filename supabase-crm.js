@@ -163,6 +163,7 @@ async function loadAllFromSupabase() {
         buildDate: r.build_date || null,
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
+        commissionPayouts: Array.isArray(r.commission_payouts) ? r.commission_payouts : [],
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
@@ -214,6 +215,7 @@ async function pushAllToSupabase() {
         build_date: j.buildDate || null,
         stage_checklist_extra: (j.stageChecklistExtra && typeof j.stageChecklistExtra === 'object') ? j.stageChecklistExtra : {},
         quote: (j.quote && typeof j.quote === 'object') ? j.quote : null,
+        commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
       };
       if (typeof j.id === 'string' && j.id.length > 20) {
         existingJobs.push({ ...base, id: j.id });

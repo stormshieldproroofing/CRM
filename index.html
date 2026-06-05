@@ -318,6 +318,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link">Map</span>
   <span class="nav-link">Team</span>
   <span class="nav-link">Calendar</span>
+  <span class="nav-link">Commissions</span>
   <span class="nav-link">My To-Do</span>
   <span class="nav-link">Insurance</span>
   <span class="nav-link" id="navProfits" style="display:none">Profits</span>
@@ -476,6 +477,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calViewWeek"  class="cal-view-btn" data-view="week"  style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">Week</button>
     </div>
     <div style="flex:1"></div>
+    <div id="calWeatherBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted);cursor:pointer" title="Weather forecast (click to refresh / change location)">
+      <i id="calWeatherIcon" class="ti ti-cloud" style="font-size:13px;color:var(--brand-light)"></i>
+      <span id="calWeatherLabel">Loading weather…</span>
+    </div>
     <div id="calCrewBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted)">
       <i class="ti ti-users-group" style="font-size:13px;color:var(--brand-light)"></i>
       <span><span id="calCrewCount" style="color:#fff;font-weight:600">3</span> crews/day</span>
@@ -526,6 +531,55 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- INSURANCE CARRIERS DIRECTORY PAGE -->
 <!-- MY TO-DO PAGE: consolidated checklist items across all jobs -->
+<!-- COMMISSIONS PAGE -->
+<div id="commissionsPage" style="display:none">
+  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Commissions</div>
+    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <button class="comm-range-btn" data-comm-range="this-month" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">This Month</button>
+      <button class="comm-range-btn" data-comm-range="last-month" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">Last Month</button>
+      <button class="comm-range-btn" data-comm-range="ytd" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">YTD</button>
+      <button class="comm-range-btn" data-comm-range="all" style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)">All Time</button>
+    </div>
+    <div style="flex:1"></div>
+    <button id="commExportCsv" style="background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:var(--success);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;gap:5px">
+      <i class="ti ti-download" style="font-size:12px"></i>Export CSV
+    </button>
+  </div>
+  <div id="commBody" style="padding:18px 20px;overflow:auto;height:calc(100vh - 110px)"></div>
+</div>
+
+<!-- Mark Commission Paid modal -->
+<div id="commPaidModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#141927;border:1px solid var(--border);border-radius:10px;width:440px;max-width:100%;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Record Commission Payment</div>
+      <button id="commPaidClose" class="icon-btn"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="commPaidJobInfo" style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;padding:10px;background:#1A1F2E;border-radius:6px"></div>
+    <input id="commPaidJobId" type="hidden">
+    <input id="commPaidUserId" type="hidden">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Amount Paid *</label><input id="commPaidAmount" type="number" step="0.01" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Payment Date *</label><input id="commPaidDate" type="date" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Method</label><select id="commPaidMethod" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none">
+          <option value="Check">Check</option>
+          <option value="ACH">ACH / Direct Deposit</option>
+          <option value="Cash">Cash</option>
+          <option value="Other">Other</option>
+        </select></div>
+      </div>
+      <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Reference / Notes</label><input id="commPaidNotes" placeholder="Check #, memo, etc." style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <div style="flex:1"></div>
+      <button id="commPaidCancel" class="btn-cancel" style="font-size:12px;padding:7px 14px">Cancel</button>
+      <button id="commPaidSave" class="btn-primary" style="font-size:12px;padding:7px 14px">Record Payment</button>
+    </div>
+  </div>
+</div>
+
 <div id="todoPage" style="display:none">
   <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">My To-Do</div>
@@ -638,6 +692,16 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .pl-empty{text-align:center;padding:30px 10px;color:var(--muted);font-size:12px;line-height:1.6}
 .pl-range-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
 
+/* Commissions page */
+.comm-range-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
+.comm-status-pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.05em;padding:2px 7px;border-radius:4px;text-transform:uppercase}
+.comm-status-pending{background:rgba(245,158,11,0.12);color:#F59E0B;border:1px solid rgba(245,158,11,0.3)}
+.comm-status-owed   {background:rgba(239,68,68,0.12);color:#EF4444;border:1px solid rgba(239,68,68,0.3)}
+.comm-status-partial{background:rgba(245,158,11,0.10);color:#F59E0B;border:1px solid rgba(245,158,11,0.25)}
+.comm-status-paid   {background:rgba(52,211,153,0.12);color:#34D399;border:1px solid rgba(52,211,153,0.3)}
+.comm-pay-btn{background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;cursor:pointer;font-family:'Barlow',sans-serif;display:inline-flex;align-items:center;gap:4px;transition:background 0.12s}
+.comm-pay-btn:hover{background:rgba(52,211,153,0.22)}
+
 /* Insurance directory */
 .ins-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .ins-card{background:#141927;border:1px solid var(--border);border-radius:9px;padding:14px 16px;transition:border-color 0.15s}
@@ -656,9 +720,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .ins-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;line-height:1.6}
 
 /* Quick-call button next to job's carrier field */
-.dp-claim-call{display:inline-flex;align-items:center;gap:4px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);border-radius:4px;padding:2px 7px;color:var(--success);text-decoration:none;font-family:'Barlow',sans-serif;font-size:10px;font-weight:600;margin-left:6px;transition:background 0.12s}
-.dp-claim-call:hover{background:rgba(52,211,153,0.2)}
-.dp-claim-call i{font-size:11px}
+.dp-claim-call{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.30);border-radius:5px;color:var(--success);text-decoration:none;flex-shrink:0;transition:background 0.12s, transform 0.08s}
+.dp-claim-call:hover{background:rgba(52,211,153,0.22);transform:scale(1.06)}
+.dp-claim-call i{font-size:13px}
 
 /* To-Do page */
 .todo-filter-btn.active, .todo-scope-btn.active, .todo-role-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
@@ -725,6 +789,23 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-mday-cap{font-size:9px;font-weight:700;padding:1px 5px;border-radius:999px;background:rgba(255,255,255,0.05);color:var(--muted)}
 .cal-mday-cap.cap-open{background:rgba(52,211,153,0.12);color:var(--success)}
 .cal-mday-cap.cap-full{background:rgba(239,68,68,0.12);color:var(--danger)}
+
+/* Weather indicators on calendar */
+.cal-wx{display:inline-flex;align-items:center;gap:2px;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;line-height:1.3;flex-shrink:0;letter-spacing:0;white-space:nowrap}
+.cal-wx i{font-size:10px}
+.cal-mday-head{flex-wrap:wrap;row-gap:3px}
+.cal-mday-head .cal-wx{margin-top:1px}
+.cal-wx.wx-clear  {background:rgba(52,211,153,0.10);color:#34D399;border:1px solid rgba(52,211,153,0.22)}
+.cal-wx.wx-cau    {background:rgba(245,158,11,0.10);color:#F59E0B;border:1px solid rgba(245,158,11,0.28)}
+.cal-wx.wx-bad    {background:rgba(239,68,68,0.10);color:#EF4444;border:1px solid rgba(239,68,68,0.30)}
+.cal-wx.wx-night  {background:rgba(167,139,250,0.08);color:#A78BFA;border:1px solid rgba(167,139,250,0.22)}
+.cal-wx.wx-unknown{background:rgba(255,255,255,0.04);color:var(--muted);border:1px solid var(--border)}
+/* Day cell that has a 'bad' weather day gets a subtle tint */
+.cal-mday.wx-bad-day{background:#1A1216}
+.cal-mday.wx-bad-day.cal-mday-today{box-shadow:inset 0 0 0 1px rgba(239,68,68,0.5)}
+/* Weather warning on scheduled jobs */
+.cal-wx-warn{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:3px;background:rgba(239,68,68,0.18);color:#EF4444;font-size:9px;flex-shrink:0;margin-left:auto;font-weight:700}
+.cal-wx-warn i{font-size:10px}
 .cal-mchip{display:flex;align-items:flex-start;gap:5px;min-width:0;font-size:10px;padding:4px 5px;border-radius:5px;background:#1E253A;border:1px solid var(--border);color:#fff;cursor:grab;user-select:none;line-height:1.25}
 .cal-mchip:hover{border-color:var(--brand-light)}
 .cal-mchip.dragging{opacity:0.4}
@@ -1130,7 +1211,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 </style>
 
 <div class="m-overlay" id="editBoardModal">
-  <div class="modal" style="width:420px;padding:0;overflow:hidden;border-radius:12px">
+  <div class="modal" style="width:520px;max-width:95vw;padding:0;overflow:hidden;border-radius:12px">
 
     <!-- Header -->
     <div style="padding:16px 18px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
@@ -1139,7 +1220,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     </div>
 
     <!-- Drag list -->
-    <div id="boardListEl" style="max-height:300px;overflow-y:auto;padding:10px 12px 4px"></div>
+    <div id="boardListEl" style="max-height:60vh;overflow-y:auto;padding:10px 12px 4px"></div>
 
     <!-- Add row -->
     <div style="padding:10px 12px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center">
@@ -1650,6 +1731,51 @@ function jobNetAfterOverhead(j){
   return netProfit-(netProfit*0.10);
 }
 
+// Is this job fully paid? (sum of deposits >= contract)
+function jobFullyPaid(j){
+  const contract = moneyValue(j.potVal);
+  if(contract <= 0) return false;
+  return jobDepositTotal(j) >= contract;
+}
+
+// All commission payouts for a job. Format: [{amount, date, method, notes, paidTo, paidAt, paidBy}]
+function jobCommissionPayouts(j){
+  if(!Array.isArray(j.commissionPayouts)) j.commissionPayouts = [];
+  return j.commissionPayouts;
+}
+
+// Total commission already paid out to a specific user on this job
+function commissionPaidToUser(j, userId){
+  return jobCommissionPayouts(j)
+    .filter(p => p.paidTo === userId)
+    .reduce((s,p) => s + (moneyValue(p.amount) || 0), 0);
+}
+
+// Total commission earned by user on this job (only if fully paid; otherwise 0)
+function commissionEarnedByUser(j, user){
+  if(!user) return 0;
+  if(!jobFullyPaid(j)) return 0;
+  return estimatedCommissionForUser(j, user);
+}
+
+// What this user is still OWED on this job (earned − paid out so far)
+function commissionOwedToUser(j, user){
+  if(!user) return 0;
+  return Math.max(0, commissionEarnedByUser(j, user) - commissionPaidToUser(j, user.id));
+}
+
+// Status of commission on this job FOR a specific user
+function commissionStatusForUser(j, user){
+  if(!user) return 'none';
+  const estimated = estimatedCommissionForUser(j, user);
+  if(estimated <= 0) return 'none';
+  const paid = commissionPaidToUser(j, user.id);
+  if(!jobFullyPaid(j)) return 'pending';   // contract not yet fully collected
+  if(paid >= estimated - 0.5) return 'paid';
+  if(paid > 0) return 'partial';
+  return 'owed';
+}
+
 function estimatedCommissionForUser(j,user){
   if(!user) return 0;
   const netAfterOverhead=jobNetAfterOverhead(j);
@@ -1946,6 +2072,20 @@ function renderCard(j){
   const ageDays=daysSinceCreated(j);
   const progress=stageChecklistProgress(j,col);
   const taskMeta=progress.total?`${progress.done}/${progress.total}`:(j.tasks>0?`${j.tasksDone}/${j.tasks}`:'');
+  // Required-only progress: count items where item.required === true
+  const reqItems = (progress.items || []).filter(it => it.required === true);
+  const reqDoneMap = j.stageChecklistDone?.[col?.id] || {};
+  const reqDone   = reqItems.filter(it => reqDoneMap[it.id]).length;
+  const reqOpen   = reqItems.length - reqDone;
+  // Build date label: short "Jun 12" form for the footer
+  const buildDateLabel = (() => {
+    if(!j.buildDate) return '';
+    const m = j.buildDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return j.buildDate;
+    const d = new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  })();
+  const buildIsBad = typeof isBadWeatherDay === 'function' && isBadWeatherDay(j.buildDate);
   // Split address: first comma divides street from city/state/zip
   const addrSplit = (a) => {
     if(!a) return { street: '', rest: '' };
@@ -1965,8 +2105,14 @@ function renderCard(j){
     'completed': { label: 'DONE', bg: 'rgba(56,189,248,0.15)', fg: '#38BDF8' },
   };
   const badge = stageBadgeMap[col?.id];
+  // Top-row pills: REQ progress (only when not fully done), stage badge
+  const reqPill = (reqItems.length > 0 && reqOpen > 0)
+    ? `<div style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:999px;background:rgba(239,68,68,0.12);color:#EF4444;margin-bottom:5px;margin-right:5px" title="${reqOpen} required item${reqOpen===1?'':'s'} unchecked"><i class="ti ti-alert-circle" style="font-size:10px"></i>${reqDone}/${reqItems.length} REQ</div>`
+    : (reqItems.length > 0 && reqOpen === 0)
+      ? `<div style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:999px;background:rgba(52,211,153,0.12);color:#34D399;margin-bottom:5px;margin-right:5px" title="All required items complete"><i class="ti ti-check" style="font-size:10px"></i>REQ</div>`
+      : '';
   return `<div class="job-card${isClosed?' card-closed':''}" draggable="true" data-jid="${j.id}">
-    ${badge ? `<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:999px;background:${badge.bg};color:${badge.fg};margin-bottom:5px">${badge.label}</div>` : ''}    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+    ${reqPill}${badge ? `<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:999px;background:${badge.bg};color:${badge.fg};margin-bottom:5px">${badge.label}</div>` : ''}    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
       <div style="flex:1;min-width:0">
         <div class="card-name">${j.name}</div>
         <div class="card-sub" style="margin-top:2px;line-height:1.4">${_a.street ? escapeHtml(_a.street) : ''}${_a.rest ? `<br>${escapeHtml(_a.rest)}` : ''}</div>
@@ -1979,9 +2125,8 @@ function renderCard(j){
     <div class="card-phone" style="margin-top:5px"><i class="ti ti-phone" aria-hidden="true"></i>${formatPhone(j.phone) || j.phone || ''}</div>
     <div class="card-footer">
       <div class="card-meta" title="Days since created"><i class="ti ti-clock" aria-hidden="true"></i>${ageDays}d</div>
-      <div class="card-meta"><i class="ti ti-message" aria-hidden="true"></i>${j.notes}</div>
-      <div class="card-meta"><i class="ti ti-file" aria-hidden="true"></i>${j.docs}</div>
       ${taskMeta?`<div class="card-meta ${(progress.total&&progress.done<progress.total)||(!progress.total&&j.tasksDone<j.tasks)?'warn':''}"><i class="ti ti-checkbox" aria-hidden="true"></i>${taskMeta}</div>`:''}
+      ${buildDateLabel ? `<div class="card-meta${buildIsBad?' warn':''}" title="${buildIsBad?'⚠ High rain risk on this date · ':''}Scheduled build date"><i class="ti ti-calendar-event" aria-hidden="true"></i>${buildDateLabel}${buildIsBad?` <i class="ti ti-alert-triangle" style="font-size:10px;color:#EF4444;margin-left:2px"></i>`:''}</div>` : ''}
       <div style="flex:1"></div>
       <div class="user-dot" style="background:${u.color}" title="${u.name}">${u.id.toUpperCase()}</div>
     </div>
@@ -2135,7 +2280,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><a href="${mapsHref(j.address)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--brand-mid);text-decoration:none" title="Open in Maps">${escapeHtml(j.address||'—')}</a><i class="ti ti-copy copy-ic" title="Copy address" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.address||'').replace(/"/g,'&quot;')}, 'Address')"></i></div>
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>${j.email && j.email!=='—' ? `<a href="mailto:${escapeHtml(j.email)}" style="font-size:11px;color:var(--brand-mid);text-decoration:none" title="Send email">${escapeHtml(j.email)}</a>` : `<span style="font-size:11px;color:var(--muted)">—</span>`}<i class="ti ti-copy copy-ic" title="Copy email" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.email||'').replace(/"/g,'&quot;')}, 'Email')"></i></div>
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.16 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16z"/></svg>${j.phone && j.phone!=='—' ? `<a href="tel:${escapeHtml(j.phone)}" style="font-size:12px;color:var(--brand);text-decoration:none" title="Call">${escapeHtml(formatPhone(j.phone)||j.phone)}</a>` : `<span style="font-size:12px;color:var(--muted)">—</span>`}<i class="ti ti-copy copy-ic" title="Copy phone" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(formatPhone(j.phone)||j.phone||'').replace(/"/g,'&quot;')}, 'Phone')"></i></div>
-            <div class="info-row" style="margin-bottom:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum)?`<span style="font-size:11px;color:var(--brand)"><strong>${escapeHtml(j.carrier||'')}</strong>${j.carrier&&j.claimNum?' · ':''}${j.claimNum?'Claim #'+escapeHtml(j.claimNum):''}</span>${j.claimNum?`<i class="ti ti-copy copy-ic" title="Copy claim #" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"></i>`:''}${(typeof carrierCallButtonFor==='function')?carrierCallButtonFor(j.carrier):''}`:`<span style="font-size:11px;color:var(--brand-light)">Add insurance info</span>`}</div>
+            <div class="info-row" style="margin-bottom:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum)?`<span style="font-size:11px;color:var(--brand);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${escapeHtml(j.carrier||'')}</strong>${j.carrier&&j.claimNum?' · ':''}${j.claimNum?'Claim #'+escapeHtml(j.claimNum):''}</span><div style="display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0">${j.claimNum?`<i class="ti ti-copy copy-ic" title="Copy claim #" aria-hidden="true" style="margin-left:0" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"></i>`:''}${(typeof carrierCallButtonFor==='function')?carrierCallButtonFor(j.carrier):''}</div>`:`<span style="font-size:11px;color:var(--brand-light)">Add insurance info</span>`}</div>
           </div>
           <div class="weather-box">
             <i class="ti ti-cloud" style="font-size:28px;color:#93C5FD;display:block;margin-bottom:5px" aria-hidden="true"></i>
@@ -4251,12 +4396,23 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
 function renderBoardList(){
   const el=$('boardListEl');
-  el.innerHTML=columns.map((c,i)=>`
+  el.innerHTML=columns.map((c,i)=>{
+    const isFirst = i === 0;
+    const isLast  = i === columns.length - 1;
+    return `
     <div class="board-row" draggable="true" data-col-id="${c.id}" style="cursor:grab;user-select:none">
       <div style="color:var(--muted);font-size:16px;cursor:grab;padding:0 2px;flex-shrink:0">⠿</div>
+      <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+        <button class="br-btn br-move${isFirst?' br-disabled':''}" data-mv-up="${c.id}" title="Move up" ${isFirst?'disabled':''} style="width:22px;height:18px;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:${isFirst?'not-allowed':'pointer'};opacity:${isFirst?'0.3':'1'}">
+          <i class="ti ti-chevron-up" style="font-size:13px"></i>
+        </button>
+        <button class="br-btn br-move${isLast?' br-disabled':''}" data-mv-dn="${c.id}" title="Move down" ${isLast?'disabled':''} style="width:22px;height:18px;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:${isLast?'not-allowed':'pointer'};opacity:${isLast?'0.3':'1'}">
+          <i class="ti ti-chevron-down" style="font-size:13px"></i>
+        </button>
+      </div>
       <div style="width:10px;height:10px;border-radius:50%;background:${c.color||'var(--brand-light)'};flex-shrink:0"></div>
-      <span style="flex:1;font-size:13px;font-weight:600;color:var(--brand)">${c.name}</span>
-      ${c.locked?`<span style="font-size:10px;font-weight:600;color:var(--warn);background:rgba(232,160,32,0.12);border:1px solid rgba(232,160,32,0.3);border-radius:4px;padding:2px 6px">Locked</span>`:''}
+      <span style="flex:1;font-size:13px;font-weight:600;color:var(--brand);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</span>
+      ${c.locked?`<span style="font-size:10px;font-weight:600;color:var(--warn);background:rgba(232,160,32,0.12);border:1px solid rgba(232,160,32,0.3);border-radius:4px;padding:2px 6px;flex-shrink:0">Locked</span>`:''}
       <button class="br-btn${c.locked?' lock-on':''}" data-lk="${c.id}" title="${c.locked?'Unlock stage':'Lock stage'}" style="flex-shrink:0">
         <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       </button>
@@ -4266,7 +4422,31 @@ function renderBoardList(){
       <button class="br-btn danger" data-dc="${c.id}" title="Delete stage" style="flex-shrink:0">
         <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
       </button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+
+  // Move up/down buttons (mobile-friendly alternative to drag)
+  function moveColumn(id, dir){
+    const idx = columns.findIndex(c => c.id === id);
+    if(idx < 0) return;
+    const newIdx = idx + dir;
+    if(newIdx < 0 || newIdx >= columns.length) return;
+    const [moved] = columns.splice(idx, 1);
+    columns.splice(newIdx, 0, moved);
+    saveToStorage();
+    renderBoardList();
+    renderBoard();
+  }
+  el.querySelectorAll('[data-mv-up]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    if(b.disabled) return;
+    moveColumn(b.dataset.mvUp, -1);
+  }));
+  el.querySelectorAll('[data-mv-dn]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    if(b.disabled) return;
+    moveColumn(b.dataset.mvDn, +1);
+  }));
 
   // drag-to-reorder
   let dragSrcId=null;
@@ -5515,6 +5695,8 @@ function switchPage(pageName){
   if(insPg) insPg.style.display = (pageName === 'insurance') ? '' : 'none';
   const todoPg = document.getElementById('todoPage');
   if(todoPg) todoPg.style.display = (pageName === 'todo') ? '' : 'none';
+  const commPg = document.getElementById('commissionsPage');
+  if(commPg) commPg.style.display = (pageName === 'commissions') ? '' : 'none';
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
   });
@@ -5526,6 +5708,7 @@ function switchPage(pageName){
   if(pageName === 'profits') renderProfitsPage();
   if(pageName === 'insurance') renderInsurancePage();
   if(pageName === 'todo') renderTodoPage();
+  if(pageName === 'commissions') renderCommissionsPage();
 }
 
 // Wire up the nav links
@@ -5542,6 +5725,7 @@ function switchPage(pageName){
     else if(txt === 'profits') l.dataset.page = 'profits';
     else if(txt === 'insurance') l.dataset.page = 'insurance';
     else if(txt === 'my to-do') l.dataset.page = 'todo';
+    else if(txt === 'commissions') l.dataset.page = 'commissions';
     l.addEventListener('click', () => {
       if(l.dataset.page) switchPage(l.dataset.page);
     });
@@ -5645,15 +5829,265 @@ function calUnscheduledJobs(){
 function renderCalMonthChip(j){
   const addr = calJobAddressFull(j);
   const title = [j.name, addr, calSalesmanForJob(j)?.name].filter(Boolean).join(' - ');
+  const isBad = isBadWeatherDay(j.buildDate);
   return `
-    <div class="cal-mchip" draggable="true" data-cal-job="${j.id}" title="${escapeHtml(title)}">
+    <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}" draggable="true" data-cal-job="${j.id}" title="${escapeHtml(title)}${isBad?' · ⚠ High rain risk':''}">
       ${calSalesAvatarHtml(j)}
       <div class="cal-mchip-main">
         <div class="cal-mchip-name">${escapeHtml(j.name || 'Job')}</div>
         <div class="cal-mchip-addr">${escapeHtml(addr || 'No address')}</div>
       </div>
+      ${isBad?`<span class="cal-wx-warn" title="High rain risk on this date"><i class="ti ti-alert-triangle"></i></span>`:''}
     </div>`;
 }
+
+// ── WEATHER FORECAST (NWS / weather.gov) ──
+// Single regional forecast for the whole calendar. Default location: Texas Gulf Coast.
+// NWS is free, no API key, no rate limit, updated multiple times per day.
+// Forecast cached in localStorage for 6 hours.
+
+const WX_LOC_KEY    = 'stormshield_wx_loc_v1';
+const WX_CACHE_KEY  = 'stormshield_wx_cache_v1';
+const WX_CACHE_MS   = 6 * 60 * 60 * 1000;
+
+function getWeatherLocation(){
+  try {
+    const raw = localStorage.getItem(WX_LOC_KEY);
+    if(raw){
+      const p = JSON.parse(raw);
+      if(typeof p.lat === 'number' && typeof p.lng === 'number') return p;
+    }
+  } catch(e){}
+  return { lat: 29.5075, lng: -95.0949, label: 'League City, TX' };
+}
+function setWeatherLocation(loc){
+  try { localStorage.setItem(WX_LOC_KEY, JSON.stringify(loc)); } catch(e){}
+}
+
+window.__wxByDate = window.__wxByDate || null;
+window.__wxLoaded = window.__wxLoaded || 0;
+window.__wxLoc    = window.__wxLoc    || null;
+window.__wxLoading = false;
+
+async function fetchWeatherForecast(force){
+  if(!force){
+    try {
+      const raw = localStorage.getItem(WX_CACHE_KEY);
+      if(raw){
+        const cached = JSON.parse(raw);
+        if(cached && (Date.now() - cached.fetchedAt) < WX_CACHE_MS){
+          window.__wxByDate = cached.byDate;
+          window.__wxLoaded = cached.fetchedAt;
+          window.__wxLoc    = cached.loc;
+          return cached.byDate;
+        }
+      }
+    } catch(e){}
+  }
+  if(window.__wxLoading) return window.__wxByDate;
+  window.__wxLoading = true;
+  const loc = getWeatherLocation();
+  try {
+    const ptUrl = `https://api.weather.gov/points/${loc.lat.toFixed(4)},${loc.lng.toFixed(4)}`;
+    const ptResp = await fetch(ptUrl, { headers: { 'Accept': 'application/geo+json' } });
+    if(!ptResp.ok) throw new Error(`NWS points lookup failed (${ptResp.status})`);
+    const pt = await ptResp.json();
+    const forecastUrl = pt?.properties?.forecast;
+    if(!forecastUrl) throw new Error('NWS did not return a forecast URL');
+    const fcResp = await fetch(forecastUrl, { headers: { 'Accept': 'application/geo+json' } });
+    if(!fcResp.ok) throw new Error(`NWS forecast fetch failed (${fcResp.status})`);
+    const fc = await fcResp.json();
+    const periods = fc?.properties?.periods || [];
+    const byDate = {};
+    periods.forEach(p => {
+      const dateKey = p.startTime.slice(0, 10);
+      if(!byDate[dateKey]){
+        byDate[dateKey] = { precip: null, tempHi: null, tempLo: null, windMax: 0, windDir: '', summaryDay: '', summaryNight: '', shortDay: '', shortNight: '' };
+      }
+      const slot = byDate[dateKey];
+      const pop = p.probabilityOfPrecipitation?.value;
+      if(typeof pop === 'number') slot.precip = Math.max(slot.precip ?? 0, pop);
+      const wHi = (p.windSpeed || '').match(/(\d+)\s*to\s*(\d+)\s*mph/);
+      const wm  = (p.windSpeed || '').match(/(\d+)\s*mph$/);
+      if(wHi) slot.windMax = Math.max(slot.windMax, parseInt(wHi[2]));
+      else if(wm) slot.windMax = Math.max(slot.windMax, parseInt(wm[1]));
+      slot.windDir = p.windDirection || slot.windDir;
+      if(p.isDaytime){
+        slot.tempHi = p.temperature;
+        slot.summaryDay = p.detailedForecast || p.shortForecast || '';
+        slot.shortDay = p.shortForecast || '';
+      } else {
+        slot.tempLo = p.temperature;
+        slot.summaryNight = p.detailedForecast || p.shortForecast || '';
+        slot.shortNight = p.shortForecast || '';
+      }
+    });
+    window.__wxByDate = byDate;
+    window.__wxLoaded = Date.now();
+    window.__wxLoc    = loc;
+    try { localStorage.setItem(WX_CACHE_KEY, JSON.stringify({ fetchedAt: window.__wxLoaded, byDate, loc })); } catch(e){}
+    return byDate;
+  } catch(e){
+    console.warn('[weather] fetch failed', e);
+    return window.__wxByDate;
+  } finally {
+    window.__wxLoading = false;
+  }
+}
+
+function getWeatherForDate(dateKey){
+  if(!dateKey || !window.__wxByDate) return null;
+  return window.__wxByDate[dateKey] || null;
+}
+
+function classifyWeather(w){
+  if(!w) return { level: 'unknown' };
+  const precip = w.precip ?? 0;
+  const wind   = w.windMax ?? 0;
+  const summary = (w.shortDay || w.shortNight || '').toLowerCase();
+  const hasStorm = /thunderstorm|t-storm/.test(summary);
+  const hasHeavy = /heavy rain/.test(summary);
+  if(precip >= 70 || wind >= 25 || hasStorm || hasHeavy) return { level: 'bad' };
+  if(precip >= 30 || wind >= 20 || /rain|shower|drizzle/.test(summary)) return { level: 'caution' };
+  return { level: 'clear' };
+}
+
+function isBadWeatherDay(dateKey){
+  const w = getWeatherForDate(dateKey);
+  if(!w) return false;
+  return classifyWeather(w).level === 'bad';
+}
+
+function weatherIconFor(w){
+  if(!w) return 'ti-question-mark';
+  const s = (w.shortDay || w.shortNight || '').toLowerCase();
+  if(/thunderstorm|t-storm/.test(s))  return 'ti-cloud-storm';
+  if(/snow|sleet|freezing/.test(s))   return 'ti-snowflake';
+  if(/heavy rain/.test(s))             return 'ti-cloud-rain';
+  if(/rain|shower|drizzle/.test(s))    return 'ti-cloud-rain';
+  if(/fog|mist/.test(s))               return 'ti-mist';
+  if(/cloudy|overcast/.test(s))        return 'ti-cloud';
+  if(/partly|mostly\s+sunny|mostly\s+clear/.test(s)) return 'ti-cloud-sun';
+  if(/sunny|clear|fair/.test(s))       return 'ti-sun';
+  const p = w.precip ?? 0;
+  if(p >= 70) return 'ti-cloud-rain';
+  if(p >= 30) return 'ti-cloud';
+  return 'ti-sun';
+}
+
+function renderWeatherBadgeFor(dateKey){
+  const w = getWeatherForDate(dateKey);
+  if(!w) return '';
+  const cls = classifyWeather(w);
+  const icon = weatherIconFor(w);
+  // Always show precip % and wind mph, even at low values
+  const precip = w.precip ?? 0;
+  const wind   = w.windMax ?? 0;
+  // Color the wind pill by its own severity (not the overall day classification)
+  const windLevel = wind >= 25 ? 'bad' : (wind >= 20 ? 'cau' : 'clear');
+  const mainLevel = cls.level === 'unknown' ? 'unknown' : (cls.level === 'caution' ? 'cau' : cls.level);
+  const tooltip = [
+    w.shortDay || '—',
+    `Precip ${Math.round(precip)}%`,
+    `Wind ${wind} mph`,
+    w.tempHi != null ? `High ${w.tempHi}°` : '',
+  ].filter(Boolean).join(' · ');
+  return `<span class="cal-wx wx-${mainLevel}" title="${escapeHtml(tooltip)}"><i class="ti ${icon}"></i><span>${Math.round(precip)}%</span></span><span class="cal-wx wx-${windLevel}" style="margin-left:3px" title="Wind ${wind} mph"><i class="ti ti-wind"></i><span>${wind}</span></span>`;
+}
+
+function updateCalendarWeatherHeader(){
+  const labelEl = document.getElementById('calWeatherLabel');
+  const iconEl  = document.getElementById('calWeatherIcon');
+  const badge   = document.getElementById('calWeatherBadge');
+  if(!labelEl || !iconEl) return;
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const w = getWeatherForDate(todayKey);
+  if(!w){
+    labelEl.textContent = window.__wxLoading ? 'Loading weather…' : 'Weather: tap to refresh';
+    iconEl.className = 'ti ti-cloud-question';
+    iconEl.style.color = 'var(--muted)';
+    return;
+  }
+  const cls = classifyWeather(w);
+  const icon = weatherIconFor(w);
+  iconEl.className = 'ti ' + icon;
+  iconEl.style.color = cls.level === 'bad' ? '#EF4444' : (cls.level === 'caution' ? '#F59E0B' : '#34D399');
+  const parts = [];
+  if(w.shortDay) parts.push(w.shortDay);
+  if(typeof w.precip === 'number' && w.precip >= 5) parts.push(`${Math.round(w.precip)}% rain`);
+  if(w.windMax) parts.push(`wind ${w.windMax} mph`);
+  if(w.tempHi != null) parts.push(`${w.tempHi}°`);
+  labelEl.textContent = parts.slice(0,3).join(' · ') || 'Today';
+  if(badge){
+    const loc = window.__wxLoc || getWeatherLocation();
+    badge.title = `${loc.label || 'Location'} · click to refresh / change location`;
+  }
+}
+
+function openWeatherLocationModal(){
+  const loc = getWeatherLocation();
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:10px;width:420px;max-width:100%;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Weather Location</div>
+        <button id="wxClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">Forecasts use the National Weather Service. Set this once to your operating area. Stored locally in this browser.</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Label</label><input id="wxLabel" value="${escapeHtml(loc.label||'')}" placeholder="e.g. League City, TX" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Latitude</label><input id="wxLat" type="number" step="0.0001" value="${loc.lat}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Longitude</label><input id="wxLng" type="number" step="0.0001" value="${loc.lng}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        </div>
+        <button id="wxUseHere" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer">Use my current GPS location</button>
+        <div style="font-size:10px;color:var(--muted);line-height:1.4">For a different city, look up its coordinates on Google Maps (right-click → "What's here?") and paste them above.</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px">
+        <button id="wxRefresh" style="background:transparent;border:1px solid var(--border);color:var(--brand-light);font-size:11px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer"><i class="ti ti-refresh"></i> Refresh now</button>
+        <div style="flex:1"></div>
+        <button id="wxCancel" class="btn-cancel" style="font-size:12px;padding:7px 14px">Cancel</button>
+        <button id="wxSave" class="btn-primary" style="font-size:12px;padding:7px 14px">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#wxClose').addEventListener('click', close);
+  overlay.querySelector('#wxCancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+  overlay.querySelector('#wxUseHere').addEventListener('click', () => {
+    if(!navigator.geolocation){ toast('Geolocation not available'); return; }
+    navigator.geolocation.getCurrentPosition(pos => {
+      overlay.querySelector('#wxLat').value = pos.coords.latitude.toFixed(4);
+      overlay.querySelector('#wxLng').value = pos.coords.longitude.toFixed(4);
+      toast('Location captured — tap Save');
+    }, err => {
+      toast('Could not get location: ' + (err.message || 'permission denied'));
+    });
+  });
+  overlay.querySelector('#wxRefresh').addEventListener('click', async () => {
+    toast('Refreshing weather…');
+    await fetchWeatherForecast(true);
+    if(typeof renderCalendarPage === 'function') renderCalendarPage();
+    updateCalendarWeatherHeader();
+    toast('Weather updated');
+  });
+  overlay.querySelector('#wxSave').addEventListener('click', async () => {
+    const lat = parseFloat(overlay.querySelector('#wxLat').value);
+    const lng = parseFloat(overlay.querySelector('#wxLng').value);
+    const label = overlay.querySelector('#wxLabel').value.trim();
+    if(!isFinite(lat) || !isFinite(lng)){ toast('Enter valid coordinates'); return; }
+    setWeatherLocation({ lat, lng, label });
+    close();
+    toast('Refreshing weather…');
+    await fetchWeatherForecast(true);
+    if(typeof renderCalendarPage === 'function') renderCalendarPage();
+    updateCalendarWeatherHeader();
+  });
+}
+window.openWeatherLocationModal = openWeatherLocationModal;
 
 // View state: 'month' default, 'week' alternate. Anchor date drives navigation.
 let calView = localStorage.getItem('stormshield_cal_view') || 'month';
@@ -5676,6 +6110,28 @@ function renderCalendarPage(){
   });
   const crewCount = document.getElementById('calCrewCount');
   if(crewCount) crewCount.textContent = calCrewsPerDay;
+
+  // Wire the weather badge in the header (once)
+  const wxBadge = document.getElementById('calWeatherBadge');
+  if(wxBadge && !wxBadge.dataset.wired){
+    wxBadge.dataset.wired = '1';
+    wxBadge.addEventListener('click', openWeatherLocationModal);
+  }
+  updateCalendarWeatherHeader();
+
+  // Trigger forecast fetch in the background — re-render once data lands
+  if(!window.__wxByDate || (Date.now() - window.__wxLoaded) > WX_CACHE_MS){
+    fetchWeatherForecast(false).then(byDate => {
+      if(byDate){
+        // Only re-render if we're still on the calendar page
+        if(document.getElementById('calendarPage')?.style.display !== 'none'){
+          renderCalendarPage();
+        } else {
+          updateCalendarWeatherHeader();
+        }
+      }
+    });
+  }
 
   if(calView === 'month') renderCalendarMonth();
   else renderCalendarWeek();
@@ -5713,7 +6169,9 @@ function renderCalendarWeek(){
     if(isToday) cls.push('cal-today');
     if(isPast)  cls.push('cal-past');
     if(isFull && !isPast) cls.push('cal-full');
+    if(isBadWeatherDay(key)) cls.push('wx-bad-day');
     const capCls = isFull ? 'cap-full' : 'cap-open';
+    const wxBadge = renderWeatherBadgeFor(key);
     return `
       <div class="${cls.join(' ')}" data-cal-day="${key}">
         <div class="cal-day-header">
@@ -5721,7 +6179,10 @@ function renderCalendarWeek(){
             <div class="cal-day-name">${fmt(d,{weekday:'short'})}</div>
             <div class="cal-day-date">${d.getDate()}</div>
           </div>
-          <div class="cal-day-cap ${capCls}">${dayJobs.length} / ${calCrewsPerDay}</div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <div class="cal-day-cap ${capCls}">${dayJobs.length} / ${calCrewsPerDay}</div>
+            ${wxBadge}
+          </div>
         </div>
         <div class="cal-day-body" data-cal-body="${key}">
           ${dayJobs.map(j => renderCalJobCard(j)).join('')}
@@ -5769,6 +6230,7 @@ function renderCalendarMonth(){
     if(!inMonth) cls.push('cal-mday-other');
     if(isToday)  cls.push('cal-mday-today');
     if(isFull)   cls.push('cal-mday-full');
+    if(isBadWeatherDay(key)) cls.push('wx-bad-day');
     const capCls = isFull ? 'cap-full' : (dayJobs.length ? 'cap-open' : '');
     // Show up to 2 chips; rest as "+N more"
     const MAX_CHIPS = 2;
@@ -5776,10 +6238,12 @@ function renderCalendarMonth(){
     const moreCount = dayJobs.length - visibleJobs.length;
     const chipsHtml = visibleJobs.map(j => renderCalMonthChip(j)).join('');
     const moreHtml = moreCount > 0 ? `<div class="cal-mmore" data-cal-more="${key}">+${moreCount} more</div>` : '';
+    const wxBadge = renderWeatherBadgeFor(key);
     return `
       <div class="${cls.join(' ')}" data-cal-day="${key}">
         <div class="cal-mday-head">
           <span class="cal-mday-num">${d.getDate()}</span>
+          ${wxBadge}
           ${dayJobs.length ? `<span class="cal-mday-cap ${capCls}">${dayJobs.length}/${calCrewsPerDay}</span>` : ''}
         </div>
         ${chipsHtml}
@@ -5846,14 +6310,49 @@ function openCalDayPopup(dateKey){
   document.getElementById('calDayPopupDate').textContent = fmt;
   document.getElementById('calDayPopupCap').textContent  = `${dayJobs.length} of ${calCrewsPerDay} crews booked`;
   const body = document.getElementById('calDayPopupBody');
-  body.innerHTML = dayJobs.length
-    ? dayJobs.map(j => `
-        <div style="background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:9px 11px;cursor:pointer" data-cal-popup-job="${j.id}">
-          <div style="font-size:13px;font-weight:600;color:#fff">${escapeHtml(j.name||'—')}</div>
+
+  // Weather block
+  const w = getWeatherForDate(dateKey);
+  let wxBlock = '';
+  if(w){
+    const cls = classifyWeather(w);
+    const icon = weatherIconFor(w);
+    const color = cls.level === 'bad' ? '#EF4444' : (cls.level === 'caution' ? '#F59E0B' : '#34D399');
+    const banner = cls.level === 'bad'
+      ? `<div style="background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.3);color:#EF4444;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;margin-top:8px"><i class="ti ti-alert-triangle"></i> Rain risk is high — consider rescheduling any work on this day.</div>`
+      : cls.level === 'caution'
+        ? `<div style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.3);color:#F59E0B;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:600;margin-top:8px"><i class="ti ti-cloud"></i> Mixed conditions — monitor closer to the date.</div>`
+        : '';
+    wxBlock = `
+      <div style="background:#141927;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ti ${icon}" style="font-size:24px;color:${color}"></i>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:#fff;line-height:1.2">${escapeHtml(w.shortDay || w.shortNight || 'Forecast')}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              ${w.precip != null ? `${Math.round(w.precip)}% rain` : 'No precip data'}
+              ${w.windMax ? ` · Wind ${w.windMax} mph` : ''}
+              ${w.tempHi != null ? ` · High ${w.tempHi}°` : ''}
+              ${w.tempLo != null ? ` · Low ${w.tempLo}°` : ''}
+            </div>
+          </div>
+        </div>
+        ${w.summaryDay ? `<div style="font-size:11px;color:var(--brand);line-height:1.5;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">${escapeHtml(w.summaryDay)}</div>` : ''}
+        ${banner}
+      </div>`;
+  }
+
+  body.innerHTML = wxBlock + (dayJobs.length
+    ? dayJobs.map(j => {
+        const jobBad = isBadWeatherDay(j.buildDate);
+        return `
+        <div style="background:#1E253A;border:1px solid ${jobBad?'rgba(239,68,68,0.35)':'var(--border)'};border-radius:7px;padding:9px 11px;cursor:pointer;margin-bottom:6px" data-cal-popup-job="${j.id}">
+          <div style="font-size:13px;font-weight:600;color:#fff;display:flex;align-items:center;gap:6px">${escapeHtml(j.name||'—')}${jobBad?` <i class="ti ti-alert-triangle" style="color:#EF4444;font-size:12px"></i>`:''}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px">${escapeHtml((j.address||'').split(',')[0]||'—')}</div>
           ${j.carrier?`<div style="font-size:10px;color:var(--brand-light);margin-top:3px">${escapeHtml(j.carrier)}${j.claimNum?' · '+escapeHtml(j.claimNum):''}</div>`:''}
-        </div>`).join('')
-    : `<div style="text-align:center;padding:20px 8px;color:var(--muted);font-size:12px">No jobs scheduled on this day.</div>`;
+        </div>`;
+      }).join('')
+    : `<div style="text-align:center;padding:20px 8px;color:var(--muted);font-size:12px">No jobs scheduled on this day.</div>`);
   body.querySelectorAll('[data-cal-popup-job]').forEach(el => {
     el.addEventListener('click', () => {
       const id = el.dataset.calPopupJob;
@@ -5867,12 +6366,13 @@ function openCalDayPopup(dateKey){
 function renderCalJobCard(j){
   const addr = calJobAddressShort(j);
   const carrier = j.carrier ? `<span class="cjc-pill">${escapeHtml(j.carrier)}</span>` : '';
+  const isBad = isBadWeatherDay(j.buildDate);
   return `
-    <div class="cal-job-card" draggable="true" data-cal-job="${j.id}">
+    <div class="cal-job-card" draggable="true" data-cal-job="${j.id}" title="${isBad?'⚠ High rain risk — consider rescheduling':''}">
       <div class="cjc-top">
         ${calSalesAvatarHtml(j)}
         <div class="cjc-main">
-          <div class="cjc-name">${escapeHtml(j.name || '—')}</div>
+          <div class="cjc-name">${escapeHtml(j.name || '—')}${isBad?` <i class="ti ti-alert-triangle" style="color:#EF4444;font-size:12px;margin-left:4px" title="High rain risk on this date"></i>`:''}</div>
           <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
           ${carrier}
         </div>
@@ -5920,13 +6420,21 @@ function wireCalDragDrop(){
         return;
       }
       const prev = j.buildDate || null;
+      const isBad = isBadWeatherDay(key);
+      if(isBad){
+        const w = getWeatherForDate(key);
+        const reason = w ? `${w.shortDay || 'Forecast'} · ${w.precip != null ? Math.round(w.precip)+'% rain' : ''}${w.windMax ? ' · '+w.windMax+' mph wind' : ''}` : 'Heavy rain expected';
+        if(!confirm(`⚠ Weather warning for ${key}\n\n${reason}\n\nSchedule ${j.name} anyway?`)){
+          return;
+        }
+      }
       j.buildDate = key;
       if(prev !== key){
         const fromLabel = prev ? prev : 'unscheduled';
-        if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}`);
+        if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
       }
       saveToStorage();
-      toast(`Scheduled ${j.name} for ${key}`);
+      toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
       renderCalendarPage();
     });
   });
@@ -6461,19 +6969,14 @@ function defaultScopeText(){
   ].join('\n');
 }
 
-function defaultTermsText(){
-  return [
-    'Payment Schedule: First insurance check (ACV) due upon contract signing. Depreciation check due upon job completion. Customer deductible and any out-of-pocket costs due no later than day of completion.',
-    'Color and material selections must be confirmed in writing prior to material order. Changes after material is ordered may incur restocking fees.',
-    'Customer is responsible for moving fragile items, vehicles, and outdoor furniture away from the work area prior to start date.',
-    'This agreement supersedes any verbal agreements. Cancellation must be made in writing within 3 business days of signing per Texas law.',
-    'Contractor is fully insured. Certificate of Insurance available upon request.',
-  ].join('\n\n');
+function defaultTermsText(mode){
+  return mode === 'cash' ? defaultTermsCash() : defaultTermsInsurance();
 }
 
 function getJobQuote(j){
   if(!j.quote || typeof j.quote !== 'object'){
     j.quote = {
+      mode: '',           // 'insurance' or 'cash' — set on first render
       scope: '',
       shingleBrand: '',
       shingleModel: '',
@@ -6486,19 +6989,46 @@ function getJobQuote(j){
       quoteDate: '',
     };
   }
+  if(!j.quote.mode){
+    // Default: insurance pipeline → insurance quote; everything else → cash
+    j.quote.mode = (j.pipeline === 'insurance') ? 'insurance' : 'cash';
+  }
   return j.quote;
+}
+
+// Default terms differ between insurance and cash quotes
+function defaultTermsInsurance(){
+  return [
+    'Payment Schedule: First insurance check (ACV) due upon contract signing. Depreciation check due upon job completion. Customer deductible and any out-of-pocket costs due no later than day of completion.',
+    'Color and material selections must be confirmed in writing prior to material order. Changes after material is ordered may incur restocking fees.',
+    'Customer is responsible for moving fragile items, vehicles, and outdoor furniture away from the work area prior to start date.',
+    'This agreement supersedes any verbal agreements. Cancellation must be made in writing within 3 business days of signing per Texas law.',
+    'Contractor is fully insured. Certificate of Insurance available upon request.',
+  ].join('\n\n');
+}
+
+function defaultTermsCash(){
+  return [
+    'Payment Schedule: 50% deposit due upon contract signing. Remaining balance due upon completion of work. All payments by check or electronic transfer.',
+    'Color and material selections must be confirmed in writing prior to material order. Changes after material is ordered may incur restocking fees.',
+    'Customer is responsible for moving fragile items, vehicles, and outdoor furniture away from the work area prior to start date.',
+    'This agreement supersedes any verbal agreements. Cancellation must be made in writing within 3 business days of signing per Texas law.',
+    'Contractor is fully insured. Certificate of Insurance available upon request.',
+    'Late payments are subject to a 1.5% monthly service charge. Returned checks subject to a $35 fee.',
+  ].join('\n\n');
 }
 
 function renderQuoteTab(j){
   const q = getJobQuote(j);
   const ci = getCompanyInfo();
+  const isInsurance = q.mode === 'insurance';
   // Pre-fill from insurance fields if available
   if(!q.contractAmount && j.potVal) q.contractAmount = String(j.potVal);
   if(!q.deductible && j.deductible) q.deductible = String(j.deductible);
   if(!q.quoteDate) q.quoteDate = new Date().toISOString().slice(0,10);
   if(!q.repName && window.currentMember?.name) q.repName = window.currentMember.name;
   if(!q.scope) q.scope = defaultScopeText();
-  if(!q.terms) q.terms = defaultTermsText();
+  if(!q.terms) q.terms = defaultTermsText(q.mode);
 
   const body = document.getElementById('dpBody');
   if(!body) return;
@@ -6507,6 +7037,17 @@ function renderQuoteTab(j){
 
   body.innerHTML = `
     <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+      <!-- Mode toggle -->
+      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+        <i class="ti ti-${isInsurance?'shield':'cash'}" style="color:${isInsurance?'#4D9DE0':'#34D399'};font-size:16px"></i>
+        <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Quote Type</span>
+        <div style="flex:1"></div>
+        <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+          <button id="quoteModeInsurance" style="background:${isInsurance?'rgba(77,157,224,0.18)':'transparent'};color:${isInsurance?'var(--brand-light)':'var(--muted)'};border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-shield" style="font-size:12px;margin-right:4px"></i>Insurance</button>
+          <button id="quoteModeCash" style="background:${!isInsurance?'rgba(52,211,153,0.18)':'transparent'};color:${!isInsurance?'#34D399':'var(--muted)'};border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)"><i class="ti ti-cash" style="font-size:12px;margin-right:4px"></i>Cash</button>
+        </div>
+      </div>
+
       <!-- Company Info card -->
       <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
@@ -6558,12 +7099,12 @@ function renderQuoteTab(j){
           <i class="ti ti-currency-dollar" style="color:var(--brand-light);font-size:14px"></i>
           <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Pricing</span>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div style="display:grid;grid-template-columns:${isInsurance?'1fr 1fr 1fr':'1fr 1fr'};gap:10px">
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount</label><input id="qContract" type="number" value="${escapeHtml(String(q.contractAmount||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="number" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deposit at Signing</label><input id="qDeposit" type="number" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          ${isInsurance ? `<div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="number" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>` : ''}
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit (50% suggested)'}</label><input id="qDeposit" type="number" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:6px">For insurance jobs, contract amount typically = RCV. Deductible = customer's out-of-pocket.</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">${isInsurance?'For insurance jobs, contract amount typically = RCV. Deductible = customer out-of-pocket.':'Cash quote: contract amount is total due. No deductible, no insurance coverage applied.'}</div>
       </div>
 
       <!-- Terms -->
@@ -6605,7 +7146,7 @@ function renderQuoteTab(j){
     qq.shingleColor = $('qShingleColor').value;
     qq.scope = $('qScope').value;
     qq.contractAmount = $('qContract').value;
-    qq.deductible = $('qDeductible').value;
+    qq.deductible = $('qDeductible')?.value || '';
     qq.depositAmount = $('qDeposit').value;
     qq.terms = $('qTerms').value;
     qq.quoteDate = $('qDate').value;
@@ -6615,7 +7156,7 @@ function renderQuoteTab(j){
   $('quoteSaveBtn').addEventListener('click', () => {
     collectQuote();
     saveToStorage();
-    if(typeof logActivity === 'function') logActivity(j, 'quote', 'Quote saved', `Contract: $${parseFloat($('qContract').value||0).toLocaleString()}`);
+    if(typeof logActivity === 'function') logActivity(j, 'quote', `${q.mode === 'cash' ? 'Cash' : 'Insurance'} quote saved`, `Contract: $${parseFloat($('qContract').value||0).toLocaleString()}`);
     toast('Quote saved');
   });
   $('quotePreviewBtn').addEventListener('click', () => {
@@ -6630,16 +7171,55 @@ function renderQuoteTab(j){
     }
   });
   $('quoteResetTermsBtn').addEventListener('click', () => {
-    if(confirm('Reset terms to default template? Your edits will be lost.')){
-      $('qTerms').value = defaultTermsText();
+    if(confirm(`Reset terms to default ${q.mode === 'cash' ? 'cash' : 'insurance'} template? Your edits will be lost.`)){
+      $('qTerms').value = defaultTermsText(q.mode);
     }
   });
+  // Mode toggle handlers
+  $('quoteModeInsurance').addEventListener('click', () => switchQuoteMode(j, 'insurance'));
+  $('quoteModeCash').addEventListener('click', () => switchQuoteMode(j, 'cash'));
+}
+
+// Switch between insurance and cash mode. Offers to refresh the terms template
+// since the wording differs significantly.
+function switchQuoteMode(j, newMode){
+  const q = getJobQuote(j);
+  if(q.mode === newMode) return;
+  // Persist whatever the user has typed so far before re-rendering
+  if(typeof $ === 'function' && $('qScope')){
+    q.shingleBrand = $('qShingleBrand').value;
+    q.shingleModel = $('qShingleModel').value;
+    q.shingleColor = $('qShingleColor').value;
+    q.scope = $('qScope').value;
+    q.contractAmount = $('qContract').value;
+    if($('qDeductible')) q.deductible = $('qDeductible').value;
+    q.depositAmount = $('qDeposit').value;
+    q.terms = $('qTerms').value;
+    q.quoteDate = $('qDate').value;
+    q.repName = $('qRep').value;
+  }
+  q.mode = newMode;
+  // Offer to refresh terms — wording differs between modes
+  const currentIsDefaultInsurance = q.terms === defaultTermsInsurance();
+  const currentIsDefaultCash = q.terms === defaultTermsCash();
+  if(currentIsDefaultInsurance || currentIsDefaultCash){
+    // User hadn't customized terms — silently swap to the new default
+    q.terms = defaultTermsText(newMode);
+  } else {
+    // User customized terms — ask before overwriting
+    if(confirm(`Switched to ${newMode === 'cash' ? 'Cash' : 'Insurance'} mode. Replace terms with the ${newMode} default? (Your custom terms will be lost.)`)){
+      q.terms = defaultTermsText(newMode);
+    }
+  }
+  saveToStorage();
+  renderQuoteTab(j);
 }
 
 // Open a clean printable quote in a new window for browser print → PDF
 function openQuotePreview(j){
   const q = getJobQuote(j);
   const ci = getCompanyInfo();
+  const isCash = q.mode === 'cash';
   const fmt = (n) => '$' + (parseFloat(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   const dateText = q.quoteDate ? new Date(q.quoteDate + 'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   const quoteNo = `Q-${(j.id || '').slice(-6).toUpperCase()}-${(q.quoteDate||'').replace(/-/g,'').slice(2,8)}`;
@@ -6647,14 +7227,38 @@ function openQuotePreview(j){
   const contract = parseFloat(q.contractAmount) || 0;
   const deductible = parseFloat(q.deductible) || 0;
   const deposit = parseFloat(q.depositAmount) || 0;
-  // Calc insurance pays (best-effort, will be 0 if not insurance job)
   const insurance = Math.max(0, contract - deductible);
+  const balanceDue = isCash ? Math.max(0, contract - deposit) : 0;
 
   const scopeHtml = (q.scope || '').split('\n').filter(s => s.trim()).map(line => `<li>${escapeHtml(line.trim())}</li>`).join('');
   const termsHtml = (q.terms || '').split('\n\n').filter(s => s.trim()).map(p => `<p>${escapeHtml(p.trim())}</p>`).join('');
 
   const customerAddr = j.address || '—';
   const customerLine2 = [j.phone, j.email].filter(x => x && x !== '—').join(' · ');
+
+  // Mode-specific pricing table
+  let pricingTable;
+  if(isCash){
+    pricingTable = `
+      <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
+      ${deposit > 0 ? `
+      <tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>
+      <tr><td class="label">Balance Due at Completion</td><td class="val">${fmt(balanceDue)}</td></tr>` : ''}
+      <tr class="total"><td>TOTAL DUE</td><td class="val">${fmt(contract)}</td></tr>
+    `;
+  } else {
+    pricingTable = `
+      <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
+      ${j.carrier?`
+      <tr><td class="label">Less: Estimated Insurance Coverage</td><td class="val">−${fmt(insurance).replace('$','$')}</td></tr>
+      <tr class="due"><td class="label">Customer Responsibility (Deductible)</td><td class="val">${fmt(deductible)}</td></tr>`:''}
+      ${deposit>0?`<tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>`:''}
+      <tr class="total"><td>TOTAL DUE</td><td class="val">${fmt(j.carrier?deductible:contract)}</td></tr>
+    `;
+  }
+
+  // Mode-specific accent color for the title banner
+  const accent = isCash ? '#0E7C5A' : '#1a3a6a';
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${escapeHtml(quoteNo)} · ${escapeHtml(j.name||'')}</title>
@@ -6663,17 +7267,18 @@ function openQuotePreview(j){
   * { box-sizing: border-box; }
   body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 0; padding: 0; line-height: 1.45; }
   .q-wrap { max-width: 7.5in; margin: 0 auto; padding: 0.3in 0.4in; }
-  .q-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1a3a6a; padding-bottom: 14px; margin-bottom: 18px; }
+  .q-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${accent}; padding-bottom: 14px; margin-bottom: 18px; }
   .q-head-left { flex: 1; }
   .q-head-right { text-align: right; }
   .q-logo { max-height: 60px; max-width: 200px; margin-bottom: 8px; }
-  .q-company-name { font-size: 18pt; font-weight: 800; color: #1a3a6a; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .q-company-name { font-size: 18pt; font-weight: 800; color: ${accent}; margin: 0 0 4px; letter-spacing: -0.02em; }
   .q-company-detail { font-size: 9pt; color: #555; line-height: 1.5; }
-  .q-title { font-size: 22pt; font-weight: 900; color: #1a3a6a; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .q-title { font-size: 22pt; font-weight: 900; color: ${accent}; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .q-mode-pill { display: inline-block; background: ${accent}; color: white; font-size: 9pt; font-weight: 700; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.06em; margin-bottom: 6px; }
   .q-meta { font-size: 9pt; color: #555; line-height: 1.6; }
   .q-meta strong { color: #1a1a1a; }
   .q-section { margin-bottom: 18px; }
-  .q-section-title { font-size: 10pt; font-weight: 800; color: #1a3a6a; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 8px; }
+  .q-section-title { font-size: 10pt; font-weight: 800; color: ${accent}; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 8px; }
   .q-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .q-customer { font-size: 10pt; line-height: 1.55; }
   .q-customer strong { font-size: 11pt; color: #1a1a1a; }
@@ -6686,7 +7291,7 @@ function openQuotePreview(j){
   .q-price-table td { padding: 7px 10px; font-size: 10pt; border-bottom: 1px solid #eee; }
   .q-price-table td.label { color: #555; }
   .q-price-table td.val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .q-price-table tr.total td { font-size: 12pt; font-weight: 800; color: #1a3a6a; border-top: 2px solid #1a3a6a; border-bottom: none; padding-top: 9px; }
+  .q-price-table tr.total td { font-size: 12pt; font-weight: 800; color: ${accent}; border-top: 2px solid ${accent}; border-bottom: none; padding-top: 9px; }
   .q-price-table tr.due td { background: #fef3c7; font-weight: 700; }
   .q-terms { font-size: 9pt; line-height: 1.55; color: #333; }
   .q-terms p { margin: 0 0 7px; }
@@ -6694,7 +7299,7 @@ function openQuotePreview(j){
   .q-sig-block { font-size: 9pt; color: #555; }
   .q-sig-line { border-bottom: 1px solid #333; height: 36px; margin-bottom: 4px; }
   .q-footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 8pt; color: #888; text-align: center; }
-  .q-print-btn { position: fixed; top: 12px; right: 12px; background: #1a3a6a; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+  .q-print-btn { position: fixed; top: 12px; right: 12px; background: ${accent}; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
   @media print { .q-print-btn { display: none; } body { background: white; } }
 </style>
 </head><body>
@@ -6712,6 +7317,7 @@ function openQuotePreview(j){
       </div>
     </div>
     <div class="q-head-right">
+      <span class="q-mode-pill">${isCash ? 'CASH' : 'INSURANCE'}</span>
       <div class="q-title">Quote &amp; Agreement</div>
       <div class="q-meta">
         <strong>Quote #:</strong> ${escapeHtml(quoteNo)}<br>
@@ -6732,7 +7338,7 @@ function openQuotePreview(j){
     <div>
       <div class="q-section-title">Property Address</div>
       <div class="q-property">${escapeHtml(customerAddr)}</div>
-      ${j.carrier?`<div style="margin-top:8px;font-size:9pt;color:#555"><strong>Insurance:</strong> ${escapeHtml(j.carrier)}${j.claimNum?' · Claim #'+escapeHtml(j.claimNum):''}</div>`:''}
+      ${!isCash && j.carrier?`<div style="margin-top:8px;font-size:9pt;color:#555"><strong>Insurance:</strong> ${escapeHtml(j.carrier)}${j.claimNum?' · Claim #'+escapeHtml(j.claimNum):''}</div>`:''}
     </div>
   </div>
 
@@ -6753,14 +7359,7 @@ function openQuotePreview(j){
 
   <div class="q-section">
     <div class="q-section-title">Pricing</div>
-    <table class="q-price-table">
-      <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
-      ${j.carrier?`
-      <tr><td class="label">Less: Estimated Insurance Coverage</td><td class="val">−${fmt(insurance).replace('$','$')}</td></tr>
-      <tr class="due"><td class="label">Customer Responsibility (Deductible)</td><td class="val">${fmt(deductible)}</td></tr>`:''}
-      ${deposit>0?`<tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>`:''}
-      <tr class="total"><td>TOTAL DUE</td><td class="val">${fmt(j.carrier?deductible:contract)}</td></tr>
-    </table>
+    <table class="q-price-table">${pricingTable}</table>
   </div>
 
   <div class="q-section">
@@ -6864,6 +7463,316 @@ function openCompanyInfoModal(){
     if(activeTab === 'quote') renderDetailPanel();
   });
 }
+
+// ── COMMISSIONS PAGE ──
+// Shows commission earned, paid, and owed across jobs.
+// Salesmen see their own; admins see everyone.
+// Uses existing helpers: estimatedCommissionForUser(), jobFullyPaid(), commissionPaidToUser(), etc.
+
+let commRange = 'this-month';
+
+function commComputeRange(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  let from, to;
+  if(commRange === 'this-month'){
+    from = ymd(new Date(today.getFullYear(), today.getMonth(), 1));
+    to   = ymd(today);
+  } else if(commRange === 'last-month'){
+    const f = new Date(today.getFullYear(), today.getMonth()-1, 1);
+    const t = new Date(today.getFullYear(), today.getMonth(), 0);
+    from = ymd(f); to = ymd(t);
+  } else if(commRange === 'ytd'){
+    from = ymd(new Date(today.getFullYear(), 0, 1));
+    to   = ymd(today);
+  } else {
+    from = '1970-01-01'; to = '2999-12-31';
+  }
+  return { from, to };
+}
+
+// Build the data set for the page. Returns rows + totals.
+function commGatherData(range){
+  const cm = window.currentMember;
+  const isAdminUser = isAdmin();
+  // Decide which users to show
+  const userPool = (window.TEAM || window.USERS || []);
+  const visibleUsers = isAdminUser ? userPool : (cm ? [cm] : []);
+  const rows = [];   // {user, job, status, estimated, paid, owed, payoutDates[]}
+  visibleUsers.forEach(user => {
+    jobs.forEach(j => {
+      const estimated = estimatedCommissionForUser(j, user);
+      if(estimated <= 0) return;
+      const paid = commissionPaidToUser(j, user.id);
+      const status = commissionStatusForUser(j, user);
+      const earnedAmount = jobFullyPaid(j) ? estimated : 0;
+      const owed = Math.max(0, earnedAmount - paid);
+      // Payouts to this user on this job
+      const payouts = jobCommissionPayouts(j).filter(p => p.paidTo === user.id);
+      rows.push({ user, job: j, status, estimated, earnedAmount, paid, owed, payouts });
+    });
+  });
+  return rows;
+}
+
+function fmtMoney(n){
+  const sign = n < 0 ? '−' : '';
+  return sign + '$' + Math.abs(Math.round(n)).toLocaleString();
+}
+
+function renderCommissionsPage(){
+  const body = document.getElementById('commBody');
+  if(!body) return;
+  document.querySelectorAll('.comm-range-btn').forEach(b => b.classList.toggle('active', b.dataset.commRange === commRange));
+  const { from, to } = commComputeRange();
+  const isAdminUser = isAdmin();
+  const allRows = commGatherData();
+
+  // KPIs (based on selected date range for "paid this period"; owed/pending are point-in-time)
+  let totalEarned = 0;     // total commission earned (job fully paid) for visible users
+  let totalPaidPeriod = 0; // commission paid IN this period
+  let totalOwed = 0;       // owed right now (earned − paid)
+  let totalPending = 0;    // commission accruing on jobs not yet fully paid
+  allRows.forEach(r => {
+    if(r.earnedAmount > 0){
+      totalEarned += r.earnedAmount;
+      totalOwed   += r.owed;
+    } else {
+      totalPending += r.estimated;
+    }
+    r.payouts.forEach(p => {
+      if((p.date || '') >= from && (p.date || '') <= to){
+        totalPaidPeriod += moneyValue(p.amount) || 0;
+      }
+    });
+  });
+
+  // Sort rows: Owed first (most pressing), then Pending, then Paid
+  const order = { owed: 0, partial: 1, pending: 2, paid: 3, none: 4 };
+  allRows.sort((a, b) => {
+    const o = (order[a.status]||9) - (order[b.status]||9);
+    if(o !== 0) return o;
+    return b.owed - a.owed;
+  });
+
+  // Per-salesman summary (admin only)
+  let perSalesmanHtml = '';
+  if(isAdminUser){
+    const bySalesman = {};
+    allRows.forEach(r => {
+      const k = r.user.id;
+      if(!bySalesman[k]) bySalesman[k] = { user: r.user, earned: 0, paid: 0, owed: 0, pending: 0 };
+      bySalesman[k].earned  += r.earnedAmount;
+      bySalesman[k].paid    += r.paid;
+      bySalesman[k].owed    += r.owed;
+      if(r.earnedAmount === 0) bySalesman[k].pending += r.estimated;
+    });
+    const salesmenRows = Object.values(bySalesman).sort((a,b) => b.owed - a.owed);
+    perSalesmanHtml = salesmenRows.length ? `
+      <div class="pl-section">
+        <div class="pl-section-title"><i class="ti ti-users"></i>By Salesman</div>
+        <table class="pl-table">
+          <thead><tr><th>Salesman</th><th class="num">Earned (Total)</th><th class="num">Paid</th><th class="num">Owed</th><th class="num">Pending</th></tr></thead>
+          <tbody>${salesmenRows.map(s => `<tr>
+            <td><strong>${escapeHtml(s.user.name)}</strong></td>
+            <td class="num">${fmtMoney(s.earned)}</td>
+            <td class="num" style="color:#34D399">${fmtMoney(s.paid)}</td>
+            <td class="num" style="color:${s.owed>0?'#EF4444':'var(--muted)'}">${fmtMoney(s.owed)}</td>
+            <td class="num muted">${fmtMoney(s.pending)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>` : '';
+  }
+
+  // Per-job detail table
+  const jobTable = allRows.length ? `
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-list-details"></i>Detail by Job</div>
+      <table class="pl-table">
+        <thead><tr>
+          <th>Job</th>
+          ${isAdminUser?'<th>Salesman</th>':''}
+          <th class="num">Contract</th>
+          <th class="num">Profit (after OH)</th>
+          <th class="num">Earned</th>
+          <th class="num">Paid</th>
+          <th class="num">Owed</th>
+          <th>Status</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${allRows.map(r => {
+            const profitAfterOH = jobNetAfterOverhead(r.job);
+            const addr = (r.job.address || '').split(',')[0] || '—';
+            const statusLabel = { pending: 'PENDING', owed: 'OWED', partial: 'PARTIAL', paid: 'PAID' }[r.status] || '—';
+            const statusCls = 'comm-status-' + (r.status === 'partial' ? 'partial' : r.status);
+            const showPayBtn = isAdminUser && (r.status === 'owed' || r.status === 'partial');
+            return `<tr data-comm-job="${r.job.id}">
+              <td>
+                <div style="font-weight:600;cursor:pointer" data-comm-open-job="${r.job.id}">${escapeHtml(r.job.name||'—')}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(addr)}</div>
+              </td>
+              ${isAdminUser?`<td class="muted">${escapeHtml(r.user.name)}</td>`:''}
+              <td class="num">${fmtMoney(moneyValue(r.job.potVal))}</td>
+              <td class="num muted">${fmtMoney(profitAfterOH)}</td>
+              <td class="num">${fmtMoney(r.estimated)}</td>
+              <td class="num" style="color:#34D399">${fmtMoney(r.paid)}</td>
+              <td class="num" style="color:${r.owed>0?'#EF4444':'var(--muted)'}">${fmtMoney(r.owed)}</td>
+              <td><span class="comm-status-pill ${statusCls}">${statusLabel}</span></td>
+              <td>${showPayBtn ? `<button class="comm-pay-btn" data-comm-pay="${r.job.id}|${r.user.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : `<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:13px">No commission data yet. Commissions appear here once jobs have contract amounts and salesmen are assigned.</div>`;
+
+  const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
+  const toLabel   = to === '2999-12-31' ? 'Today' : to;
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">${isAdminUser ? 'Admin view · all salesmen' : 'Your commissions only'} · "Paid in period" = ${fromLabel} → ${toLabel} · Earned only counts when contract is fully paid</div>
+    <div class="pl-kpi-row">
+      <div class="pl-kpi kpi-rev">
+        <div class="pl-kpi-label">Earned (Cumulative)</div>
+        <div class="pl-kpi-val">${fmtMoney(totalEarned)}</div>
+        <div class="pl-kpi-sub">on fully paid jobs</div>
+      </div>
+      <div class="pl-kpi kpi-profit">
+        <div class="pl-kpi-label">Paid This Period</div>
+        <div class="pl-kpi-val">${fmtMoney(totalPaidPeriod)}</div>
+        <div class="pl-kpi-sub">${fromLabel} → ${toLabel}</div>
+      </div>
+      <div class="pl-kpi kpi-cost">
+        <div class="pl-kpi-label">Owed Right Now</div>
+        <div class="pl-kpi-val" style="color:${totalOwed>0?'#EF4444':'var(--success)'}">${fmtMoney(totalOwed)}</div>
+        <div class="pl-kpi-sub">earned − paid</div>
+      </div>
+      <div class="pl-kpi">
+        <div class="pl-kpi-label">Pending</div>
+        <div class="pl-kpi-val" style="color:#F59E0B">${fmtMoney(totalPending)}</div>
+        <div class="pl-kpi-sub">on jobs not fully paid</div>
+      </div>
+    </div>
+    ${perSalesmanHtml}
+    ${jobTable}
+  `;
+
+  body.querySelectorAll('[data-comm-pay]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [jobId, userId] = b.dataset.commPay.split('|');
+    openCommPaidModal(jobId, userId);
+  }));
+  body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', () => {
+    if(typeof openDetail === 'function') openDetail(el.dataset.commOpenJob);
+  }));
+}
+
+function openCommPaidModal(jobId, userId){
+  if(!isAdmin()){ toast('Only admins can record commission payments'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  const user = (window.TEAM || window.USERS || []).find(u => u.id === userId);
+  if(!j || !user) return;
+  const estimated = estimatedCommissionForUser(j, user);
+  const paid = commissionPaidToUser(j, user.id);
+  const remaining = Math.max(0, estimated - paid);
+  document.getElementById('commPaidJobId').value = jobId;
+  document.getElementById('commPaidUserId').value = userId;
+  document.getElementById('commPaidJobInfo').innerHTML = `
+    <div style="font-weight:600;color:#fff">${escapeHtml(j.name||'')} · ${escapeHtml(user.name)}</div>
+    <div style="margin-top:4px">Earned: <strong style="color:var(--brand-light)">${fmtMoney(estimated)}</strong> · Already paid: ${fmtMoney(paid)} · Remaining: <strong style="color:#EF4444">${fmtMoney(remaining)}</strong></div>
+  `;
+  document.getElementById('commPaidAmount').value = remaining.toFixed(2);
+  document.getElementById('commPaidDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('commPaidMethod').value = 'Check';
+  document.getElementById('commPaidNotes').value = '';
+  document.getElementById('commPaidModalBg').style.display = 'flex';
+}
+
+function closeCommPaidModal(){
+  document.getElementById('commPaidModalBg').style.display = 'none';
+}
+
+function saveCommPayment(){
+  const jobId  = document.getElementById('commPaidJobId').value;
+  const userId = document.getElementById('commPaidUserId').value;
+  const amount = parseFloat(document.getElementById('commPaidAmount').value);
+  const date   = document.getElementById('commPaidDate').value;
+  const method = document.getElementById('commPaidMethod').value;
+  const notes  = document.getElementById('commPaidNotes').value.trim();
+  if(!isFinite(amount) || amount <= 0){ toast('Enter a valid amount'); return; }
+  if(!date){ toast('Enter a payment date'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  if(!Array.isArray(j.commissionPayouts)) j.commissionPayouts = [];
+  j.commissionPayouts.push({
+    amount: amount.toFixed(2),
+    date,
+    method,
+    notes,
+    paidTo: userId,
+    paidAt: new Date().toISOString(),
+    paidBy: window.currentMember?.id || '',
+  });
+  if(typeof logActivity === 'function'){
+    const user = (window.TEAM || window.USERS || []).find(u => u.id === userId);
+    logActivity(j, 'commission', 'Commission paid', `${user?.name || 'Salesman'}: ${fmtMoney(amount)} · ${method}`);
+  }
+  saveToStorage();
+  closeCommPaidModal();
+  toast(`Recorded ${fmtMoney(amount)} commission payment`);
+  renderCommissionsPage();
+}
+
+function commExportCsv(){
+  const rows = [['Job','Salesman','Pipeline','Contract','Profit after OH','Earned','Paid','Owed','Status','Payouts']];
+  const data = commGatherData();
+  data.forEach(r => {
+    const payoutSummary = r.payouts.map(p => `${p.date}:${fmtMoney(moneyValue(p.amount))}:${p.method}`).join(' | ');
+    rows.push([
+      r.job.name || '',
+      r.user.name,
+      r.job.pipeline || '',
+      moneyValue(r.job.potVal).toFixed(2),
+      jobNetAfterOverhead(r.job).toFixed(2),
+      r.estimated.toFixed(2),
+      r.paid.toFixed(2),
+      r.owed.toFixed(2),
+      r.status,
+      payoutSummary,
+    ]);
+  });
+  const esc = v => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const csv = rows.map(r => r.map(esc).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  const today = new Date().toISOString().slice(0,10);
+  a.download = `stormshield-commissions-${today}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('Commissions CSV exported');
+}
+
+// Wire commission controls
+(function wireCommissionsControls(){
+  document.querySelectorAll('.comm-range-btn').forEach(b => b.addEventListener('click', () => {
+    commRange = b.dataset.commRange;
+    renderCommissionsPage();
+  }));
+  const exportBtn = document.getElementById('commExportCsv');
+  if(exportBtn) exportBtn.addEventListener('click', commExportCsv);
+  ['commPaidCancel','commPaidClose'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('click', closeCommPaidModal);
+  });
+  const saveBtn = document.getElementById('commPaidSave');
+  if(saveBtn) saveBtn.addEventListener('click', saveCommPayment);
+  const bg = document.getElementById('commPaidModalBg');
+  if(bg) bg.addEventListener('click', e => { if(e.target === bg) closeCommPaidModal(); });
+})();
 
 let todoFilter = 'mine';       // 'mine' or 'all'
 let todoScope  = 'open';       // 'open' or 'all'
@@ -7202,7 +8111,7 @@ function carrierCallButtonFor(carrierName){
     return cn === norm || norm.includes(cn) || cn.includes(norm);
   });
   if(!found || !found.phone) return '';
-  return `<a class="dp-claim-call" href="${fmtPhoneTel(found.phone)}" title="Call ${escapeHtml(found.name)} claims · ${escapeHtml(fmtPhoneDisplay(found.phone))}"><i class="ti ti-phone"></i><span>Call claims</span></a>`;
+  return `<a class="dp-claim-call" href="${fmtPhoneTel(found.phone)}" title="Call ${escapeHtml(found.name)} claims · ${escapeHtml(fmtPhoneDisplay(found.phone))}" aria-label="Call ${escapeHtml(found.name)} claims"><i class="ti ti-phone"></i></a>`;
 }
 window.carrierCallButtonFor = carrierCallButtonFor;
 
