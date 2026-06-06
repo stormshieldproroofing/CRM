@@ -565,7 +565,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     <input id="commPaidJobId" type="hidden">
     <input id="commPaidUserId" type="hidden">
     <div style="display:flex;flex-direction:column;gap:10px">
-      <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Amount Paid *</label><input id="commPaidAmount" type="number" step="0.01" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+      <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Amount Paid *</label><input id="commPaidAmount" type="number" step="0.01" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Payment Date *</label><input id="commPaidDate" type="date" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
         <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Method</label><select id="commPaidMethod" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none">
@@ -796,6 +796,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-mday-cap.cap-open{background:rgba(52,211,153,0.12);color:var(--success)}
 .cal-mday-cap.cap-full{background:rgba(239,68,68,0.12);color:var(--danger)}
 
+/* Weather pill bottom-right of each day cell */
+.cal-mday-wx-corner{position:absolute;bottom:4px;right:4px;display:flex;gap:2px;pointer-events:none;z-index:1}
+.cal-mday-wx-corner .cal-wx{pointer-events:auto}
+.cal-day-wx-corner{position:absolute;bottom:8px;right:8px;display:flex;gap:3px;pointer-events:none;z-index:1}
+.cal-day-wx-corner .cal-wx{pointer-events:auto}
+.cal-mday{padding-bottom:18px}   /* room for weather pills */
 /* Weather indicators on calendar */
 .cal-wx{display:inline-flex;align-items:center;gap:2px;font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;line-height:1.3;flex-shrink:0;letter-spacing:0;white-space:nowrap}
 .cal-wx i{font-size:10px}
@@ -1134,14 +1140,14 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Claim Amount (RCV)</label>
             <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px;transition:border-color 0.15s" onfocus-within="this.style.borderColor='var(--warn)'">
               <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-              <input id="f-rcv" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+              <input id="f-rcv" type="text" inputmode="decimal" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00 (try 800+1200)">
             </div>
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Deductible</label>
             <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
               <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-              <input id="f-deductible" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+              <input id="f-deductible" type="text" inputmode="decimal" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00 (try 800+1200)">
             </div>
           </div>
         </div>
@@ -1152,14 +1158,14 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Recoverable Depreciation</label>
             <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
               <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-              <input id="f-recovdep" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+              <input id="f-recovdep" type="text" inputmode="decimal" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00 (try 800+1200)">
             </div>
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Non-Recoverable Depreciation</label>
             <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
               <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-              <input id="f-nonrecovdep" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+              <input id="f-nonrecovdep" type="text" inputmode="decimal" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00 (try 800+1200)">
             </div>
           </div>
         </div>
@@ -1172,7 +1178,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
           </div>
           <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
             <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-            <input id="f-netclaim" type="number" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00">
+            <input id="f-netclaim" type="text" inputmode="decimal" step="0.01" min="0" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00 (try 800+1200)">
           </div>
           <div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.4">
             Auto-calculates from the other fields. Fill in any 4 of {RCV, Deductible, Recov Dep, Non-Recov Dep, Net Claim} and the 5th computes automatically.
@@ -1695,6 +1701,55 @@ function moneyValue(v){
   return Number.isFinite(n)?n:0;
 }
 
+// Safely evaluate a math expression like "1500+2300" or "(800*3)+250".
+// Returns the numeric result, or null if the expression is invalid.
+// Only allows digits, decimal points, + − * / ( ) and whitespace.
+function evalMathExpr(s){
+  if(typeof s !== 'string') return null;
+  const cleaned = s.trim().replace(/[,$]/g, '').replace(/[−–—]/g, '-').replace(/[×x✕]/g, '*').replace(/÷/g, '/');
+  if(!cleaned) return null;
+  // Plain number? short-circuit
+  if(/^-?\d+(\.\d+)?$/.test(cleaned)) return parseFloat(cleaned);
+  // Must contain at least one math operator to count as an expression
+  if(!/[+\-*/()]/.test(cleaned)) return null;
+  // Reject anything outside our whitelist
+  if(!/^[\d.+\-*/()\s]+$/.test(cleaned)) return null;
+  try {
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict";return (' + cleaned + ')')();
+    if(typeof result !== 'number' || !Number.isFinite(result)) return null;
+    return result;
+  } catch(e){
+    return null;
+  }
+}
+
+// On blur of any number input, if the value contains math operators, evaluate and replace.
+// Attached once globally — works on every <input> across the app.
+(function attachCalcInput(){
+  document.addEventListener('blur', e => {
+    const t = e.target;
+    if(!t || t.tagName !== 'INPUT') return;
+    // Skip non-numeric/text inputs (date, file, etc.)
+    const type = (t.type || '').toLowerCase();
+    if(type && !['text','number','tel'].includes(type)) return;
+    const raw = t.value || '';
+    if(!/[+\-*/()]/.test(raw)) return;     // not an expression
+    if(t.dataset.noCalc === 'true') return; // opt-out flag
+    const result = evalMathExpr(raw);
+    if(result == null) return;
+    // Round to 2 decimals for currency-like values
+    const rounded = Math.round(result * 100) / 100;
+    // Only replace if visibly different (avoid useless mutation events)
+    if(parseFloat(raw) !== rounded){
+      t.value = String(rounded);
+      // Fire input event so any listeners (auto-save, computed fields) see the new value
+      t.dispatchEvent(new Event('input', { bubbles: true }));
+      t.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }, true);
+})();
+
 function moneyText(v){
   return '$'+moneyValue(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
@@ -2092,11 +2147,6 @@ function renderCard(j){
   const ageDays=daysSinceCreated(j);
   const progress=stageChecklistProgress(j,col);
   const taskMeta=progress.total?`${progress.done}/${progress.total}`:(j.tasks>0?`${j.tasksDone}/${j.tasks}`:'');
-  // Required-only progress: count items where item.required === true
-  const reqItems = (progress.items || []).filter(it => it.required === true);
-  const reqDoneMap = j.stageChecklistDone?.[col?.id] || {};
-  const reqDone   = reqItems.filter(it => reqDoneMap[it.id]).length;
-  const reqOpen   = reqItems.length - reqDone;
   // Build date label: short "Jun 12" form for the footer
   const buildDateLabel = (() => {
     if(!j.buildDate) return '';
@@ -2125,14 +2175,8 @@ function renderCard(j){
     'completed': { label: 'DONE', bg: 'rgba(56,189,248,0.15)', fg: '#38BDF8' },
   };
   const badge = stageBadgeMap[col?.id];
-  // Top-row pills: REQ progress (only when not fully done), stage badge
-  const reqPill = (reqItems.length > 0 && reqOpen > 0)
-    ? `<div style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:999px;background:rgba(239,68,68,0.12);color:#EF4444;margin-bottom:5px;margin-right:5px" title="${reqOpen} required item${reqOpen===1?'':'s'} unchecked"><i class="ti ti-alert-circle" style="font-size:10px"></i>${reqDone}/${reqItems.length} REQ</div>`
-    : (reqItems.length > 0 && reqOpen === 0)
-      ? `<div style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 6px;border-radius:999px;background:rgba(52,211,153,0.12);color:#34D399;margin-bottom:5px;margin-right:5px" title="All required items complete"><i class="ti ti-check" style="font-size:10px"></i>REQ</div>`
-      : '';
   return `<div class="job-card${isClosed?' card-closed':''}" draggable="true" data-jid="${j.id}">
-    ${reqPill}${badge ? `<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:999px;background:${badge.bg};color:${badge.fg};margin-bottom:5px">${badge.label}</div>` : ''}    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+    ${badge ? `<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:999px;background:${badge.bg};color:${badge.fg};margin-bottom:5px">${badge.label}</div>` : ''}    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
       <div style="flex:1;min-width:0">
         <div class="card-name">${j.name}</div>
         <div class="card-sub" style="margin-top:2px;line-height:1.4">${_a.street ? escapeHtml(_a.street) : ''}${_a.rest ? `<br>${escapeHtml(_a.rest)}` : ''}</div>
@@ -2400,7 +2444,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Net Claim</label>
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpNetClaim" type="number" step="0.01" min="0" placeholder="0.00" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                    <input id="cpNetClaim" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
                 <!-- Deductible -->
@@ -2408,7 +2452,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Deductible</label>
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpDeductible" type="number" step="0.01" min="0" placeholder="0.00" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                    <input id="cpDeductible" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
                 <!-- Depreciation -->
@@ -2416,7 +2460,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Depreciation</label>
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpDepreciation" type="number" step="0.01" min="0" placeholder="0.00" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                    <input id="cpDepreciation" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
                 <!-- Live total -->
@@ -2469,7 +2513,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                       <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Amount</label>
                       <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                         <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                        <input id="depAmtInput" type="number" step="0.01" min="0" placeholder="0.00" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                        <input id="depAmtInput" type="text" inputmode="decimal" placeholder="0.00 (try 800+1200)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                       </div>
                     </div>
                     <div style="display:flex;gap:6px">
@@ -2531,7 +2575,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Amount</label>
                     <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                       <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                      <input id="expAmtInput" type="number" step="0.01" min="0" placeholder="0.00" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                      <input id="expAmtInput" type="text" inputmode="decimal" placeholder="0.00 (try 800+1200)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                     </div>
                   </div>
                   <div style="display:flex;gap:6px">
@@ -4193,9 +4237,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
-          <div><label class="ins-label">RCV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="number" step="0.01" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-rcv" value="${ins.rcv}" placeholder="0.00" oninput="lossSyncField('rcv',this.value)"></div></div>
-          <div><label class="ins-label">Deductible</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="number" step="0.01" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-deductible" value="${ins.deductible}" placeholder="0.00" oninput="lossSyncField('deductible',this.value)"></div></div>
-          <div><label class="ins-label">ACV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="number" step="0.01" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-acv" value="${j.acv||''}" placeholder="0.00" oninput="lossSyncField('acv',this.value)"></div></div>
+          <div><label class="ins-label">RCV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-rcv" value="${ins.rcv}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('rcv',this.value)"></div></div>
+          <div><label class="ins-label">Deductible</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-deductible" value="${ins.deductible}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('deductible',this.value)"></div></div>
+          <div><label class="ins-label">ACV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-acv" value="${j.acv||''}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('acv',this.value)"></div></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div><label class="ins-label">Adjuster Name</label><input class="ins-field" id="li-adjName" value="${ins.adjName}" placeholder="Adjuster full name" oninput="lossSyncField('adjName',this.value)"></div>
@@ -6227,20 +6271,18 @@ function renderCalendarWeek(){
     const capCls = isFull ? 'cap-full' : 'cap-open';
     const wxBadge = renderWeatherBadgeFor(key);
     return `
-      <div class="${cls.join(' ')}" data-cal-day="${key}">
+      <div class="${cls.join(' ')}" data-cal-day="${key}" style="position:relative">
         <div class="cal-day-header">
           <div>
             <div class="cal-day-name">${fmt(d,{weekday:'short'})}</div>
             <div class="cal-day-date">${d.getDate()}</div>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-            <div class="cal-day-cap ${capCls}">${dayJobs.length} / ${calCrewsPerDay}</div>
-            ${wxBadge}
-          </div>
+          <div class="cal-day-cap ${capCls}">${dayJobs.length} / ${calCrewsPerDay}</div>
         </div>
         <div class="cal-day-body" data-cal-body="${key}">
           ${dayJobs.map(j => renderCalJobCard(j)).join('')}
         </div>
+        ${wxBadge ? `<div class="cal-day-wx-corner">${wxBadge}</div>` : ''}
       </div>`;
   }).join('');
   wireCalDragDrop();
@@ -6294,14 +6336,14 @@ function renderCalendarMonth(){
     const moreHtml = moreCount > 0 ? `<div class="cal-mmore" data-cal-more="${key}">+${moreCount} more</div>` : '';
     const wxBadge = renderWeatherBadgeFor(key);
     return `
-      <div class="${cls.join(' ')}" data-cal-day="${key}">
+      <div class="${cls.join(' ')}" data-cal-day="${key}" style="position:relative">
         <div class="cal-mday-head">
           <span class="cal-mday-num">${d.getDate()}</span>
-          ${wxBadge}
           ${dayJobs.length ? `<span class="cal-mday-cap ${capCls}">${dayJobs.length}/${calCrewsPerDay}</span>` : ''}
         </div>
         ${chipsHtml}
         ${moreHtml}
+        ${wxBadge ? `<div class="cal-mday-wx-corner">${wxBadge}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -7298,9 +7340,9 @@ function renderQuoteTab(j){
           <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Pricing</span>
         </div>
         <div style="display:grid;grid-template-columns:${isInsurance?'1fr 1fr 1fr':'1fr 1fr'};gap:10px">
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount</label><input id="qContract" type="number" value="${escapeHtml(String(q.contractAmount||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-          ${isInsurance ? `<div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="number" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>` : ''}
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit (50% suggested)'}</label><input id="qDeposit" type="number" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount</label><input id="qContract" type="text" inputmode="decimal" value="${escapeHtml(String(q.contractAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          ${isInsurance ? `<div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="text" inputmode="decimal" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>` : ''}
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit (50% suggested)'}</label><input id="qDeposit" type="text" inputmode="decimal" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:6px">${isInsurance?'For insurance jobs, contract amount typically = RCV. Deductible = customer out-of-pocket.':'Cash quote: contract amount is total due. No deductible, no insurance coverage applied.'}</div>
       </div>

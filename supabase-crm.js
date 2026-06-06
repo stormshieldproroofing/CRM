@@ -147,7 +147,11 @@ async function loadAllFromSupabase() {
       const stageChecklistDone = {};
       (chk || []).filter(c => c.job_id === r.id).forEach(c => {
         (stageChecklistDone[c.stage_id] ||= {})[c.item_key] = {
-          completed:true, completedAt:new Date(c.completed_at).getTime(),
+          completed:true,
+          completedAt: c.completed_at ? new Date(c.completed_at).getTime() : Date.now(),
+          agentId:   c.agent_id   || '',
+          agentName: c.agent_name || 'Unassigned',
+          agentRole: c.agent_role || '',
         };
       });
 
@@ -157,6 +161,16 @@ async function loadAllFromSupabase() {
         priority:r.priority, user:r.assigned_to, col:r.stage_id, pipeline:r.pipeline_id,
         source:r.source, potVal:String(r.pot_val ?? '0'), paidVal:String(r.paid_val ?? '0'),
         carrier:r.carrier, claimNum:r.claim_num,
+        claimType: r.claim_type || '',
+        claimStatus: r.claim_status || '',
+        policyNum: r.policy_num || '',
+        dateOfLoss: r.date_of_loss || '',
+        rcv: r.rcv || '',
+        acv: r.acv || '',
+        deductible: r.deductible || '',
+        recoverableDep: r.recoverable_dep || '',
+        nonRecoverableDep: r.non_recoverable_dep || '',
+        netClaim: r.net_claim || '',
         latitude:r.latitude, longitude:r.longitude,
         roofEstimate: r.roof_estimate || null,
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
@@ -215,6 +229,16 @@ async function pushAllToSupabase() {
         priority: j.priority, source: j.source,
         pot_val: parseFloat(j.potVal || 0), paid_val: parseFloat(j.paidVal || 0),
         carrier: j.carrier || null, claim_num: j.claimNum || null,
+        claim_type: j.claimType || null,
+        claim_status: j.claimStatus || null,
+        policy_num: j.policyNum || null,
+        date_of_loss: j.dateOfLoss || null,
+        rcv: j.rcv || null,
+        acv: j.acv || null,
+        deductible: j.deductible || null,
+        recoverable_dep: j.recoverableDep || null,
+        non_recoverable_dep: j.nonRecoverableDep || null,
+        net_claim: j.netClaim || null,
         latitude: j.latitude ?? null, longitude: j.longitude ?? null,
         roof_estimate: j.roofEstimate ?? null,
         timeline: Array.isArray(j.timeline) ? j.timeline : [],
@@ -291,7 +315,15 @@ async function pushAllToSupabase() {
       const chkRows = [];
       Object.entries(j.stageChecklistDone || {}).forEach(([stageId, items]) => {
         Object.entries(items).forEach(([itemKey, rec]) => {
-          if (rec) chkRows.push({ job_id:j.id, stage_id:stageId, item_key:itemKey });
+          if (rec) chkRows.push({
+            job_id: j.id,
+            stage_id: stageId,
+            item_key: itemKey,
+            agent_id:   rec.agentId   || null,
+            agent_name: rec.agentName || null,
+            agent_role: rec.agentRole || null,
+            completed_at: rec.completedAt ? new Date(rec.completedAt).toISOString() : null,
+          });
         });
       });
       if (chkRows.length) await sb.from('stage_checklist_done').insert(chkRows);
