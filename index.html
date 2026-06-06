@@ -7502,8 +7502,11 @@ function renderQuoteTab(j){
   $('quoteEditCompanyBtn').addEventListener('click', openCompanyInfoModal);
   $('quoteResetScopeBtn').addEventListener('click', () => {
     if(confirm('Reset scope of work to default template? Your edits will be lost.')){
-      $('qScope').value = defaultScopeText();
-      q.scopeExclude = [];   // reset exclusions too
+      const def = defaultScopeText();
+      $('qScope').value = def;
+      q.scope = def;           // keep the job object in sync (selector reads from this)
+      q.scopeExclude = [];     // reset exclusions too
+      saveToStorage();         // persist immediately
       renderScopeSelector(j);
     }
   });
@@ -7763,7 +7766,9 @@ function openQuotePreview(j){
   .q-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${accent}; padding-bottom: 14px; margin-bottom: 18px; }
   .q-head-left { flex: 1; }
   .q-head-right { text-align: right; }
-  .q-logo { max-height: 60px; max-width: 200px; margin-bottom: 8px; }
+  .q-logo { max-height: 64px; max-width: 90px; flex-shrink: 0; }
+  .q-company-block { display: flex; align-items: center; gap: 12px; }
+  .q-company-text { display: flex; flex-direction: column; }
   .q-company-name { font-size: 18pt; font-weight: 800; color: ${accent}; margin: 0 0 4px; letter-spacing: -0.02em; }
   .q-company-detail { font-size: 9pt; color: #000000; line-height: 1.5; }
   .q-title { font-size: 22pt; font-weight: 900; color: ${accent}; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.02em; }
@@ -7803,13 +7808,17 @@ function openQuotePreview(j){
 <div class="q-wrap">
   <div class="q-head">
     <div class="q-head-left">
-      ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="q-logo" alt="${escapeHtml(ci.name)}">`:''}
-      <div class="q-company-name">${escapeHtml(ci.name||'')}</div>
-      <div class="q-company-detail">
-        ${ci.address?escapeHtml(ci.address)+'<br>':''}
-        ${ci.phone?escapeHtml(ci.phone):''}${ci.email?' · '+escapeHtml(ci.email):''}
-        ${ci.website?'<br>'+escapeHtml(ci.website):''}
-        ${ci.license?'<br>'+escapeHtml(ci.license):''}
+      <div class="q-company-block">
+        ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="q-logo" alt="${escapeHtml(ci.name)}">`:''}
+        <div class="q-company-text">
+          <div class="q-company-name">${escapeHtml(ci.name||'')}</div>
+          <div class="q-company-detail">
+            ${ci.address?escapeHtml(ci.address)+'<br>':''}
+            ${ci.phone?escapeHtml(ci.phone):''}${ci.email?' · '+escapeHtml(ci.email):''}
+            ${ci.website?'<br>'+escapeHtml(ci.website):''}
+            ${ci.license?'<br>'+escapeHtml(ci.license):''}
+          </div>
+        </div>
       </div>
     </div>
     <div class="q-head-right">
