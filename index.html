@@ -7279,6 +7279,7 @@ function getJobQuote(j){
     j.quote = {
       mode: '',           // 'insurance' or 'cash' — set on first render
       scope: '',
+      scopeExclude: [],   // array of item text strings excluded from PDF (default: all included)
       shingleBrand: '',
       shingleModel: '',
       shingleColor: '',
@@ -7291,10 +7292,31 @@ function getJobQuote(j){
     };
   }
   if(!j.quote.mode){
-    // Default: insurance pipeline → insurance quote; everything else → cash
     j.quote.mode = (j.pipeline === 'insurance') ? 'insurance' : 'cash';
   }
+  if(!Array.isArray(j.quote.scopeExclude)) j.quote.scopeExclude = [];
   return j.quote;
+}
+
+// Parse scope text into [{title, items: []}] sections.
+// Lines starting with "## " begin a section. Plain lines are items. Blanks ignored.
+function parseScopeSections(text){
+  const lines = (text || '').split('\n');
+  const out = [];
+  let cur = { title: '', items: [] };
+  lines.forEach(raw => {
+    const line = raw.trim();
+    if(!line) return;
+    const m = line.match(/^##\s+(.+)$/);
+    if(m){
+      if(cur.items.length || cur.title) out.push(cur);
+      cur = { title: m[1].trim(), items: [] };
+    } else {
+      cur.items.push(line);
+    }
+  });
+  if(cur.items.length || cur.title) out.push(cur);
+  return out;
 }
 
 // Default terms differ between insurance and cash quotes
@@ -7392,6 +7414,18 @@ function renderQuoteTab(j){
         </div>
         <textarea id="qScope" rows="9" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical;line-height:1.5">${escapeHtml(q.scope||'')}</textarea>
         <div style="font-size:10px;color:var(--muted);margin-top:4px">One bullet point per line. Type <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px">## Section Name</code> to start a new section.</div>
+
+        <!-- Include/Exclude panel -->
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <i class="ti ti-checkbox" style="color:var(--brand-light);font-size:13px"></i>
+            <span style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Include on this Quote</span>
+            <div style="flex:1"></div>
+            <button id="quoteScopeAll"  style="background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.3);color:var(--success);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Select all">All</button>
+            <button id="quoteScopeNone" style="background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.3);color:var(--danger);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Select none">None</button>
+          </div>
+          <div id="qScopeSelector" style="font-size:11px"></div>
+        </div>
       </div>
 
       <!-- Pricing -->
@@ -7469,6 +7503,8 @@ function renderQuoteTab(j){
   $('quoteResetScopeBtn').addEventListener('click', () => {
     if(confirm('Reset scope of work to default template? Your edits will be lost.')){
       $('qScope').value = defaultScopeText();
+      q.scopeExclude = [];   // reset exclusions too
+      renderScopeSelector(j);
     }
   });
   $('quoteResetTermsBtn').addEventListener('click', () => {
@@ -7476,9 +7512,100 @@ function renderQuoteTab(j){
       $('qTerms').value = defaultTermsText(q.mode);
     }
   });
+
+  // Scope selector — re-render whenever the textarea changes
+  renderScopeSelector(j);
+  $('qScope').addEventListener('input', () => {
+    // The textarea is the master scope. Update j.quote.scope then re-render the selector.
+    q.scope = $('qScope').value;
+    renderScopeSelector(j);
+  });
+  // "All" / "None" bulk buttons
+  $('quoteScopeAll').addEventListener('click', () => {
+    q.scopeExclude = [];
+    saveToStorage();
+    renderScopeSelector(j);
+  });
+  $('quoteScopeNone').addEventListener('click', () => {
+    // Exclude every item from current scope
+    const allItems = [];
+    parseScopeSections($('qScope').value).forEach(s => s.items.forEach(i => allItems.push(i)));
+    q.scopeExclude = allItems;
+    saveToStorage();
+    renderScopeSelector(j);
+  });
+
   // Mode toggle handlers
   $('quoteModeInsurance').addEventListener('click', () => switchQuoteMode(j, 'insurance'));
   $('quoteModeCash').addEventListener('click', () => switchQuoteMode(j, 'cash'));
+}
+
+// Render the include/exclude selector beneath the scope textarea.
+// Each section gets a master toggle (✓ all / partial / —); each item has its own checkbox.
+function renderScopeSelector(j){
+  const wrap = document.getElementById('qScopeSelector');
+  if(!wrap) return;
+  const q = getJobQuote(j);
+  const sections = parseScopeSections(q.scope);
+  const exclude = new Set(q.scopeExclude || []);
+  if(!sections.length){
+    wrap.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:6px 0">Add scope items above to enable selection.</div>`;
+    return;
+  }
+  wrap.innerHTML = sections.map((sec, sIdx) => {
+    const total = sec.items.length;
+    const included = sec.items.filter(i => !exclude.has(i)).length;
+    const state = included === total ? 'on' : (included === 0 ? 'off' : 'partial');
+    const stateColor = state === 'on' ? '#34D399' : (state === 'off' ? '#EF4444' : '#F59E0B');
+    const stateText  = state === 'on' ? `✓ All ${total}` : (state === 'off' ? `— None` : `◐ ${included}/${total}`);
+    const itemsHtml = sec.items.map((item, iIdx) => {
+      const checked = !exclude.has(item);
+      return `<label class="scope-sel-item" style="display:flex;align-items:flex-start;gap:7px;padding:4px 0;cursor:pointer;color:${checked ? 'var(--brand)' : 'var(--muted)'};${!checked ? 'text-decoration:line-through;text-decoration-color:rgba(248,113,113,0.4)' : ''}">
+        <input type="checkbox" data-scope-item="${sIdx}|${iIdx}" ${checked ? 'checked' : ''} style="margin-top:2px;flex-shrink:0;cursor:pointer;accent-color:var(--brand-light)">
+        <span style="flex:1;line-height:1.45">${escapeHtml(item)}</span>
+      </label>`;
+    }).join('');
+    return `
+      <div style="margin-bottom:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:7px;padding:8px 10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <button data-scope-sec-toggle="${sIdx}" style="background:rgba(255,255,255,0.04);border:1px solid ${stateColor}55;color:${stateColor};font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif" title="Toggle entire section">${stateText}</button>
+          <strong style="font-size:11px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">${escapeHtml(sec.title || 'Scope of Work')}</strong>
+        </div>
+        ${itemsHtml}
+      </div>
+    `;
+  }).join('');
+
+  // Wire item checkboxes
+  wrap.querySelectorAll('[data-scope-item]').forEach(box => box.addEventListener('change', () => {
+    const [sIdx, iIdx] = box.dataset.scopeItem.split('|').map(n => parseInt(n));
+    const item = sections[sIdx]?.items?.[iIdx];
+    if(item == null) return;
+    const set = new Set(q.scopeExclude || []);
+    if(box.checked) set.delete(item);
+    else set.add(item);
+    q.scopeExclude = [...set];
+    saveToStorage();
+    renderScopeSelector(j);
+  }));
+  // Wire section toggles
+  wrap.querySelectorAll('[data-scope-sec-toggle]').forEach(btn => btn.addEventListener('click', () => {
+    const sIdx = parseInt(btn.dataset.scopeSecToggle);
+    const sec = sections[sIdx];
+    if(!sec) return;
+    const set = new Set(q.scopeExclude || []);
+    const anyIncluded = sec.items.some(i => !set.has(i));
+    if(anyIncluded){
+      // If any item is included, exclude all
+      sec.items.forEach(i => set.add(i));
+    } else {
+      // All currently excluded — include all
+      sec.items.forEach(i => set.delete(i));
+    }
+    q.scopeExclude = [...set];
+    saveToStorage();
+    renderScopeSelector(j);
+  }));
 }
 
 // Switch between insurance and cash mode. Offers to refresh the terms template
@@ -7531,27 +7658,12 @@ function openQuotePreview(j){
   const insurance = Math.max(0, contract - deductible);
   const balanceDue = isCash ? Math.max(0, contract - deposit) : 0;
 
-  // Parse scope into sections. Lines starting with "## " begin a new section;
-  // other lines are bullets in the current section. Lines without a preceding
-  // section header go into an unnamed default section (no title shown).
-  const scopeSections = (() => {
-    const lines = (q.scope || '').split('\n');
-    const result = [];
-    let current = { title: '', items: [] };
-    lines.forEach(raw => {
-      const line = raw.trim();
-      if(!line) return;   // skip blank lines
-      const m = line.match(/^##\s+(.+)$/);
-      if(m){
-        if(current.items.length || current.title) result.push(current);
-        current = { title: m[1].trim(), items: [] };
-      } else {
-        current.items.push(line);
-      }
-    });
-    if(current.items.length || current.title) result.push(current);
-    return result;
-  })();
+  // Parse + filter by exclusion list. Sections that become empty are dropped.
+  const excludeSet = new Set(q.scopeExclude || []);
+  const scopeSections = parseScopeSections(q.scope).map(sec => ({
+    title: sec.title,
+    items: sec.items.filter(it => !excludeSet.has(it)),
+  })).filter(sec => sec.items.length > 0);
   const scopeHtml = scopeSections.length
     ? scopeSections.map(sec => `
         ${sec.title ? `<div class="q-scope-sec-title">${escapeHtml(sec.title)}</div>` : ''}
