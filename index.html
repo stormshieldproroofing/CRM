@@ -312,8 +312,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <nav class="topnav">
   <div class="logo"><div class="logo-icon"><i class="ti ti-home-shield" aria-hidden="true"></i></div>STORMSHIELD PRO</div>
-  <span class="nav-link active">Summary</span>
-  <span class="nav-link">Boards</span>
+  <span class="nav-link">Summary</span>
+  <span class="nav-link active">Boards</span>
   <span class="nav-link">Jobs</span>
   <span class="nav-link">Map</span>
   <span class="nav-link">Team</span>
@@ -333,12 +333,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 </nav>
 
 <!-- SUMMARY PAGE -->
-<div id="summaryPage">
+<div id="summaryPage" style="display:none">
   <div id="boardSalesSummary" style="padding:12px 16px 10px;overflow-x:auto"></div>
 </div>
 
 <!-- BOARDS PAGE -->
-<div id="boardsPage" style="display:none">
+<div id="boardsPage">
 <div class="subbar">
   <div id="boardPipelineTabs" style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-right:8px"></div>
   <button class="icon-btn" title="Refresh"><i class="ti ti-refresh" aria-hidden="true"></i></button>
@@ -7244,8 +7244,10 @@ function saveCompanyInfo(info){
 }
 
 // Default scope-of-work template — admin can edit per job
+// Use "## " prefix to start a section. Lines without a section appear as plain bullets.
 function defaultScopeText(){
   return [
+    '## Roof Replacement',
     'Tear off existing roof down to decking; inspect and replace deteriorated decking as needed.',
     'Install ice & water shield in valleys and around all penetrations per code.',
     'Install synthetic underlayment over entire roof deck.',
@@ -7256,10 +7258,15 @@ function defaultScopeText(){
     'Install new pipe boots and seal all pipe jacks and vents / Paint to match roof.',
     'Install new ridge ventilation for proper airflow.',
     'Replace damaged gas vent caps.',
+    '',
+    '## Additional Work',
     'Protect landscaping and A/C units.',
     'Clean up and haul all debris + 3x magnetic sweep of yard and driveway.',
-    'Provide manufacturer\'s warranty (160 mph wind warranty + Class 3 impact resistance + 10 year algae) and 10-year workmanship warranty.',
     'Contact HOA for approval.',
+    '',
+    '## Warranty',
+    'Manufacturer\'s warranty: 160 mph wind warranty + Class 3 impact resistance + 10-year algae protection.',
+    '10-year workmanship warranty.',
   ].join('\n');
 }
 
@@ -7384,7 +7391,7 @@ function renderQuoteTab(j){
           <button id="quoteResetScopeBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Reset to default scope">Reset</button>
         </div>
         <textarea id="qScope" rows="9" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical;line-height:1.5">${escapeHtml(q.scope||'')}</textarea>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">One bullet point per line. Edit freely.</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">One bullet point per line. Type <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px">## Section Name</code> to start a new section.</div>
       </div>
 
       <!-- Pricing -->
@@ -7524,7 +7531,33 @@ function openQuotePreview(j){
   const insurance = Math.max(0, contract - deductible);
   const balanceDue = isCash ? Math.max(0, contract - deposit) : 0;
 
-  const scopeHtml = (q.scope || '').split('\n').filter(s => s.trim()).map(line => `<li>${escapeHtml(line.trim())}</li>`).join('');
+  // Parse scope into sections. Lines starting with "## " begin a new section;
+  // other lines are bullets in the current section. Lines without a preceding
+  // section header go into an unnamed default section (no title shown).
+  const scopeSections = (() => {
+    const lines = (q.scope || '').split('\n');
+    const result = [];
+    let current = { title: '', items: [] };
+    lines.forEach(raw => {
+      const line = raw.trim();
+      if(!line) return;   // skip blank lines
+      const m = line.match(/^##\s+(.+)$/);
+      if(m){
+        if(current.items.length || current.title) result.push(current);
+        current = { title: m[1].trim(), items: [] };
+      } else {
+        current.items.push(line);
+      }
+    });
+    if(current.items.length || current.title) result.push(current);
+    return result;
+  })();
+  const scopeHtml = scopeSections.length
+    ? scopeSections.map(sec => `
+        ${sec.title ? `<div class="q-scope-sec-title">${escapeHtml(sec.title)}</div>` : ''}
+        <ul class="q-scope">${sec.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+      `).join('')
+    : `<ul class="q-scope"><li>—</li></ul>`;
   const termsHtml = (q.terms || '').split('\n\n').filter(s => s.trim()).map(p => `<p>${escapeHtml(p.trim())}</p>`).join('');
 
   const customerAddr = j.address || '—';
@@ -7579,6 +7612,9 @@ function openQuotePreview(j){
   .q-property { font-size: 10pt; line-height: 1.55; color: #000000; }
   .q-scope { font-size: 10pt; line-height: 1.55; padding-left: 18px; margin: 0; color: #000000; }
   .q-scope li { margin-bottom: 4px; }
+  .q-scope-sec-title { font-size: 10.5pt; font-weight: 700; color: ${accent}; margin-top: 10px; margin-bottom: 4px; letter-spacing: 0.01em; }
+  .q-scope-sec-title:first-child { margin-top: 0; }
+  .q-scope-wrap > .q-scope-sec-title:first-of-type { margin-top: 0; }
   .q-materials { font-size: 10pt; line-height: 1.7; color: #000000; }
   .q-materials .label { display: inline-block; min-width: 90px; font-weight: 600; color: ${accent}; }
   .q-price-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
@@ -7648,7 +7684,7 @@ function openQuotePreview(j){
 
   <div class="q-section">
     <div class="q-section-title">Scope of Work</div>
-    <ul class="q-scope">${scopeHtml || '<li>—</li>'}</ul>
+    <div class="q-scope-wrap">${scopeHtml}</div>
   </div>
 
   <div class="q-section">
