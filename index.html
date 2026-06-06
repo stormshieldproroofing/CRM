@@ -7247,7 +7247,7 @@ function saveCompanyInfo(info){
 // Use "## " prefix to start a section. Lines without a section appear as plain bullets.
 function defaultScopeText(){
   return [
-    '## Roof Replacement',
+    '## Scope of Work',
     'Tear off existing roof down to decking; inspect and replace deteriorated decking as needed.',
     'Install ice & water shield in valleys and around all penetrations per code.',
     'Install synthetic underlayment over entire roof deck.',
@@ -7258,8 +7258,6 @@ function defaultScopeText(){
     'Install new pipe boots and seal all pipe jacks and vents / Paint to match roof.',
     'Install new ridge ventilation for proper airflow.',
     'Replace damaged gas vent caps.',
-    '',
-    '## Additional Work',
     'Protect landscaping and A/C units.',
     'Clean up and haul all debris + 3x magnetic sweep of yard and driveway.',
     'Contact HOA for approval.',
@@ -7267,6 +7265,8 @@ function defaultScopeText(){
     '## Warranty',
     'Manufacturer\'s warranty: 160 mph wind warranty + Class 3 impact resistance + 10-year algae protection.',
     '10-year workmanship warranty.',
+    '',
+    '## Additional Work',
   ].join('\n');
 }
 
@@ -7540,8 +7540,22 @@ function renderQuoteTab(j){
   $('quoteModeCash').addEventListener('click', () => switchQuoteMode(j, 'cash'));
 }
 
+// Serialize a sections array back to "##"-prefixed scope text.
+// Preserves section order and blank line between sections for readability.
+function serializeScopeSections(sections){
+  const blocks = sections.map(sec => {
+    const lines = [];
+    if(sec.title) lines.push(`## ${sec.title}`);
+    sec.items.forEach(i => lines.push(i));
+    return lines.join('\n');
+  });
+  return blocks.join('\n\n');
+}
+
 // Render the include/exclude selector beneath the scope textarea.
 // Each section gets a master toggle (✓ all / partial / —); each item has its own checkbox.
+// Section headers also include a "+ Add item" button so the user can append items
+// without dropping back to the textarea (useful for the empty "Additional Work" section).
 function renderScopeSelector(j){
   const wrap = document.getElementById('qScopeSelector');
   if(!wrap) return;
@@ -7555,28 +7569,33 @@ function renderScopeSelector(j){
   wrap.innerHTML = sections.map((sec, sIdx) => {
     const total = sec.items.length;
     const included = sec.items.filter(i => !exclude.has(i)).length;
-    const state = included === total ? 'on' : (included === 0 ? 'off' : 'partial');
-    const stateColor = state === 'on' ? '#34D399' : (state === 'off' ? '#EF4444' : '#F59E0B');
-    const stateText  = state === 'on' ? `✓ All ${total}` : (state === 'off' ? `— None` : `◐ ${included}/${total}`);
-    const itemsHtml = sec.items.map((item, iIdx) => {
-      const checked = !exclude.has(item);
-      return `<label class="scope-sel-item" style="display:flex;align-items:flex-start;gap:7px;padding:4px 0;cursor:pointer;color:${checked ? 'var(--brand)' : 'var(--muted)'};${!checked ? 'text-decoration:line-through;text-decoration-color:rgba(248,113,113,0.4)' : ''}">
-        <input type="checkbox" data-scope-item="${sIdx}|${iIdx}" ${checked ? 'checked' : ''} style="margin-top:2px;flex-shrink:0;cursor:pointer;accent-color:var(--brand-light)">
-        <span style="flex:1;line-height:1.45">${escapeHtml(item)}</span>
-      </label>`;
-    }).join('');
+    const state = total === 0 ? 'empty' : (included === total ? 'on' : (included === 0 ? 'off' : 'partial'));
+    const stateColor = state === 'on' ? '#34D399' : (state === 'off' ? '#EF4444' : (state === 'empty' ? '#6B7280' : '#F59E0B'));
+    const stateText  = total === 0 ? 'empty' : (state === 'on' ? `✓ All ${total}` : (state === 'off' ? `— None` : `◐ ${included}/${total}`));
+    const itemsHtml = total === 0
+      ? `<div style="font-size:11px;color:var(--muted);font-style:italic;padding:4px 0">No items in this section — click <strong>+ Add</strong> to add one.</div>`
+      : sec.items.map((item, iIdx) => {
+          const checked = !exclude.has(item);
+          return `<label class="scope-sel-item" style="display:flex;align-items:flex-start;gap:7px;padding:4px 0;cursor:pointer;color:${checked ? 'var(--brand)' : 'var(--muted)'};${!checked ? 'text-decoration:line-through;text-decoration-color:rgba(248,113,113,0.4)' : ''}">
+            <input type="checkbox" data-scope-item="${sIdx}|${iIdx}" ${checked ? 'checked' : ''} style="margin-top:2px;flex-shrink:0;cursor:pointer;accent-color:var(--brand-light)">
+            <span style="flex:1;line-height:1.45">${escapeHtml(item)}</span>
+            <button data-scope-item-remove="${sIdx}|${iIdx}" title="Remove this item from the scope" style="background:transparent;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'">×</button>
+          </label>`;
+        }).join('');
     return `
       <div style="margin-bottom:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:7px;padding:8px 10px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,0.04)">
-          <button data-scope-sec-toggle="${sIdx}" style="background:rgba(255,255,255,0.04);border:1px solid ${stateColor}55;color:${stateColor};font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif" title="Toggle entire section">${stateText}</button>
+          <button data-scope-sec-toggle="${sIdx}" ${total === 0 ? 'disabled' : ''} style="background:rgba(255,255,255,0.04);border:1px solid ${stateColor}55;color:${stateColor};font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:${total === 0 ? 'default' : 'pointer'};font-family:'Barlow',sans-serif" title="${total === 0 ? 'No items to toggle' : 'Toggle entire section'}">${stateText}</button>
           <strong style="font-size:11px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">${escapeHtml(sec.title || 'Scope of Work')}</strong>
+          <div style="flex:1"></div>
+          <button data-scope-sec-add="${sIdx}" style="background:rgba(77,157,224,0.10);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif" title="Add a new line item to this section"><i class="ti ti-plus" style="font-size:10px"></i> Add</button>
         </div>
         ${itemsHtml}
       </div>
     `;
   }).join('');
 
-  // Wire item checkboxes
+  // Item checkboxes
   wrap.querySelectorAll('[data-scope-item]').forEach(box => box.addEventListener('change', () => {
     const [sIdx, iIdx] = box.dataset.scopeItem.split('|').map(n => parseInt(n));
     const item = sections[sIdx]?.items?.[iIdx];
@@ -7588,21 +7607,56 @@ function renderScopeSelector(j){
     saveToStorage();
     renderScopeSelector(j);
   }));
-  // Wire section toggles
+  // Section toggles
   wrap.querySelectorAll('[data-scope-sec-toggle]').forEach(btn => btn.addEventListener('click', () => {
+    if(btn.disabled) return;
     const sIdx = parseInt(btn.dataset.scopeSecToggle);
     const sec = sections[sIdx];
     if(!sec) return;
     const set = new Set(q.scopeExclude || []);
     const anyIncluded = sec.items.some(i => !set.has(i));
     if(anyIncluded){
-      // If any item is included, exclude all
       sec.items.forEach(i => set.add(i));
     } else {
-      // All currently excluded — include all
       sec.items.forEach(i => set.delete(i));
     }
     q.scopeExclude = [...set];
+    saveToStorage();
+    renderScopeSelector(j);
+  }));
+  // Per-section "+ Add" buttons
+  wrap.querySelectorAll('[data-scope-sec-add]').forEach(btn => btn.addEventListener('click', () => {
+    const sIdx = parseInt(btn.dataset.scopeSecAdd);
+    const sec = sections[sIdx];
+    if(!sec) return;
+    const text = prompt(`Add a new item to "${sec.title || 'Scope of Work'}":`);
+    if(text == null) return;
+    const trimmed = text.trim();
+    if(!trimmed) return;
+    // Mutate the parsed structure, re-serialize, push back to textarea + q.scope
+    sec.items.push(trimmed);
+    const newText = serializeScopeSections(sections);
+    q.scope = newText;
+    const ta = document.getElementById('qScope');
+    if(ta) ta.value = newText;
+    saveToStorage();
+    renderScopeSelector(j);
+  }));
+  // Per-item remove (×) buttons
+  wrap.querySelectorAll('[data-scope-item-remove]').forEach(btn => btn.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    const [sIdx, iIdx] = btn.dataset.scopeItemRemove.split('|').map(n => parseInt(n));
+    const sec = sections[sIdx];
+    const item = sec?.items?.[iIdx];
+    if(item == null) return;
+    if(!confirm(`Remove this item from the scope?\n\n"${item}"\n\nThis edits the master scope text. To just hide it from the PDF (and keep it for later), uncheck the box instead.`)) return;
+    sec.items.splice(iIdx, 1);
+    // Also drop it from the exclude list (it's gone)
+    q.scopeExclude = (q.scopeExclude || []).filter(x => x !== item);
+    const newText = serializeScopeSections(sections);
+    q.scope = newText;
+    const ta = document.getElementById('qScope');
+    if(ta) ta.value = newText;
     saveToStorage();
     renderScopeSelector(j);
   }));
