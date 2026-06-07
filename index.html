@@ -7232,6 +7232,7 @@ function defaultCompanyInfo(){
   return {
     name: 'StormShield Pro Roofing',
     address: '',
+    cityStateZip: '',
     phone: '',
     email: '',
     website: '',
@@ -7769,7 +7770,7 @@ function openQuotePreview(j){
   .q-logo { max-height: 64px; max-width: 90px; flex-shrink: 0; }
   .q-company-block { display: flex; align-items: center; gap: 12px; }
   .q-company-text { display: flex; flex-direction: column; }
-  .q-company-name { font-size: 18pt; font-weight: 800; color: ${accent}; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .q-company-name { font-size: 14pt; font-weight: 800; color: ${accent}; margin: 0 0 4px; letter-spacing: -0.02em; white-space: nowrap; }
   .q-company-detail { font-size: 9pt; color: #000000; line-height: 1.5; }
   .q-title { font-size: 22pt; font-weight: 900; color: ${accent}; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.02em; }
   .q-mode-pill { display: inline-block; background: ${accent}; color: white; font-size: 9pt; font-weight: 700; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.06em; margin-bottom: 6px; }
@@ -7814,6 +7815,7 @@ function openQuotePreview(j){
           <div class="q-company-name">${escapeHtml(ci.name||'')}</div>
           <div class="q-company-detail">
             ${ci.address?escapeHtml(ci.address)+'<br>':''}
+            ${ci.cityStateZip?escapeHtml(ci.cityStateZip)+'<br>':''}
             ${ci.phone?escapeHtml(ci.phone):''}${ci.email?' · '+escapeHtml(ci.email):''}
             ${ci.website?'<br>'+escapeHtml(ci.website):''}
             ${ci.license?'<br>'+escapeHtml(ci.license):''}
@@ -7913,7 +7915,8 @@ function openCompanyInfoModal(){
       <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5">This appears on every quote. Stored locally in your browser. <strong>You'll need to set this on each device that generates quotes.</strong></div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Company Name *</label><input id="ciName" value="${escapeHtml(ci.name||'')}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Address</label><input id="ciAddress" value="${escapeHtml(ci.address||'')}" placeholder="123 Main St, City, State ZIP" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Street Address</label><input id="ciAddress" value="${escapeHtml(ci.address||'')}" placeholder="123 Main St, Suite 200" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+        <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">City, State ZIP</label><input id="ciCityStateZip" value="${escapeHtml(ci.cityStateZip||'')}" placeholder="League City, TX 77573" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Phone</label><input id="ciPhone" value="${escapeHtml(ci.phone||'')}" placeholder="(555) 555-1234" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Email</label><input id="ciEmail" value="${escapeHtml(ci.email||'')}" placeholder="info@yourroofing.com" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
@@ -7956,6 +7959,7 @@ function openCompanyInfoModal(){
     const info = {
       name: overlay.querySelector('#ciName').value.trim(),
       address: overlay.querySelector('#ciAddress').value.trim(),
+      cityStateZip: overlay.querySelector('#ciCityStateZip').value.trim(),
       phone: overlay.querySelector('#ciPhone').value.trim(),
       email: overlay.querySelector('#ciEmail').value.trim(),
       website: overlay.querySelector('#ciWebsite').value.trim(),
