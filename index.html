@@ -7986,13 +7986,43 @@ function openQuotePreview(j){
   // Both modes use the same blue/black palette (navy for headers, black for body text)
   const accent = '#1a3a6a';
 
+  // Satellite cover page — uses the job's geocoded coordinates via Mapbox Static Images API.
+  const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
+  const hasCoords = (j.latitude != null && j.longitude != null && isFinite(j.latitude) && isFinite(j.longitude));
+  let coverHtml = '';
+  if(hasCoords){
+    const lon = j.longitude, lat = j.latitude;
+    // zoom 19 ≈ individual house; satellite-v9 = pure imagery; @2x for crisp print; marker pin on the home
+    const satUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/`
+      + `pin-l+f97316(${lon},${lat})/`
+      + `${lon},${lat},19,0/640x440@2x`
+      + `?access_token=${MAPBOX_TOKEN}`;
+    coverHtml = `
+      <div class="q-cover">
+        <div class="q-cover-top">
+          ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="q-cover-logo" alt="${escapeHtml(ci.name)}">`:''}
+          <div class="q-cover-company">${escapeHtml(ci.name||'')}</div>
+        </div>
+        <div class="q-cover-title">Roofing Estimate</div>
+        <div class="q-cover-sub">Prepared for ${escapeHtml(j.name||'')}</div>
+        <img src="${satUrl}" class="q-cover-img" alt="Satellite view of property"
+             onerror="this.style.display='none';document.getElementById('qCoverImgFallback').style.display='block';">
+        <div id="qCoverImgFallback" style="display:none;padding:40px;color:#888;font-size:11pt;text-align:center;border:1px dashed #ccc;border-radius:8px">Satellite image unavailable</div>
+        <div class="q-cover-addr">${escapeHtml(j.address||'')}</div>
+        <div class="q-cover-meta">${escapeHtml(quoteNo)} · ${escapeHtml(dateText)}</div>
+        <div class="q-cover-footer">
+          ${ci.phone?escapeHtml(ci.phone):''}${ci.phone&&ci.email?'  ·  ':''}${ci.email?escapeHtml(ci.email):''}
+        </div>
+      </div>`;
+  }
+
   const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${escapeHtml(quoteNo)} · ${escapeHtml(j.name||'')}</title>
+<html><head><meta charset="utf-8"><title>Roofing Estimate${j.name?' - '+escapeHtml(j.name):''}${j.address&&j.address!=='—'?' - '+escapeHtml((j.address||'').split(',')[0].trim()):''}</title>
 <style>
-  @page { size: letter; margin: 0.5in; }
+  @page { size: letter; margin: 0; }
   * { box-sizing: border-box; }
   body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11pt; color: #000000; margin: 0; padding: 0; line-height: 1.45; }
-  .q-wrap { max-width: 7.5in; margin: 0 auto; padding: 0.3in 0.4in; }
+  .q-wrap { max-width: 7.5in; margin: 0 auto; padding: 0.5in; }
   .q-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${accent}; padding-bottom: 14px; margin-bottom: 18px; }
   .q-head-left { flex: 1; }
   .q-head-right { text-align: right; }
@@ -8031,10 +8061,22 @@ function openQuotePreview(j){
   .q-sig-line { border-bottom: 1px solid #000; height: 36px; margin-bottom: 4px; }
   .q-footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 8pt; color: #000000; text-align: center; }
   .q-print-btn { position: fixed; top: 12px; right: 12px; background: ${accent}; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
-  @media print { .q-print-btn { display: none; } body { background: white; } }
+  /* Satellite cover page */
+  .q-cover { max-width: 7.5in; margin: 0 auto; padding: 0.7in 0.5in; text-align: center; page-break-after: always; display: flex; flex-direction: column; align-items: center; min-height: 9.5in; }
+  .q-cover-top { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .q-cover-logo { height: 110px; width: auto; max-width: 220px; object-fit: contain; }
+  .q-cover-company { font-size: 16pt; font-weight: 800; color: ${accent}; letter-spacing: -0.01em; }
+  .q-cover-title { font-size: 30pt; font-weight: 900; color: ${accent}; text-transform: uppercase; letter-spacing: 0.03em; margin-top: 24px; }
+  .q-cover-sub { font-size: 13pt; color: #000; margin-top: 4px; margin-bottom: 22px; }
+  .q-cover-img { width: 100%; max-width: 6.4in; border-radius: 10px; border: 3px solid ${accent}; box-shadow: 0 4px 14px rgba(0,0,0,0.2); }
+  .q-cover-addr { font-size: 13pt; font-weight: 700; color: #000; margin-top: 18px; }
+  .q-cover-meta { font-size: 10pt; color: #555; margin-top: 6px; }
+  .q-cover-footer { margin-top: auto; padding-top: 24px; font-size: 10pt; color: ${accent}; font-weight: 600; }
+  @media print { .q-print-btn { display: none; } body { background: white; } .q-cover { page-break-after: always; } }
 </style>
 </head><body>
 <button class="q-print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
+${coverHtml}
 <div class="q-wrap">
   <div class="q-head">
     <div class="q-head-left">
