@@ -7430,7 +7430,10 @@ function openInsuranceEstimator(jobId){
       const clientOOP = deductible + nonRecovDep;
       const overhead = rcv * INS_EST_DEFAULTS.overheadRate;
       const margin = rcv - cost - overhead;
-      return { rcv, dep, acv, acvCheck, recovRelease, insurancePays, clientOOP, overhead, margin };
+      // Margin if the job ends up ACV-only (contract = RCV − depreciation)
+      const overheadACV = acv * INS_EST_DEFAULTS.overheadRate;
+      const marginACV = acv - cost - overheadACV;
+      return { rcv, dep, acv, acvCheck, recovRelease, insurancePays, clientOOP, overhead, margin, overheadACV, marginACV };
     };
 
     const lo = calc(lowSq), hi = calc(highSq);
@@ -7456,6 +7459,7 @@ function openInsuranceEstimator(jobId){
         ${row(`− Job cost (${(sq * INS_EST_DEFAULTS.wasteFactor).toFixed(1)} sq × $${INS_EST_DEFAULTS.costPerSq}, incl. 15% waste)`, -cost, -cost, {})}
         ${row('− Overhead (10% of RCV)', -lo.overhead, -hi.overhead, {})}
         ${row('= Contractor margin (if contract = RCV)', lo.margin, hi.margin, { bold: true, color: 'var(--brand)', valColor: lo.margin < 0 ? 'var(--danger)' : '#34D399' })}
+        ${row('= Contractor margin (if contract = ACV / RCV − depreciation)', lo.marginACV, hi.marginACV, { bold: true, color: 'var(--brand)', valColor: lo.marginACV < 0 ? 'var(--danger)' : '#34D399' })}
       ` : ''}
       ${row('CLIENT OUT-OF-POCKET', lo.clientOOP, hi.clientOOP, { bold: true, bg: 'rgba(96,196,255,0.1)', border: 'rgba(96,196,255,0.3)', color: '#60C4FF', valColor: '#60C4FF' })}
     `;
