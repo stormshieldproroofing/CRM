@@ -8047,7 +8047,7 @@ function openQuotePreview(j){
   .q-scope-sec-title:first-child { margin-top: 0; }
   .q-scope-wrap > .q-scope-sec-title:first-of-type { margin-top: 0; }
   .q-materials { font-size: 10pt; line-height: 1.7; color: #000000; }
-  .q-materials .label { display: inline-block; min-width: 90px; font-weight: 600; color: ${accent}; }
+  .q-materials .label { font-weight: 600; color: ${accent}; }
   .q-price-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
   .q-price-table td { padding: 7px 10px; font-size: 10pt; border-bottom: 1px solid #eee; color: #000000; }
   .q-price-table td.label { color: #000000; }
@@ -8124,9 +8124,11 @@ ${coverHtml}
   <div class="q-section">
     <div class="q-section-title">Materials</div>
     <div class="q-materials">
-      ${q.shingleBrand?`<div><span class="label">Brand:</span> ${escapeHtml(q.shingleBrand)}</div>`:''}
-      ${q.shingleModel?`<div><span class="label">Model:</span> ${escapeHtml(q.shingleModel)}</div>`:''}
-      ${q.shingleColor?`<div><span class="label">Color:</span> ${escapeHtml(q.shingleColor)}</div>`:''}
+      <div>${[
+        q.shingleBrand?`<span class="label">Brand:</span> ${escapeHtml(q.shingleBrand)}`:'',
+        q.shingleModel?`<span class="label">Model:</span> ${escapeHtml(q.shingleModel)}`:'',
+        q.shingleColor?`<span class="label">Color:</span> ${escapeHtml(q.shingleColor)}`:''
+      ].filter(Boolean).join('&nbsp;&nbsp;&nbsp;&nbsp;')}</div>
     </div>
   </div>`:''}
 
