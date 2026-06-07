@@ -700,6 +700,11 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 /* Commissions page */
 .comm-range-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
 .pay-tab-btn.active{background:rgba(77,157,224,0.15)!important;color:var(--brand-light)!important}
+.ie-lbl{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px}
+.ie-inp{width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;box-sizing:border-box}
+.ie-inp:focus{border-color:var(--brand-light)}
+.ie-tab{background:transparent;border:none;color:var(--muted);font-size:10px;font-weight:600;padding:4px 10px;cursor:pointer;font-family:'Barlow',sans-serif}
+.ie-tab.ie-tab-on{background:rgba(77,157,224,0.15);color:var(--brand-light)}
 .comm-status-pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.05em;padding:2px 7px;border-radius:4px;text-transform:uppercase}
 .comm-status-pending{background:rgba(245,158,11,0.12);color:#F59E0B;border:1px solid rgba(245,158,11,0.3)}
 .comm-status-owed   {background:rgba(239,68,68,0.12);color:#EF4444;border:1px solid rgba(239,68,68,0.3)}
@@ -2421,7 +2426,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <span id="ccSliderMinLabel">$0</span><span id="ccSliderMaxLabel">$25,000</span>
                   </div>
                   <div id="ccFloorWarning" style="display:none;margin-top:6px;padding:5px 8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:5px;font-size:10px;color:var(--warn);line-height:1.3"></div>
-                </div>`
+                </div>
+                <button onclick="openInsuranceEstimator(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:13px"></i>Insurance Contribution Estimator</button>`
             }
           </div>
         </div>
@@ -7277,6 +7283,191 @@ async function loadCompanyInfo(){
     console.warn('company_info load error', e);
   }
 }
+
+// ── INSURANCE CONTRIBUTION ESTIMATOR ──
+// Pre-adjuster ballpark: estimate RCV from roof size × $/sq range, then break down
+// the claim into ACV, depreciation, deductible, job cost, margin, and client out-of-pocket.
+const INS_EST_DEFAULTS = {
+  perSqLow: 525,
+  perSqHigh: 625,
+  costPerSq: 280,    // your job-cost basis per square
+  wasteFactor: 1.15, // 15% waste
+  overheadRate: 0.10,
+};
+
+function openInsuranceEstimator(jobId){
+  const j = jobs.find(x => x.id === jobId) || null;
+  const squares = j?.roofEstimate?.totalSquares || 0;
+  const deductible = parseFloat(j?.deductible || 0) || 0;
+  const overlay = document.createElement('div');
+  overlay.id = 'insEstOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:560px;max-width:100%;max-height:92vh;overflow:auto;padding:0">
+      <div style="position:sticky;top:0;background:#141927;padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:1">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Insurance Contribution Estimator</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${j ? escapeHtml(j.name||'') : 'Standalone — enter values below'}</div>
+        </div>
+        <button id="insEstClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+          <div>
+            <label class="ie-lbl">Roof Size (squares)</label>
+            <input id="ieSquares" type="text" inputmode="decimal" value="${squares || ''}" placeholder="e.g. 28" class="ie-inp">
+          </div>
+          <div>
+            <label class="ie-lbl">Deductible</label>
+            <input id="ieDeductible" type="text" inputmode="decimal" value="${deductible || ''}" placeholder="e.g. 2000" class="ie-inp">
+          </div>
+          <div>
+            <label class="ie-lbl">Insurance $/sq — Low</label>
+            <input id="iePerSqLow" type="text" inputmode="decimal" value="${INS_EST_DEFAULTS.perSqLow}" class="ie-inp">
+          </div>
+          <div>
+            <label class="ie-lbl">Insurance $/sq — High</label>
+            <input id="iePerSqHigh" type="text" inputmode="decimal" value="${INS_EST_DEFAULTS.perSqHigh}" class="ie-inp">
+          </div>
+        </div>
+
+        <div style="background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:700;color:var(--brand)">Depreciation</span>
+            <div style="flex:1"></div>
+            <div style="display:flex;background:#0E1320;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+              <button id="ieDepModePct" class="ie-tab ie-tab-on" data-mode="pct">% direct</button>
+              <button id="ieDepModeAge" class="ie-tab" data-mode="age">By age</button>
+            </div>
+          </div>
+          <div id="ieDepPctRow">
+            <label class="ie-lbl">Depreciation %</label>
+            <input id="ieDepPct" type="text" inputmode="decimal" value="30" placeholder="e.g. 30" class="ie-inp">
+          </div>
+          <div id="ieDepAgeRow" style="display:none">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <label class="ie-lbl">Roof Age (yrs)</label>
+                <input id="ieRoofAge" type="text" inputmode="decimal" value="" placeholder="e.g. 12" class="ie-inp">
+              </div>
+              <div>
+                <label class="ie-lbl">Expected Life (yrs)</label>
+                <input id="ieRoofLife" type="text" inputmode="decimal" value="25" placeholder="e.g. 25" class="ie-inp">
+              </div>
+            </div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px">Depreciation % = Age ÷ Expected Life (capped at 100%).</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer">
+            <input id="ieRecoverable" type="checkbox" checked style="cursor:pointer;accent-color:var(--brand-light)">
+            Depreciation is recoverable (released after completion)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer">
+            <input id="ieIncludeCost" type="checkbox" checked style="cursor:pointer;accent-color:var(--brand-light)">
+            Include job cost &amp; show contractor margin
+          </label>
+        </div>
+
+        <div id="ieOutput"></div>
+
+        <div style="font-size:9px;color:var(--muted);margin-top:12px;line-height:1.5;padding-top:10px;border-top:1px solid var(--border)">
+          Estimate only. Actual numbers depend entirely on the adjuster's approved scope. The $/sq range is a regional ballpark, not a guarantee. Client out-of-pocket assumes the homeowner pays their deductible; recoverable depreciation is released only after the job is completed and invoiced.
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#insEstClose').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+
+  let depMode = 'pct';
+  const setDepMode = m => {
+    depMode = m;
+    overlay.querySelector('#ieDepModePct').classList.toggle('ie-tab-on', m === 'pct');
+    overlay.querySelector('#ieDepModeAge').classList.toggle('ie-tab-on', m === 'age');
+    overlay.querySelector('#ieDepPctRow').style.display = (m === 'pct') ? '' : 'none';
+    overlay.querySelector('#ieDepAgeRow').style.display = (m === 'age') ? '' : 'none';
+    recompute();
+  };
+  overlay.querySelector('#ieDepModePct').addEventListener('click', () => setDepMode('pct'));
+  overlay.querySelector('#ieDepModeAge').addEventListener('click', () => setDepMode('age'));
+
+  const num = id => {
+    const el = overlay.querySelector('#' + id);
+    if(!el) return 0;
+    const v = evalMathExpr(el.value);
+    return (v != null) ? v : (parseFloat(el.value) || 0);
+  };
+
+  function depPercent(){
+    if(depMode === 'age'){
+      const age = num('ieRoofAge'), life = num('ieRoofLife');
+      if(life <= 0) return 0;
+      return Math.min(100, (age / life) * 100);
+    }
+    return Math.min(100, num('ieDepPct'));
+  }
+
+  function recompute(){
+    const sq = num('ieSquares');
+    const lowSq = num('iePerSqLow'), highSq = num('iePerSqHigh');
+    const deductible = num('ieDeductible');
+    const depPct = depPercent() / 100;
+    const recoverable = overlay.querySelector('#ieRecoverable').checked;
+    const includeCost = overlay.querySelector('#ieIncludeCost').checked;
+    const cost = sq * INS_EST_DEFAULTS.wasteFactor * INS_EST_DEFAULTS.costPerSq;
+
+    const calc = perSq => {
+      const rcv = sq * perSq;
+      const dep = rcv * depPct;
+      const acv = rcv - dep;
+      const nonRecovDep = recoverable ? 0 : dep;
+      const acvCheck = Math.max(0, acv - deductible);
+      const recovRelease = recoverable ? dep : 0;
+      const insurancePays = Math.max(0, rcv - deductible - nonRecovDep);
+      const clientOOP = deductible + nonRecovDep;
+      const overhead = rcv * INS_EST_DEFAULTS.overheadRate;
+      const margin = rcv - cost - overhead;
+      return { rcv, dep, acv, acvCheck, recovRelease, insurancePays, clientOOP, overhead, margin };
+    };
+
+    const lo = calc(lowSq), hi = calc(highSq);
+    const fmt = n => (n < 0 ? '−$' : '$') + Math.round(Math.abs(n)).toLocaleString();
+    const rng = (a, b) => (Math.round(a) === Math.round(b)) ? fmt(a) : `${fmt(a)} – ${fmt(b)}`;
+
+    const row = (label, loV, hiV, opts = {}) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;${opts.bg ? `background:${opts.bg};` : ''}${opts.border ? `border:1px solid ${opts.border};` : ''}border-radius:6px;margin-bottom:5px">
+        <span style="font-size:11px;${opts.bold ? 'font-weight:700;' : ''}color:${opts.color || 'var(--muted)'}">${label}</span>
+        <span style="font-size:12px;font-weight:${opts.bold ? '700' : '600'};color:${opts.valColor || 'var(--brand)'}">${rng(loV, hiV)}</span>
+      </div>`;
+
+    const out = overlay.querySelector('#ieOutput');
+    out.innerHTML = `
+      ${row(`Estimated RCV (${sq || 0} sq × $${Math.round(lowSq)}–${Math.round(highSq)})`, lo.rcv, hi.rcv, { bold: true, bg: 'rgba(77,157,224,0.1)', border: 'rgba(77,157,224,0.3)', color: 'var(--brand)', valColor: 'var(--brand-light)' })}
+      ${row(`− Depreciation (${depPercent().toFixed(0)}%)`, -lo.dep, -hi.dep, {})}
+      ${row('= ACV', lo.acv, hi.acv, {})}
+      ${row('− Deductible', -deductible, -deductible, {})}
+      ${row('= ACV check (1st insurance payment)', lo.acvCheck, hi.acvCheck, { color: 'var(--brand)' })}
+      ${recoverable ? row('+ Recoverable dep (released after completion)', lo.recovRelease, hi.recovRelease, {}) : ''}
+      ${row('Total insurance pays', lo.insurancePays, hi.insurancePays, { bold: true, bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.25)', color: '#34D399', valColor: '#34D399' })}
+      ${includeCost ? `
+        ${row(`− Job cost (${(sq * INS_EST_DEFAULTS.wasteFactor).toFixed(1)} sq × $${INS_EST_DEFAULTS.costPerSq}, incl. 15% waste)`, -cost, -cost, {})}
+        ${row('− Overhead (10% of RCV)', -lo.overhead, -hi.overhead, {})}
+        ${row('= Contractor margin (if contract = RCV)', lo.margin, hi.margin, { bold: true, color: 'var(--brand)', valColor: lo.margin < 0 ? 'var(--danger)' : '#34D399' })}
+      ` : ''}
+      ${row('CLIENT OUT-OF-POCKET', lo.clientOOP, hi.clientOOP, { bold: true, bg: 'rgba(96,196,255,0.1)', border: 'rgba(96,196,255,0.3)', color: '#60C4FF', valColor: '#60C4FF' })}
+    `;
+  }
+
+  overlay.querySelectorAll('input').forEach(el => {
+    el.addEventListener('input', recompute);
+    el.addEventListener('change', recompute);
+  });
+  recompute();
+}
+window.openInsuranceEstimator = openInsuranceEstimator;
 
 // Default scope-of-work template — admin can edit per job
 // Use "## " prefix to start a section. Lines without a section appear as plain bullets.
