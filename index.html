@@ -2427,7 +2427,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   </div>
                   <div id="ccFloorWarning" style="display:none;margin-top:6px;padding:5px 8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:5px;font-size:10px;color:var(--warn);line-height:1.3"></div>
                 </div>
-                <button onclick="openInsuranceEstimator(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:13px"></i>Insurance Contribution Estimator</button>`
+                <button onclick="openInsuranceEstimator(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:13px"></i>Insurance Contribution Estimator</button>
+                <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>`
             }
           </div>
         </div>
@@ -7283,6 +7284,280 @@ async function loadCompanyInfo(){
     console.warn('company_info load error', e);
   }
 }
+
+// ── ABC SUPPLY MATERIAL ORDER CALCULATOR ──
+// Computes a roofing material takeoff from squares + linear measurements + waste,
+// applies an editable (team-shared) price list + tax, and drafts an order email.
+// Standard material set with coverage assumptions. Quantities are editable per-job.
+const ABC_MATERIALS = [
+  { key:'shingles',     name:'Architectural Shingles', unit:'bundle', note:'3 bundles / square',     calc:m=>Math.ceil(m.sqWaste*3) },
+  { key:'starter',      name:'Starter Strip',          unit:'bundle', note:'~120 LF / bundle',        calc:m=>Math.ceil((m.eaves+m.rakes)/120) },
+  { key:'ridgecap',     name:'Hip & Ridge Cap',        unit:'bundle', note:'~25 LF / bundle',         calc:m=>Math.ceil((m.ridges+m.hips)/25) },
+  { key:'underlayment', name:'Synthetic Underlayment', unit:'roll',   note:'10 squares / roll',       calc:m=>Math.ceil(m.sqWaste/10) },
+  { key:'icewater',     name:'Ice & Water Shield',     unit:'roll',   note:'~66 LF / roll + penetrations', calc:m=>Math.ceil(m.valleys/66)+(m.penetrations>0?1:0) },
+  { key:'dripedge',     name:'Drip Edge (10 ft)',      unit:'stick',  note:'10 ft / stick + waste',   calc:m=>Math.ceil((m.eaves+m.rakes)/10*(1+m.waste/100)) },
+  { key:'ridgevent',    name:'Ridge Vent (4 ft)',      unit:'piece',  note:'4 ft / piece',            calc:m=>Math.ceil(m.ridges/4) },
+  { key:'pipeboots',    name:'Pipe Boots',             unit:'each',   note:'1 per penetration',       calc:m=>m.penetrations },
+  { key:'coilnails',    name:'Coil Nails',             unit:'box',    note:'~20 squares / box',       calc:m=>Math.ceil(m.sqWaste/20) },
+  { key:'capnails',     name:'Cap Nails',              unit:'box',    note:'~25 squares / box',       calc:m=>Math.ceil(m.sqWaste/25) },
+  { key:'sealant',      name:'Roofing Sealant',        unit:'tube',   note:'~1 per 15 squares (min 2)', calc:m=>Math.max(2,Math.ceil(m.sqWaste/15)) },
+];
+
+let abcPriceList = null;   // { prices:{key:price}, taxRate, customLines:[{name,unit,qty,price}] }
+
+async function loadAbcPriceList(){
+  if(abcPriceList) return abcPriceList;
+  // localStorage cache first
+  try { const c = localStorage.getItem('abc_price_list'); if(c) abcPriceList = JSON.parse(c); } catch(e){}
+  if(!abcPriceList) abcPriceList = { prices:{}, taxRate:8.25, customLines:[] };
+  if(window.sb){
+    try {
+      const { data } = await window.sb.from('app_settings').select('value').eq('key','abc_price_list').maybeSingle();
+      if(data?.value && typeof data.value==='object'){
+        abcPriceList = Object.assign({ prices:{}, taxRate:8.25, customLines:[] }, data.value);
+        localStorage.setItem('abc_price_list', JSON.stringify(abcPriceList));
+      }
+    } catch(e){ console.warn('abc price list load failed', e); }
+  }
+  return abcPriceList;
+}
+
+async function saveAbcPriceList(){
+  localStorage.setItem('abc_price_list', JSON.stringify(abcPriceList));
+  if(window.sb){
+    try {
+      const { error } = await window.sb.from('app_settings').upsert({
+        key:'abc_price_list', value:abcPriceList, updated_at:new Date().toISOString(),
+      }, { onConflict:'key' });
+      if(error){ toast('Saved locally only — could not sync price list'); return; }
+      toast('Price list saved for team');
+    } catch(e){ toast('Saved locally only'); }
+  } else {
+    toast('Price list saved');
+  }
+}
+
+async function openAbcMaterialCalc(jobId){
+  const j = jobs.find(x=>x.id===jobId) || null;
+  await loadAbcPriceList();
+  const squares = j?.roofEstimate?.totalSquares || 0;
+  // Per-job material state (qty overrides) stored on the job
+  const saved = (j && j.abcOrder) ? j.abcOrder : {};
+  const overlay = document.createElement('div');
+  overlay.id = 'abcOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:680px;max-width:100%;max-height:94vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">ABC Supply Material Order</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${j?escapeHtml(j.name||''):'Standalone'} · quantities auto-calc from measurements, editable</div>
+        </div>
+        <button id="abcClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        <!-- Measurements -->
+        <div style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Measurements</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:6px">
+          <div><label class="ie-lbl">Squares</label><input id="abcSquares" class="ie-inp" type="text" inputmode="decimal" value="${squares||''}" placeholder="28"></div>
+          <div><label class="ie-lbl">Waste %</label><input id="abcWaste" class="ie-inp" type="text" inputmode="decimal" value="${saved.waste??15}"></div>
+          <div><label class="ie-lbl">Penetrations</label><input id="abcPen" class="ie-inp" type="text" inputmode="decimal" value="${saved.penetrations??''}" placeholder="#"></div>
+          <div><label class="ie-lbl">Eaves (LF)</label><input id="abcEaves" class="ie-inp" type="text" inputmode="decimal" value="${saved.eaves??''}" placeholder="LF"></div>
+          <div><label class="ie-lbl">Rakes (LF)</label><input id="abcRakes" class="ie-inp" type="text" inputmode="decimal" value="${saved.rakes??''}" placeholder="LF"></div>
+          <div><label class="ie-lbl">Ridges (LF)</label><input id="abcRidges" class="ie-inp" type="text" inputmode="decimal" value="${saved.ridges??''}" placeholder="LF"></div>
+          <div><label class="ie-lbl">Hips (LF)</label><input id="abcHips" class="ie-inp" type="text" inputmode="decimal" value="${saved.hips??''}" placeholder="LF"></div>
+          <div><label class="ie-lbl">Valleys (LF)</label><input id="abcValleys" class="ie-inp" type="text" inputmode="decimal" value="${saved.valleys??''}" placeholder="LF"></div>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:14px">Linear measurements drive starter, ridge cap, drip edge, ridge vent & ice/water. Pull them from your EagleView/measurement report. Leave blank if unknown (those lines compute 0 — enter quantities manually below).</div>
+
+        <!-- Materials table -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">Materials</span>
+          <div style="flex:1"></div>
+          <button id="abcEditPrices" style="background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer">Edit Price List</button>
+        </div>
+        <div id="abcTable"></div>
+
+        <button id="abcAddLine" style="margin-top:8px;background:transparent;border:1px dashed var(--border);color:var(--muted);font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;width:100%"><i class="ti ti-plus" style="font-size:11px"></i> Add custom line</button>
+
+        <!-- Totals -->
+        <div id="abcTotals" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px"></div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="abcSaveOrder" class="btn-cancel" style="font-size:12px;padding:9px 14px">Save to Job</button>
+          <div style="flex:1"></div>
+          <button id="abcDraftEmail" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-mail"></i>Draft Email to Rep</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Coverage figures are industry rules of thumb and vary by product. Always confirm final quantities with your ABC rep — this is for ordering/estimating, not a guarantee. Prices you enter are your estimate; the rep's quote is authoritative.</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>overlay.remove();
+  overlay.querySelector('#abcClose').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+
+  const num = id => { const el=overlay.querySelector('#'+id); if(!el) return 0; const v=evalMathExpr(el.value); return (v!=null)?v:(parseFloat(el.value)||0); };
+  const qtyOverrides = Object.assign({}, saved.qtyOverrides||{});
+  let customLines = Array.isArray(saved.customLines) ? saved.customLines.map(c=>({...c})) : [];
+
+  function measurements(){
+    const squares = num('abcSquares'), waste = num('abcWaste');
+    return {
+      squares, waste, sqWaste: squares*(1+waste/100),
+      eaves:num('abcEaves'), rakes:num('abcRakes'), ridges:num('abcRidges'),
+      hips:num('abcHips'), valleys:num('abcValleys'), penetrations:num('abcPen'),
+    };
+  }
+
+  function render(){
+    const m = measurements();
+    const prices = abcPriceList.prices || {};
+    const rows = ABC_MATERIALS.map(mat=>{
+      const autoQty = mat.calc(m) || 0;
+      const qty = (qtyOverrides[mat.key]!=null && qtyOverrides[mat.key]!=='') ? parseFloat(qtyOverrides[mat.key]) : autoQty;
+      const price = parseFloat(prices[mat.key]||0);
+      const lineTotal = qty*price;
+      return { ...mat, autoQty, qty, price, lineTotal };
+    });
+    const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    const tbl = overlay.querySelector('#abcTable');
+    tbl.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 64px 50px 78px 78px;gap:6px;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:0 4px 4px">
+        <span>Material</span><span style="text-align:center">Qty</span><span>Unit</span><span style="text-align:right">Unit $</span><span style="text-align:right">Total</span>
+      </div>
+      ${rows.map(r=>`
+        <div style="display:grid;grid-template-columns:1fr 64px 50px 78px 78px;gap:6px;align-items:center;padding:4px;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <div><div style="font-size:12px;color:var(--brand);font-weight:600">${r.name}</div><div style="font-size:9px;color:var(--muted)">${r.note}</div></div>
+          <input data-abc-qty="${r.key}" class="ie-inp" type="text" inputmode="decimal" value="${r.qty}" style="padding:5px 6px;font-size:12px;text-align:center" title="Auto: ${r.autoQty}">
+          <span style="font-size:11px;color:var(--muted)">${r.unit}</span>
+          <input data-abc-price="${r.key}" class="ie-inp" type="text" inputmode="decimal" value="${r.price||''}" placeholder="0.00" style="padding:5px 6px;font-size:12px;text-align:right">
+          <span style="font-size:12px;color:var(--brand);text-align:right;font-weight:600">${fmt(r.lineTotal)}</span>
+        </div>
+      `).join('')}
+      ${customLines.map((c,i)=>`
+        <div style="display:grid;grid-template-columns:1fr 64px 50px 78px 78px;gap:6px;align-items:center;padding:4px;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <div style="display:flex;align-items:center;gap:4px">
+            <button data-abc-del="${i}" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0">×</button>
+            <input data-abc-cname="${i}" class="ie-inp" type="text" value="${escapeHtml(c.name||'')}" placeholder="Custom item" style="padding:5px 6px;font-size:12px">
+          </div>
+          <input data-abc-cqty="${i}" class="ie-inp" type="text" inputmode="decimal" value="${c.qty||''}" style="padding:5px 6px;font-size:12px;text-align:center">
+          <input data-abc-cunit="${i}" class="ie-inp" type="text" value="${escapeHtml(c.unit||'ea')}" style="padding:5px 6px;font-size:11px">
+          <input data-abc-cprice="${i}" class="ie-inp" type="text" inputmode="decimal" value="${c.price||''}" placeholder="0.00" style="padding:5px 6px;font-size:12px;text-align:right">
+          <span style="font-size:12px;color:var(--brand);text-align:right;font-weight:600">${fmt((parseFloat(c.qty)||0)*(parseFloat(c.price)||0))}</span>
+        </div>
+      `).join('')}
+    `;
+
+    // Totals
+    const matSubtotal = rows.reduce((s,r)=>s+r.lineTotal,0);
+    const customSubtotal = customLines.reduce((s,c)=>s+(parseFloat(c.qty)||0)*(parseFloat(c.price)||0),0);
+    const subtotal = matSubtotal+customSubtotal;
+    const taxRate = abcPriceList.taxRate||0;
+    const tax = subtotal*(taxRate/100);
+    const total = subtotal+tax;
+    overlay.querySelector('#abcTotals').innerHTML = `
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--brand);margin-bottom:5px"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:5px">
+        <span style="display:flex;align-items:center;gap:6px">Tax <input id="abcTaxRate" class="ie-inp" type="text" inputmode="decimal" value="${taxRate}" style="width:54px;padding:3px 6px;font-size:11px;text-align:right">%</span>
+        <span>${fmt(tax)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#F97316;border-top:1px solid var(--border);padding-top:8px"><span>Estimated Total</span><span>${fmt(total)}</span></div>
+    `;
+
+    // Wire qty/price inputs
+    tbl.querySelectorAll('[data-abc-qty]').forEach(el=>el.addEventListener('input',()=>{ qtyOverrides[el.dataset.abcQty]=el.value; renderTotalsOnly(); }));
+    tbl.querySelectorAll('[data-abc-price]').forEach(el=>el.addEventListener('input',()=>{ abcPriceList.prices[el.dataset.abcPrice]=parseFloat(el.value)||0; renderTotalsOnly(); }));
+    tbl.querySelectorAll('[data-abc-cname]').forEach(el=>el.addEventListener('input',()=>{ customLines[el.dataset.abcCname].name=el.value; }));
+    tbl.querySelectorAll('[data-abc-cqty]').forEach(el=>el.addEventListener('input',()=>{ customLines[el.dataset.abcCqty].qty=el.value; renderTotalsOnly(); }));
+    tbl.querySelectorAll('[data-abc-cunit]').forEach(el=>el.addEventListener('input',()=>{ customLines[el.dataset.abcCunit].unit=el.value; }));
+    tbl.querySelectorAll('[data-abc-cprice]').forEach(el=>el.addEventListener('input',()=>{ customLines[el.dataset.abcCprice].price=el.value; renderTotalsOnly(); }));
+    tbl.querySelectorAll('[data-abc-del]').forEach(el=>el.addEventListener('click',()=>{ customLines.splice(parseInt(el.dataset.abcDel),1); render(); }));
+    const taxEl = overlay.querySelector('#abcTaxRate');
+    if(taxEl) taxEl.addEventListener('input',()=>{ abcPriceList.taxRate=parseFloat(taxEl.value)||0; renderTotalsOnly(); });
+  }
+
+  // Lightweight totals refresh without rebuilding inputs (keeps focus)
+  function renderTotalsOnly(){
+    const m = measurements();
+    const prices = abcPriceList.prices||{};
+    let subtotal = 0;
+    ABC_MATERIALS.forEach(mat=>{
+      const autoQty = mat.calc(m)||0;
+      const qty = (qtyOverrides[mat.key]!=null && qtyOverrides[mat.key]!=='') ? parseFloat(qtyOverrides[mat.key]) : autoQty;
+      subtotal += (qty||0)*(parseFloat(prices[mat.key]||0));
+    });
+    customLines.forEach(c=>{ subtotal += (parseFloat(c.qty)||0)*(parseFloat(c.price)||0); });
+    const taxRate = abcPriceList.taxRate||0;
+    const tax = subtotal*(taxRate/100), total = subtotal+tax;
+    const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    const box = overlay.querySelector('#abcTotals');
+    if(box) box.querySelectorAll('span').forEach(()=>{});
+    // Simple: re-render totals box
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--brand);margin-bottom:5px"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:5px">
+        <span style="display:flex;align-items:center;gap:6px">Tax <input id="abcTaxRate" class="ie-inp" type="text" inputmode="decimal" value="${taxRate}" style="width:54px;padding:3px 6px;font-size:11px;text-align:right">%</span>
+        <span>${fmt(tax)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#F97316;border-top:1px solid var(--border);padding-top:8px"><span>Estimated Total</span><span>${fmt(total)}</span></div>
+    `;
+    const taxEl = overlay.querySelector('#abcTaxRate');
+    if(taxEl) taxEl.addEventListener('input',()=>{ abcPriceList.taxRate=parseFloat(taxEl.value)||0; renderTotalsOnly(); });
+  }
+
+  // Recompute quantities live when measurements change
+  ['abcSquares','abcWaste','abcPen','abcEaves','abcRakes','abcRidges','abcHips','abcValleys'].forEach(id=>{
+    overlay.querySelector('#'+id).addEventListener('input',()=>{
+      // Clear overrides that match auto (so measurement edits flow through); simplest: just re-render table
+      render();
+    });
+  });
+
+  overlay.querySelector('#abcAddLine').addEventListener('click',()=>{ customLines.push({name:'',unit:'ea',qty:'',price:''}); render(); });
+  overlay.querySelector('#abcEditPrices').addEventListener('click',()=>{ toast('Edit unit prices inline in the table, then Save to Job syncs them'); });
+
+  overlay.querySelector('#abcSaveOrder').addEventListener('click',async ()=>{
+    if(j){
+      const m = measurements();
+      j.abcOrder = {
+        waste:m.waste, penetrations:m.penetrations, eaves:m.eaves, rakes:m.rakes,
+        ridges:m.ridges, hips:m.hips, valleys:m.valleys,
+        qtyOverrides, customLines,
+      };
+      saveToStorage();
+    }
+    await saveAbcPriceList();
+    toast('Saved');
+  });
+
+  overlay.querySelector('#abcDraftEmail').addEventListener('click',()=>{
+    const m = measurements();
+    const prices = abcPriceList.prices||{};
+    const lines = [];
+    ABC_MATERIALS.forEach(mat=>{
+      const autoQty = mat.calc(m)||0;
+      const qty = (qtyOverrides[mat.key]!=null && qtyOverrides[mat.key]!=='') ? parseFloat(qtyOverrides[mat.key]) : autoQty;
+      if(qty>0) lines.push(`- ${qty} ${mat.unit}${qty>1?'s':''} — ${mat.name}`);
+    });
+    customLines.forEach(c=>{ if((parseFloat(c.qty)||0)>0 && c.name) lines.push(`- ${c.qty} ${c.unit||'ea'} — ${c.name}`); });
+    const ci = getCompanyInfo();
+    const addr = j?.address && j.address!=='—' ? j.address : '';
+    const body = `Hi,\n\nPlease quote the following materials for a roofing job${addr?' at '+addr:''}:\n\n${lines.join('\n')}\n\nMeasurements: ${m.squares} squares${m.waste?` (+${m.waste}% waste)`:''}.\n\nPlease send pricing and availability. Thank you,\n\n${ci.name||''}\n${ci.phone||''}`.trim();
+    const subject = `Material Quote Request${addr?' — '+addr.split(',')[0]:''}`;
+
+    // Copy to clipboard
+    const full = `Subject: ${subject}\n\n${body}`;
+    navigator.clipboard?.writeText(full).then(()=>toast('Email copied to clipboard')).catch(()=>{});
+    // Also offer mailto
+    const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailto,'_blank');
+  });
+
+  render();
+}
+window.openAbcMaterialCalc = openAbcMaterialCalc;
 
 // ── INSURANCE CONTRIBUTION ESTIMATOR ──
 // Pre-adjuster ballpark: estimate RCV from roof size × $/sq range, then break down
