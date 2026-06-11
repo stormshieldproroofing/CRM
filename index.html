@@ -1835,8 +1835,9 @@ async function intakeJobFile(file, kind, section){
   } catch(e){ console.warn('[intake] downsize failed, using full size', e); sized = working; }
 
   // Step 3: upload to Supabase storage if available
-  if(window.uploadJobFile && window.openJobId){
-    const j = jobs.find(x=>x.id===window.openJobId);
+  const activeJobId = (typeof openJobId !== 'undefined' && openJobId) ? openJobId : window.openJobId;
+  if(window.uploadJobFile && activeJobId){
+    const j = jobs.find(x=>x.id===activeJobId);
     console.log('[intake] job sync state', { found:!!j, _sb:j?._sb });
     if(j && j._sb){
       try {
@@ -1865,7 +1866,8 @@ window.intakeJobFile = intakeJobFile;
 // Produce a renamed File with a clean, descriptive name based on the open job.
 // Pattern: "Name - Address - Type - YYYY-MM-DD - ##.ext"
 function renameJobFile(file, kind, section){
-  const j = window.openJobId ? jobs.find(x=>x.id===window.openJobId) : null;
+  const activeJobId = (typeof openJobId !== 'undefined' && openJobId) ? openJobId : window.openJobId;
+  const j = activeJobId ? jobs.find(x=>x.id===activeJobId) : null;
   if(!j) return file;  // no context — leave as-is
 
   const clean = s => (s||'').toString().trim().replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,' ').trim();
@@ -2346,7 +2348,7 @@ function renderCard(j){
 }
 
 function openDetail(id){
-  openJobId=id;activeTab='overview';checklistCollapsed=true;
+  openJobId=id;window.openJobId=id;activeTab='overview';checklistCollapsed=true;
   renderDetailPanel();
   $('detailOverlay').classList.add('open');
 }
@@ -5123,7 +5125,7 @@ function switchPipeline(id){
   $('pipelineDrop').style.display='none';
   {const d=document.getElementById('boardPipelineDrop'); if(d) d.style.display='none';}
   $('detailOverlay').classList.remove('open');
-  openJobId=null;
+  openJobId=null;window.openJobId=null;
   syncActivePipeline();
   saveToStorage();
   renderBoard();
