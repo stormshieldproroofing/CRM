@@ -1175,6 +1175,19 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
           </div>
         </div>
 
+        <!-- ACV (auto = RCV − depreciation, shared with Loss Statement) -->
+        <div style="margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">ACV (RCV − Depreciation)</label>
+            <span id="f-acv-status" style="font-size:9px;color:var(--muted);font-style:italic"></span>
+          </div>
+          <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;gap:4px">
+            <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
+            <input id="f-acv" type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" placeholder="0.00 (try 800+1200)">
+          </div>
+          <div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.4">Auto-calculates as RCV minus total depreciation. Syncs with the ACV field on the Loss Statement tab.</div>
+        </div>
+
         <!-- Net Claim (derived or directly entered) -->
         <div style="margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -1784,7 +1797,8 @@ function storedFileFromUpload(file){
 
 // Downsize an image File before storage. Returns a new File (JPEG) capped at maxDim px
 // on the long edge at the given quality. PDFs and non-images pass through untouched.
-function downsizeImageFile(file, maxDim=2000, quality=0.82){
+// Defaults tuned for documentation/proof-of-work: 1400px / 0.70 ≈ 150-200KB per photo.
+function downsizeImageFile(file, maxDim=1400, quality=0.70){
   return new Promise(resolve=>{
     if(!file.type || !file.type.startsWith('image/')){ resolve(file); return; }
     const reader=new FileReader();
@@ -1793,8 +1807,8 @@ function downsizeImageFile(file, maxDim=2000, quality=0.82){
       img.onload=()=>{
         let { width, height } = img;
         if(width<=maxDim && height<=maxDim){
-          // Still re-encode to JPEG to strip metadata + compress, unless already small
-          if(file.size < 600*1024){ resolve(file); return; }
+          // Still re-encode to JPEG to strip metadata + compress, unless already tiny
+          if(file.size < 200*1024){ resolve(file); return; }
         }
         const scale=Math.min(1, maxDim/Math.max(width,height));
         const w=Math.round(width*scale), h=Math.round(height*scale);
@@ -1804,6 +1818,8 @@ function downsizeImageFile(file, maxDim=2000, quality=0.82){
         ctx.drawImage(img,0,0,w,h);
         canvas.toBlob(blob=>{
           if(!blob){ resolve(file); return; }
+          // Guard: if compression somehow produced a bigger file, keep the original
+          if(blob.size >= file.size && file.type==='image/jpeg'){ resolve(file); return; }
           const newName=file.name.replace(/\.(png|webp|heic|heif|bmp|tiff?)$/i,'.jpg');
           resolve(new File([blob], newName, { type:'image/jpeg', lastModified:Date.now() }));
         }, 'image/jpeg', quality);
@@ -4354,6 +4370,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       claimStatus:j.claimStatus||'',
       dateOfLoss:j.dateOfLoss||'',
       rcv:       j.rcv||'',
+      acv:       j.acv||'',
       deductible:j.deductible||'',
       adjName:   j.adjName||'',
       adjPhone:  j.adjPhone||'',
@@ -4439,7 +4456,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
           <div><label class="ins-label">RCV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-rcv" value="${ins.rcv}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('rcv',this.value)"></div></div>
           <div><label class="ins-label">Deductible</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-deductible" value="${ins.deductible}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('deductible',this.value)"></div></div>
-          <div><label class="ins-label">ACV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-acv" value="${j.acv||''}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('acv',this.value)"></div></div>
+          <div><label class="ins-label">ACV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-acv" value="${ins.acv}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('acv',this.value)"></div></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div><label class="ins-label">Adjuster Name</label><input class="ins-field" id="li-adjName" value="${ins.adjName}" placeholder="Adjuster full name" oninput="lossSyncField('adjName',this.value)"></div>
@@ -5339,6 +5356,7 @@ function openEditJob(id){
   if($('f-recovdep'))  $('f-recovdep').value  = j.recoverableDep||'';
   if($('f-nonrecovdep'))$('f-nonrecovdep').value= j.nonRecoverableDep||'';
   if($('f-netclaim'))  $('f-netclaim').value  = j.netClaim||'';
+  if($('f-acv'))       $('f-acv').value       = j.acv||'';
   if(window.__resetInsuranceInterlock) window.__resetInsuranceInterlock();
   if($('f-adjname'))   $('f-adjname').value   = j.adjName||'';
   if($('f-adjphone'))  $('f-adjphone').value  = j.adjPhone||'';
@@ -5476,18 +5494,36 @@ $('cancelAdd').onclick=closeJobModal;
     return fillOrder[0] || null;
   }
 
+  function updateAcv(){
+    const rcv = val('f-rcv'), rdep = val('f-recovdep'), nrdep = val('f-nonrecovdep');
+    const acvEl = document.getElementById('f-acv');
+    const status = document.getElementById('f-acv-status');
+    if(!acvEl) return;
+    // Auto-calc only when RCV present and at least one depreciation field present,
+    // and the user isn't currently editing ACV directly.
+    if(document.activeElement === acvEl) return;
+    if(rcv != null){
+      const acv = rcv - (rdep||0) - (nrdep||0);
+      if(acv >= 0){
+        acvEl.value = acv.toFixed(2).replace(/\.00$/, '');
+        if(status) status.textContent = 'auto-calculated';
+      }
+    }
+  }
+
   function recompute(){
     const target = deriveTarget();
     const status = document.getElementById('f-netclaim-status');
-    if(!target){ if(status) status.textContent = ''; return; }
-    const derived = deriveFor(target);
-    if(derived != null && derived >= 0){
-      setVal(target, derived);
+    if(target){
+      const derived = deriveFor(target);
+      if(derived != null && derived >= 0){
+        setVal(target, derived);
+      }
+      if(status) status.textContent = (target === 'f-netclaim') ? 'auto-calculated' : '';
+    } else if(status){
+      status.textContent = '';
     }
-    // Visual hint on Net Claim if it's currently the derived field
-    if(status){
-      status.textContent = (target === 'f-netclaim') ? 'auto-calculated' : '';
-    }
+    updateAcv();
   }
 
   // Wire each field
@@ -5503,6 +5539,15 @@ $('cancelAdd').onclick=closeJobModal;
     // Also recompute on blur in case the user pastes/edits without firing input correctly
     el.addEventListener('blur', recompute);
   });
+
+  // ACV: allow manual override — when user edits it, stop auto-calculating
+  const acvEl = document.getElementById('f-acv');
+  if(acvEl){
+    acvEl.addEventListener('input', () => {
+      const status = document.getElementById('f-acv-status');
+      if(status) status.textContent = 'manual';
+    });
+  }
 
   // Reset state when modal opens (re-detect order from currently-populated values)
   window.__resetInsuranceInterlock = () => {
@@ -5566,6 +5611,7 @@ $('saveJob').onclick=async ()=>{
     recoverableDep:($('f-recovdep')?$('f-recovdep').value:'')||'',
     nonRecoverableDep:($('f-nonrecovdep')?$('f-nonrecovdep').value:'')||'',
     netClaim:($('f-netclaim')?$('f-netclaim').value:'')||'',
+    acv:($('f-acv')?$('f-acv').value:'')||'',
     adjName:($('f-adjname')?$('f-adjname').value:'')||'',adjPhone:($('f-adjphone')?$('f-adjphone').value:'')||'',
     inspDate:($('f-inspdate')?$('f-inspdate').value:'')||'',claimNotes:($('f-claimnotes')?$('f-claimnotes').value:'')||''
   };
