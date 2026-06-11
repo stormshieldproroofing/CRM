@@ -1433,7 +1433,7 @@ function saveToStorage(){
 
 syncActivePipeline();
 
-let filterUser=null,draggingId=null,editingColId=null,openJobId=null,activeTab='overview';
+let filterUser=null,draggingId=null,editingColId=null,openJobId=null,activeTab='overview',checklistCollapsed=true;
 
 function $(id){return document.getElementById(id)}
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)}
@@ -1816,30 +1816,113 @@ function downsizeImageFile(file, maxDim=2000, quality=0.82){
   });
 }
 
-// Unified intake: downsize (if image) → upload to Supabase storage if available,
+// Unified intake: rename → downsize (if image) → upload to Supabase storage if available,
 // else fall back to base64 local storage. Returns a record with a usable `url`.
+// Every step is isolated so one failure can't break the whole upload.
 async function intakeJobFile(file, kind, section){
-  const sized = await downsizeImageFile(file);
-  // If Supabase upload is wired and we have an open job that's synced, use storage
+  console.log('[intake] start', { name:file?.name, kind, section, type:file?.type });
+
+  // Step 1: rename (never fatal)
+  let working = file;
+  try {
+    working = renameJobFile(file, kind, section) || file;
+  } catch(e){ console.warn('[intake] rename failed, using original name', e); working = file; }
+
+  // Step 2: downsize if image (never fatal)
+  let sized = working;
+  try {
+    sized = await downsizeImageFile(working) || working;
+  } catch(e){ console.warn('[intake] downsize failed, using full size', e); sized = working; }
+
+  // Step 3: upload to Supabase storage if available
   if(window.uploadJobFile && window.openJobId){
     const j = jobs.find(x=>x.id===window.openJobId);
+    console.log('[intake] job sync state', { found:!!j, _sb:j?._sb });
     if(j && j._sb){
       try {
         const rec = await window.uploadJobFile(j.id, kind, section, sized);
+        console.log('[intake] upload result', rec);
         if(rec && rec.url){
           return {
-            name: rec.name, path: rec.path, url: rec.url,
+            name: rec.name, path: rec.path, url: rec.url, _id: rec._id,
             date: fileDateText(), size: sized.size,
-            type: sized.type, isPdf: sized.type==='application/pdf'||/\.pdf$/i.test(sized.name),
+            type: sized.type, isPdf: sized.type==='application/pdf'||/\.pdf$/i.test(sized.name||''),
           };
         }
-      } catch(e){ console.warn('Supabase upload failed, falling back to local', e); }
+        console.warn('[intake] upload returned no url — falling back to local');
+      } catch(e){ console.error('[intake] Supabase upload threw — falling back to local', e); }
+    } else {
+      console.warn('[intake] job not Supabase-synced — using local storage');
     }
+  } else {
+    console.warn('[intake] uploadJobFile or openJobId missing — using local storage');
   }
   // Fallback: base64 local record
   return storedFileFromUpload(sized);
 }
 window.intakeJobFile = intakeJobFile;
+
+// Produce a renamed File with a clean, descriptive name based on the open job.
+// Pattern: "Name - Address - Type - YYYY-MM-DD - ##.ext"
+function renameJobFile(file, kind, section){
+  const j = window.openJobId ? jobs.find(x=>x.id===window.openJobId) : null;
+  if(!j) return file;  // no context — leave as-is
+
+  const clean = s => (s||'').toString().trim().replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,' ').trim();
+  const name = clean(j.name && j.name!=='—' ? j.name : '');
+  const street = clean((j.address && j.address!=='—' ? j.address : '').split(',')[0]);
+
+  // Type label
+  const typeMap = {
+    photo: { before:'Before Photo', during:'During Photo', after:'After Photo' },
+    contract: 'Contract',
+    check: 'Check',
+    loss: 'Loss Statement',
+    roof: 'Measurement',
+    other: 'Document',
+  };
+  let typeLabel = 'Document';
+  if(kind==='photo') typeLabel = (typeMap.photo[section] || 'Photo');
+  else typeLabel = typeMap[kind] || 'Document';
+
+  // Date (today)
+  const d = new Date();
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  // Counter — how many of this kind/section already exist on the job
+  let existing = 0;
+  if(kind==='photo') existing = (j.photos?.[section]||[]).length;
+  else if(kind==='contract') existing = (j.contracts||[]).length;
+  else if(kind==='check') existing = (j.checks||[]).length;
+  else if(kind==='loss') existing = (j.lossFiles||[]).length;
+  else if(kind==='roof') existing = (j.roofFiles||[]).length;
+  else existing = (j.otherFiles||[]).length;
+  // Bump per call within the same batch
+  renameJobFile._batch = renameJobFile._batch || {};
+  const batchKey = `${j.id}|${kind}|${section||''}`;
+  renameJobFile._batch[batchKey] = (renameJobFile._batch[batchKey]||existing) + 1;
+  const num = String(renameJobFile._batch[batchKey]).padStart(2,'0');
+  // Reset this batch key shortly after, so the next upload action recomputes from real array length
+  clearTimeout(renameJobFile._timers?.[batchKey]);
+  renameJobFile._timers = renameJobFile._timers || {};
+  renameJobFile._timers[batchKey] = setTimeout(()=>{ if(renameJobFile._batch) delete renameJobFile._batch[batchKey]; }, 4000);
+
+  // Extension
+  const ext = (file.name.match(/\.([a-z0-9]+)$/i)?.[1] || (file.type.split('/')[1]||'jpg')).toLowerCase();
+
+  // Assemble — skip empty parts
+  const parts = [name, street, typeLabel, dateStr, num].filter(Boolean);
+  const newName = parts.join(' - ') + '.' + ext;
+
+  try {
+    return new File([file], newName, { type:file.type, lastModified:file.lastModified });
+  } catch(e){
+    // Some browsers can't reconstruct File; fall back to tagging the name on a clone
+    file._renamed = newName;
+    return file;
+  }
+}
+window.renameJobFile = renameJobFile;
 window.downsizeImageFile = downsizeImageFile;
 
 function openStoredFile(file){
@@ -2263,7 +2346,7 @@ function renderCard(j){
 }
 
 function openDetail(id){
-  openJobId=id;activeTab='overview';
+  openJobId=id;activeTab='overview';checklistCollapsed=true;
   renderDetailPanel();
   $('detailOverlay').classList.add('open');
 }
@@ -2410,16 +2493,19 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <span style="font-size:11px;color:var(--muted)">Created <strong style="color:var(--brand)">${j.created}</strong></span>
       </div>
       <div class="checklist-box" style="margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid var(--border)">
+        <div id="checklistToggle" style="display:flex;align-items:center;gap:7px;${checklistCollapsed?'':'margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid var(--border)'};cursor:pointer;user-select:none">
           <i class="ti ti-checkbox" style="font-size:14px;color:var(--brand-mid)" aria-hidden="true"></i>
           <span style="font-weight:700;font-size:12px;color:var(--brand)">${col.name} Checklist</span>
           <div style="flex:1"></div>
-          <span style="font-size:11px;color:var(--muted)">${totalDone}/${totalCount||0}</span>
+          <span style="font-size:11px;font-weight:600;color:${totalDone===totalCount&&totalCount>0?'#34D399':'var(--muted)'}">${totalDone}/${totalCount||0}</span>
+          <i class="ti ti-chevron-${checklistCollapsed?'down':'up'}" style="font-size:14px;color:var(--muted)" aria-hidden="true"></i>
         </div>
-        ${groupedChecklist}
-        <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.06)">
-          <input id="jobExtraTaskInput" type="text" placeholder="Add a task for this job..." style="flex:1;background:#1A1F2E;border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
-          <button id="jobExtraTaskAdd" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">+ Add</button>
+        <div id="checklistBody" style="${checklistCollapsed?'display:none':''}">
+          ${groupedChecklist}
+          <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.06)">
+            <input id="jobExtraTaskInput" type="text" placeholder="Add a task for this job..." style="flex:1;background:#1A1F2E;border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
+            <button id="jobExtraTaskAdd" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">+ Add</button>
+          </div>
         </div>
       </div>
       <div class="two-col">
@@ -3577,6 +3663,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if($('jobsPage')?.style.display!=='none') renderJobsPage();
     });
     cpRenderSummary();
+    // Checklist collapse/expand toggle
+    const clToggle = document.getElementById('checklistToggle');
+    if(clToggle) clToggle.addEventListener('click', () => {
+      checklistCollapsed = !checklistCollapsed;
+      const body = document.getElementById('checklistBody');
+      const chev = clToggle.querySelector('.ti-chevron-up, .ti-chevron-down');
+      if(body) body.style.display = checklistCollapsed ? 'none' : '';
+      if(chev){ chev.classList.toggle('ti-chevron-down', checklistCollapsed); chev.classList.toggle('ti-chevron-up', !checklistCollapsed); }
+      // toggle header border/margin
+      if(checklistCollapsed){ clToggle.style.marginBottom=''; clToggle.style.paddingBottom=''; clToggle.style.borderBottom=''; }
+      else { clToggle.style.marginBottom='9px'; clToggle.style.paddingBottom='7px'; clToggle.style.borderBottom='1px solid var(--border)'; }
+    });
     document.querySelectorAll('[data-job-stage-check]').forEach(box=>box.addEventListener('change',()=>{
       const j=jobs.find(x=>x.id===openJobId);if(!j)return;
       const itemId = box.dataset.jobStageCheck;
