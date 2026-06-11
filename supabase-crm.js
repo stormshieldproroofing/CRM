@@ -135,14 +135,28 @@ async function loadAllFromSupabase() {
 
   if (jobErr) { console.error('[Supabase] jobs load failed:', jobErr); }
   else {
+    // Batch-generate signed URLs for all file paths so previews work after reload.
+    const allPaths = (files || []).map(f => f.storage_path).filter(Boolean);
+    const urlMap = {};
+    if(allPaths.length){
+      try {
+        const { data: signed } = await sb.storage.from('job-files').createSignedUrls(allPaths, 60*60*24*7); // 7 days
+        (signed || []).forEach(s => { if(s && s.path && s.signedUrl) urlMap[s.path] = s.signedUrl; });
+      } catch(e){ console.warn('signed url batch failed', e); }
+    }
+    const isPdfName = n => /\.pdf$/i.test(n||'');
+    const fileRec = f => ({
+      name: f.name, path: f.storage_path, _id: f.id,
+      url: urlMap[f.storage_path] || null,
+      isPdf: isPdfName(f.name),
+    });
     const newJobs = (jobRows || []).map(r => {
       const jobFiles = (files || []).filter(f => f.job_id === r.id);
       const photos = { before:[], during:[], after:[] };
       jobFiles.filter(f => f.kind === 'photo').forEach(f => {
-        (photos[f.section] || photos.before).push({ name:f.name, path:f.storage_path, _id:f.id });
+        (photos[f.section] || photos.before).push(fileRec(f));
       });
-      const byKind = k => jobFiles.filter(f => f.kind === k)
-        .map(f => ({ name:f.name, path:f.storage_path, _id:f.id }));
+      const byKind = k => jobFiles.filter(f => f.kind === k).map(fileRec);
 
       const stageChecklistDone = {};
       (chk || []).filter(c => c.job_id === r.id).forEach(c => {
@@ -417,16 +431,28 @@ window.fetchMapView = fetchMapView;
 
 /* ---------- FILE upload helper (use in photo/contract tabs) */
 async function uploadJobFile(jobId, kind, section, file) {
-  const path = `${jobId}/${kind}/${Date.now()}-${file.name}`;
-  const { error } = await sb.storage.from('job-files').upload(path, file);
-  if (error) { console.error(error); return null; }
-  await sb.from('job_files').insert({
+  const safeName = (file.name||'file').replace(/[^\w.\-]+/g,'_');
+  const path = `${jobId}/${kind}/${Date.now()}-${safeName}`;
+  const { error } = await sb.storage.from('job-files').upload(path, file, { contentType: file.type || undefined });
+  if (error) { console.error('[Supabase] file upload failed:', error); return null; }
+  const { data: row } = await sb.from('job_files').insert({
     job_id: jobId, kind, section: section || null, name: file.name, storage_path: path,
-  });
-  const { data } = await sb.storage.from('job-files').createSignedUrl(path, 3600);
-  return { name:file.name, path, url:data?.signedUrl };
+  }).select().maybeSingle();
+  const { data } = await sb.storage.from('job-files').createSignedUrl(path, 60*60*24*7);
+  return { name:file.name, path, url:data?.signedUrl, _id: row?.id, isPdf: /\.pdf$/i.test(file.name) || file.type==='application/pdf' };
 }
 window.uploadJobFile = uploadJobFile;
+
+/* ---------- FILE delete helper */
+async function deleteJobFile(rec){
+  if(!rec) return;
+  try {
+    if(rec.path) await sb.storage.from('job-files').remove([rec.path]);
+    if(rec._id) await sb.from('job_files').delete().eq('id', rec._id);
+    else if(rec.path) await sb.from('job_files').delete().eq('storage_path', rec.path);
+  } catch(e){ console.warn('file delete failed', e); }
+}
+window.deleteJobFile = deleteJobFile;
 
 /* ---------- OVERRIDE the app's storage functions --------- */
 function installOverrides() {

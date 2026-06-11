@@ -1782,6 +1782,66 @@ function storedFileFromUpload(file){
   });
 }
 
+// Downsize an image File before storage. Returns a new File (JPEG) capped at maxDim px
+// on the long edge at the given quality. PDFs and non-images pass through untouched.
+function downsizeImageFile(file, maxDim=2000, quality=0.82){
+  return new Promise(resolve=>{
+    if(!file.type || !file.type.startsWith('image/')){ resolve(file); return; }
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let { width, height } = img;
+        if(width<=maxDim && height<=maxDim){
+          // Still re-encode to JPEG to strip metadata + compress, unless already small
+          if(file.size < 600*1024){ resolve(file); return; }
+        }
+        const scale=Math.min(1, maxDim/Math.max(width,height));
+        const w=Math.round(width*scale), h=Math.round(height*scale);
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        canvas.toBlob(blob=>{
+          if(!blob){ resolve(file); return; }
+          const newName=file.name.replace(/\.(png|webp|heic|heif|bmp|tiff?)$/i,'.jpg');
+          resolve(new File([blob], newName, { type:'image/jpeg', lastModified:Date.now() }));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror=()=>resolve(file);
+      img.src=e.target.result;
+    };
+    reader.onerror=()=>resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Unified intake: downsize (if image) → upload to Supabase storage if available,
+// else fall back to base64 local storage. Returns a record with a usable `url`.
+async function intakeJobFile(file, kind, section){
+  const sized = await downsizeImageFile(file);
+  // If Supabase upload is wired and we have an open job that's synced, use storage
+  if(window.uploadJobFile && window.openJobId){
+    const j = jobs.find(x=>x.id===window.openJobId);
+    if(j && j._sb){
+      try {
+        const rec = await window.uploadJobFile(j.id, kind, section, sized);
+        if(rec && rec.url){
+          return {
+            name: rec.name, path: rec.path, url: rec.url,
+            date: fileDateText(), size: sized.size,
+            type: sized.type, isPdf: sized.type==='application/pdf'||/\.pdf$/i.test(sized.name),
+          };
+        }
+      } catch(e){ console.warn('Supabase upload failed, falling back to local', e); }
+    }
+  }
+  // Fallback: base64 local record
+  return storedFileFromUpload(sized);
+}
+window.intakeJobFile = intakeJobFile;
+window.downsizeImageFile = downsizeImageFile;
+
 function openStoredFile(file){
   if(!file?.url){toast('File preview is unavailable');return}
   const win=window.open('');
@@ -2283,29 +2343,50 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     const checklistItems = totalCount ? combined.map(item=>{
       const completed = !!doneMap[item.id];
       const details = checklistCompletionDetails(j,col.id,item.id);
-      const isReq = item.required === true;
       const isExtra = item.scope === 'extra';
       const canCheck = canCurrentUserCheckItem(item);
       const disabledAttr = (!canCheck && !completed) ? 'disabled' : '';
       const lockTitle = !canCheck ? `Only ${item.role === 'admin' ? 'admins' : (item.role === 'salesman' ? 'sales/admin' : 'team')} can check this` : '';
+      const accent = item.role === 'admin' ? '#A78BFA' : (item.role === 'salesman' ? '#4D9DE0' : 'var(--brand-light)');
+      return { item, completed, details, isExtra, canCheck, disabledAttr, lockTitle, accent };
+    }) : [];
+
+    // Render a single checklist row
+    const rowHtml = r => {
+      const { item, completed, details, isExtra, canCheck, disabledAttr, lockTitle, accent } = r;
       return `
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--brand);padding:5px 0;cursor:${canCheck?'pointer':'not-allowed'};${isReq ? 'border-left:2px solid var(--danger);padding-left:8px;margin-left:-2px':''};${!canCheck && !completed ? 'opacity:0.55' : ''}" title="${lockTitle}">
-            <input type="checkbox" data-job-stage-check="${item.id}" ${completed?'checked':''} ${disabledAttr} style="width:14px;height:14px;accent-color:${isReq?'var(--danger)':'var(--brand-light)'};cursor:${canCheck?'pointer':'not-allowed'};flex-shrink:0">
-            <span style="min-width:0;display:flex;align-items:center;gap:6px;flex:1">
-              <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.text)}</span>
-              ${isReq ? `<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--danger);padding:1px 4px;border:1px solid rgba(248,113,113,0.4);border-radius:3px;flex-shrink:0">REQ</span>`:''}
-              ${renderRoleBadge(item.role)}
-              ${completed?`<span style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);line-height:1.35;white-space:nowrap;text-align:right;flex-shrink:0"><i class="ti ti-user-check" style="font-size:11px;color:var(--success)" aria-hidden="true"></i>${escapeHtml(details)}</span>`:''}
-              ${isExtra && canCheck?`<button data-job-extra-delete="${item.id}" title="Remove this task" style="margin-left:auto;width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" onmouseover="this.style.color='var(--danger)';this.style.borderColor='rgba(248,113,113,0.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='rgba(255,255,255,0.08)'"><i class="ti ti-x" style="font-size:11px" aria-hidden="true"></i></button>`:''}
-            </span>
-          </label>
-        `;
-    }).join('') : `<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)">
-          <i class="ti ti-list-check" style="font-size:13px" aria-hidden="true"></i>No checklist items for this stage
+        <label style="display:flex;align-items:center;gap:9px;font-size:12px;color:var(--brand);padding:6px 0;cursor:${canCheck?'pointer':'not-allowed'};${!canCheck && !completed ? 'opacity:0.5' : ''}" title="${lockTitle}">
+          <input type="checkbox" data-job-stage-check="${item.id}" ${completed?'checked':''} ${disabledAttr} style="width:15px;height:15px;accent-color:${accent};cursor:${canCheck?'pointer':'not-allowed'};flex-shrink:0">
+          <span style="min-width:0;display:flex;align-items:center;gap:6px;flex:1">
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${completed?'color:var(--muted);text-decoration:line-through;text-decoration-color:rgba(255,255,255,0.2)':''}">${escapeHtml(item.text)}</span>
+            ${completed?`<span style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0"><i class="ti ti-user-check" style="font-size:11px;color:var(--success)" aria-hidden="true"></i>${escapeHtml(details)}</span>`:''}
+            ${isExtra && canCheck?`<button data-job-extra-delete="${item.id}" title="Remove this task" style="margin-left:auto;width:20px;height:20px;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-x" style="font-size:11px" aria-hidden="true"></i></button>`:''}
+          </span>
+        </label>`;
+    };
+
+    // Group into Sales vs Admin (anything not admin counts as sales/shared)
+    const salesRows = checklistItems.filter(r => r.item.role !== 'admin');
+    const adminRows = checklistItems.filter(r => r.item.role === 'admin');
+
+    const groupHtml = (title, rows, color, bg, icon) => {
+      if(!rows.length) return '';
+      const done = rows.filter(r => r.completed).length;
+      return `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 9px;background:${bg};border-radius:6px;margin-bottom:2px">
+            <i class="ti ${icon}" style="font-size:12px;color:${color}" aria-hidden="true"></i>
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${color}">${title}</span>
+            <div style="flex:1"></div>
+            <span style="font-size:10px;font-weight:600;color:${done===rows.length?'#34D399':'var(--muted)'}">${done}/${rows.length}</span>
+          </div>
+          <div style="padding-left:4px">${rows.map(rowHtml).join('')}</div>
         </div>`;
-    const reqStatusHtml = reqItems.length
-      ? `<span style="font-size:10px;font-weight:700;letter-spacing:0.04em;color:${reqDone===reqItems.length?'var(--success)':'var(--danger)'};padding:2px 6px;border:1px solid ${reqDone===reqItems.length?'rgba(52,211,153,0.3)':'rgba(248,113,113,0.35)'};border-radius:4px">${reqDone}/${reqItems.length} REQUIRED</span>`
-      : '';
+    };
+
+    const groupedChecklist = totalCount
+      ? `${groupHtml('Sales Tasks', salesRows, '#4D9DE0', 'rgba(77,157,224,0.1)', 'ti-user')}${groupHtml('Admin Tasks', adminRows, '#A78BFA', 'rgba(167,139,250,0.1)', 'ti-shield-lock')}`
+      : `<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);padding:8px 0"><i class="ti ti-list-check" style="font-size:13px" aria-hidden="true"></i>No checklist items for this stage</div>`;
     body.innerHTML=`
       <div class="action-pills" style="margin-bottom:12px">
         <span class="ap-pill" style="background:rgba(139,92,246,0.15);border-color:rgba(139,92,246,0.35);color:#A78BFA"><i class="ti ti-sparkles" style="font-size:12px" aria-hidden="true"></i>AI Summary</span>
@@ -2329,14 +2410,13 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <span style="font-size:11px;color:var(--muted)">Created <strong style="color:var(--brand)">${j.created}</strong></span>
       </div>
       <div class="checklist-box" style="margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid var(--border)">
           <i class="ti ti-checkbox" style="font-size:14px;color:var(--brand-mid)" aria-hidden="true"></i>
           <span style="font-weight:700;font-size:12px;color:var(--brand)">${col.name} Checklist</span>
           <div style="flex:1"></div>
-          ${reqStatusHtml}
           <span style="font-size:11px;color:var(--muted)">${totalDone}/${totalCount||0}</span>
         </div>
-        ${checklistItems}
+        ${groupedChecklist}
         <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.06)">
           <input id="jobExtraTaskInput" type="text" placeholder="Add a task for this job..." style="flex:1;background:#1A1F2E;border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
           <button id="jobExtraTaskAdd" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">+ Add</button>
@@ -3529,6 +3609,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       arr.push({
         id: 'extra-' + Date.now() + '-' + Math.random().toString(36).slice(2,7),
         text,
+        role: (window.currentMember?.role === 'admin') ? 'admin' : 'salesman',
         by: (window.currentMember?.name) || 'Someone',
         at: new Date().toISOString(),
       });
@@ -3788,14 +3869,19 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.phAddFiles = async function(sectionKey, files){
       if(!files||!files.length) return;
       const images=Array.from(files).filter(file=>file.type.startsWith('image/'));
-      const records=await Promise.all(images.map(storedFileFromUpload));
+      if(!images.length) return;
+      toast('Uploading…');
+      const records=await Promise.all(images.map(f=>intakeJobFile(f,'photo',sectionKey)));
       j.photos[sectionKey].push(...records);
       saveToStorage();
       body.innerHTML = photosTabHTML();
       wirePhotoFunctions();
+      toast('Photos uploaded');
     };
 
     window.phDelete = function(sectionKey, idx){
+      const rec=j.photos[sectionKey][idx];
+      window.deleteJobFile?.(rec);
       j.photos[sectionKey].splice(idx,1);
       saveToStorage();
       body.innerHTML = photosTabHTML();
@@ -3905,13 +3991,16 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.phAddFiles = async function(sectionKey, files){
       if(!files||!files.length) return;
       const images=Array.from(files).filter(file=>file.type.startsWith('image/'));
-      const records=await Promise.all(images.map(storedFileFromUpload));
+      if(!images.length) return;
+      toast('Uploading…');
+      const records=await Promise.all(images.map(f=>intakeJobFile(f,'photo',sectionKey)));
       j.photos[sectionKey].push(...records);
       saveToStorage();
       body.innerHTML=photosTabHTML();
       wirePhFns();
+      toast('Photos uploaded');
     };
-    window.phDelete=function(sk,i){j.photos[sk].splice(i,1);saveToStorage();body.innerHTML=photosTabHTML();wirePhFns()};
+    window.phDelete=function(sk,i){const rec=j.photos[sk][i];window.deleteJobFile?.(rec);j.photos[sk].splice(i,1);saveToStorage();body.innerHTML=photosTabHTML();wirePhFns()};
     window.phOpenLightbox=function(sk,i){const p=j.photos[sk][i];document.getElementById('ph-lb-img').src=p.url;document.getElementById('ph-lb-cap').textContent=p.name;document.getElementById('ph-lightbox').classList.add('open')};
     function wirePhFns(){const lb=document.getElementById('ph-lightbox');if(lb)lb.addEventListener('click',e=>{if(e.target===lb)lb.classList.remove('open')})}
     wirePhFns();
@@ -4014,13 +4103,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.contractAddFiles=async function(files){
       const pending=Array.from(files);
       if(!pending.length) return;
-      const records=await Promise.all(pending.map(storedFileFromUpload));
+      toast('Uploading…');
+      const records=await Promise.all(pending.map(f=>intakeJobFile(f,'contract',null)));
       j.contracts.push(...records);
       saveToStorage();
       body.innerHTML=contractHTML();
       wireContractLightbox();
+      toast('Contract uploaded');
     };
-    window.contractDelete=function(i){j.contracts.splice(i,1);saveToStorage();body.innerHTML=contractHTML();wireContractLightbox()};
+    window.contractDelete=function(i){const rec=j.contracts[i];window.deleteJobFile?.(rec);j.contracts.splice(i,1);saveToStorage();body.innerHTML=contractHTML();wireContractLightbox()};
     window.contractOpenFile=function(i){
       const f=j.contracts[i];if(!f)return;
       const content=document.getElementById('doc-lb-content');
@@ -4129,13 +4220,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.checkAddFiles=async function(files){
       const pending=Array.from(files);
       if(!pending.length) return;
-      const records=await Promise.all(pending.map(storedFileFromUpload));
+      toast('Uploading…');
+      const records=await Promise.all(pending.map(f=>intakeJobFile(f,'check',null)));
       j.checks.push(...records);
       saveToStorage();
       body.innerHTML=checksHTML();
       wireCheckLightbox();
+      toast('Check uploaded');
     };
-    window.checkDelete=function(i){j.checks.splice(i,1);saveToStorage();body.innerHTML=checksHTML();wireCheckLightbox()};
+    window.checkDelete=function(i){const rec=j.checks[i];window.deleteJobFile?.(rec);j.checks.splice(i,1);saveToStorage();body.innerHTML=checksHTML();wireCheckLightbox()};
     window.checkOpenFile=function(i){
       const f=j.checks[i];if(!f)return;
       const content=document.getElementById('chk-lb-content');
