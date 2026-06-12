@@ -7878,11 +7878,10 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
       <div class="v-label">Labor Breakdown</div>
       <table>
         ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
-        ${c.storyAdd?line(`2-story adder — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory), true):''}
+        ${c.storyAdd?line(`2-story adder — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
         ${c.mixedPitch
-          ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} adder — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder), true)).join('')
-          : (c.laborSteep?line(`Steep pitch adder — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep), true):'')}
-        ${line(`<strong>Labor subtotal</strong>${c.mixedPitch?` — ${c.sq} sq (mixed pitch)`:` — ${c.sq} sq × $${c.ratePerSq}/sq`}`, '<strong>'+fmt(c.labor)+'</strong>')}
+          ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} adder — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder))).join('')
+          : (c.laborSteep?line(`Steep pitch adder — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep)):'')}
         ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
         ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
         <tr class="v-total"><td>TOTAL PAYMENT</td><td style="text-align:right">${fmt(c.total)}</td></tr>
