@@ -2612,7 +2612,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <div id="ccFloorWarning" style="display:none;margin-top:6px;padding:5px 8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:5px;font-size:10px;color:var(--warn);line-height:1.3"></div>
                 </div>
                 <button onclick="openInsuranceEstimator(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:13px"></i>Insurance Contribution Estimator</button>
-                <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>`
+                <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>
+                <button onclick="openSubVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt" style="font-size:13px"></i>Payment Breakdown / Receipt</button>`
             }
           </div>
         </div>
@@ -4478,7 +4479,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       body.innerHTML=lossHTML(false);
     };
     window.lossDelete=function(i){j.lossFiles.splice(i,1);saveToStorage();body.innerHTML=lossHTML(false)};
-    window.lossSyncField=function(field,val){j[field]=val};  // live sync to job
+    window.lossSyncField=function(field,val){ j[field]=val; saveToStorage(); };  // live sync to job + persist
     window.lossSave=function(){saveToStorage();toast('Insurance details saved');};
     window.lossAutofill=function(){
       body.innerHTML=lossHTML(true);
@@ -5494,13 +5495,14 @@ $('cancelAdd').onclick=closeJobModal;
     return fillOrder[0] || null;
   }
 
+  let acvManual = false;   // true once user types ACV directly, or a synced value differs from auto
+
   function updateAcv(){
+    if(acvManual) return;   // respect manually-entered / Loss-Statement-synced ACV
     const rcv = val('f-rcv'), rdep = val('f-recovdep'), nrdep = val('f-nonrecovdep');
     const acvEl = document.getElementById('f-acv');
     const status = document.getElementById('f-acv-status');
     if(!acvEl) return;
-    // Auto-calc only when RCV present and at least one depreciation field present,
-    // and the user isn't currently editing ACV directly.
     if(document.activeElement === acvEl) return;
     if(rcv != null){
       const acv = rcv - (rdep||0) - (nrdep||0);
@@ -5544,6 +5546,7 @@ $('cancelAdd').onclick=closeJobModal;
   const acvEl = document.getElementById('f-acv');
   if(acvEl){
     acvEl.addEventListener('input', () => {
+      acvManual = true;
       const status = document.getElementById('f-acv-status');
       if(status) status.textContent = 'manual';
     });
@@ -5552,6 +5555,19 @@ $('cancelAdd').onclick=closeJobModal;
   // Reset state when modal opens (re-detect order from currently-populated values)
   window.__resetInsuranceInterlock = () => {
     fillOrder = FIELDS.filter(id => val(id) != null);
+    // Decide ACV mode: if a value is already present (e.g. synced from the Loss Statement)
+    // that doesn't match the auto-calc, treat it as manual so we don't clobber it.
+    const acvEl2 = document.getElementById('f-acv');
+    const rcv = val('f-rcv'), rdep = val('f-recovdep'), nrdep = val('f-nonrecovdep');
+    const autoAcv = (rcv != null) ? (rcv - (rdep||0) - (nrdep||0)) : null;
+    const curAcv = acvEl2 ? parseFloat(acvEl2.value) : NaN;
+    if(isFinite(curAcv) && (autoAcv == null || Math.abs(curAcv - autoAcv) > 0.5)){
+      acvManual = true;
+      const status = document.getElementById('f-acv-status');
+      if(status) status.textContent = 'manual';
+    } else {
+      acvManual = false;
+    }
     recompute();
   };
 })();
@@ -7523,6 +7539,363 @@ async function loadCompanyInfo(){
     console.warn('company_info load error', e);
   }
 }
+
+// ── SUBCONTRACTOR PAYMENT VOUCHER ──
+// Computes labor pay from squares + story + pitch tier + decking + additional work,
+// then prints a one-page voucher to attach to the sub's check.
+const SUB_PAY = {
+  base: 75,        // $/sq
+  storyAdder: 5,   // +$/sq for 2-story
+  steep79: 5,      // +$/sq for 7/12–9/12
+  steep1012: 10,   // +$/sq total for 10/12–12/12 (stacks: 5 + 5)
+  perSheet: 40,    // $/sheet of decking
+};
+
+async function openSubVoucher(jobId){
+  const j = jobs.find(x=>x.id===jobId) || null;
+  if(window.loadSubcontractors && !window.subcontractors) await window.loadSubcontractors();
+  const subs = (window.subcontractors || []).filter(s=>s.active!==false);
+  const squares = j?.roofEstimate?.totalSquares ? Math.round(j.roofEstimate.totalSquares*10)/10 : '';
+  const saved = (j && j.subVoucher) ? j.subVoucher : {};
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:560px;max-width:100%;max-height:94vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Payment Breakdown / Receipt</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${j?escapeHtml(j.name||''):'Standalone'}</div>
+        </div>
+        <button id="svClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div style="grid-column:1 / -1">
+            <label class="ie-lbl">Subcontractor</label>
+            <select id="svSub" class="ie-inp" style="cursor:pointer">
+              <option value="">— Select sub —</option>
+              ${subs.map(s=>`<option value="${s.id}" ${saved.subId===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="ie-lbl">Total Squares</label>
+            <input id="svSquares" class="ie-inp" type="text" inputmode="decimal" value="${saved.squares??squares}" placeholder="28" ${saved.mixedPitch?'disabled style="opacity:0.5"':''}>
+          </div>
+          <div>
+            <label class="ie-lbl">Stories</label>
+            <select id="svStory" class="ie-inp" style="cursor:pointer">
+              <option value="1" ${saved.story!=2?'selected':''}>1 story</option>
+              <option value="2" ${saved.story==2?'selected':''}>2 story (+$${SUB_PAY.storyAdder}/sq)</option>
+            </select>
+          </div>
+          <div style="grid-column:1 / -1">
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px">
+              <input id="svMixedToggle" type="checkbox" ${saved.mixedPitch?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">
+              Mixed pitch (enter squares per pitch tier)
+            </label>
+            <!-- Single-pitch mode -->
+            <div id="svSinglePitchWrap" style="${saved.mixedPitch?'display:none':''}">
+              <label class="ie-lbl">Pitch (whole roof)</label>
+              <select id="svPitch" class="ie-inp" style="cursor:pointer">
+                <option value="0" ${(!saved.pitch||saved.pitch==='0')?'selected':''}>Standard ≤6/12 (no adder)</option>
+                <option value="79" ${saved.pitch==='79'?'selected':''}>Steep 7/12–9/12 (+$${SUB_PAY.steep79}/sq)</option>
+                <option value="1012" ${saved.pitch==='1012'?'selected':''}>Extra steep 10/12–12/12 (+$${SUB_PAY.steep1012}/sq)</option>
+              </select>
+            </div>
+            <!-- Mixed-pitch mode -->
+            <div id="svMixedPitchWrap" style="${saved.mixedPitch?'':'display:none'};background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:9px 11px">
+              <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center;font-size:11px">
+                <span style="color:var(--muted)">Standard ≤6/12 ($${SUB_PAY.base}/sq)</span>
+                <input id="svSqStd" class="ie-inp" type="text" inputmode="decimal" value="${saved.sqStd??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
+                <span style="color:var(--muted)">Steep 7–9/12 (+$${SUB_PAY.steep79}/sq)</span>
+                <input id="svSq79" class="ie-inp" type="text" inputmode="decimal" value="${saved.sq79??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
+                <span style="color:var(--muted)">Extra steep 10–12/12 (+$${SUB_PAY.steep1012}/sq)</span>
+                <input id="svSq1012" class="ie-inp" type="text" inputmode="decimal" value="${saved.sq1012??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
+              </div>
+              <div id="svMixedSum" style="font-size:9px;color:var(--muted);margin-top:6px;text-align:right"></div>
+            </div>
+          </div>
+          <div>
+            <label class="ie-lbl">Decking sheets replaced</label>
+            <input id="svSheets" class="ie-inp" type="text" inputmode="decimal" value="${saved.sheets??''}" placeholder="0">
+          </div>
+          <div>
+            <label class="ie-lbl">Check #</label>
+            <input id="svCheckNo" class="ie-inp" type="text" value="${saved.checkNo??''}" placeholder="optional">
+          </div>
+        </div>
+
+        <!-- Additional work lines -->
+        <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px">
+          <span style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">Additional Work</span>
+          <div style="flex:1"></div>
+          <button id="svAddLine" style="background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer"><i class="ti ti-plus" style="font-size:10px"></i> Add</button>
+        </div>
+        <div id="svExtraLines"></div>
+
+        <!-- Breakdown -->
+        <div id="svBreakdown" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px"></div>
+
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="svSave" class="btn-cancel" style="font-size:12px;padding:9px 14px">Save to Job</button>
+          <div style="flex:1"></div>
+          <button id="svPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Voucher</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · +$${SUB_PAY.steep79}/sq (7–9/12) · +$${SUB_PAY.steep1012}/sq (10–12/12) · $${SUB_PAY.perSheet}/decking sheet.</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.querySelector('#svClose').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+
+  const num = id => { const el=overlay.querySelector('#'+id); if(!el) return 0; const v=evalMathExpr(el.value); return (v!=null)?v:(parseFloat(el.value)||0); };
+  let extraLines = Array.isArray(saved.extraLines) ? saved.extraLines.map(l=>({...l})) : [];
+
+  function renderExtras(){
+    const wrap = overlay.querySelector('#svExtraLines');
+    wrap.innerHTML = extraLines.length ? extraLines.map((l,i)=>`
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <button data-sv-del="${i}" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0">×</button>
+        <input data-sv-desc="${i}" class="ie-inp" type="text" value="${escapeHtml(l.desc||'')}" placeholder="Description" style="flex:1;padding:6px 8px;font-size:12px">
+        <input data-sv-amt="${i}" class="ie-inp" type="text" inputmode="decimal" value="${l.amount||''}" placeholder="0.00" style="width:90px;padding:6px 8px;font-size:12px;text-align:right">
+      </div>`).join('') : `<div style="font-size:11px;color:var(--muted);font-style:italic;padding:2px 0">No additional work. Click + Add to include extras (e.g. chimney flashing, satellite remount).</div>`;
+    wrap.querySelectorAll('[data-sv-desc]').forEach(el=>el.addEventListener('input',()=>{ extraLines[el.dataset.svDesc].desc=el.value; }));
+    wrap.querySelectorAll('[data-sv-amt]').forEach(el=>el.addEventListener('input',()=>{ extraLines[el.dataset.svAmt].amount=el.value; renderBreakdown(); }));
+    wrap.querySelectorAll('[data-sv-del]').forEach(el=>el.addEventListener('click',()=>{ extraLines.splice(parseInt(el.dataset.svDel),1); renderExtras(); renderBreakdown(); }));
+  }
+
+  let mixedPitch = !!saved.mixedPitch;
+
+  function compute(){
+    const story = parseInt(overlay.querySelector('#svStory').value)||1;
+    const storyAdd = (story===2) ? SUB_PAY.storyAdder : 0;
+    const sheets = num('svSheets');
+
+    let sq, laborBase, laborStory, laborSteep, labor, tiers, ratePerSq=null;
+    if(mixedPitch){
+      const sqStd = num('svSqStd'), sq79 = num('svSq79'), sq1012 = num('svSq1012');
+      sq = sqStd + sq79 + sq1012;
+      laborBase = sq * SUB_PAY.base;
+      laborStory = sq * storyAdd;
+      laborSteep = sq79*SUB_PAY.steep79 + sq1012*SUB_PAY.steep1012;
+      labor = laborBase + laborStory + laborSteep;
+      tiers = [
+        { label:'Standard ≤6/12', sq:sqStd, adder:0 },
+        { label:'Steep 7–9/12', sq:sq79, adder:SUB_PAY.steep79 },
+        { label:'Extra steep 10–12/12', sq:sq1012, adder:SUB_PAY.steep1012 },
+      ].filter(t=>t.sq>0);
+    } else {
+      sq = num('svSquares');
+      const pitch = overlay.querySelector('#svPitch').value;
+      const steepAdd = pitch==='79' ? SUB_PAY.steep79 : (pitch==='1012' ? SUB_PAY.steep1012 : 0);
+      ratePerSq = SUB_PAY.base + storyAdd + steepAdd;
+      laborBase = sq * SUB_PAY.base;
+      laborStory = sq * storyAdd;
+      laborSteep = sq * steepAdd;
+      labor = sq * ratePerSq;
+      tiers = [{ label:'', sq, adder:steepAdd }];
+    }
+    const decking = sheets * SUB_PAY.perSheet;
+    const extras = extraLines.reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
+    const total = labor + decking + extras;
+    return { sq, story, storyAdd, sheets, mixedPitch, tiers, ratePerSq, laborBase, laborStory, laborSteep, labor, decking, extras, total };
+  }
+
+  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  function renderBreakdown(){
+    const c = compute();
+    const row=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+label+'</span>':'<span>'+label+'</span>'}<span style="font-variant-numeric:tabular-nums">${val}</span></div>`;
+    let laborRows = '';
+    if(c.mixedPitch){
+      laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
+      if(c.storyAdd) laborRows += row(`2-story adder — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} adder — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
+      laborRows += row(`Labor subtotal`, fmt(c.labor));
+    } else {
+      laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
+      if(c.storyAdd) laborRows += row(`2-story adder — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      if(c.laborSteep) laborRows += row(`Steep adder — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
+      laborRows += row(`Labor subtotal — ${c.sq} sq × $${c.ratePerSq}/sq`, fmt(c.labor));
+    }
+    overlay.querySelector('#svBreakdown').innerHTML = `
+      ${laborRows}
+      ${c.decking?row(`Decking — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
+      ${c.extras?row('Additional work', fmt(c.extras)):''}
+      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:#34D399;border-top:2px solid var(--border);padding-top:9px;margin-top:6px"><span>TOTAL PAY</span><span style="font-variant-numeric:tabular-nums">${fmt(c.total)}</span></div>
+    `;
+    // Update mixed-sum hint
+    const sumEl = overlay.querySelector('#svMixedSum');
+    if(sumEl && mixedPitch) sumEl.textContent = `Total: ${c.sq} squares`;
+  }
+
+  // Mixed-pitch toggle
+  overlay.querySelector('#svMixedToggle').addEventListener('change', e=>{
+    mixedPitch = e.target.checked;
+    overlay.querySelector('#svSinglePitchWrap').style.display = mixedPitch ? 'none' : '';
+    overlay.querySelector('#svMixedPitchWrap').style.display = mixedPitch ? '' : 'none';
+    const sqEl = overlay.querySelector('#svSquares');
+    if(sqEl){ sqEl.disabled = mixedPitch; sqEl.style.opacity = mixedPitch ? '0.5' : ''; }
+    renderBreakdown();
+  });
+
+  overlay.querySelectorAll('#svSquares,#svStory,#svPitch,#svSheets,#svSqStd,#svSq79,#svSq1012').forEach(el=>el.addEventListener('input',renderBreakdown));
+  overlay.querySelectorAll('#svStory,#svPitch').forEach(el=>el.addEventListener('change',renderBreakdown));
+  overlay.querySelector('#svAddLine').addEventListener('click',()=>{ extraLines.push({desc:'',amount:''}); renderExtras(); });
+
+  function collectVoucher(){
+    return {
+      subId: overlay.querySelector('#svSub').value||'',
+      mixedPitch,
+      squares: num('svSquares'),
+      sqStd: num('svSqStd'), sq79: num('svSq79'), sq1012: num('svSq1012'),
+      story: parseInt(overlay.querySelector('#svStory').value)||1,
+      pitch: overlay.querySelector('#svPitch')?.value || '0',
+      sheets: num('svSheets'),
+      checkNo: overlay.querySelector('#svCheckNo').value||'',
+      extraLines,
+    };
+  }
+
+  overlay.querySelector('#svSave').addEventListener('click',()=>{
+    if(j){ j.subVoucher = collectVoucher(); saveToStorage(); }
+    toast('Voucher saved to job');
+  });
+
+  overlay.querySelector('#svPrint').addEventListener('click',()=>{
+    const c = compute();
+    const subId = overlay.querySelector('#svSub').value;
+    const sub = (window.subcontractors||[]).find(s=>s.id===subId);
+    const checkNo = overlay.querySelector('#svCheckNo').value||'';
+    if(!sub){ toast('Select a subcontractor first'); return; }
+    if(c.total<=0){ toast('Enter squares to calculate pay'); return; }
+    // Save voucher + create/update the paid sub expense, then print
+    if(j){
+      j.subVoucher = collectVoucher();
+      createOrUpdateSubExpense(j, sub, c, checkNo);
+      saveToStorage();
+    }
+    printSubVoucher(j, sub, c, checkNo, extraLines);
+    toast('Voucher printed · sub expense logged as paid');
+  });
+
+  renderExtras();
+  renderBreakdown();
+}
+window.openSubVoucher = openSubVoucher;
+
+// Create (or update on reprint) the subcontractor labor expense, marked paid.
+// Uses a stable tag on the expense so reprinting updates rather than duplicates.
+function createOrUpdateSubExpense(j, sub, c, checkNo){
+  if(!j) return;
+  if(!Array.isArray(j.expenses)) j.expenses = [];
+  const tag = 'subvoucher';   // marks the auto-created voucher expense
+  const today = new Date().toISOString().slice(0,10);
+  const desc = `Sub labor — ${c.sq} sq${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`;
+  let exp = j.expenses.find(e=>e._src===tag);
+  if(!exp){
+    exp = { _src:tag };
+    j.expenses.push(exp);
+  }
+  exp.cat = 'Labor';
+  exp.desc = desc;
+  exp.amount = c.total.toFixed(2);
+  exp.vendor = sub.id;
+  exp.vendorName = sub.name;
+  exp.paid = true;
+  exp.paidDate = today;
+  exp.paidMethod = checkNo ? 'Check' : 'Check';
+  exp.paidNotes = checkNo ? `Check #${checkNo}` : '';
+  if(typeof refreshExpenseUI==='function') refreshExpenseUI();
+  if(typeof logActivity==='function') logActivity(j,'subpay','Sub voucher paid',`${sub.name}: $${Math.round(c.total).toLocaleString()}${checkNo?` · Check #${checkNo}`:''}`);
+}
+window.createOrUpdateSubExpense = createOrUpdateSubExpense;
+
+function printSubVoucher(j, sub, c, checkNo, extraLines){
+  const ci = getCompanyInfo();
+  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const accent = '#1a3a6a';
+  const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const addr = (j?.address && j.address!=='—') ? j.address : '';
+  const line = (label, val, sub2) => `<tr><td style="padding:6px 10px;font-size:10pt;${sub2?'padding-left:24px;color:#555':''}">${label}</td><td style="padding:6px 10px;font-size:10pt;text-align:right;font-variant-numeric:tabular-nums">${val}</td></tr>`;
+  const win = window.open('', '_blank');
+  if(!win){ toast('Allow pop-ups to print'); return; }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Receipt${sub?' - '+escapeHtml(sub.name):''}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
+  <style>
+    @page { size: letter; margin: 0; }
+    *{box-sizing:border-box}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0.6in 0.5in;font-size:11pt}
+    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:12px;margin-bottom:16px}
+    .v-co{display:flex;align-items:center;gap:12px}
+    .v-logo{height:60px;width:auto;max-width:90px;object-fit:contain}
+    .v-co-name{font-size:14pt;font-weight:800;color:${accent}}
+    .v-co-detail{font-size:8pt;color:#000;line-height:1.5}
+    .v-title{font-size:16pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
+    .v-meta{font-size:9pt;color:#000;text-align:right;line-height:1.6;margin-top:4px}
+    .v-meta strong{color:${accent}}
+    .v-section{margin-bottom:16px}
+    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:4px}
+    .v-box{font-size:11pt;line-height:1.5}
+    table{width:100%;border-collapse:collapse;margin-top:4px}
+    table td{border-bottom:1px solid #eee}
+    .v-total td{font-size:13pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:10px}
+    .v-sign{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+    .v-sign-line{border-bottom:1px solid #000;height:34px;margin-bottom:4px}
+    .v-sign-lbl{font-size:8pt;color:#555}
+    .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+    @media print{.v-print-btn{display:none}}
+  </style></head><body>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
+    <div class="v-head">
+      <div class="v-co">
+        ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="v-logo">`:''}
+        <div>
+          <div class="v-co-name">${escapeHtml(ci.name||'')}</div>
+          <div class="v-co-detail">${ci.address?escapeHtml(ci.address)+'<br>':''}${ci.cityStateZip?escapeHtml(ci.cityStateZip)+'<br>':''}${ci.phone?escapeHtml(ci.phone):''}</div>
+        </div>
+      </div>
+      <div>
+        <div class="v-title">Payment Breakdown / Receipt</div>
+        <div class="v-meta"><strong>Date:</strong> ${today}${checkNo?`<br><strong>Check #:</strong> ${escapeHtml(checkNo)}`:''}</div>
+      </div>
+    </div>
+
+    <div class="v-section" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div>
+        <div class="v-label">Pay To</div>
+        <div class="v-box"><strong>${escapeHtml(sub?.name||'_______________________')}</strong>${sub?.phone?'<br>'+escapeHtml(sub.phone):''}${sub?.specialty?'<br>'+escapeHtml(sub.specialty):''}</div>
+      </div>
+      <div>
+        <div class="v-label">Job</div>
+        <div class="v-box">${escapeHtml(j?.name||'')}${addr?'<br>'+escapeHtml(addr):''}</div>
+      </div>
+    </div>
+
+    <div class="v-section">
+      <div class="v-label">Labor Breakdown</div>
+      <table>
+        ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
+        ${c.storyAdd?line(`2-story adder — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory), true):''}
+        ${c.mixedPitch
+          ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} adder — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder), true)).join('')
+          : (c.laborSteep?line(`Steep pitch adder — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep), true):'')}
+        ${line(`<strong>Labor subtotal</strong>${c.mixedPitch?` — ${c.sq} sq (mixed pitch)`:` — ${c.sq} sq × $${c.ratePerSq}/sq`}`, '<strong>'+fmt(c.labor)+'</strong>')}
+        ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
+        ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
+        <tr class="v-total"><td>TOTAL PAYMENT</td><td style="text-align:right">${fmt(c.total)}</td></tr>
+      </table>
+    </div>
+
+    <div class="v-sign">
+      <div><div class="v-sign-line"></div><div class="v-sign-lbl">Subcontractor signature / date</div></div>
+      <div><div class="v-sign-line"></div><div class="v-sign-lbl">Approved by / date</div></div>
+    </div>
+  </body></html>`);
+  win.document.close();
+}
+window.printSubVoucher = printSubVoucher;
 
 // ── ABC SUPPLY MATERIAL ORDER CALCULATOR ──
 // Computes a roofing material takeoff from squares + linear measurements + waste,

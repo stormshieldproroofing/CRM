@@ -192,6 +192,7 @@ async function loadAllFromSupabase() {
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
+        subVoucher: (r.sub_voucher && typeof r.sub_voucher === 'object') ? r.sub_voucher : null,
         commissionPayouts: Array.isArray(r.commission_payouts) ? r.commission_payouts : [],
         projectManager: r.project_manager || null,
         pmFee: (r.pm_fee != null) ? r.pm_fee : 250,
@@ -261,6 +262,7 @@ async function pushAllToSupabase() {
         stage_checklist_extra: (j.stageChecklistExtra && typeof j.stageChecklistExtra === 'object') ? j.stageChecklistExtra : {},
         quote: (j.quote && typeof j.quote === 'object') ? j.quote : null,
         abc_order: (j.abcOrder && typeof j.abcOrder === 'object') ? j.abcOrder : null,
+        sub_voucher: (j.subVoucher && typeof j.subVoucher === 'object') ? j.subVoucher : null,
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
         project_manager: j.projectManager || null,
         pm_fee: (j.pmFee != null) ? j.pmFee : 250,
@@ -433,12 +435,15 @@ window.fetchMapView = fetchMapView;
 async function uploadJobFile(jobId, kind, section, file) {
   const safeName = (file.name||'file').replace(/[^\w.\-]+/g,'_');
   const path = `${jobId}/${kind}/${Date.now()}-${safeName}`;
+  console.log('[uploadJobFile] uploading to', path, 'size', file.size, 'type', file.type);
   const { error } = await sb.storage.from('job-files').upload(path, file, { contentType: file.type || undefined });
-  if (error) { console.error('[Supabase] file upload failed:', error); return null; }
-  const { data: row } = await sb.from('job_files').insert({
+  if (error) { console.error('[Supabase] file upload failed:', error.message || error); return null; }
+  const { data: row, error: insErr } = await sb.from('job_files').insert({
     job_id: jobId, kind, section: section || null, name: file.name, storage_path: path,
   }).select().maybeSingle();
+  if (insErr) { console.error('[Supabase] job_files insert failed:', insErr.message || insErr); }
   const { data } = await sb.storage.from('job-files').createSignedUrl(path, 60*60*24*7);
+  console.log('[uploadJobFile] success', { path, hasUrl: !!data?.signedUrl, rowId: row?.id });
   return { name:file.name, path, url:data?.signedUrl, _id: row?.id, isPdf: /\.pdf$/i.test(file.name) || file.type==='application/pdf' };
 }
 window.uploadJobFile = uploadJobFile;
