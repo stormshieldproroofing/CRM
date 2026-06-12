@@ -3202,6 +3202,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       j2.deposits.push({amount:amt.toFixed(2),desc,date:dateStr,time:timeStr});
       j2.paidVal=(j2.deposits.reduce((s,d)=>s+parseFloat(d.amount),0)).toFixed(2);
       logActivity(j2, 'deposit_add', 'Deposit added', `$${amt.toLocaleString()} · ${desc}`);
+      saveToStorage();
       $('depAddForm').style.display='none';
       $('depAddToggle').style.display='flex';
       $('depAmtInput').value='';
