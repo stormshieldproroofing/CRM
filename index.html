@@ -8346,50 +8346,9 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
   const line = (label, val, sub2) => `<tr><td style="padding:6px 10px;font-size:10pt;${sub2?'padding-left:24px;color:#555':''}">${label}</td><td style="padding:6px 10px;font-size:10pt;text-align:right;font-variant-numeric:tabular-nums">${val}</td></tr>`;
   const win = window.open('', '_blank');
   if(!win){ toast('Allow pop-ups to print'); return; }
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Receipt${sub?' - '+escapeHtml(sub.name):''}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
-  <style>
-    @page { size: letter; margin: 0; }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0.45in 0.4in;font-size:10.5pt;display:flex;flex-direction:column;min-height:11in;position:relative}
-    /* Trifold guide lines (letter page = 11in tall, folds at 1/3 and 2/3) */
-    .v-fold{position:absolute;left:0.25in;right:0.25in;border-top:1px dashed #cfcfcf;z-index:6;pointer-events:none}
-    .v-fold-1{top:3.667in}
-    .v-fold-2{top:7.333in}
-    .v-fold span{position:absolute;right:0;top:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
-    .v-stub{flex:0 0 auto}
-    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:9px;margin-bottom:11px}
-    .v-co{display:flex;align-items:center;gap:11px}
-    .v-logo{height:52px;width:auto;max-width:80px;object-fit:contain}
-    .v-co-name{font-size:13pt;font-weight:800;color:${accent}}
-    .v-co-detail{font-size:8pt;color:#000;line-height:1.45}
-    .v-title{font-size:14pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
-    .v-meta{font-size:9pt;color:#000;text-align:right;line-height:1.55;margin-top:3px}
-    .v-meta strong{color:${accent}}
-    .v-section{margin-bottom:11px}
-    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:3px}
-    .v-box{font-size:10.5pt;line-height:1.45}
-    table{width:100%;border-collapse:collapse;margin-top:3px}
-    table td{border-bottom:1px solid #eee;padding:4px 8px;font-size:10pt}
-    .v-total td{font-size:12.5pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:8px}
-    .v-sign{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
-    .v-sign-line{border-bottom:1px solid #000;height:30px;margin-bottom:3px}
-    .v-sign-lbl{font-size:8pt;color:#555}
-    /* Check attachment zone pinned to the bottom of the page */
-    .v-check-zone{flex:0 0 auto;margin-top:auto;border:2px dashed #999;border-radius:6px;height:3.55in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
-    .v-check-inner{color:#aaa}
-    .v-check-title{font-size:13pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bbb}
-    .v-check-sub{font-size:9pt;color:#bbb;margin-top:6px;line-height:1.5}
-    .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
-    .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
-    .v-cut{position:absolute;left:0;right:0;top:-9px;text-align:center;font-size:7pt;color:#bbb;letter-spacing:.2em}
-    .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
-    @media print{.v-print-btn{display:none}}
-  </style></head><body>
-    <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
-    <div class="v-fold v-fold-1"><span>fold</span></div>
-    <div class="v-fold v-fold-2"><span>fold</span></div>
-    <div class="v-stub">
+
+  const headBlock = (tag) => `
+      <div class="v-copytag">${tag}</div>
       <div class="v-head">
         <div class="v-co">
           ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="v-logo">`:''}
@@ -8399,12 +8358,11 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
           </div>
         </div>
         <div>
-          <div class="v-title">Payment Breakdown / Receipt</div>
+          <div class="v-title">Payment Receipt</div>
           <div class="v-meta"><strong>Date:</strong> ${today}${checkNo?`<br><strong>Check #:</strong> ${escapeHtml(checkNo)}`:''}</div>
         </div>
       </div>
-
-      <div class="v-section" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:11px">
+      <div class="v-section" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:0">
         <div>
           <div class="v-label">Pay To</div>
           <div class="v-box"><strong>${escapeHtml(sub?.name||'_______________________')}</strong>${sub?.phone?'<br>'+escapeHtml(sub.phone):''}${sub?.specialty?'<br>'+escapeHtml(sub.specialty):''}</div>
@@ -8413,9 +8371,10 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
           <div class="v-label">Job</div>
           <div class="v-box">${escapeHtml(j?.name||'')}${addr?'<br>'+escapeHtml(addr):''}</div>
         </div>
-      </div>
+      </div>`;
 
-      <div class="v-section">
+  const breakdownBlock = `
+      <div class="v-section" style="margin-bottom:0">
         <div class="v-label">Labor Breakdown</div>
         <table>
           ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
@@ -8427,23 +8386,86 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
           ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
           <tr class="v-total"><td>TOTAL PAYMENT</td><td style="text-align:right">${fmt(c.total)}</td></tr>
         </table>
-      </div>
+      </div>`;
 
+  const signRow = `
       <div class="v-sign">
         <div><div class="v-sign-line"></div><div class="v-sign-lbl">Subcontractor signature / date</div></div>
-        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Approved by / date</div></div>
-      </div>
-    </div>
+        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Approved by / date — ${escapeHtml(ci.name||'')}</div></div>
+      </div>`;
 
-    <div class="v-check-zone">
-      <div class="v-cut">— — — — — — — — — —  fold / cut line  — — — — — — — — — —</div>
-      <span class="v-tape">▾ tape check top edge here ▾</span>
-      <div class="v-check-inner">
-        <div class="v-check-title">Attach Check Here</div>
-        <div class="v-check-sub">Business check 8.5″ × 3.5″ · tape the TOP edge so the check can be lifted/detached</div>
-        <div class="v-check-amt">Amount: ${fmt(c.total)}${checkNo?` · Check #${escapeHtml(checkNo)}`:''}</div>
+  const checkZone = `
+      <div class="v-check-zone">
+        <span class="v-tape">▾ tape check top edge here ▾</span>
+        <div class="v-check-inner">
+          <div class="v-check-title">Attach Check Here</div>
+          <div class="v-check-sub">Business check 8.25″ × 3″ · tape the TOP edge</div>
+          <div class="v-check-amt">Amount: ${fmt(c.total)}${checkNo?` · Check #${escapeHtml(checkNo)}`:''}</div>
+        </div>
+      </div>`;
+
+  const page1 = `
+    <div class="v-page">
+      <div class="v-panel">${headBlock("Subcontractor's Copy — keep with your check")}</div>
+      <div class="v-panel">${breakdownBlock}${signRow}</div>
+      <div class="v-panel v-panel-check">${checkZone}</div>
+    </div>`;
+
+  const page2 = `
+    <div class="v-page v-page-last">
+      <div class="v-panel">${headBlock('Office Copy — retained by '+escapeHtml(ci.name||'company'))}</div>
+      <div class="v-panel">${breakdownBlock}</div>
+      <div class="v-panel">
+        <div class="v-issued">Check #${checkNo?escapeHtml(checkNo):'____________'} issued ${today} · Amount ${fmt(c.total)}</div>
+        ${signRow}
+        <div class="v-filenote">Retain this signed original for company records.</div>
       </div>
-    </div>
+    </div>`;
+
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Receipt${sub?' - '+escapeHtml(sub.name):''}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
+  <style>
+    @page { size: letter; margin: 0; }
+    *{box-sizing:border-box}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10.5pt}
+    .v-page{position:relative;page-break-after:always}
+    .v-page-last{page-break-after:auto}
+    .v-panel{height:3.667in;padding:0.3in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-page .v-panel:last-child{border-bottom:none}
+    .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
+    .v-page .v-panel:last-child::after{content:none}
+    .v-panel-check{padding:0;display:flex;align-items:center;justify-content:center}
+    .v-copytag{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:${accent};display:inline-block;padding:3px 10px;border-radius:3px;margin-bottom:9px}
+    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:8px;margin-bottom:10px}
+    .v-co{display:flex;align-items:center;gap:11px}
+    .v-logo{height:48px;width:auto;max-width:78px;object-fit:contain}
+    .v-co-name{font-size:13pt;font-weight:800;color:${accent}}
+    .v-co-detail{font-size:8pt;color:#000;line-height:1.45}
+    .v-title{font-size:13pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
+    .v-meta{font-size:9pt;color:#000;text-align:right;line-height:1.5;margin-top:3px}
+    .v-meta strong{color:${accent}}
+    .v-section{margin-bottom:11px}
+    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:3px}
+    .v-box{font-size:10pt;line-height:1.4}
+    table{width:100%;border-collapse:collapse;margin-top:3px}
+    table td{border-bottom:1px solid #eee;padding:3px 8px;font-size:9.5pt}
+    .v-total td{font-size:12pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:7px}
+    .v-sign{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+    .v-sign-line{border-bottom:1px solid #000;height:28px;margin-bottom:3px}
+    .v-sign-lbl{font-size:8pt;color:#555}
+    .v-issued{font-size:9pt;color:#333;border:1px solid #ddd;border-radius:5px;padding:7px 10px;background:#fafafa}
+    .v-filenote{margin-top:12px;font-size:7.5pt;color:#999;font-style:italic}
+    .v-check-zone{border:2px dashed #999;border-radius:6px;width:8.25in;height:3in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
+    .v-check-inner{color:#aaa}
+    .v-check-title{font-size:13pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bbb}
+    .v-check-sub{font-size:9pt;color:#bbb;margin-top:6px;line-height:1.5}
+    .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
+    .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
+    .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
+    @media print{.v-print-btn{display:none}}
+  </style></head><body>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
+    ${page1}
+    ${page2}
   </body></html>`);
   win.document.close();
 }
