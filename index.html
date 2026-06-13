@@ -711,6 +711,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .comm-status-partial{background:rgba(245,158,11,0.10);color:#F59E0B;border:1px solid rgba(245,158,11,0.25)}
 .comm-status-paid   {background:rgba(52,211,153,0.12);color:#34D399;border:1px solid rgba(52,211,153,0.3)}
 .comm-pay-btn{background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;cursor:pointer;font-family:'Barlow',sans-serif;display:inline-flex;align-items:center;gap:4px;transition:background 0.12s}
+.comm-unpay-btn{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#F87171;font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;cursor:pointer;font-family:'Barlow',sans-serif;display:inline-flex;align-items:center;gap:4px;transition:background 0.12s;margin-left:4px}
+.comm-unpay-btn:hover{background:rgba(248,113,113,0.18)}
 .comm-pay-btn:hover{background:rgba(52,211,153,0.22)}
 
 /* Insurance directory */
@@ -7547,10 +7549,15 @@ async function loadCompanyInfo(){
 const SUB_PAY = {
   base: 75,        // $/sq
   storyAdder: 5,   // +$/sq for 2-story
-  steep79: 5,      // +$/sq for 7/12–9/12
-  steep1012: 10,   // +$/sq total for 10/12–12/12 (stacks: 5 + 5)
   perSheet: 40,    // $/sheet of decking
+  // Steep pitch charge tiers — cumulative $5 steps. `charge` is $/sq added to base.
+  steepTiers: [
+    { key:'89',   label:'8/12–9/12',   charge:5 },
+    { key:'910',  label:'9/12–10/12',  charge:10 },
+    { key:'1112', label:'11/12–12/12', charge:15 },
+  ],
 };
+function steepChargeFor(key){ const t=SUB_PAY.steepTiers.find(t=>t.key===key); return t?t.charge:0; }
 
 async function openSubVoucher(jobId){
   const j = jobs.find(x=>x.id===jobId) || null;
@@ -7599,20 +7606,18 @@ async function openSubVoucher(jobId){
             <div id="svSinglePitchWrap" style="${saved.mixedPitch?'display:none':''}">
               <label class="ie-lbl">Pitch (whole roof)</label>
               <select id="svPitch" class="ie-inp" style="cursor:pointer">
-                <option value="0" ${(!saved.pitch||saved.pitch==='0')?'selected':''}>Standard ≤6/12 (no adder)</option>
-                <option value="79" ${saved.pitch==='79'?'selected':''}>Steep 7/12–9/12 (+$${SUB_PAY.steep79}/sq)</option>
-                <option value="1012" ${saved.pitch==='1012'?'selected':''}>Extra steep 10/12–12/12 (+$${SUB_PAY.steep1012}/sq)</option>
+                <option value="0" ${(!saved.pitch||saved.pitch==='0')?'selected':''}>Standard ≤7/12 (no charge)</option>
+                ${SUB_PAY.steepTiers.map(t=>`<option value="${t.key}" ${saved.pitch===t.key?'selected':''}>Steep ${t.label} (+$${t.charge}/sq)</option>`).join('')}
               </select>
             </div>
             <!-- Mixed-pitch mode -->
             <div id="svMixedPitchWrap" style="${saved.mixedPitch?'':'display:none'};background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:9px 11px">
               <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center;font-size:11px">
-                <span style="color:var(--muted)">Standard ≤6/12 ($${SUB_PAY.base}/sq)</span>
+                <span style="color:var(--muted)">Standard ≤7/12 ($${SUB_PAY.base}/sq)</span>
                 <input id="svSqStd" class="ie-inp" type="text" inputmode="decimal" value="${saved.sqStd??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
-                <span style="color:var(--muted)">Steep 7–9/12 (+$${SUB_PAY.steep79}/sq)</span>
-                <input id="svSq79" class="ie-inp" type="text" inputmode="decimal" value="${saved.sq79??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
-                <span style="color:var(--muted)">Extra steep 10–12/12 (+$${SUB_PAY.steep1012}/sq)</span>
-                <input id="svSq1012" class="ie-inp" type="text" inputmode="decimal" value="${saved.sq1012??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
+                ${SUB_PAY.steepTiers.map(t=>`
+                <span style="color:var(--muted)">Steep ${t.label} (+$${t.charge}/sq)</span>
+                <input id="svSq_${t.key}" class="ie-inp" type="text" inputmode="decimal" value="${saved['sq_'+t.key]??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">`).join('')}
               </div>
               <div id="svMixedSum" style="font-size:9px;color:var(--muted);margin-top:6px;text-align:right"></div>
             </div>
@@ -7638,12 +7643,21 @@ async function openSubVoucher(jobId){
         <!-- Breakdown -->
         <div id="svBreakdown" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px"></div>
 
-        <div style="display:flex;gap:8px;margin-top:16px">
+        <!-- Paid toggle -->
+        <label style="display:flex;align-items:center;gap:9px;margin-top:14px;padding:10px 12px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+          <input id="svPaid" type="checkbox" ${saved.paid!==false?'checked':''} style="width:16px;height:16px;accent-color:#34D399;cursor:pointer;flex-shrink:0">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--brand)">Mark as paid</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:1px">Logs a paid sub expense in Payroll → Subs. Uncheck if you're not paying yet.</div>
+          </div>
+        </label>
+
+        <div style="display:flex;gap:8px;margin-top:14px">
           <button id="svSave" class="btn-cancel" style="font-size:12px;padding:9px 14px">Save to Job</button>
           <div style="flex:1"></div>
           <button id="svPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Voucher</button>
         </div>
-        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · +$${SUB_PAY.steep79}/sq (7–9/12) · +$${SUB_PAY.steep1012}/sq (10–12/12) · $${SUB_PAY.perSheet}/decking sheet.</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · ${SUB_PAY.steepTiers.map(t=>`+$${t.charge} (${t.label})`).join(' · ')} · $${SUB_PAY.perSheet}/decking sheet.</div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -7676,21 +7690,21 @@ async function openSubVoucher(jobId){
 
     let sq, laborBase, laborStory, laborSteep, labor, tiers, ratePerSq=null;
     if(mixedPitch){
-      const sqStd = num('svSqStd'), sq79 = num('svSq79'), sq1012 = num('svSq1012');
-      sq = sqStd + sq79 + sq1012;
+      const sqStd = num('svSqStd');
+      const tierSquares = SUB_PAY.steepTiers.map(t=>({ ...t, sq:num('svSq_'+t.key) }));
+      sq = sqStd + tierSquares.reduce((s,t)=>s+t.sq,0);
       laborBase = sq * SUB_PAY.base;
       laborStory = sq * storyAdd;
-      laborSteep = sq79*SUB_PAY.steep79 + sq1012*SUB_PAY.steep1012;
+      laborSteep = tierSquares.reduce((s,t)=>s+t.sq*t.charge,0);
       labor = laborBase + laborStory + laborSteep;
       tiers = [
-        { label:'Standard ≤6/12', sq:sqStd, adder:0 },
-        { label:'Steep 7–9/12', sq:sq79, adder:SUB_PAY.steep79 },
-        { label:'Extra steep 10–12/12', sq:sq1012, adder:SUB_PAY.steep1012 },
+        { label:'Standard ≤7/12', sq:sqStd, adder:0 },
+        ...tierSquares.map(t=>({ label:t.label, sq:t.sq, adder:t.charge })),
       ].filter(t=>t.sq>0);
     } else {
       sq = num('svSquares');
       const pitch = overlay.querySelector('#svPitch').value;
-      const steepAdd = pitch==='79' ? SUB_PAY.steep79 : (pitch==='1012' ? SUB_PAY.steep1012 : 0);
+      const steepAdd = steepChargeFor(pitch);
       ratePerSq = SUB_PAY.base + storyAdd + steepAdd;
       laborBase = sq * SUB_PAY.base;
       laborStory = sq * storyAdd;
@@ -7712,13 +7726,13 @@ async function openSubVoucher(jobId){
     let laborRows = '';
     if(c.mixedPitch){
       laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
-      if(c.storyAdd) laborRows += row(`2-story adder — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
-      c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} adder — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
+      if(c.storyAdd) laborRows += row(`2-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} charge — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
       laborRows += row(`Labor subtotal`, fmt(c.labor));
     } else {
       laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
-      if(c.storyAdd) laborRows += row(`2-story adder — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
-      if(c.laborSteep) laborRows += row(`Steep adder — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
+      if(c.storyAdd) laborRows += row(`2-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      if(c.laborSteep) laborRows += row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
       laborRows += row(`Labor subtotal — ${c.sq} sq × $${c.ratePerSq}/sq`, fmt(c.labor));
     }
     overlay.querySelector('#svBreakdown').innerHTML = `
@@ -7742,26 +7756,53 @@ async function openSubVoucher(jobId){
     renderBreakdown();
   });
 
-  overlay.querySelectorAll('#svSquares,#svStory,#svPitch,#svSheets,#svSqStd,#svSq79,#svSq1012').forEach(el=>el.addEventListener('input',renderBreakdown));
+  overlay.querySelectorAll('#svSquares,#svStory,#svPitch,#svSheets,#svSqStd,'+SUB_PAY.steepTiers.map(t=>'#svSq_'+t.key).join(',')).forEach(el=>el.addEventListener('input',renderBreakdown));
   overlay.querySelectorAll('#svStory,#svPitch').forEach(el=>el.addEventListener('change',renderBreakdown));
   overlay.querySelector('#svAddLine').addEventListener('click',()=>{ extraLines.push({desc:'',amount:''}); renderExtras(); });
+
+  // Paid toggle — warn when switching to NOT paid
+  const paidEl = overlay.querySelector('#svPaid');
+  if(paidEl){
+    paidEl.addEventListener('change', ()=>{
+      if(!paidEl.checked){
+        const ok = confirm('Mark this as NOT YET PAID?\n\nThe sub will not be recorded as paid in Payroll, and any existing paid expense for this voucher will be reverted to owed. Continue?');
+        if(!ok){ paidEl.checked = true; }
+      }
+    });
+  }
 
   function collectVoucher(){
     return {
       subId: overlay.querySelector('#svSub').value||'',
       mixedPitch,
       squares: num('svSquares'),
-      sqStd: num('svSqStd'), sq79: num('svSq79'), sq1012: num('svSq1012'),
+      sqStd: num('svSqStd'),
+      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, num('svSq_'+t.key)])),
       story: parseInt(overlay.querySelector('#svStory').value)||1,
       pitch: overlay.querySelector('#svPitch')?.value || '0',
       sheets: num('svSheets'),
       checkNo: overlay.querySelector('#svCheckNo').value||'',
+      paid: overlay.querySelector('#svPaid')?.checked !== false,
       extraLines,
     };
   }
 
   overlay.querySelector('#svSave').addEventListener('click',()=>{
-    if(j){ j.subVoucher = collectVoucher(); saveToStorage(); }
+    if(j){
+      j.subVoucher = collectVoucher();
+      // Sync expense to the paid state
+      const subId = overlay.querySelector('#svSub').value;
+      const sub = (window.subcontractors||[]).find(s=>s.id===subId);
+      const c = compute();
+      if(sub && c.total>0){
+        if(overlay.querySelector('#svPaid')?.checked !== false){
+          createOrUpdateSubExpense(j, sub, c, overlay.querySelector('#svCheckNo').value||'', true);
+        } else {
+          createOrUpdateSubExpense(j, sub, c, overlay.querySelector('#svCheckNo').value||'', false);
+        }
+      }
+      saveToStorage();
+    }
     toast('Voucher saved to job');
   });
 
@@ -7770,16 +7811,17 @@ async function openSubVoucher(jobId){
     const subId = overlay.querySelector('#svSub').value;
     const sub = (window.subcontractors||[]).find(s=>s.id===subId);
     const checkNo = overlay.querySelector('#svCheckNo').value||'';
+    const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
     if(!sub){ toast('Select a subcontractor first'); return; }
     if(c.total<=0){ toast('Enter squares to calculate pay'); return; }
-    // Save voucher + create/update the paid sub expense, then print
+    // Save voucher + create/update the sub expense (paid or unpaid), then print
     if(j){
       j.subVoucher = collectVoucher();
-      createOrUpdateSubExpense(j, sub, c, checkNo);
+      createOrUpdateSubExpense(j, sub, c, checkNo, isPaid);
       saveToStorage();
     }
     printSubVoucher(j, sub, c, checkNo, extraLines);
-    toast('Voucher printed · sub expense logged as paid');
+    toast(isPaid ? 'Voucher printed · sub expense logged as paid' : 'Voucher printed · expense logged as OWED (not yet paid)');
   });
 
   renderExtras();
@@ -7789,8 +7831,9 @@ window.openSubVoucher = openSubVoucher;
 
 // Create (or update on reprint) the subcontractor labor expense, marked paid.
 // Uses a stable tag on the expense so reprinting updates rather than duplicates.
-function createOrUpdateSubExpense(j, sub, c, checkNo){
+function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid){
   if(!j) return;
+  if(isPaid === undefined) isPaid = true;
   if(!Array.isArray(j.expenses)) j.expenses = [];
   const tag = 'subvoucher';   // marks the auto-created voucher expense
   const today = new Date().toISOString().slice(0,10);
@@ -7805,12 +7848,20 @@ function createOrUpdateSubExpense(j, sub, c, checkNo){
   exp.amount = c.total.toFixed(2);
   exp.vendor = sub.id;
   exp.vendorName = sub.name;
-  exp.paid = true;
-  exp.paidDate = today;
-  exp.paidMethod = checkNo ? 'Check' : 'Check';
-  exp.paidNotes = checkNo ? `Check #${checkNo}` : '';
+  if(isPaid){
+    exp.paid = true;
+    exp.paidDate = today;
+    exp.paidMethod = 'Check';
+    exp.paidNotes = checkNo ? `Check #${checkNo}` : '';
+  } else {
+    exp.paid = false;
+    delete exp.paidDate; delete exp.paidMethod; delete exp.paidNotes;
+  }
   if(typeof refreshExpenseUI==='function') refreshExpenseUI();
-  if(typeof logActivity==='function') logActivity(j,'subpay','Sub voucher paid',`${sub.name}: $${Math.round(c.total).toLocaleString()}${checkNo?` · Check #${checkNo}`:''}`);
+  if(typeof logActivity==='function'){
+    if(isPaid) logActivity(j,'subpay','Sub voucher paid',`${sub.name}: $${Math.round(c.total).toLocaleString()}${checkNo?` · Check #${checkNo}`:''}`);
+    else logActivity(j,'subpay','Sub voucher logged (unpaid)',`${sub.name}: $${Math.round(c.total).toLocaleString()} owed`);
+  }
 }
 window.createOrUpdateSubExpense = createOrUpdateSubExpense;
 
@@ -7827,70 +7878,92 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
   <style>
     @page { size: letter; margin: 0; }
     *{box-sizing:border-box}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0.6in 0.5in;font-size:11pt}
-    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:12px;margin-bottom:16px}
-    .v-co{display:flex;align-items:center;gap:12px}
-    .v-logo{height:60px;width:auto;max-width:90px;object-fit:contain}
-    .v-co-name{font-size:14pt;font-weight:800;color:${accent}}
-    .v-co-detail{font-size:8pt;color:#000;line-height:1.5}
-    .v-title{font-size:16pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
-    .v-meta{font-size:9pt;color:#000;text-align:right;line-height:1.6;margin-top:4px}
+    html,body{height:100%}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0.45in 0.4in;font-size:10.5pt;display:flex;flex-direction:column;min-height:11in}
+    .v-stub{flex:0 0 auto}
+    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:9px;margin-bottom:11px}
+    .v-co{display:flex;align-items:center;gap:11px}
+    .v-logo{height:52px;width:auto;max-width:80px;object-fit:contain}
+    .v-co-name{font-size:13pt;font-weight:800;color:${accent}}
+    .v-co-detail{font-size:8pt;color:#000;line-height:1.45}
+    .v-title{font-size:14pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
+    .v-meta{font-size:9pt;color:#000;text-align:right;line-height:1.55;margin-top:3px}
     .v-meta strong{color:${accent}}
-    .v-section{margin-bottom:16px}
-    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:4px}
-    .v-box{font-size:11pt;line-height:1.5}
-    table{width:100%;border-collapse:collapse;margin-top:4px}
-    table td{border-bottom:1px solid #eee}
-    .v-total td{font-size:13pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:10px}
-    .v-sign{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
-    .v-sign-line{border-bottom:1px solid #000;height:34px;margin-bottom:4px}
+    .v-section{margin-bottom:11px}
+    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:3px}
+    .v-box{font-size:10.5pt;line-height:1.45}
+    table{width:100%;border-collapse:collapse;margin-top:3px}
+    table td{border-bottom:1px solid #eee;padding:4px 8px;font-size:10pt}
+    .v-total td{font-size:12.5pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:8px}
+    .v-sign{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+    .v-sign-line{border-bottom:1px solid #000;height:30px;margin-bottom:3px}
     .v-sign-lbl{font-size:8pt;color:#555}
+    /* Check attachment zone pinned to the bottom of the page */
+    .v-check-zone{flex:0 0 auto;margin-top:auto;border:2px dashed #999;border-radius:6px;height:3.55in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
+    .v-check-inner{color:#aaa}
+    .v-check-title{font-size:13pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bbb}
+    .v-check-sub{font-size:9pt;color:#bbb;margin-top:6px;line-height:1.5}
+    .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
+    .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
+    .v-cut{position:absolute;left:0;right:0;top:-9px;text-align:center;font-size:7pt;color:#bbb;letter-spacing:.2em}
     .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
     @media print{.v-print-btn{display:none}}
   </style></head><body>
     <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
-    <div class="v-head">
-      <div class="v-co">
-        ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="v-logo">`:''}
+    <div class="v-stub">
+      <div class="v-head">
+        <div class="v-co">
+          ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="v-logo">`:''}
+          <div>
+            <div class="v-co-name">${escapeHtml(ci.name||'')}</div>
+            <div class="v-co-detail">${ci.address?escapeHtml(ci.address)+'<br>':''}${ci.cityStateZip?escapeHtml(ci.cityStateZip)+'<br>':''}${ci.phone?escapeHtml(ci.phone):''}</div>
+          </div>
+        </div>
         <div>
-          <div class="v-co-name">${escapeHtml(ci.name||'')}</div>
-          <div class="v-co-detail">${ci.address?escapeHtml(ci.address)+'<br>':''}${ci.cityStateZip?escapeHtml(ci.cityStateZip)+'<br>':''}${ci.phone?escapeHtml(ci.phone):''}</div>
+          <div class="v-title">Payment Breakdown / Receipt</div>
+          <div class="v-meta"><strong>Date:</strong> ${today}${checkNo?`<br><strong>Check #:</strong> ${escapeHtml(checkNo)}`:''}</div>
         </div>
       </div>
-      <div>
-        <div class="v-title">Payment Breakdown / Receipt</div>
-        <div class="v-meta"><strong>Date:</strong> ${today}${checkNo?`<br><strong>Check #:</strong> ${escapeHtml(checkNo)}`:''}</div>
+
+      <div class="v-section" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:11px">
+        <div>
+          <div class="v-label">Pay To</div>
+          <div class="v-box"><strong>${escapeHtml(sub?.name||'_______________________')}</strong>${sub?.phone?'<br>'+escapeHtml(sub.phone):''}${sub?.specialty?'<br>'+escapeHtml(sub.specialty):''}</div>
+        </div>
+        <div>
+          <div class="v-label">Job</div>
+          <div class="v-box">${escapeHtml(j?.name||'')}${addr?'<br>'+escapeHtml(addr):''}</div>
+        </div>
+      </div>
+
+      <div class="v-section">
+        <div class="v-label">Labor Breakdown</div>
+        <table>
+          ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
+          ${c.storyAdd?line(`2-story charge — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
+          ${c.mixedPitch
+            ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} charge — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder))).join('')
+            : (c.laborSteep?line(`Steep pitch charge — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep)):'')}
+          ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
+          ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
+          <tr class="v-total"><td>TOTAL PAYMENT</td><td style="text-align:right">${fmt(c.total)}</td></tr>
+        </table>
+      </div>
+
+      <div class="v-sign">
+        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Subcontractor signature / date</div></div>
+        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Approved by / date</div></div>
       </div>
     </div>
 
-    <div class="v-section" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
-      <div>
-        <div class="v-label">Pay To</div>
-        <div class="v-box"><strong>${escapeHtml(sub?.name||'_______________________')}</strong>${sub?.phone?'<br>'+escapeHtml(sub.phone):''}${sub?.specialty?'<br>'+escapeHtml(sub.specialty):''}</div>
+    <div class="v-check-zone">
+      <div class="v-cut">— — — — — — — — — —  fold / cut line  — — — — — — — — — —</div>
+      <span class="v-tape">▾ tape check top edge here ▾</span>
+      <div class="v-check-inner">
+        <div class="v-check-title">Attach Check Here</div>
+        <div class="v-check-sub">Business check 8.5″ × 3.5″ · tape the TOP edge so the check can be lifted/detached</div>
+        <div class="v-check-amt">Amount: ${fmt(c.total)}${checkNo?` · Check #${escapeHtml(checkNo)}`:''}</div>
       </div>
-      <div>
-        <div class="v-label">Job</div>
-        <div class="v-box">${escapeHtml(j?.name||'')}${addr?'<br>'+escapeHtml(addr):''}</div>
-      </div>
-    </div>
-
-    <div class="v-section">
-      <div class="v-label">Labor Breakdown</div>
-      <table>
-        ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
-        ${c.storyAdd?line(`2-story adder — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
-        ${c.mixedPitch
-          ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} adder — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder))).join('')
-          : (c.laborSteep?line(`Steep pitch adder — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep)):'')}
-        ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
-        ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
-        <tr class="v-total"><td>TOTAL PAYMENT</td><td style="text-align:right">${fmt(c.total)}</td></tr>
-      </table>
-    </div>
-
-    <div class="v-sign">
-      <div><div class="v-sign-line"></div><div class="v-sign-lbl">Subcontractor signature / date</div></div>
-      <div><div class="v-sign-line"></div><div class="v-sign-lbl">Approved by / date</div></div>
     </div>
   </body></html>`);
   win.document.close();
@@ -9286,7 +9359,7 @@ function renderPayrollSales(){
               <td class="num" style="color:#34D399">${fmtMoney(r.paid)}</td>
               <td class="num" style="color:${r.owed>0?'#EF4444':'var(--muted)'}">${fmtMoney(r.owed)}</td>
               <td><span class="comm-status-pill ${statusCls}">${statusLabel}</span></td>
-              <td>${showPayBtn ? `<button class="comm-pay-btn" data-comm-pay="${r.job.id}|${r.user.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}</td>
+              <td>${showPayBtn ? `<button class="comm-pay-btn" data-comm-pay="${r.job.id}|${r.user.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}${(isAdminUser && r.paid>0) ? `<button class="comm-unpay-btn" data-comm-unpay="${r.job.id}|${r.user.id}" title="Revert last commission payment"><i class="ti ti-arrow-back-up"></i>Undo</button>` : ''}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -9311,6 +9384,11 @@ function renderPayrollSales(){
     e.stopPropagation();
     const [jobId, userId] = b.dataset.commPay.split('|');
     openCommPaidModal(jobId, userId);
+  }));
+  body.querySelectorAll('[data-comm-unpay]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [jobId, userId] = b.dataset.commUnpay.split('|');
+    unpayCommission(jobId, userId);
   }));
   body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', () => {
     if(typeof openDetail === 'function') openDetail(el.dataset.commOpenJob);
@@ -9421,7 +9499,7 @@ function renderPayrollPM(){
               <td class="num">${fmtMoney(moneyValue(r.job.potVal))}</td>
               <td class="num">${fmtMoney(r.fee)}</td>
               <td><span class="comm-status-pill ${statusCls}">${statusLabel}</span>${r.paidDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">Paid ${r.paidDate}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>`:''}</td>
-              <td>${showPayBtn ? `<button class="comm-pay-btn" data-pm-pay="${r.job.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}</td>
+              <td>${showPayBtn ? `<button class="comm-pay-btn" data-pm-pay="${r.job.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}${(isAdminUser && r.feePaid) ? `<button class="comm-unpay-btn" data-pm-unpay="${r.job.id}" title="Revert PM fee to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>` : ''}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -9444,6 +9522,10 @@ function renderPayrollPM(){
   body.querySelectorAll('[data-pm-pay]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     openPmPaidModal(b.dataset.pmPay);
+  }));
+  body.querySelectorAll('[data-pm-unpay]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    unpayCommission(b.dataset.pmUnpay, '__PM__');
   }));
   body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', () => {
     if(typeof openDetail === 'function') openDetail(el.dataset.commOpenJob);
@@ -9573,7 +9655,7 @@ async function renderPayrollSubs(){
             <td class="muted">${escapeHtml(r.cat || '—')}</td>
             <td class="num">${fmtMoney(r.amount)}</td>
             <td>${r.paid ? `<span class="comm-status-pill comm-status-paid">PAID</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.paidDate)}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>` : `<span class="comm-status-pill comm-status-owed">OWED</span>`}</td>
-            <td>${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : ''}</td>
+            <td>${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : `<button class="comm-unpay-btn" data-sub-unpay="${r.job.id}|${r.expenseIdx}" title="Revert sub payment to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>`}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -9598,6 +9680,11 @@ async function renderPayrollSubs(){
     e.stopPropagation();
     const [jobId, idxStr] = b.dataset.subPay.split('|');
     openSubPaidModal(jobId, parseInt(idxStr));
+  }));
+  body.querySelectorAll('[data-sub-unpay]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [jobId, idxStr] = b.dataset.subUnpay.split('|');
+    unpayCommission(jobId, '__SUB__' + idxStr);
   }));
   body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', () => {
     if(typeof openDetail === 'function') openDetail(el.dataset.commOpenJob);
@@ -9651,6 +9738,64 @@ function openCommPaidModal(jobId, userId){
 function closeCommPaidModal(){
   document.getElementById('commPaidModalBg').style.display = 'none';
 }
+
+// Revert a payment back to unpaid. Handles all three payroll types via the same
+// sentinel scheme used by the Pay flow: '__PM__', '__SUB__<idx>', or a real user id.
+function unpayCommission(jobId, userId){
+  if(!isAdmin()){ toast('Only admins can revert payments'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+
+  // PM fee
+  if(userId === '__PM__'){
+    if(!j.pmFeePaid){ toast('PM fee is not marked paid'); return; }
+    if(!confirm('Revert this PM fee back to unpaid?')) return;
+    j.pmFeePaid = false;
+    delete j.pmFeePaidDate; delete j.pmFeePaidMethod; delete j.pmFeePaidNotes;
+    if(typeof logActivity === 'function'){
+      const pm = (window.TEAM || window.USERS || []).find(u => u.id === j.projectManager);
+      logActivity(j, 'pmfee', 'PM fee reverted to unpaid', pm?.name || 'PM');
+    }
+    saveToStorage(); renderPayrollPage();
+    toast('PM fee reverted to unpaid');
+    return;
+  }
+
+  // Sub payment (expense.paid flag)
+  if(userId.startsWith('__SUB__')){
+    const idx = parseInt(userId.slice(7));
+    const exp = j.expenses?.[idx];
+    if(!exp || !exp.paid){ toast('Sub payment not found or already unpaid'); return; }
+    if(!confirm('Revert this sub payment back to unpaid?')) return;
+    exp.paid = false;
+    delete exp.paidDate; delete exp.paidMethod; delete exp.paidNotes;
+    if(typeof logActivity === 'function'){
+      const vendorName = exp.vendorName || (window.subcontractors||[]).find(s=>s.id===exp.vendor)?.name || 'Vendor';
+      logActivity(j, 'subpay', 'Sub payment reverted to unpaid', vendorName);
+    }
+    saveToStorage(); renderPayrollPage();
+    toast('Sub payment reverted to unpaid');
+    return;
+  }
+
+  // Salesman commission — remove the most recent payout for that user
+  const payouts = Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [];
+  const userPayouts = payouts.filter(p => p.paidTo === userId);
+  if(!userPayouts.length){ toast('No commission payment to revert'); return; }
+  const last = userPayouts[userPayouts.length - 1];
+  if(!confirm(`Revert the last commission payment of ${fmtMoney(moneyValue(last.amount))}?`)) return;
+  // Remove just that one payout (last matching entry)
+  const removeIdx = payouts.lastIndexOf(last);
+  payouts.splice(removeIdx, 1);
+  j.commissionPayouts = payouts;
+  if(typeof logActivity === 'function'){
+    const u = (window.TEAM || window.USERS || []).find(x => x.id === userId);
+    logActivity(j, 'commission', 'Commission payment reverted', `${u?.name || 'Rep'}: ${fmtMoney(moneyValue(last.amount))}`);
+  }
+  saveToStorage(); renderPayrollPage();
+  toast('Commission payment reverted to unpaid');
+}
+window.unpayCommission = unpayCommission;
 
 function saveCommPayment(){
   const jobId  = document.getElementById('commPaidJobId').value;
