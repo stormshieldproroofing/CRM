@@ -3508,12 +3508,42 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const desc=$('expDescInput').value.trim()||cat;
       const vendorId = $('expVendorSel')?.value || '';
       const vendorObj = (window.subcontractors || []).find(s => s.id === vendorId);
+      const isLabor = /labor/i.test(cat);
+
+      // Labor should be tied to a contractor so it syncs to Payroll + the Payment Breakdown.
+      if(isLabor && !vendorId){
+        const proceed = confirm('No contractor selected.\n\nLabor expenses sync to Payroll → Subs and the Payment Breakdown only when a contractor is chosen. Add as a plain expense anyway?');
+        if(!proceed){ $('expVendorSel')?.focus(); return; }
+      }
+
       const exp = { cat, desc, amount: amt.toFixed(2), paid: false };
       if(vendorId){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';
       }
-      if(window._expDraftBreakdown && /labor/i.test(cat)){
+      let linkedToVoucher = false;
+      if(isLabor && vendorId){
+        // One source of truth: this labor expense drives Payroll (via vendor tag) AND the
+        // Payment Breakdown / Receipt (via a shared _vid link). Works with or without the
+        // pitch calculator — a flat amount becomes a single labor line on the voucher.
+        const vid = 'v'+Date.now()+Math.random().toString(36).slice(2,6);
+        exp._src = 'subvoucher';
+        exp._vid = vid;
+        if(window._expDraftBreakdown){
+          exp.breakdown = window._expDraftBreakdown;
+          j2.subVoucher = Object.assign({}, window._expDraftBreakdown, {
+            subId: vendorId, checkNo:'', paid:false, _vid:vid,
+          });
+        } else {
+          // Flat-amount labor: represent it as a single additional-work line on the voucher
+          j2.subVoucher = {
+            subId: vendorId, mixedPitch:false, squares:0, story:1, pitch:'0', sheets:0,
+            checkNo:'', paid:false, _vid:vid,
+            extraLines:[{ desc: desc||'Roofing labor', amount: amt.toFixed(2) }],
+          };
+        }
+        linkedToVoucher = true;
+      } else if(window._expDraftBreakdown && isLabor){
         exp.breakdown = window._expDraftBreakdown;
       }
       j2.expenses.push(exp);
@@ -3523,7 +3553,17 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       $('expAddToggle').style.display='flex';
       $('expDescInput').value='';$('expAmtInput').value='';
       if($('expVendorSel')) $('expVendorSel').value = '';
+      saveToStorage();
       refreshExpenseUI();
+      if(linkedToVoucher){
+        const jid = j2.id;
+        toast('Labor synced to Payroll · payment breakdown ready');
+        setTimeout(()=>{
+          if(confirm('Labor expense synced to Payroll → Subs and the Payment Breakdown.\n\nOpen the Payment Breakdown / Receipt now to print a check voucher?')){
+            openSubVoucher(jid);
+          }
+        }, 150);
+      }
     });
 
     refreshExpenseUI();
@@ -8200,22 +8240,21 @@ async function openSubVoucher(jobId){
       checkNo: overlay.querySelector('#svCheckNo').value||'',
       paid: overlay.querySelector('#svPaid')?.checked !== false,
       extraLines,
+      _vid: saved._vid || null,
     };
   }
 
   overlay.querySelector('#svSave').addEventListener('click',()=>{
     if(j){
-      j.subVoucher = collectVoucher();
-      // Sync expense to the paid state
+      const vd = collectVoucher();
+      j.subVoucher = vd;
       const subId = overlay.querySelector('#svSub').value;
       const sub = (window.subcontractors||[]).find(s=>s.id===subId);
       const c = compute();
       if(sub && c.total>0){
-        if(overlay.querySelector('#svPaid')?.checked !== false){
-          createOrUpdateSubExpense(j, sub, c, overlay.querySelector('#svCheckNo').value||'', true);
-        } else {
-          createOrUpdateSubExpense(j, sub, c, overlay.querySelector('#svCheckNo').value||'', false);
-        }
+        const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
+        const vid = createOrUpdateSubExpense(j, sub, c, vd.checkNo, isPaid, vd);
+        j.subVoucher._vid = vid;
       }
       saveToStorage();
     }
@@ -8230,10 +8269,11 @@ async function openSubVoucher(jobId){
     const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
     if(!sub){ toast('Select a subcontractor first'); return; }
     if(c.total<=0){ toast('Enter squares to calculate pay'); return; }
-    // Save voucher + create/update the sub expense (paid or unpaid), then print
     if(j){
-      j.subVoucher = collectVoucher();
-      createOrUpdateSubExpense(j, sub, c, checkNo, isPaid);
+      const vd = collectVoucher();
+      j.subVoucher = vd;
+      const vid = createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, vd);
+      j.subVoucher._vid = vid;
       saveToStorage();
     }
     printSubVoucher(j, sub, c, checkNo, extraLines);
@@ -8247,23 +8287,38 @@ window.openSubVoucher = openSubVoucher;
 
 // Create (or update on reprint) the subcontractor labor expense, marked paid.
 // Uses a stable tag on the expense so reprinting updates rather than duplicates.
-function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid){
+function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
   if(!j) return;
   if(isPaid === undefined) isPaid = true;
   if(!Array.isArray(j.expenses)) j.expenses = [];
-  const tag = 'subvoucher';   // marks the auto-created voucher expense
+  const tag = 'subvoucher';
   const today = new Date().toISOString().slice(0,10);
   const desc = `Sub labor — ${c.sq} sq${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`;
-  let exp = j.expenses.find(e=>e._src===tag);
+  // Match the specific voucher by its unique id (so multiple per sub/job are kept distinct)
+  const vid = (voucherData && voucherData._vid) ? voucherData._vid : null;
+  let exp = vid ? j.expenses.find(e=>e._vid===vid)
+                : j.expenses.find(e=>e._src===tag && !e._vid);
   if(!exp){
-    exp = { _src:tag };
+    exp = { _src:tag, _vid: vid || ('v'+Date.now()+Math.random().toString(36).slice(2,6)) };
     j.expenses.push(exp);
   }
-  exp.cat = 'Labor';
+  if(voucherData) exp._vid = exp._vid || vid;
+  exp.cat = 'Roofing Labor';
   exp.desc = desc;
   exp.amount = c.total.toFixed(2);
   exp.vendor = sub.id;
   exp.vendorName = sub.name;
+  // Store the breakdown so Payroll → Subs shows the itemized pitch detail
+  if(voucherData){
+    exp.breakdown = {
+      mixedPitch: voucherData.mixedPitch,
+      squares: voucherData.squares,
+      sqStd: voucherData.sqStd,
+      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, voucherData['sq_'+t.key]])),
+      story: voucherData.story, pitch: voucherData.pitch, sheets: voucherData.sheets,
+      extraLines: voucherData.extraLines,
+    };
+  }
   if(isPaid){
     exp.paid = true;
     exp.paidDate = today;
@@ -8278,6 +8333,7 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid){
     if(isPaid) logActivity(j,'subpay','Sub voucher paid',`${sub.name}: $${Math.round(c.total).toLocaleString()}${checkNo?` · Check #${checkNo}`:''}`);
     else logActivity(j,'subpay','Sub voucher logged (unpaid)',`${sub.name}: $${Math.round(c.total).toLocaleString()} owed`);
   }
+  return exp._vid;
 }
 window.createOrUpdateSubExpense = createOrUpdateSubExpense;
 
@@ -8295,7 +8351,12 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     @page { size: letter; margin: 0; }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0.45in 0.4in;font-size:10.5pt;display:flex;flex-direction:column;min-height:11in}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0.45in 0.4in;font-size:10.5pt;display:flex;flex-direction:column;min-height:11in;position:relative}
+    /* Trifold guide lines (letter page = 11in tall, folds at 1/3 and 2/3) */
+    .v-fold{position:absolute;left:0.25in;right:0.25in;border-top:1px dashed #cfcfcf;z-index:6;pointer-events:none}
+    .v-fold-1{top:3.667in}
+    .v-fold-2{top:7.333in}
+    .v-fold span{position:absolute;right:0;top:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
     .v-stub{flex:0 0 auto}
     .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:9px;margin-bottom:11px}
     .v-co{display:flex;align-items:center;gap:11px}
@@ -8326,6 +8387,8 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     @media print{.v-print-btn{display:none}}
   </style></head><body>
     <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
+    <div class="v-fold v-fold-1"><span>fold</span></div>
+    <div class="v-fold v-fold-2"><span>fold</span></div>
     <div class="v-stub">
       <div class="v-head">
         <div class="v-co">
