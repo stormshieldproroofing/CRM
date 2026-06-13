@@ -185,6 +185,7 @@ async function loadAllFromSupabase() {
         recoverableDep: r.recoverable_dep || '',
         nonRecoverableDep: r.non_recoverable_dep || '',
         netClaim: r.net_claim || '',
+        insEmail: r.ins_email || '',
         latitude:r.latitude, longitude:r.longitude,
         roofEstimate: r.roof_estimate || null,
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
@@ -205,7 +206,7 @@ async function loadAllFromSupabase() {
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
           .map(d=>({amount:String(d.amount),desc:d.description})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null})),
+          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         stageChecklistDone,
@@ -255,6 +256,7 @@ async function pushAllToSupabase() {
         recoverable_dep: j.recoverableDep || null,
         non_recoverable_dep: j.nonRecoverableDep || null,
         net_claim: j.netClaim || null,
+        ins_email: j.insEmail || null,
         latitude: j.latitude ?? null, longitude: j.longitude ?? null,
         roof_estimate: j.roofEstimate ?? null,
         timeline: Array.isArray(j.timeline) ? j.timeline : [],
@@ -327,6 +329,7 @@ async function pushAllToSupabase() {
           paid_date: e.paidDate || null,
           paid_method: e.paidMethod || null,
           paid_notes: e.paidNotes || null,
+          breakdown: (e.breakdown && typeof e.breakdown === 'object') ? e.breakdown : null,
         })));
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);

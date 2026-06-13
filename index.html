@@ -1211,6 +1211,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
           <input id="f-adjphone" style="background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--warn)'" onblur="this.style.borderColor='var(--border)'" placeholder="Adjuster phone">
         </div>
 
+        <!-- Insurance / depreciation email -->
+        <div style="margin-bottom:8px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Insurance Email (for depreciation release)</label>
+          <input id="f-insemail" type="email" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--warn)'" onblur="this.style.borderColor='var(--border)'" placeholder="claims@carrier.com">
+        </div>
+
         <!-- Adjuster inspection date -->
         <div style="margin-bottom:8px">
           <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Adjuster Inspection Date</label>
@@ -2615,7 +2621,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
                 <button onclick="openInsuranceEstimator(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:13px"></i>Insurance Contribution Estimator</button>
                 <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>
-                <button onclick="openSubVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt" style="font-size:13px"></i>Payment Breakdown / Receipt</button>`
+                <button onclick="openSubVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt" style="font-size:13px"></i>Payment Breakdown / Receipt</button>
+                <button onclick="openFinalInvoice(openJobId)" style="width:100%;margin-top:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>Final Invoice / Depreciation Request</button>`
             }
           </div>
         </div>
@@ -2771,6 +2778,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                       <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
                       <input id="expAmtInput" type="text" inputmode="decimal" placeholder="0.00 (try 800+1200)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                     </div>
+                    <button id="expBreakdownBtn" type="button" style="display:none;margin-top:6px;width:100%;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:600;padding:6px;border-radius:6px;cursor:pointer;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:12px"></i>Calculate from pitch breakdown</button>
+                    <div id="expBreakdownSummary" style="display:none;margin-top:6px;font-size:10px;color:var(--muted);line-height:1.5;padding:6px 8px;background:#141927;border-radius:5px"></div>
                   </div>
                   <div style="display:flex;gap:6px">
                     <button id="expSaveNew" class="btn-primary" style="flex:1;font-size:12px;padding:7px">Add Expense</button>
@@ -3457,7 +3466,31 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           subs.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
         vendorSel.value = '';
       }
+      window._expDraftBreakdown = null;
+      updateExpBreakdownBtn();
       $('expDescInput').focus();
+    });
+
+    // Show the pitch-breakdown calculator only for roofing-labor categories
+    function updateExpBreakdownBtn(){
+      const cat = $('expCatSel')?.value || '';
+      const btn = $('expBreakdownBtn');
+      const isLabor = /labor/i.test(cat);
+      if(btn) btn.style.display = isLabor ? 'flex' : 'none';
+      if(!isLabor){
+        window._expDraftBreakdown = null;
+        const s=$('expBreakdownSummary'); if(s) s.style.display='none';
+      }
+    }
+    $('expCatSel')&&$('expCatSel').addEventListener('change',updateExpBreakdownBtn);
+    $('expBreakdownBtn')&&$('expBreakdownBtn').addEventListener('click',e=>{
+      e.stopPropagation();
+      openLaborBreakdownCalc(window._expDraftBreakdown, ({total, breakdown})=>{
+        window._expDraftBreakdown = breakdown;
+        $('expAmtInput').value = total.toFixed(2);
+        const s=$('expBreakdownSummary');
+        if(s){ s.style.display='block'; s.textContent = laborBreakdownSummary(breakdown); }
+      });
     });
     $('expCancelNew')&&$('expCancelNew').addEventListener('click',e=>{
       e.stopPropagation();
@@ -3480,7 +3513,12 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';
       }
+      if(window._expDraftBreakdown && /labor/i.test(cat)){
+        exp.breakdown = window._expDraftBreakdown;
+      }
       j2.expenses.push(exp);
+      window._expDraftBreakdown = null;
+      const bs=$('expBreakdownSummary'); if(bs) bs.style.display='none';
       $('expAddForm').style.display='none';
       $('expAddToggle').style.display='flex';
       $('expDescInput').value='';$('expAmtInput').value='';
@@ -5363,6 +5401,7 @@ function openEditJob(id){
   if($('f-acv'))       $('f-acv').value       = j.acv||'';
   if(window.__resetInsuranceInterlock) window.__resetInsuranceInterlock();
   if($('f-adjname'))   $('f-adjname').value   = j.adjName||'';
+  if($('f-insemail'))  $('f-insemail').value  = j.insEmail||'';
   if($('f-adjphone'))  $('f-adjphone').value  = j.adjPhone||'';
   if($('f-inspdate'))  $('f-inspdate').value  = j.inspDate||'';
   if($('f-claimnotes'))$('f-claimnotes').value= j.claimNotes||'';
@@ -5632,6 +5671,7 @@ $('saveJob').onclick=async ()=>{
     netClaim:($('f-netclaim')?$('f-netclaim').value:'')||'',
     acv:($('f-acv')?$('f-acv').value:'')||'',
     adjName:($('f-adjname')?$('f-adjname').value:'')||'',adjPhone:($('f-adjphone')?$('f-adjphone').value:'')||'',
+    insEmail:($('f-insemail')?$('f-insemail').value:'')||'',
     inspDate:($('f-inspdate')?$('f-inspdate').value:'')||'',claimNotes:($('f-claimnotes')?$('f-claimnotes').value:'')||''
   };
 
@@ -7558,6 +7598,382 @@ const SUB_PAY = {
   ],
 };
 function steepChargeFor(key){ const t=SUB_PAY.steepTiers.find(t=>t.key===key); return t?t.charge:0; }
+
+// Compute labor total + breakdown from a breakdown object (shared by voucher + expense).
+// bd = { mixedPitch, squares, sqStd, sq_<tier>, story, pitch, sheets, extraLines:[{desc,amount}] }
+function computeLaborFromBreakdown(bd){
+  bd = bd || {};
+  const storyAdd = (parseInt(bd.story)===2) ? SUB_PAY.storyAdder : 0;
+  const sheets = parseFloat(bd.sheets)||0;
+  let sq, laborBase, laborStory, laborSteep, labor, tiers, ratePerSq=null;
+  if(bd.mixedPitch){
+    const sqStd = parseFloat(bd.sqStd)||0;
+    const tierSquares = SUB_PAY.steepTiers.map(t=>({ ...t, sq:parseFloat(bd['sq_'+t.key])||0 }));
+    sq = sqStd + tierSquares.reduce((s,t)=>s+t.sq,0);
+    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd;
+    laborSteep = tierSquares.reduce((s,t)=>s+t.sq*t.charge,0);
+    labor = laborBase+laborStory+laborSteep;
+    tiers = [{label:'Standard ≤7/12',sq:sqStd,adder:0},...tierSquares.map(t=>({label:t.label,sq:t.sq,adder:t.charge}))].filter(t=>t.sq>0);
+  } else {
+    sq = parseFloat(bd.squares)||0;
+    const steepAdd = steepChargeFor(bd.pitch);
+    ratePerSq = SUB_PAY.base+storyAdd+steepAdd;
+    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborSteep = sq*steepAdd;
+    labor = sq*ratePerSq;
+    tiers = [{label:'',sq,adder:steepAdd}];
+  }
+  const decking = sheets*SUB_PAY.perSheet;
+  const extras = (bd.extraLines||[]).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
+  const total = labor+decking+extras;
+  return { sq, storyAdd, sheets, mixedPitch:!!bd.mixedPitch, tiers, ratePerSq, laborBase, laborStory, laborSteep, labor, decking, extras, total };
+}
+// Short human summary of a breakdown for inline display.
+function laborBreakdownSummary(bd){
+  const c = computeLaborFromBreakdown(bd);
+  const parts = [`${c.sq} sq`];
+  if(c.storyAdd) parts.push('2-story');
+  if(bd.mixedPitch) parts.push('mixed pitch');
+  else if(bd.pitch && bd.pitch!=='0'){ const t=SUB_PAY.steepTiers.find(t=>t.key===bd.pitch); if(t) parts.push(t.label); }
+  if(c.sheets) parts.push(`${c.sheets} decking`);
+  if(c.extras) parts.push('+ extras');
+  return parts.join(' · ') + ` = $${Math.round(c.total).toLocaleString()}`;
+}
+
+// Reusable pitch-breakdown calculator modal. Calls onDone({ total, breakdown }) on apply.
+function openLaborBreakdownCalc(initial, onDone){
+  const saved = initial || {};
+  let mixedPitch = !!saved.mixedPitch;
+  let extraLines = Array.isArray(saved.extraLines) ? saved.extraLines.map(l=>({...l})) : [];
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:460;display:flex;align-items:center;justify-content:center;padding:14px';
+  overlay.innerHTML=`
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:520px;max-width:100%;max-height:94vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Labor Pitch Breakdown</div>
+        <button id="lbClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div><label class="ie-lbl">Total Squares</label><input id="lbSquares" class="ie-inp" type="text" inputmode="decimal" value="${saved.squares??''}" placeholder="28" ${mixedPitch?'disabled style="opacity:0.5"':''}></div>
+          <div><label class="ie-lbl">Stories</label><select id="lbStory" class="ie-inp" style="cursor:pointer"><option value="1" ${saved.story!=2?'selected':''}>1 story</option><option value="2" ${saved.story==2?'selected':''}>2 story (+$${SUB_PAY.storyAdder}/sq)</option></select></div>
+          <div style="grid-column:1/-1">
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px"><input id="lbMixed" type="checkbox" ${mixedPitch?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">Mixed pitch (squares per tier)</label>
+            <div id="lbSingleWrap" style="${mixedPitch?'display:none':''}">
+              <label class="ie-lbl">Pitch (whole roof)</label>
+              <select id="lbPitch" class="ie-inp" style="cursor:pointer"><option value="0" ${(!saved.pitch||saved.pitch==='0')?'selected':''}>Standard ≤7/12 (no charge)</option>${SUB_PAY.steepTiers.map(t=>`<option value="${t.key}" ${saved.pitch===t.key?'selected':''}>Steep ${t.label} (+$${t.charge}/sq)</option>`).join('')}</select>
+            </div>
+            <div id="lbMixedWrap" style="${mixedPitch?'':'display:none'};background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:9px 11px">
+              <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center;font-size:11px">
+                <span style="color:var(--muted)">Standard ≤7/12 ($${SUB_PAY.base}/sq)</span>
+                <input id="lbSqStd" class="ie-inp" type="text" inputmode="decimal" value="${saved.sqStd??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
+                ${SUB_PAY.steepTiers.map(t=>`<span style="color:var(--muted)">Steep ${t.label} (+$${t.charge}/sq)</span><input id="lbSq_${t.key}" class="ie-inp" type="text" inputmode="decimal" value="${saved['sq_'+t.key]??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">`).join('')}
+              </div>
+            </div>
+          </div>
+          <div><label class="ie-lbl">Decking sheets</label><input id="lbSheets" class="ie-inp" type="text" inputmode="decimal" value="${saved.sheets??''}" placeholder="0"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin:8px 0 6px"><span style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">Additional Work</span><div style="flex:1"></div><button id="lbAddLine" style="background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer"><i class="ti ti-plus" style="font-size:10px"></i> Add</button></div>
+        <div id="lbExtras"></div>
+        <div id="lbBreakdown" style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px"></div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="lbCancel" class="btn-cancel" style="font-size:12px;padding:9px 14px">Cancel</button>
+          <div style="flex:1"></div>
+          <button id="lbApply" class="btn-primary" style="font-size:12px;padding:9px 18px">Use This Amount</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.querySelector('#lbClose').addEventListener('click',close);
+  overlay.querySelector('#lbCancel').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
+  const num=id=>{const el=overlay.querySelector('#'+id);if(!el)return 0;const v=evalMathExpr(el.value);return(v!=null)?v:(parseFloat(el.value)||0);};
+  const fmt=n=>'$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  function collect(){
+    return {
+      mixedPitch,
+      squares:num('lbSquares'),
+      sqStd:num('lbSqStd'),
+      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key,num('lbSq_'+t.key)])),
+      story:parseInt(overlay.querySelector('#lbStory').value)||1,
+      pitch:overlay.querySelector('#lbPitch')?.value||'0',
+      sheets:num('lbSheets'),
+      extraLines,
+    };
+  }
+  function renderExtras(){
+    const w=overlay.querySelector('#lbExtras');
+    w.innerHTML = extraLines.length ? extraLines.map((l,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><button data-lx-del="${i}" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px">×</button><input data-lx-desc="${i}" class="ie-inp" type="text" value="${escapeHtml(l.desc||'')}" placeholder="Description" style="flex:1;padding:6px 8px;font-size:12px"><input data-lx-amt="${i}" class="ie-inp" type="text" inputmode="decimal" value="${l.amount||''}" placeholder="0.00" style="width:90px;padding:6px 8px;font-size:12px;text-align:right"></div>`).join('') : `<div style="font-size:11px;color:var(--muted);font-style:italic">No additional work.</div>`;
+    w.querySelectorAll('[data-lx-desc]').forEach(el=>el.addEventListener('input',()=>{extraLines[el.dataset.lxDesc].desc=el.value;}));
+    w.querySelectorAll('[data-lx-amt]').forEach(el=>el.addEventListener('input',()=>{extraLines[el.dataset.lxAmt].amount=el.value;render();}));
+    w.querySelectorAll('[data-lx-del]').forEach(el=>el.addEventListener('click',()=>{extraLines.splice(parseInt(el.dataset.lxDel),1);renderExtras();render();}));
+  }
+  function render(){
+    const c=computeLaborFromBreakdown(collect());
+    const row=(l,v,sub)=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+l+'</span>':'<span>'+l+'</span>'}<span>${v}</span></div>`;
+    let html=row(`Base — ${c.sq} sq × $${SUB_PAY.base}`,fmt(c.laborBase));
+    if(c.storyAdd) html+=row(`2-story charge — ${c.sq} sq × $${c.storyAdd}`,fmt(c.laborStory),true);
+    c.tiers.filter(t=>t.adder>0).forEach(t=>{ if(c.mixedPitch) html+=row(`${t.label} charge — ${t.sq} sq × $${t.adder}`,fmt(t.sq*t.adder),true); });
+    if(!c.mixedPitch && c.laborSteep) html+=row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`,fmt(c.laborSteep),true);
+    if(c.decking) html+=row(`Decking — ${c.sheets} × $${SUB_PAY.perSheet}`,fmt(c.decking));
+    if(c.extras) html+=row('Additional work',fmt(c.extras));
+    html+=`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#34D399;border-top:2px solid var(--border);padding-top:8px;margin-top:6px"><span>TOTAL</span><span>${fmt(c.total)}</span></div>`;
+    overlay.querySelector('#lbBreakdown').innerHTML=html;
+  }
+  overlay.querySelector('#lbMixed').addEventListener('change',e=>{
+    mixedPitch=e.target.checked;
+    overlay.querySelector('#lbSingleWrap').style.display=mixedPitch?'none':'';
+    overlay.querySelector('#lbMixedWrap').style.display=mixedPitch?'':'none';
+    const sqEl=overlay.querySelector('#lbSquares'); sqEl.disabled=mixedPitch; sqEl.style.opacity=mixedPitch?'0.5':'';
+    render();
+  });
+  overlay.querySelectorAll('#lbSquares,#lbStory,#lbPitch,#lbSheets,#lbSqStd,'+SUB_PAY.steepTiers.map(t=>'#lbSq_'+t.key).join(',')).forEach(el=>{el.addEventListener('input',render);el.addEventListener('change',render);});
+  overlay.querySelector('#lbAddLine').addEventListener('click',()=>{extraLines.push({desc:'',amount:''});renderExtras();});
+  overlay.querySelector('#lbApply').addEventListener('click',()=>{
+    const bd=collect(); const c=computeLaborFromBreakdown(bd);
+    if(c.total<=0){ toast('Enter squares to calculate'); return; }
+    onDone({ total:c.total, breakdown:bd });
+    close();
+  });
+  renderExtras(); render();
+}
+window.openLaborBreakdownCalc = openLaborBreakdownCalc;
+window.computeLaborFromBreakdown = computeLaborFromBreakdown;
+window.laborBreakdownSummary = laborBreakdownSummary;
+
+// ── FINAL INVOICE / DEPRECIATION RELEASE REQUEST ──
+// Shows deductible collected, net-claim (ACV) check collected, and the recoverable
+// depreciation balance due. Lets you pick completion photos, generates one printable
+// PDF (invoice + photos), and drafts a mailto email to the insurance carrier.
+function moneyNum(v){ const n = parseFloat(String(v??'').replace(/[^0-9.\-]/g,'')); return isFinite(n)?n:0; }
+
+function openFinalInvoice(jobId){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j){ toast('Open a job first'); return; }
+  const afterPhotos = (j.photos?.after || []).filter(p=>p && p.url);
+  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Defaults pulled from the insurance fields
+  const rcv = moneyNum(j.rcv);
+  const acv = moneyNum(j.acv);
+  const ded = moneyNum(j.deductible);
+  const recovDep = moneyNum(j.recoverableDep);
+  // Net claim check (first insurance payment) — use netClaim if set, else ACV − deductible
+  const netClaim = j.netClaim ? moneyNum(j.netClaim) : Math.max(0, acv - ded);
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:600px;max-width:100%;max-height:94vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Final Invoice / Depreciation Request</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(j.name||'')}${j.claimNum?' · Claim #'+escapeHtml(j.claimNum):''}</div>
+        </div>
+        <button id="fiClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Amounts</div>
+        <div style="display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;margin-bottom:4px">
+          <label style="font-size:12px;color:var(--brand)">Total RCV (final invoice amount)</label>
+          <input id="fiRcv" class="ie-inp" type="text" inputmode="decimal" value="${rcv||''}" style="text-align:right">
+          <label style="font-size:12px;color:var(--muted)">Net claim / ACV check collected</label>
+          <input id="fiNetClaim" class="ie-inp" type="text" inputmode="decimal" value="${netClaim||''}" style="text-align:right">
+          <label style="font-size:12px;color:var(--muted)">Deductible collected from insured</label>
+          <input id="fiDed" class="ie-inp" type="text" inputmode="decimal" value="${ded||''}" style="text-align:right">
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:7px;padding:9px 12px;margin-top:8px">
+          <span style="font-size:12px;font-weight:700;color:#A78BFA">Recoverable Depreciation Due</span>
+          <span id="fiDepDue" style="font-size:15px;font-weight:800;color:#A78BFA;font-variant-numeric:tabular-nums"></span>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">Calculated: RCV − net claim collected − deductible collected. Adjust amounts above if your figures differ. (Insurance recoverable-dep on file: ${recovDep?fmt(recovDep):'—'})</div>
+
+        <div style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 8px">Completion Photos to Include</div>
+        ${afterPhotos.length ? `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <button id="fiSelectAll" style="background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer">Select all</button>
+            <button id="fiSelectNone" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;cursor:pointer">None</button>
+            <span id="fiPhotoCount" style="font-size:10px;color:var(--muted)"></span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+            ${afterPhotos.map((p,i)=>`
+              <label style="position:relative;cursor:pointer;border-radius:6px;overflow:hidden;aspect-ratio:1;background:#1A1F2E;display:block">
+                <img src="${p.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+                <input type="checkbox" data-fi-photo="${i}" checked style="position:absolute;top:4px;left:4px;width:16px;height:16px;accent-color:#A78BFA;cursor:pointer">
+              </label>`).join('')}
+          </div>
+        ` : `<div style="font-size:11px;color:var(--muted);font-style:italic;padding:4px 0">No completion (After) photos on this job yet. Add them in the Photos tab → After section, then come back.</div>`}
+
+        <div style="display:flex;gap:8px;margin-top:18px">
+          <button id="fiPrint" class="btn-cancel" style="font-size:12px;padding:9px 14px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Invoice + Photos (PDF)</button>
+          <div style="flex:1"></div>
+          <button id="fiEmail" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-mail"></i>Draft Email to Insurance</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Workflow: <strong>Print</strong> saves one PDF (invoice + selected photos). Then <strong>Draft Email</strong> opens your mail app to ${j.insEmail?escapeHtml(j.insEmail):'the insurance email (add it in Edit Job → Insurance)'} with the subject &amp; message ready — attach the saved PDF and send.</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.querySelector('#fiClose').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
+
+  const fival = id => moneyNum(overlay.querySelector('#'+id)?.value);
+  function recompDep(){
+    const due = Math.max(0, fival('fiRcv') - fival('fiNetClaim') - fival('fiDed'));
+    overlay.querySelector('#fiDepDue').textContent = fmt(due);
+    return due;
+  }
+  overlay.querySelectorAll('#fiRcv,#fiNetClaim,#fiDed').forEach(el=>el.addEventListener('input',recompDep));
+  recompDep();
+
+  function updatePhotoCount(){
+    const n = overlay.querySelectorAll('[data-fi-photo]:checked').length;
+    const el = overlay.querySelector('#fiPhotoCount');
+    if(el) el.textContent = `${n} of ${afterPhotos.length} selected`;
+  }
+  overlay.querySelectorAll('[data-fi-photo]').forEach(cb=>cb.addEventListener('change',updatePhotoCount));
+  overlay.querySelector('#fiSelectAll')?.addEventListener('click',()=>{ overlay.querySelectorAll('[data-fi-photo]').forEach(cb=>cb.checked=true); updatePhotoCount(); });
+  overlay.querySelector('#fiSelectNone')?.addEventListener('click',()=>{ overlay.querySelectorAll('[data-fi-photo]').forEach(cb=>cb.checked=false); updatePhotoCount(); });
+  updatePhotoCount();
+
+  function selectedPhotos(){
+    return Array.from(overlay.querySelectorAll('[data-fi-photo]:checked')).map(cb=>afterPhotos[parseInt(cb.dataset.fiPhoto)]).filter(Boolean);
+  }
+
+  overlay.querySelector('#fiPrint').addEventListener('click',()=>{
+    const amounts = { rcv:fival('fiRcv'), netClaim:fival('fiNetClaim'), ded:fival('fiDed'), depDue:recompDep() };
+    printFinalInvoice(j, amounts, selectedPhotos());
+  });
+
+  overlay.querySelector('#fiEmail').addEventListener('click',()=>{
+    const depDue = recompDep();
+    draftDepreciationEmail(j, { rcv:fival('fiRcv'), netClaim:fival('fiNetClaim'), ded:fival('fiDed'), depDue });
+  });
+}
+window.openFinalInvoice = openFinalInvoice;
+
+function printFinalInvoice(j, a, photos){
+  const ci = getCompanyInfo();
+  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const accent = '#1a3a6a';
+  const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const addr = (j.address && j.address!=='—') ? j.address : '';
+  const win = window.open('','_blank');
+  if(!win){ toast('Allow pop-ups to print'); return; }
+  const photoPages = photos.map((p,i)=>`
+    <div class="fi-photo-page">
+      <div class="fi-photo-cap">Completion Photo ${i+1}${addr?' — '+escapeHtml(addr.split(',')[0]):''}</div>
+      <img src="${p.url}" class="fi-photo">
+    </div>`).join('');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Final Invoice${j.name?' - '+escapeHtml(j.name):''}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
+  <style>
+    @page{size:letter;margin:0}
+    *{box-sizing:border-box}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:11pt}
+    .fi-page{padding:0.55in 0.5in;min-height:11in;page-break-after:always}
+    .fi-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:12px;margin-bottom:18px}
+    .fi-co{display:flex;align-items:center;gap:12px}
+    .fi-logo{height:58px;width:auto;max-width:90px;object-fit:contain}
+    .fi-co-name{font-size:14pt;font-weight:800;color:${accent}}
+    .fi-co-detail{font-size:8pt;line-height:1.5}
+    .fi-title{font-size:17pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
+    .fi-meta{font-size:9pt;text-align:right;line-height:1.6;margin-top:4px}
+    .fi-meta strong{color:${accent}}
+    .fi-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:4px}
+    .fi-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+    .fi-box{font-size:10.5pt;line-height:1.5}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    td{padding:7px 10px;font-size:10.5pt;border-bottom:1px solid #eee}
+    .fi-due td{font-size:13pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:11px}
+    .fi-note{margin-top:22px;font-size:9.5pt;color:#333;line-height:1.6}
+    .fi-photo-page{padding:0.4in;page-break-after:always;text-align:center}
+    .fi-photo-cap{font-size:10pt;font-weight:700;color:${accent};margin-bottom:10px}
+    .fi-photo{max-width:100%;max-height:9.5in;object-fit:contain;border:1px solid #ddd}
+    .fi-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+    @media print{.fi-print-btn{display:none}}
+  </style></head><body>
+    <button class="fi-print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
+    <div class="fi-page">
+      <div class="fi-head">
+        <div class="fi-co">
+          ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="fi-logo">`:''}
+          <div>
+            <div class="fi-co-name">${escapeHtml(ci.name||'')}</div>
+            <div class="fi-co-detail">${ci.address?escapeHtml(ci.address)+'<br>':''}${ci.cityStateZip?escapeHtml(ci.cityStateZip)+'<br>':''}${ci.phone?escapeHtml(ci.phone):''}${ci.email?' · '+escapeHtml(ci.email):''}</div>
+          </div>
+        </div>
+        <div>
+          <div class="fi-title">Final Invoice</div>
+          <div class="fi-meta"><strong>Date:</strong> ${today}${j.claimNum?`<br><strong>Claim #:</strong> ${escapeHtml(j.claimNum)}`:''}${j.policyNum?`<br><strong>Policy #:</strong> ${escapeHtml(j.policyNum)}`:''}</div>
+        </div>
+      </div>
+
+      <div class="fi-grid">
+        <div>
+          <div class="fi-label">Insured / Property</div>
+          <div class="fi-box"><strong>${escapeHtml(j.name||'')}</strong>${addr?'<br>'+escapeHtml(addr):''}</div>
+        </div>
+        <div>
+          <div class="fi-label">Insurance Carrier</div>
+          <div class="fi-box">${escapeHtml(j.carrier||'—')}${j.adjName?'<br>Adjuster: '+escapeHtml(j.adjName):''}</div>
+        </div>
+      </div>
+
+      <div class="fi-label">Settlement Summary — Work Complete</div>
+      <table>
+        <tr><td>Total Replacement Cost Value (RCV)</td><td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.rcv)}</td></tr>
+        <tr><td>Less: Net claim / ACV payment received</td><td style="text-align:right;font-variant-numeric:tabular-nums">− ${fmt(a.netClaim)}</td></tr>
+        <tr><td>Less: Deductible (collected from insured)</td><td style="text-align:right;font-variant-numeric:tabular-nums">− ${fmt(a.ded)}</td></tr>
+        <tr class="fi-due"><td>Recoverable Depreciation Now Due</td><td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.depDue)}</td></tr>
+      </table>
+
+      <div class="fi-note">
+        The above roofing project has been <strong>completed in full</strong>. The deductible has been collected from the insured and the ACV payment has been received.
+        We are requesting <strong>release of the recoverable depreciation</strong> in the amount of <strong>${fmt(a.depDue)}</strong>.
+        ${photos.length?`Completion photos are attached (${photos.length} ${photos.length===1?'photo':'photos'}).`:''}
+        Please remit payment to ${escapeHtml(ci.name||'')}. Contact us at ${escapeHtml(ci.phone||'')}${ci.email?' / '+escapeHtml(ci.email):''} with any questions.
+      </div>
+    </div>
+    ${photoPages}
+  </body></html>`);
+  win.document.close();
+}
+window.printFinalInvoice = printFinalInvoice;
+
+function draftDepreciationEmail(j, a){
+  const ci = getCompanyInfo();
+  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const addr = (j.address && j.address!=='—') ? j.address : '';
+  const claim = j.claimNum || '';
+  const subject = `Claim #${claim} - Request for Release of Recoverable Depreciation`;
+  const body = `To whom it may concern,
+
+The roofing project for ${j.name||'the insured'}${addr?' at '+addr:''} has been completed in full.
+
+Claim #: ${claim||'(see attached)'}${j.policyNum?`\nPolicy #: ${j.policyNum}`:''}
+
+We are requesting release of the recoverable depreciation. Settlement summary:
+
+  Total RCV: ${fmt(a.rcv)}
+  Net claim / ACV payment received: ${fmt(a.netClaim)}
+  Deductible collected from insured: ${fmt(a.ded)}
+  Recoverable depreciation now due: ${fmt(a.depDue)}
+
+The final invoice and completion photos are attached. Please remit the recoverable depreciation payment to ${ci.name||''}.
+
+Thank you,
+${ci.name||''}
+${ci.phone||''}${ci.email?'\n'+ci.email:''}`;
+  const to = j.insEmail || '';
+  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  // Copy as backup too
+  navigator.clipboard?.writeText(`Subject: ${subject}\n\n${body}`).catch(()=>{});
+  window.open(mailto,'_blank');
+  if(!to) toast('No insurance email set — add it in Edit Job → Insurance. Email text copied to clipboard.');
+  else toast('Email drafted · attach the saved PDF and send');
+}
+window.draftDepreciationEmail = draftDepreciationEmail;
 
 async function openSubVoucher(jobId){
   const j = jobs.find(x=>x.id===jobId) || null;
@@ -9574,6 +9990,8 @@ function subsGatherData(){
         paidMethod: e.paidMethod || '',
         paidNotes: e.paidNotes || '',
         cat: e.cat || '',
+        desc: e.desc || '',
+        breakdown: e.breakdown || null,
       });
     });
   });
@@ -9652,7 +10070,7 @@ async function renderPayrollSubs(){
               <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(addr)}</div>
             </td>
             <td>${escapeHtml(r.vendorName)}</td>
-            <td class="muted">${escapeHtml(r.cat || '—')}</td>
+            <td class="muted">${escapeHtml(r.cat || '—')}${r.breakdown?`<div style="font-size:9px;color:var(--muted);margin-top:2px;font-style:italic">${escapeHtml(laborBreakdownSummary(r.breakdown))}</div>`:(r.desc?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.desc)}</div>`:'')}</td>
             <td class="num">${fmtMoney(r.amount)}</td>
             <td>${r.paid ? `<span class="comm-status-pill comm-status-paid">PAID</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.paidDate)}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>` : `<span class="comm-status-pill comm-status-owed">OWED</span>`}</td>
             <td>${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : `<button class="comm-unpay-btn" data-sub-unpay="${r.job.id}|${r.expenseIdx}" title="Revert sub payment to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>`}</td>
