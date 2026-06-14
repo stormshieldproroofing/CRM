@@ -222,36 +222,37 @@ async function loadAllFromSupabase() {
     } else {
       window.jobs = newJobs;
     }
-    // One-time cleanup: collapse duplicate voucher-linked / labor expenses.
-    // Catches both same-_vid dupes and legacy content-identical dupes (which lost
-    // their _vid on an earlier reload before the tag was persisted).
+    // One-time cleanup: remove duplicate expense rows. A sync glitch can insert
+    // byte-identical copies of an expense, which doubles the tracker total.
+    // We collapse records that match on ALL meaningful fields (amount normalized),
+    // which is the signature of a duplicate — legitimate separate entries differ.
     let _dupRemoved = 0;
+    const normAmt = a => { const n = parseFloat(String(a??'').replace(/[^0-9.\-]/g,'')); return isFinite(n)?n.toFixed(2):'0.00'; };
     (window.jobs||[]).forEach(j => {
       if(!Array.isArray(j.expenses)) return;
       const keep = [];
       const seenVid = new Set();
       const seenSig = new Set();
       j.expenses.forEach(e => {
-        if(!e){ return; }
-        // 1) exact voucher-id duplicates
+        if(!e) return;
+        // exact voucher-id duplicate
         if(e._vid){
           if(seenVid.has(e._vid)){ _dupRemoved++; return; }
           seenVid.add(e._vid);
         }
-        // 2) content-identical auto-generated labor/voucher dupes
-        //    (only when there's a vendor AND it's auto-generated, so manual
-        //     entries are never collapsed)
-        const isAuto = (e._src === 'subvoucher') || (e.vendor && e.breakdown);
-        if(isAuto && e.vendor){
-          const sig = [e.vendor, e.amount, e.cat||'', e.desc||'', JSON.stringify(e.breakdown||'')].join('|');
-          if(seenSig.has(sig)){ _dupRemoved++; return; }
-          seenSig.add(sig);
-        }
+        // full-record duplicate (all meaningful fields identical)
+        const sig = [
+          (e.cat||''), (e.desc||''), normAmt(e.amount),
+          (e.vendor||''), (e.vendorName||''),
+          (e.paid?'1':'0'), (e.paidDate||''), (e.paidMethod||''), (e.paidNotes||''),
+          JSON.stringify(e.breakdown||''),
+        ].join('|');
+        if(seenSig.has(sig)){ _dupRemoved++; return; }
+        seenSig.add(sig);
         keep.push(e);
       });
       if(keep.length !== j.expenses.length) j.expenses = keep;
     });
-    // Persist the cleanup so the duplicates are removed from Supabase too
     if(_dupRemoved > 0){
       console.log('[Supabase] removed', _dupRemoved, 'duplicate expense line(s)');
       setTimeout(()=>{ if(window.saveToStorage) window.saveToStorage(); }, 1500);
