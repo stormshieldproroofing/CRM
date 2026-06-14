@@ -3055,7 +3055,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     // expAcc collapsible (separate so inner buttons don't bubble-collapse it)
     {
       const acc=$('expAcc'),chev=$('expChev'),bdy=$('expBody');
-      if(acc) acc.querySelector('.acc-header').addEventListener('click',()=>{const open=bdy.style.display==='block';bdy.style.display=open?'none':'block';chev.classList.toggle('open',!open);if(window.refreshExpenseUI)window.refreshExpenseUI();});
+      const accHeader = acc ? acc.querySelector('.acc-header') : null;
+      if(accHeader && bdy) accHeader.addEventListener('click',()=>{const open=bdy.style.display==='block';bdy.style.display=open?'none':'block';if(chev)chev.classList.toggle('open',!open);if(window.refreshExpenseUI)window.refreshExpenseUI();});
     }
 
     // ── Deposits system ──────────────────────────────────────────────

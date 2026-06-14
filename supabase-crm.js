@@ -311,7 +311,18 @@ async function pushAllToSupabase() {
     // Upsert existing ones (id column present and valid)
     if (existingJobs.length) {
       const { error } = await sb.from('jobs').upsert(existingJobs);
-      if (error) throw error;
+      if (error) {
+        // Surface a missing-column error clearly so it's obvious which migration to run
+        const msg = (error.message || '') + ' ' + (error.details || '') + ' ' + (error.hint || '');
+        console.error('[Supabase] jobs upsert failed:', error);
+        if (/column .* does not exist|could not find the .* column|schema cache/i.test(msg)) {
+          const col = (msg.match(/'([a-z_]+)'/) || msg.match(/column "?([a-z_]+)"?/i) || [])[1];
+          const banner = `Supabase is missing a column${col ? `: "${col}"` : ''}. Run the pending SQL migration in Supabase, then refresh.`;
+          if (typeof window !== 'undefined' && window.toast) window.toast(banner);
+          console.error('[Supabase] ' + banner);
+        }
+        throw error;
+      }
     }
 
     // delete any jobs that exist in Supabase but no longer in our local array
