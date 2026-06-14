@@ -186,6 +186,10 @@ async function loadAllFromSupabase() {
         nonRecoverableDep: r.non_recoverable_dep || '',
         netClaim: r.net_claim || '',
         insEmail: r.ins_email || '',
+        adjName: r.adj_name || '',
+        adjPhone: r.adj_phone || '',
+        inspDate: r.insp_date || '',
+        claimNotes: r.claim_notes || '',
         latitude:r.latitude, longitude:r.longitude,
         roofEstimate: r.roof_estimate || null,
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
@@ -206,7 +210,7 @@ async function loadAllFromSupabase() {
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
           .map(d=>({amount:String(d.amount),desc:d.description})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null})),
+          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,_src:e.src||null,_vid:e.vid||null})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         stageChecklistDone,
@@ -218,6 +222,16 @@ async function loadAllFromSupabase() {
     } else {
       window.jobs = newJobs;
     }
+    // One-time cleanup: collapse duplicate voucher-linked expenses (same vid).
+    // These accumulated before _vid was persisted; keep the last of each vid.
+    (window.jobs||[]).forEach(j => {
+      if(!Array.isArray(j.expenses)) return;
+      const seen = new Map();
+      j.expenses.forEach(e => { if(e && e._vid) seen.set(e._vid, e); });
+      if(seen.size){
+        j.expenses = j.expenses.filter(e => !e || !e._vid || seen.get(e._vid) === e);
+      }
+    });
   }
 }
 
@@ -257,6 +271,10 @@ async function pushAllToSupabase() {
         non_recoverable_dep: j.nonRecoverableDep || null,
         net_claim: j.netClaim || null,
         ins_email: j.insEmail || null,
+        adj_name: j.adjName || null,
+        adj_phone: j.adjPhone || null,
+        insp_date: j.inspDate || null,
+        claim_notes: j.claimNotes || null,
         latitude: j.latitude ?? null, longitude: j.longitude ?? null,
         roof_estimate: j.roofEstimate ?? null,
         timeline: Array.isArray(j.timeline) ? j.timeline : [],
@@ -330,6 +348,8 @@ async function pushAllToSupabase() {
           paid_method: e.paidMethod || null,
           paid_notes: e.paidNotes || null,
           breakdown: (e.breakdown && typeof e.breakdown === 'object') ? e.breakdown : null,
+          src: e._src || null,
+          vid: e._vid || null,
         })));
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);

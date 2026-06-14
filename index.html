@@ -4643,12 +4643,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.lossAddFiles=async function(files){
       const pending=Array.from(files);
       if(!pending.length) return;
-      const records=await Promise.all(pending.map(storedFileFromUpload));
+      const records=await Promise.all(pending.map(f=>intakeJobFile(f,'loss',null)));
       j.lossFiles.push(...records);
       saveToStorage();
       body.innerHTML=lossHTML(false);
     };
-    window.lossDelete=function(i){j.lossFiles.splice(i,1);saveToStorage();body.innerHTML=lossHTML(false)};
+    window.lossDelete=async function(i){
+      const f=j.lossFiles[i];
+      if(f && (f.path||f.storagePath) && window.deleteJobFile){ try{ await window.deleteJobFile(f.path||f.storagePath); }catch(e){} }
+      j.lossFiles.splice(i,1);
+      saveToStorage();
+      body.innerHTML=lossHTML(false);
+    };
     window.lossSyncField=function(field,val){ j[field]=val; saveToStorage(); };  // live sync to job + persist
     window.lossSave=function(){saveToStorage();toast('Insurance details saved');};
     window.lossAutofill=function(){
