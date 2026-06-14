@@ -222,16 +222,40 @@ async function loadAllFromSupabase() {
     } else {
       window.jobs = newJobs;
     }
-    // One-time cleanup: collapse duplicate voucher-linked expenses (same vid).
-    // These accumulated before _vid was persisted; keep the last of each vid.
+    // One-time cleanup: collapse duplicate voucher-linked / labor expenses.
+    // Catches both same-_vid dupes and legacy content-identical dupes (which lost
+    // their _vid on an earlier reload before the tag was persisted).
+    let _dupRemoved = 0;
     (window.jobs||[]).forEach(j => {
       if(!Array.isArray(j.expenses)) return;
-      const seen = new Map();
-      j.expenses.forEach(e => { if(e && e._vid) seen.set(e._vid, e); });
-      if(seen.size){
-        j.expenses = j.expenses.filter(e => !e || !e._vid || seen.get(e._vid) === e);
-      }
+      const keep = [];
+      const seenVid = new Set();
+      const seenSig = new Set();
+      j.expenses.forEach(e => {
+        if(!e){ return; }
+        // 1) exact voucher-id duplicates
+        if(e._vid){
+          if(seenVid.has(e._vid)){ _dupRemoved++; return; }
+          seenVid.add(e._vid);
+        }
+        // 2) content-identical auto-generated labor/voucher dupes
+        //    (only when there's a vendor AND it's auto-generated, so manual
+        //     entries are never collapsed)
+        const isAuto = (e._src === 'subvoucher') || (e.vendor && e.breakdown);
+        if(isAuto && e.vendor){
+          const sig = [e.vendor, e.amount, e.cat||'', e.desc||'', JSON.stringify(e.breakdown||'')].join('|');
+          if(seenSig.has(sig)){ _dupRemoved++; return; }
+          seenSig.add(sig);
+        }
+        keep.push(e);
+      });
+      if(keep.length !== j.expenses.length) j.expenses = keep;
     });
+    // Persist the cleanup so the duplicates are removed from Supabase too
+    if(_dupRemoved > 0){
+      console.log('[Supabase] removed', _dupRemoved, 'duplicate expense line(s)');
+      setTimeout(()=>{ if(window.saveToStorage) window.saveToStorage(); }, 1500);
+    }
   }
 }
 
