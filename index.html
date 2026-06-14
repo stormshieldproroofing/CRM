@@ -8396,6 +8396,7 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
 
   const checkZone = `
       <div class="v-check-zone">
+        <span class="v-corner tl"></span><span class="v-corner tr"></span><span class="v-corner bl"></span><span class="v-corner br"></span>
         <span class="v-tape">▾ tape check top edge here ▾</span>
         <div class="v-check-inner">
           <div class="v-check-title">Attach Check Here</div>
@@ -8454,7 +8455,13 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     .v-sign-lbl{font-size:8pt;color:#555}
     .v-issued{font-size:9pt;color:#333;border:1px solid #ddd;border-radius:5px;padding:7px 10px;background:#fafafa}
     .v-filenote{margin-top:12px;font-size:7.5pt;color:#999;font-style:italic}
-    .v-check-zone{border:2px dashed #999;border-radius:6px;width:8.25in;height:3in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
+    .v-check-zone{border:1.5px dashed #777;border-radius:4px;width:8.25in;height:3in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
+    /* corner registration marks so the check corners line up exactly */
+    .v-corner{position:absolute;width:16px;height:16px;border:2px solid #555}
+    .v-corner.tl{top:-2px;left:-2px;border-right:none;border-bottom:none}
+    .v-corner.tr{top:-2px;right:-2px;border-left:none;border-bottom:none}
+    .v-corner.bl{bottom:-2px;left:-2px;border-right:none;border-top:none}
+    .v-corner.br{bottom:-2px;right:-2px;border-left:none;border-top:none}
     .v-check-inner{color:#aaa}
     .v-check-title{font-size:13pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bbb}
     .v-check-sub{font-size:9pt;color:#bbb;margin-top:6px;line-height:1.5}
