@@ -1951,6 +1951,63 @@ function renameJobFile(file, kind, section){
 window.renameJobFile = renameJobFile;
 window.downsizeImageFile = downsizeImageFile;
 
+// ── PHOTO LIGHTBOX (shared show / navigate / download) ──
+// Uses window._phLbCtx = { photos:[{url,name}], idx }
+function phLightboxShow(){
+  const ctx = window._phLbCtx;
+  if(!ctx || !ctx.photos || !ctx.photos.length) return;
+  if(ctx.idx < 0) ctx.idx = 0;
+  if(ctx.idx > ctx.photos.length-1) ctx.idx = ctx.photos.length-1;
+  const p = ctx.photos[ctx.idx];
+  if(!p) return;
+  const img = document.getElementById('ph-lb-img');
+  const cap = document.getElementById('ph-lb-cap');
+  if(img) img.src = p.url;
+  if(cap) cap.textContent = `${p.name||'Photo'}  (${ctx.idx+1} of ${ctx.photos.length})`;
+  document.getElementById('ph-lightbox')?.classList.add('open');
+  // Hide nav arrows if only one photo
+  const multi = ctx.photos.length > 1;
+  document.querySelectorAll('.ph-lb-nav').forEach(b=>b.style.display = multi ? 'flex' : 'none');
+}
+function phLightboxNav(dir){
+  const ctx = window._phLbCtx;
+  if(!ctx) return;
+  ctx.idx = (ctx.idx + dir + ctx.photos.length) % ctx.photos.length;
+  phLightboxShow();
+}
+window.phLightboxNav = phLightboxNav;
+async function phLightboxDownload(){
+  const ctx = window._phLbCtx;
+  if(!ctx) return;
+  const p = ctx.photos[ctx.idx];
+  if(!p || !p.url) return;
+  try {
+    // Fetch the image as a blob so the download works for signed Supabase URLs
+    const res = await fetch(p.url);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = p.name || 'photo.jpg';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  } catch(e){
+    // Fallback: open in new tab so the user can save manually
+    window.open(p.url, '_blank');
+  }
+}
+window.phLightboxDownload = phLightboxDownload;
+// Keyboard arrows / escape for the lightbox
+document.addEventListener('keydown', e=>{
+  const lb = document.getElementById('ph-lightbox');
+  if(!lb || !lb.classList.contains('open')) return;
+  if(e.key === 'ArrowLeft') phLightboxNav(-1);
+  else if(e.key === 'ArrowRight') phLightboxNav(1);
+  else if(e.key === 'Escape') lb.classList.remove('open');
+});
+
 function openStoredFile(file){
   if(!file?.url){toast('File preview is unavailable');return}
   const win=window.open('');
@@ -2228,6 +2285,13 @@ function isForwardStageMove(j,targetColId){
 function canMoveToStage(j,targetColId){
   // Same stage → no gate
   if(!j || j.col === targetColId) return true;
+  // Backward moves (to an earlier stage) are always allowed — the checklist gate
+  // only blocks forward progress, so you can pull a job back without completing it.
+  const cols = (typeof columnsForPipeline === 'function') ? columnsForPipeline(j.pipeline || 'insurance') : (window.columns || []);
+  const fromIdx = cols.findIndex(c => c.id === j.col);
+  const toIdx   = cols.findIndex(c => c.id === targetColId);
+  if(fromIdx !== -1 && toIdx !== -1 && toIdx < fromIdx) return true;
+  // Forward move → enforce the required-item gate
   const gate = canJobLeaveStage(j);
   if(gate.ok) return true;
   toast(gate.reason);
@@ -2387,7 +2451,6 @@ function renderDetailPanel(){
     {id:'overview',icon:'ti-layout-2',label:'Overview'},
     {id:'timeline',icon:'ti-history',label:'Timeline'},
     {id:'photos',icon:'ti-camera',label:'Photos'},
-    {id:'quote',icon:'ti-file-invoice',label:'Quote'},
     {id:'contract',icon:'ti-writing',label:'Contract'},
     {id:'checks',icon:'ti-writing-sign',label:'Checks'},
     {id:'loss',icon:'ti-file-alert',label:'Loss Statement'},
@@ -2620,6 +2683,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <div id="ccFloorWarning" style="display:none;margin-top:6px;padding:5px 8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:5px;font-size:10px;color:var(--warn);line-height:1.3"></div>
                 </div>
                 <button onclick="openInsuranceEstimator(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:13px"></i>Insurance Contribution Estimator</button>
+                <button onclick="activeTab='quote';renderDetailPanel()" style="width:100%;margin-top:6px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);color:#38BDF8;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>Quote &amp; Estimate</button>
                 <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>
                 <button onclick="openSubVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt" style="font-size:13px"></i>Payment Breakdown / Receipt</button>
                 <button onclick="openFinalInvoice(openJobId)" style="width:100%;margin-top:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>Final Invoice / Depreciation Request</button>`
@@ -3425,8 +3489,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     };
     window.expDelete=function(i){
       const j2=curJob();
+      const removed = j2.expenses[i];
+      // If this expense was the one linked to the Payment Breakdown voucher, unlink it
+      if(removed && removed._vid && j2.subVoucher && j2.subVoucher._vid === removed._vid){
+        j2.subVoucher = null;
+      }
       j2.expenses.splice(i,1);
+      saveToStorage();
       refreshExpenseUI();
+      renderBoard();
     };
     window.expEditOpen=function(i){
       const view=document.getElementById('exp-view-'+i);
@@ -3450,7 +3521,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       e.cat=document.getElementById('exp-edit-cat-'+i).value;
       e.desc=document.getElementById('exp-edit-desc-'+i).value.trim()||e.cat;
       e.amount=amt.toFixed(2);
+      saveToStorage();
       refreshExpenseUI();
+      renderBoard();
     };
 
     // Add expense form toggle
@@ -4002,13 +4075,22 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         .ph-lightbox.open{display:flex}
         .ph-lightbox img{max-width:90vw;max-height:80vh;border-radius:8px;object-fit:contain}
         .ph-lb-close{position:absolute;top:18px;right:22px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .ph-lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,0.12);border:none;color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
+        .ph-lb-nav:hover{background:rgba(255,255,255,0.22)}
+        .ph-lb-prev{left:18px}
+        .ph-lb-next{right:18px}
+        .ph-lb-download{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px}
+        .ph-lb-download:hover{background:rgba(255,255,255,0.24)}
         .ph-lb-caption{margin-top:12px;font-size:12px;color:rgba(255,255,255,0.5)}
       </style>
 
       <div id="ph-lightbox" class="ph-lightbox">
         <button class="ph-lb-close" onclick="document.getElementById('ph-lightbox').classList.remove('open')">×</button>
+        <button class="ph-lb-nav ph-lb-prev" onclick="phLightboxNav(-1)" title="Previous">‹</button>
         <img id="ph-lb-img" src="" alt="">
+        <button class="ph-lb-nav ph-lb-next" onclick="phLightboxNav(1)" title="Next">›</button>
         <div class="ph-lb-caption" id="ph-lb-cap"></div>
+        <button class="ph-lb-download" onclick="phLightboxDownload()" title="Download photo">⤓ Download</button>
       </div>
 
       ${sections.map(s=>`
@@ -4087,10 +4169,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     };
 
     window.phOpenLightbox = function(sectionKey, idx){
-      const p=j.photos[sectionKey][idx];
-      document.getElementById('ph-lb-img').src=p.url;
-      document.getElementById('ph-lb-cap').textContent=p.name;
-      document.getElementById('ph-lightbox').classList.add('open');
+      window._phLbCtx = { photos: j.photos[sectionKey]||[], idx };
+      phLightboxShow();
     };
 
     function wirePhotoFunctions(){
@@ -4129,13 +4209,22 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         .ph-lightbox.open{display:flex}
         .ph-lightbox img{max-width:90vw;max-height:80vh;border-radius:8px;object-fit:contain}
         .ph-lb-close{position:absolute;top:18px;right:22px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .ph-lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,0.12);border:none;color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
+        .ph-lb-nav:hover{background:rgba(255,255,255,0.22)}
+        .ph-lb-prev{left:18px}
+        .ph-lb-next{right:18px}
+        .ph-lb-download{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px}
+        .ph-lb-download:hover{background:rgba(255,255,255,0.24)}
         .ph-lb-caption{margin-top:12px;font-size:12px;color:rgba(255,255,255,0.5)}
       </style>
 
       <div id="ph-lightbox" class="ph-lightbox">
         <button class="ph-lb-close" onclick="document.getElementById('ph-lightbox').classList.remove('open')">×</button>
+        <button class="ph-lb-nav ph-lb-prev" onclick="phLightboxNav(-1)" title="Previous">‹</button>
         <img id="ph-lb-img" src="" alt="">
+        <button class="ph-lb-nav ph-lb-next" onclick="phLightboxNav(1)" title="Next">›</button>
         <div class="ph-lb-caption" id="ph-lb-cap"></div>
+        <button class="ph-lb-download" onclick="phLightboxDownload()" title="Download photo">⤓ Download</button>
       </div>
 
       ${sections.map((s,si)=>`
@@ -4199,7 +4288,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       toast('Photos uploaded');
     };
     window.phDelete=function(sk,i){const rec=j.photos[sk][i];window.deleteJobFile?.(rec);j.photos[sk].splice(i,1);saveToStorage();body.innerHTML=photosTabHTML();wirePhFns()};
-    window.phOpenLightbox=function(sk,i){const p=j.photos[sk][i];document.getElementById('ph-lb-img').src=p.url;document.getElementById('ph-lb-cap').textContent=p.name;document.getElementById('ph-lightbox').classList.add('open')};
+    window.phOpenLightbox=function(sk,i){ window._phLbCtx={photos:j.photos[sk]||[],idx:i}; phLightboxShow(); };
     function wirePhFns(){const lb=document.getElementById('ph-lightbox');if(lb)lb.addEventListener('click',e=>{if(e.target===lb)lb.classList.remove('open')})}
     wirePhFns();
 
@@ -4912,9 +5001,20 @@ function selectStageColor(val){
   });
 }
 
+function findChecklistColumn(id){
+  // Active pipeline first, then any pipeline (so the editor always finds the stage)
+  let c = (window.columns||[]).find(x=>x.id===id);
+  if(c) return c;
+  for(const p of (window.pipelines||[])){
+    const found = (p.columns||[]).find(x=>x.id===id);
+    if(found) return found;
+  }
+  return null;
+}
+
 function openStageChecklistModal(id){
   editingChecklistColId=id;
-  const c=columns.find(x=>x.id===id);if(!c)return;
+  const c=findChecklistColumn(id);if(!c){toast('Stage not found');return;}
   $('stageChecklistSub').textContent=`${c.name} checklist`;
   $('newStageChecklistItem').value='';
   // Only admins/managers can edit stage checklist items (they sync to all team members).
@@ -4932,7 +5032,7 @@ function openStageChecklistModal(id){
 }
 
 function renderStageChecklistItems(){
-  const c=columns.find(x=>x.id===editingChecklistColId);if(!c)return;
+  const c=findChecklistColumn(editingChecklistColId);if(!c)return;
   const items=getStageChecklist(c);
   const readOnly = !!window.__checklistReadOnly;
   const roleBadge = (role) => {
@@ -4940,9 +5040,13 @@ function renderStageChecklistItems(){
     if(role === 'salesman') return `<span style="font-size:9px;font-weight:700;letter-spacing:0.06em;color:#4D9DE0;padding:2px 5px;border:1px solid rgba(77,157,224,0.35);border-radius:4px;flex-shrink:0">SALES</span>`;
     return '';
   };
-  $('stageChecklistItems').innerHTML=items.length?items.map(item=>`
+  $('stageChecklistItems').innerHTML=items.length?items.map((item,idx)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid ${item.required?'rgba(248,113,113,0.35)':'var(--border)'};background:${item.required?'rgba(248,113,113,0.04)':'#141927'};border-radius:7px;margin-bottom:7px">
-      <i class="ti ti-${readOnly?'list-check':'grip-vertical'}" style="color:var(--muted);font-size:14px" aria-hidden="true"></i>
+      ${readOnly ? `<i class="ti ti-list-check" style="color:var(--muted);font-size:14px" aria-hidden="true"></i>` : `
+      <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+        <button data-stage-check-up="${item.id}" title="Move up" ${idx===0?'disabled':''} style="width:20px;height:16px;border:none;background:none;color:${idx===0?'rgba(255,255,255,0.15)':'var(--muted)'};cursor:${idx===0?'default':'pointer'};padding:0;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1">▲</button>
+        <button data-stage-check-down="${item.id}" title="Move down" ${idx===items.length-1?'disabled':''} style="width:20px;height:16px;border:none;background:none;color:${idx===items.length-1?'rgba(255,255,255,0.15)':'var(--muted)'};cursor:${idx===items.length-1?'default':'pointer'};padding:0;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1">▼</button>
+      </div>`}
       <input data-stage-check-text="${item.id}" value="${escapeHtml(item.text)}" ${readOnly?'readonly':''} style="min-width:0;flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 8px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none${readOnly?';cursor:default;opacity:0.85':''}">
       ${readOnly
         ? `${roleBadge(item.role)}${item.required ? `<span style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:var(--danger);padding:2px 5px;border:1px solid rgba(248,113,113,0.4);border-radius:4px;flex-shrink:0">REQUIRED</span>` : ''}`
@@ -4957,8 +5061,19 @@ function renderStageChecklistItems(){
           </label>
           <button data-stage-check-delete="${item.id}" title="Delete item" style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px" aria-hidden="true"></i></button>`}
     </div>
-  `).join(''):`<div style="padding:22px 10px;text-align:center;color:var(--muted);font-size:12px">No checklist items yet.${readOnly?'<br><span style="font-size:11px">Ask an admin to add items.</span>':''}</div>`;
+  `).join(''):`<div style="padding:22px 10px;text-align:center;color:var(--muted);font-size:12px">No checklist items yet.${readOnly?'<br><span style="font-size:11px">Ask an admin to add items.</span>':'<br><span style="font-size:11px">Add your first item below.</span>'}</div>`;
   if(readOnly) return;
+  const reorder=(id,dir)=>{
+    const arr=getStageChecklist(c);
+    const i=arr.findIndex(x=>x.id===id);
+    if(i<0) return;
+    const ni=i+dir;
+    if(ni<0||ni>=arr.length) return;
+    [arr[i],arr[ni]]=[arr[ni],arr[i]];
+    saveToStorage();renderStageChecklistItems();renderBoard();if($('detailOverlay').classList.contains('open'))renderDetailPanel();
+  };
+  $('stageChecklistItems').querySelectorAll('[data-stage-check-up]').forEach(b=>b.addEventListener('click',()=>reorder(b.dataset.stageCheckUp,-1)));
+  $('stageChecklistItems').querySelectorAll('[data-stage-check-down]').forEach(b=>b.addEventListener('click',()=>reorder(b.dataset.stageCheckDown,1)));
   $('stageChecklistItems').querySelectorAll('[data-stage-check-text]').forEach(input=>input.addEventListener('input',()=>{
     const item=items.find(x=>x.id===input.dataset.stageCheckText);
     if(item){item.text=input.value;saveToStorage();renderBoard();if($('detailOverlay').classList.contains('open'))renderDetailPanel();}
@@ -4990,10 +5105,10 @@ function renderStageChecklistItems(){
 }
 
 function addStageChecklistItem(){
-  const c=columns.find(x=>x.id===editingChecklistColId);if(!c)return;
+  const c=findChecklistColumn(editingChecklistColId);if(!c)return;
   const text=$('newStageChecklistItem').value.trim();
   if(!text){toast('Checklist item is required');return}
-  getStageChecklist(c).push({id:'chk-'+Date.now(),text});
+  getStageChecklist(c).push({id:'chk-'+Date.now(),text,required:false,role:'either'});
   $('newStageChecklistItem').value='';
   saveToStorage();renderStageChecklistItems();renderBoard();if($('detailOverlay').classList.contains('open'))renderDetailPanel();
 }
@@ -9058,6 +9173,7 @@ function renderQuoteTab(j){
 
   body.innerHTML = `
     <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+      <button onclick="activeTab='overview';renderDetailPanel()" style="align-self:flex-start;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--brand);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-arrow-left" style="font-size:13px"></i>Back to Overview</button>
       <!-- Mode toggle -->
       <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:10px">
         <i class="ti ti-${isInsurance?'shield':'cash'}" style="color:${isInsurance?'#4D9DE0':'#34D399'};font-size:16px"></i>
