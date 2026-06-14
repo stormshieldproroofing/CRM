@@ -230,6 +230,11 @@ async function loadAllFromSupabase() {
     const normAmt = a => { const n = parseFloat(String(a??'').replace(/[^0-9.\-]/g,'')); return isFinite(n)?n.toFixed(2):'0.00'; };
     (window.jobs||[]).forEach(j => {
       if(!Array.isArray(j.expenses)) return;
+      // Normalize legacy category names so expenses aren't hidden from the grouped
+      // list (the total counts every record, but the list only shows known cats).
+      j.expenses.forEach(e => {
+        if(e && (e.cat === 'Labor' || e.cat === 'labor')) e.cat = 'Roofing Labor';
+      });
       const keep = [];
       const seenVid = new Set();
       const seenSig = new Set();

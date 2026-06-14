@@ -3349,7 +3349,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(!window._expCatOpen) window._expCatOpen={};
       const grouped={};
       EXP_CATS.forEach(c=>{grouped[c]=[];});
-      exps.forEach((e,i)=>{ if(grouped[e.cat]!==undefined) grouped[e.cat].push({...e,origIdx:i}); });
+      // Any expense whose category isn't a known one goes into an "Other" bucket
+      // so the displayed list always matches the summed total (nothing hidden).
+      let _hasOther=false;
+      exps.forEach((e,i)=>{
+        if(grouped[e.cat]!==undefined){ grouped[e.cat].push({...e,origIdx:i}); }
+        else { if(!grouped['Other']){ grouped['Other']=[]; _hasOther=true; } grouped['Other'].push({...e,origIdx:i}); }
+      });
+      const DISPLAY_CATS = _hasOther ? [...EXP_CATS, 'Other'] : EXP_CATS;
 
       // Calculate totals
       const totalCosts=exps.filter(e=>e.cat!=='Returns').reduce((s,e)=>s+parseFloat(e.amount||0),0);
@@ -3378,7 +3385,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           ecs.style.display='none';
           ecs.innerHTML='';
         } else {
-          const activeCatsSummary=EXP_CATS.filter(cat=>grouped[cat]&&grouped[cat].length>0);
+          const activeCatsSummary=DISPLAY_CATS.filter(cat=>grouped[cat]&&grouped[cat].length>0);
           ecs.innerHTML=activeCatsSummary.map(cat=>{
             const catAmt=grouped[cat].reduce((s,e)=>s+parseFloat(e.amount||0),0);
             const isRet=cat==='Returns';
@@ -3404,7 +3411,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       // Render category groups
       const ecl=$('expCatList');
       if(!ecl) return;
-      const activeCats=EXP_CATS.filter(c=>grouped[c].length>0);
+      const activeCats=DISPLAY_CATS.filter(c=>grouped[c].length>0);
       if(!activeCats.length){
         ecl.innerHTML='<div style="font-size:11px;color:var(--muted);text-align:center;padding:6px 0 8px">No expenses added yet</div>';
         return;
