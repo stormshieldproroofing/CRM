@@ -2017,6 +2017,7 @@ async function importAbcInvoice(file){
         ? `<div style="font-size:10px;color:#34D399;margin-top:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-circle-check" style="font-size:12px"></i>PO# matches this job (${mr.match.reasons.join(', ')})</div>`
         : `<div style="font-size:10px;color:#FBBF24;margin-top:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-alert-triangle" style="font-size:12px"></i>Heads up: PO# "${escapeHtml(parsed.po||'')}" looks like it matches <strong>${escapeHtml(mr.match.job.name||'')}</strong>, not this job.</div>`)
     : '';
+  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   const overlay = document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.innerHTML = `
