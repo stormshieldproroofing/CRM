@@ -11712,9 +11712,9 @@ async function loadRoofLeadsInView(){
   const z = __map.getZoom();
   const note = document.getElementById('roofLayerNote');
   // Below neighborhood zoom there are too many homes — ask user to zoom in
-  if(z < 12.5){
+  if(z < 11){
     if(__map.getSource('roofleads')) __map.getSource('roofleads').setData({type:'FeatureCollection',features:[]});
-    if(note) note.textContent = 'Zoom in to load homes';
+    if(note) note.textContent = '🔍 Zoom in to load homes';
     return;
   }
   if(rl.loading) return;
@@ -11823,7 +11823,15 @@ window.toggleRoofLayer = function(on){
   ensureMapInit(); ensureRoofLayer();
   const panel = document.getElementById('roofSliderPanel');
   if(panel) panel.style.display = on ? 'block' : 'none';
-  if(on){ loadRoofLeadsInView(); }
+  if(on){
+    // Jump to the Pearland/South Belt target area so homes are immediately in view
+    if(__map){
+      const z = __map.getZoom();
+      // Only recenter if we're not already zoomed into a Houston-area neighborhood
+      if(z < 11){ __map.flyTo({ center:[-95.29, 29.55], zoom:13, duration:800 }); }
+    }
+    setTimeout(loadRoofLeadsInView, 900);
+  }
   else {
     if(__map && __map.getSource('roofleads')) __map.getSource('roofleads').setData({type:'FeatureCollection',features:[]});
     const note=document.getElementById('roofLayerNote'); if(note) note.textContent='';
