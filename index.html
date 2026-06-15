@@ -11751,6 +11751,13 @@ async function loadRoofLeadsInView(){
 
 function ensureRoofLayer(){
   if(!__map) return;
+  // Mapbox can't add sources/layers until the style has loaded — wait if needed
+  if(!__map.isStyleLoaded()){
+    __map.once('load', ensureRoofLayer);
+    // 'load' may have already fired; also retry shortly as a safety net
+    setTimeout(()=>{ if(__map && __map.isStyleLoaded() && !__map.getSource('roofleads')) ensureRoofLayer(); }, 600);
+    return;
+  }
   if(__map.getSource('roofleads')) return;
   __map.addSource('roofleads', {
     type:'geojson',
