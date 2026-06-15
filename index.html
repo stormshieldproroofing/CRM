@@ -462,7 +462,23 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     <button class="icon-btn" onclick="renderMapPage()" title="Refresh"><i class="ti ti-refresh"></i></button>
     <div id="map-count" style="font-size:11px;color:var(--muted);padding:0 6px"></div>
   </div>
-  <div id="mapContainer" style="width:100%;height:calc(100vh - 110px);background:#0F1117"></div>
+  <div style="padding:8px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);background:#11151f">
+    <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--brand);cursor:pointer;font-weight:600">
+      <input type="checkbox" id="roofLayerToggle" onchange="toggleRoofLayer(this.checked)" style="width:15px;height:15px;accent-color:#F97316;cursor:pointer">
+      <i class="ti ti-home-search" style="color:#F97316"></i> Roof-Age Prospecting
+    </label>
+    <div id="roofSliderPanel" style="display:none;flex:1;min-width:260px;display:none;align-items:center;gap:12px">
+      <span id="roofAgeLabel" style="font-size:12px;font-weight:700;color:#F97316;white-space:nowrap">10–15 yr roofs</span>
+      <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:180px">
+        <span style="font-size:10px;color:var(--muted)">7</span>
+        <input type="range" id="roofAgeMin" min="7" max="20" value="10" oninput="updateRoofAge()" style="flex:1;accent-color:#F97316">
+        <input type="range" id="roofAgeMax" min="7" max="20" value="15" oninput="updateRoofAge()" style="flex:1;accent-color:#F97316">
+        <span style="font-size:10px;color:var(--muted)">20</span>
+      </div>
+      <span id="roofLayerNote" style="font-size:11px;color:var(--muted);white-space:nowrap;min-width:90px"></span>
+    </div>
+  </div>
+  <div id="mapContainer" style="width:100%;height:calc(100vh - 150px);background:#0F1117"></div>
 </div>
 
 <!-- CALENDAR / PRODUCTION SCHEDULE PAGE -->
@@ -11675,6 +11691,154 @@ async function renderMapPage(){
     });
   });
 })();
+
+// ═════════════════════════════════════════════════════════════
+// ROOF-AGE PROSPECTING LAYER (HCAD homes, viewport-loaded)
+// ═════════════════════════════════════════════════════════════
+window.__roofLayer = { on:false, minAge:10, maxAge:15, loading:false, count:0, _t:null };
+
+function roofAgeColor(age){
+  // older roof = hotter color
+  if(age >= 16) return '#EF4444';      // red - very likely original/old
+  if(age >= 13) return '#F97316';      // orange
+  if(age >= 10) return '#FBBF24';      // amber - prime target
+  if(age >= 8)  return '#60C4FF';      // blue - getting there
+  return '#94A3B8';                     // gray - newer
+}
+
+async function loadRoofLeadsInView(){
+  const rl = window.__roofLayer;
+  if(!rl.on || !__map || !window.sb) return;
+  const z = __map.getZoom();
+  const note = document.getElementById('roofLayerNote');
+  // Below neighborhood zoom there are too many homes — ask user to zoom in
+  if(z < 12.5){
+    if(__map.getSource('roofleads')) __map.getSource('roofleads').setData({type:'FeatureCollection',features:[]});
+    if(note) note.textContent = 'Zoom in to load homes';
+    return;
+  }
+  if(rl.loading) return;
+  rl.loading = true;
+  if(note) note.textContent = 'Loading homes…';
+  const b = __map.getBounds();
+  try {
+    const { data, error } = await window.sb.rpc('roof_leads_in_view', {
+      min_lng: b.getWest(), min_lat: b.getSouth(),
+      max_lng: b.getEast(), max_lat: b.getNorth(),
+      min_age: rl.minAge, max_age: rl.maxAge, max_rows: 4000,
+    });
+    if(error) throw error;
+    const features = (data||[]).map(h => ({
+      type:'Feature',
+      geometry:{ type:'Point', coordinates:[h.longitude, h.latitude] },
+      properties:{
+        id:h.id, address:h.situs_address||'', city:h.city||'', zip:h.zip||'',
+        year:h.year_built, age:h.age, status:h.status||'new', color:roofAgeColor(h.age),
+      },
+    }));
+    rl.count = features.length;
+    if(__map.getSource('roofleads')){
+      __map.getSource('roofleads').setData({type:'FeatureCollection',features});
+    }
+    if(note) note.textContent = `${features.length}${features.length>=4000?'+':''} homes shown`;
+  } catch(e){
+    console.error('[roof leads]', e);
+    if(note) note.textContent = 'Error loading homes';
+  } finally {
+    rl.loading = false;
+  }
+}
+
+function ensureRoofLayer(){
+  if(!__map) return;
+  if(__map.getSource('roofleads')) return;
+  __map.addSource('roofleads', {
+    type:'geojson',
+    data:{type:'FeatureCollection',features:[]},
+    cluster:true, clusterMaxZoom:15, clusterRadius:45,
+  });
+  // Cluster bubbles
+  __map.addLayer({
+    id:'rl-clusters', type:'circle', source:'roofleads', filter:['has','point_count'],
+    paint:{
+      'circle-color':'rgba(249,115,22,0.55)',
+      'circle-radius':['step',['get','point_count'],14,50,18,250,24,1000,30],
+      'circle-stroke-width':2, 'circle-stroke-color':'rgba(249,115,22,0.9)',
+    },
+  });
+  __map.addLayer({
+    id:'rl-cluster-count', type:'symbol', source:'roofleads', filter:['has','point_count'],
+    layout:{'text-field':['get','point_count_abbreviated'],'text-size':11,'text-font':['DIN Offc Pro Medium','Arial Unicode MS Bold']},
+    paint:{'text-color':'#fff'},
+  });
+  // Individual home dots
+  __map.addLayer({
+    id:'rl-homes', type:'circle', source:'roofleads', filter:['!',['has','point_count']],
+    paint:{
+      'circle-color':['get','color'],
+      'circle-radius':6, 'circle-stroke-width':1.5, 'circle-stroke-color':'#fff',
+    },
+  });
+  // Click a home → popup with details + mark buttons
+  __map.on('click','rl-homes', e=>{
+    const f = e.features[0]; const p = f.properties;
+    const html = `<div class="map-popup">
+      <div class="mp-row" style="font-weight:700;color:#0F1117"><i class="ti ti-home"></i> ${escapeHtml(p.address)}</div>
+      <div class="mp-row">${escapeHtml(p.city)} ${escapeHtml(p.zip)}</div>
+      <div class="mp-row"><strong>Built ${p.year}</strong> · <span style="color:${p.color};font-weight:700">${p.age} yr roof</span></div>
+      <div style="display:flex;gap:5px;margin-top:8px">
+        <button onclick="roofSetStatus('${p.id}','knocked')" style="flex:1;font-size:10px;padding:5px;border:none;border-radius:5px;background:#1a2535;color:#fff;cursor:pointer">Knocked</button>
+        <button onclick="roofSetStatus('${p.id}','interested')" style="flex:1;font-size:10px;padding:5px;border:none;border-radius:5px;background:#16a34a;color:#fff;cursor:pointer">Interested</button>
+        <button onclick="roofSetStatus('${p.id}','dead')" style="flex:1;font-size:10px;padding:5px;border:none;border-radius:5px;background:#64748b;color:#fff;cursor:pointer">Pass</button>
+      </div>
+    </div>`;
+    new mapboxgl.Popup({offset:14,closeButton:true}).setLngLat(f.geometry.coordinates).setHTML(html).addTo(__map);
+  });
+  // Click a cluster → zoom in
+  __map.on('click','rl-clusters', e=>{
+    const f = __map.queryRenderedFeatures(e.point,{layers:['rl-clusters']})[0];
+    __map.getSource('roofleads').getClusterExpansionZoom(f.properties.cluster_id,(err,zoom)=>{
+      if(err) return; __map.easeTo({center:f.geometry.coordinates, zoom});
+    });
+  });
+  __map.on('mouseenter','rl-homes',()=>{__map.getCanvas().style.cursor='pointer';});
+  __map.on('mouseleave','rl-homes',()=>{__map.getCanvas().style.cursor='';});
+  // Reload homes when the map stops moving
+  __map.on('moveend', ()=>{
+    if(!window.__roofLayer.on) return;
+    clearTimeout(window.__roofLayer._t);
+    window.__roofLayer._t = setTimeout(loadRoofLeadsInView, 250);
+  });
+}
+
+window.roofSetStatus = async function(id, status){
+  if(!window.sb) return;
+  try { await window.sb.rpc('roof_lead_set_status', { lead:id, new_status:status }); toast('Marked '+status); }
+  catch(e){ console.error(e); toast('Could not save'); }
+};
+
+window.toggleRoofLayer = function(on){
+  const rl = window.__roofLayer;
+  rl.on = on;
+  ensureMapInit(); ensureRoofLayer();
+  const panel = document.getElementById('roofSliderPanel');
+  if(panel) panel.style.display = on ? 'block' : 'none';
+  if(on){ loadRoofLeadsInView(); }
+  else {
+    if(__map && __map.getSource('roofleads')) __map.getSource('roofleads').setData({type:'FeatureCollection',features:[]});
+    const note=document.getElementById('roofLayerNote'); if(note) note.textContent='';
+  }
+};
+
+window.updateRoofAge = function(){
+  const rl = window.__roofLayer;
+  const lo = parseInt(document.getElementById('roofAgeMin').value);
+  const hi = parseInt(document.getElementById('roofAgeMax').value);
+  rl.minAge = Math.min(lo,hi); rl.maxAge = Math.max(lo,hi);
+  const lbl = document.getElementById('roofAgeLabel');
+  if(lbl) lbl.textContent = `${rl.minAge}–${rl.maxAge} yr roofs`;
+  clearTimeout(rl._t); rl._t = setTimeout(loadRoofLeadsInView, 200);
+};
 
 
 // ═════════════════════════════════════════════════════════════
