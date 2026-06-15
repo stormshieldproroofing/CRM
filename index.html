@@ -477,6 +477,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       </div>
       <span id="roofLayerNote" style="font-size:11px;color:var(--muted);white-space:nowrap;min-width:90px"></span>
       <input id="roofNameSearch" type="text" placeholder="Search owner name…" oninput="updateRoofName()" style="font-size:11px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:#1E253A;color:var(--brand);outline:none;width:160px;font-family:'Barlow',sans-serif">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--brand);cursor:pointer;font-weight:600;white-space:nowrap">
+        <input type="checkbox" id="roofVietnameseToggle" onchange="updateRoofVietnameseFilter()" style="width:14px;height:14px;accent-color:#F97316;cursor:pointer">
+        Likely Vietnamese surname
+      </label>
     </div>
   </div>
   <div id="mapContainer" style="width:100%;height:calc(100vh - 150px);background:#0F1117"></div>
@@ -11696,7 +11700,7 @@ async function renderMapPage(){
 // ═════════════════════════════════════════════════════════════
 // ROOF-AGE PROSPECTING LAYER (HCAD homes, viewport-loaded)
 // ═════════════════════════════════════════════════════════════
-window.__roofLayer = { on:false, minAge:10, maxAge:15, loading:false, count:0, _t:null, nameQuery:'' };
+window.__roofLayer = { on:false, minAge:10, maxAge:15, loading:false, count:0, _t:null, nameQuery:'', onlyVietnamese:false, minVietnameseScore:80 };
 
 function roofAgeColor(age){
   // older roof = hotter color
@@ -11728,6 +11732,8 @@ async function loadRoofLeadsInView(){
       max_lng: b.getEast(), max_lat: b.getNorth(),
       min_age: rl.minAge, max_age: rl.maxAge, max_rows: 4000,
       name_query: (rl.nameQuery || null),
+      only_vietnamese: !!rl.onlyVietnamese,
+      min_vietnamese_score: rl.minVietnameseScore || 80,
     });
     if(error) throw error;
     const features = (data||[]).map(h => ({
@@ -11736,14 +11742,14 @@ async function loadRoofLeadsInView(){
       properties:{
         id:h.id, address:h.situs_address||'', city:h.city||'', zip:h.zip||'',
         year:h.year_built, age:h.age, status:h.status||'new', color:roofAgeColor(h.age),
-        owner:h.owner_name||'',
+        owner:h.owner_name||'', ownerSurname:h.owner_surname||'', vietnameseScore:h.vietnamese_probability||0,
       },
     }));
     rl.count = features.length;
     if(__map.getSource('roofleads')){
       __map.getSource('roofleads').setData({type:'FeatureCollection',features});
     }
-    if(note) note.textContent = `${features.length}${features.length>=4000?'+':''} homes shown`;
+    if(note) note.textContent = `${features.length}${features.length>=4000?'+':''} ${rl.onlyVietnamese ? 'surname matches' : 'homes shown'}`;
   } catch(e){
     console.error('[roof leads]', e);
     if(note) note.textContent = 'Error loading homes';
@@ -11797,6 +11803,7 @@ function ensureRoofLayer(){
       <div class="mp-row">${escapeHtml(p.city)} ${escapeHtml(p.zip)}</div>
       <div class="mp-row"><strong>Built ${p.year}</strong> · <span style="color:${p.color};font-weight:700">${p.age} yr roof</span></div>
       ${p.owner?`<div class="mp-row" style="color:#475569"><i class="ti ti-user"></i> ${escapeHtml(p.owner)}</div>`:''}
+      ${Number(p.vietnameseScore||0)>0?`<div class="mp-row" style="color:#c2410c"><i class="ti ti-user-check"></i> Vietnamese surname score: <strong>${p.vietnameseScore}</strong>${p.ownerSurname?` · ${escapeHtml(p.ownerSurname)}`:''}</div>`:''}
       <div style="display:flex;gap:5px;margin-top:8px">
         <button onclick="roofSetStatus('${p.id}','knocked')" style="flex:1;font-size:10px;padding:5px;border:none;border-radius:5px;background:#1a2535;color:#fff;cursor:pointer">Knocked</button>
         <button onclick="roofSetStatus('${p.id}','interested')" style="flex:1;font-size:10px;padding:5px;border:none;border-radius:5px;background:#16a34a;color:#fff;cursor:pointer">Interested</button>
@@ -11853,6 +11860,12 @@ window.updateRoofName = function(){
   const rl = window.__roofLayer;
   rl.nameQuery = (document.getElementById('roofNameSearch').value || '').trim();
   clearTimeout(rl._t); rl._t = setTimeout(loadRoofLeadsInView, 350);
+};
+
+window.updateRoofVietnameseFilter = function(){
+  const rl = window.__roofLayer;
+  rl.onlyVietnamese = !!document.getElementById('roofVietnameseToggle')?.checked;
+  clearTimeout(rl._t); rl._t = setTimeout(loadRoofLeadsInView, 200);
 };
 
 window.updateRoofAge = function(){
