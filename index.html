@@ -304,6 +304,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}</script>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
 <script src="supabase-crm.js"></script>
@@ -1951,6 +1953,213 @@ function renameJobFile(file, kind, section){
 window.renameJobFile = renameJobFile;
 window.downsizeImageFile = downsizeImageFile;
 
+// ── ABC SUPPLY INVOICE IMPORT ──
+// Reads the PDF text layer, extracts the order total/number/PO, confirms with the
+// user, then creates a Materials expense and attaches the PDF to the current job.
+async function extractPdfText(file){
+  if(!window.pdfjsLib) throw new Error('PDF reader not loaded');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = '';
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    text += content.items.map(it=>it.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+function parseAbcInvoice(text){
+  const out = { total:null, subTotal:null, tax:null, orderNum:'', po:'', orderName:'', account:'' };
+  const money = s => { const m = (s||'').replace(/[^0-9.]/g,''); return m ? parseFloat(m) : null; };
+  // Total: $11,187.17  (take the last "Total:" so Sub-Total doesn't win)
+  const totals = [...text.matchAll(/(?:^|\s)Total:\s*\$?([\d,]+\.\d{2})/gi)];
+  if(totals.length) out.total = money(totals[totals.length-1][1]);
+  const sub = text.match(/Sub-?Total:\s*\$?([\d,]+\.\d{2})/i);
+  if(sub) out.subTotal = money(sub[1]);
+  const tax = text.match(/Tax:\s*\$?([\d,]+\.\d{2})/i);
+  if(tax) out.tax = money(tax[1]);
+  const ord = text.match(/Order\s*#:\s*(\d+)/i);
+  if(ord) out.orderNum = ord[1];
+  const po = text.match(/PO\s*#:\s*([A-Za-z0-9\-]+)/i);
+  if(po) out.po = po[1];
+  const nm = text.match(/Order\s*Name:\s*([^\n]+?)(?:\s*Order\s*#|$)/i);
+  if(nm) out.orderName = nm[1].trim();
+  const acct = text.match(/Account\s*#:\s*([\d\-]+)/i);
+  if(acct) out.account = acct[1];
+  return out;
+}
+
+async function importAbcInvoice(file){
+  const jid = window.openJobId || openJobId;
+  const j = (window.jobs||[]).find(x=>x.id===jid);
+  if(!j){ toast('Open a job first'); return; }
+  toast('Reading invoice…');
+  let parsed, text;
+  try {
+    text = await extractPdfText(file);
+    parsed = parseAbcInvoice(text);
+  } catch(e){
+    console.error('[ABC import]', e);
+    toast('Could not read this PDF. You can add the expense manually.');
+    return;
+  }
+  if(!parsed.total){
+    toast('Could not find a Total on this invoice. Add it manually.');
+    return;
+  }
+  // Run the matcher against all jobs to show how confident the PO/address link is
+  const order = { po: parsed.po, address: '', orderName: parsed.orderName };
+  const mr = bestJobMatch(order);
+  const matchedThisJob = mr.match && mr.match.job.id === j.id;
+  const matchNote = mr.match
+    ? (matchedThisJob
+        ? `<div style="font-size:10px;color:#34D399;margin-top:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-circle-check" style="font-size:12px"></i>PO# matches this job (${mr.match.reasons.join(', ')})</div>`
+        : `<div style="font-size:10px;color:#FBBF24;margin-top:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-alert-triangle" style="font-size:12px"></i>Heads up: PO# "${escapeHtml(parsed.po||'')}" looks like it matches <strong>${escapeHtml(mr.match.job.name||'')}</strong>, not this job.</div>`)
+    : '';
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:420px;max-width:100%;overflow:hidden">
+      <div style="padding:15px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <i class="ti ti-package" style="color:#F97316;font-size:18px"></i>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">ABC Supply Invoice</div>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+          <span style="font-size:12px;color:var(--muted)">Total (incl. tax)</span>
+          <span style="font-size:24px;font-weight:800;color:#F97316;font-variant-numeric:tabular-nums">${fmt(parsed.total)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.8;background:#1A1F2E;border-radius:7px;padding:10px 12px">
+          ${parsed.subTotal!=null?`<div style="display:flex;justify-content:space-between"><span>Sub-total</span><span>${fmt(parsed.subTotal)}</span></div>`:''}
+          ${parsed.tax!=null?`<div style="display:flex;justify-content:space-between"><span>Tax</span><span>${fmt(parsed.tax)}</span></div>`:''}
+          ${parsed.orderNum?`<div style="display:flex;justify-content:space-between"><span>Order #</span><span>${escapeHtml(parsed.orderNum)}</span></div>`:''}
+          ${parsed.po?`<div style="display:flex;justify-content:space-between"><span>PO #</span><span>${escapeHtml(parsed.po)}</span></div>`:''}
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:10px">Will add a <strong style="color:var(--brand)">Materials</strong> expense to <strong style="color:var(--brand)">${escapeHtml(j.name||'this job')}</strong> and attach the PDF.</div>
+        ${matchNote}
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button id="abcCancel" class="btn-cancel" style="flex:1;font-size:12px;padding:9px">Cancel</button>
+          <button id="abcConfirm" class="btn-primary" style="flex:1;font-size:12px;padding:9px;background:#F97316;border-color:#F97316">Add Materials Expense</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.querySelector('#abcCancel').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
+  overlay.querySelector('#abcConfirm').addEventListener('click', async ()=>{
+    overlay.querySelector('#abcConfirm').textContent='Adding…';
+    overlay.querySelector('#abcConfirm').disabled=true;
+    // 1) Create the Materials expense
+    if(!Array.isArray(j.expenses)) j.expenses=[];
+    const descBits = ['ABC Supply'];
+    if(parsed.orderNum) descBits.push('Order #'+parsed.orderNum);
+    if(parsed.po) descBits.push('PO #'+parsed.po);
+    j.expenses.push({
+      cat:'Materials',
+      desc: descBits.join(' · '),
+      amount: parsed.total.toFixed(2),
+      vendor: null,
+      vendorName: 'ABC Supply',
+      paid:false,
+    });
+    // 2) Attach the PDF to the job (under Other files)
+    try {
+      if(window.intakeJobFile){
+        const rec = await intakeJobFile(file, 'other', null);
+        if(!Array.isArray(j.otherFiles)) j.otherFiles=[];
+        j.otherFiles.push(rec);
+      }
+    } catch(e){ console.warn('[ABC import] file attach failed', e); }
+    saveToStorage();
+    if(window.refreshExpenseUI) refreshExpenseUI();
+    if(typeof renderBoard==='function') renderBoard();
+    if(typeof logActivity==='function') logActivity(j,'expense','ABC Supply invoice imported',`Materials: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:''}`);
+    close();
+    toast('Materials expense added · invoice attached');
+  });
+}
+window.importAbcInvoice = importAbcInvoice;
+
+// ── ABC ORDER → JOB MATCHING ENGINE ──
+// Scores each job against an order's PO#, job-site address, and order name so an
+// ABC order (from PDF or, later, the API) can auto-link to the right job.
+// Returns ranked candidates: [{ job, score, reasons:[] }], best first.
+function _mNorm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
+function _mDigits(s){ return String(s||'').replace(/\D/g,''); }
+// Normalize a street address: drop unit words, standardize abbreviations, keep number+name
+function _mStreet(s){
+  let t = _mNorm(s).split(',')[0]; // first line only
+  const abbr = { street:'st', avenue:'ave', boulevard:'blvd', drive:'dr', road:'rd', lane:'ln',
+                 court:'ct', circle:'cir', place:'pl', trail:'trl', parkway:'pkwy', highway:'hwy',
+                 green:'grn', north:'n', south:'s', east:'e', west:'w' };
+  t = t.split(' ').map(w=>abbr[w]||w).join(' ');
+  return t.trim();
+}
+function _mTokens(s){ return _mStreet(s).split(' ').filter(w=>w.length>1); }
+
+// order = { po, address, orderName, account }
+function matchOrderToJobs(order, jobsArr){
+  const jobs = jobsArr || window.jobs || [];
+  const poN = _mNorm(order.po);
+  const orderAddr = _mStreet(order.address);
+  const orderAddrTokens = _mTokens(order.address);
+  const orderHouseNum = (orderAddr.match(/^\d+/)||[''])[0];
+  const orderName = _mNorm(order.orderName);
+
+  const results = [];
+  for(const j of jobs){
+    let score = 0; const reasons = [];
+    const jobName = _mNorm(j.name);
+    const jobStreet = _mStreet(j.address);
+    const jobHouseNum = (jobStreet.match(/^\d+/)||[''])[0];
+
+    // 1) PO# matches the job's customer name (e.g. PO "HOFFMAN" → job "Betty Hoffman")
+    if(poN){
+      const jobLast = jobName.split(' ').filter(Boolean).pop() || '';
+      if(jobName === poN){ score += 60; reasons.push('PO# = customer name'); }
+      else if(jobLast && poN.includes(jobLast)){ score += 45; reasons.push('PO# contains last name'); }
+      else if(jobName && poN && (jobName.includes(poN) || poN.includes(jobName.replace(/\s/g,'')))){ score += 35; reasons.push('PO# ~ name'); }
+    }
+
+    // 2) Street address match (strongest signal when present)
+    if(orderAddr && jobStreet){
+      if(orderHouseNum && jobHouseNum && orderHouseNum === jobHouseNum){
+        score += 30; reasons.push('house # match');
+        // bonus if street name tokens also overlap
+        const overlap = orderAddrTokens.filter(t=>jobStreet.includes(t)).length;
+        if(overlap >= 1){ score += 25; reasons.push('street name match'); }
+      } else if(orderAddr === jobStreet){
+        score += 50; reasons.push('exact street match');
+      }
+    }
+
+    // 3) Order name overlaps the customer name
+    if(orderName && jobName){
+      const jobLast = jobName.split(' ').filter(Boolean).pop() || '';
+      if(jobLast && orderName.includes(jobLast)){ score += 20; reasons.push('order name ~ customer'); }
+    }
+
+    if(score > 0) results.push({ job:j, score, reasons });
+  }
+  results.sort((a,b)=>b.score-a.score);
+  return results;
+}
+window.matchOrderToJobs = matchOrderToJobs;
+
+// Convenience: best match + whether it's confident enough to auto-suggest
+function bestJobMatch(order, jobsArr){
+  const ranked = matchOrderToJobs(order, jobsArr);
+  if(!ranked.length) return { match:null, confident:false, ranked:[] };
+  const top = ranked[0];
+  const second = ranked[1];
+  // Confident if top score is high AND clearly ahead of the runner-up
+  const confident = top.score >= 55 && (!second || top.score - second.score >= 20);
+  return { match: top, confident, ranked };
+}
+window.bestJobMatch = bestJobMatch;
+
 // ── PHOTO LIGHTBOX (shared show / navigate / download) ──
 // Uses window._phLbCtx = { photos:[{url,name}], idx }
 function phLightboxShow(){
@@ -2813,6 +3022,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <button id="expAddToggle" style="width:100%;padding:9px;border-radius:7px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif;transition:border-color 0.12s,background 0.12s" onmouseover="this.style.borderColor='var(--brand-light)';this.style.background='rgba(77,157,224,0.06)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='none'">
                   <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add Expense
                 </button>
+                <button id="abcImportBtn" style="width:100%;margin-top:6px;padding:9px;border-radius:7px;border:1px solid rgba(249,115,22,0.3);background:rgba(249,115,22,0.08);color:#F97316;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif" onclick="document.getElementById('abcInvoiceFile').click()">
+                  <i class="ti ti-file-upload" style="font-size:13px" aria-hidden="true"></i>Import ABC Supply Invoice (PDF)
+                </button>
+                <input id="abcInvoiceFile" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]){importAbcInvoice(this.files[0]);this.value='';}">
                 <div id="expAddForm" style="display:none;margin-top:8px;padding:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px">
                   <div style="margin-bottom:8px">
                     <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Category</label>
