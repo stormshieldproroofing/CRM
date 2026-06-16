@@ -11716,12 +11716,15 @@ async function loadRoofLeadsInView(){
   if(!rl.on || !__map || !window.sb) return;
   const z = __map.getZoom();
   const note = document.getElementById('roofLayerNote');
-  // Below neighborhood zoom there are too many homes — ask user to zoom in
-  if(z < 11){
+  // Show prospects from city level (z>=9). Zoomed way out, cap how many homes
+  // we pull so a metro-wide view stays fast — clustering shows where they are.
+  if(z < 9){
     if(__map.getSource('roofleads')) __map.getSource('roofleads').setData({type:'FeatureCollection',features:[]});
     if(note) note.textContent = '🔍 Zoom in to load homes';
     return;
   }
+  // Row cap scales with zoom: wide view = sampled clusters, close view = full detail
+  const rowCap = z < 11 ? 8000 : (z < 13 ? 12000 : 4000);
   if(rl.loading) return;
   rl.loading = true;
   if(note) note.textContent = 'Loading homes…';
@@ -11730,7 +11733,7 @@ async function loadRoofLeadsInView(){
     const { data, error } = await window.sb.rpc('roof_leads_in_view', {
       min_lng: b.getWest(), min_lat: b.getSouth(),
       max_lng: b.getEast(), max_lat: b.getNorth(),
-      min_age: rl.minAge, max_age: rl.maxAge, max_rows: 4000,
+      min_age: rl.minAge, max_age: rl.maxAge, max_rows: rowCap,
       name_query: (rl.nameQuery || null),
       only_vietnamese: !!rl.onlyVietnamese,
       min_vietnamese_score: rl.minVietnameseScore || 80,
@@ -11771,7 +11774,7 @@ function ensureRoofLayer(){
   __map.addSource('roofleads', {
     type:'geojson',
     data:{type:'FeatureCollection',features:[]},
-    cluster:true, clusterMaxZoom:15, clusterRadius:45,
+    cluster:true, clusterMaxZoom:14, clusterRadius:60,
   });
   // Cluster bubbles
   __map.addLayer({
@@ -11846,7 +11849,7 @@ window.toggleRoofLayer = function(on){
     if(__map){
       const z = __map.getZoom();
       // Only recenter if we're not already zoomed into a Houston-area neighborhood
-      if(z < 11){ __map.flyTo({ center:[-95.29, 29.55], zoom:13, duration:800 }); }
+      if(z < 9){ __map.flyTo({ center:[-95.29, 29.55], zoom:13, duration:800 }); }
     }
     setTimeout(loadRoofLeadsInView, 900);
   }
