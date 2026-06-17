@@ -459,6 +459,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <option value="all">All stages</option>
     </select>
     <div style="flex:1"></div>
+    <button id="mapStyleBtn" class="btn-ghost" onclick="toggleMapStyle()" style="font-size:11px;padding:5px 11px;border:1px solid var(--border);border-radius:6px;background:#1E253A;color:var(--brand);cursor:pointer">🛰️ Satellite</button>
     <button class="icon-btn" onclick="renderMapPage()" title="Refresh"><i class="ti ti-refresh"></i></button>
     <div id="map-count" style="font-size:11px;color:var(--muted);padding:0 6px"></div>
   </div>
@@ -483,7 +484,45 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       </label>
     </div>
   </div>
-  <div id="mapContainer" style="width:100%;height:calc(100vh - 150px);background:#0F1117"></div>
+  <div style="padding:8px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);background:#0d1320">
+    <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:#A855F7;cursor:pointer;font-weight:600">
+      <input type="checkbox" id="stormLayerToggle" onchange="toggleStormLayer(this.checked)" style="width:15px;height:15px;accent-color:#A855F7;cursor:pointer">
+      <i class="ti ti-cloud-storm" style="color:#A855F7"></i> Storm Overlay (hail / wind)
+    </label>
+    <div id="stormPanel" style="display:none;align-items:center;gap:14px;flex-wrap:wrap">
+      <select id="stormSince" onchange="updateStormRange()" style="font-size:11px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:#1E253A;color:var(--brand);font-family:'Barlow',sans-serif">
+        <option value="90">Last 90 days</option>
+        <option value="365">Last 1 year</option>
+        <option value="730" selected>Last 2 years</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#FBBF24;cursor:pointer">
+        <input type="checkbox" id="stormHail" checked onchange="updateStormRange()" style="accent-color:#FBBF24"> Hail
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#A855F7;cursor:pointer">
+        <input type="checkbox" id="stormWind" checked onchange="updateStormRange()" style="accent-color:#A855F7"> Wind
+      </label>
+      <span id="stormNote" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+    </div>
+    <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:#F97316;cursor:pointer;font-weight:600;margin-left:14px">
+      <input type="checkbox" id="stormPolyToggle" onchange="toggleStormPoly(this.checked)" style="width:15px;height:15px;accent-color:#F97316;cursor:pointer">
+      <i class="ti ti-vector-triangle" style="color:#F97316"></i> Storm Areas (warning polygons)
+    </label>
+    <div id="stormPolyPanel" style="display:none;align-items:center;gap:12px;flex-wrap:wrap">
+      <select id="stormPolySince" onchange="updateStormPoly()" style="font-size:11px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:#1E253A;color:var(--brand);font-family:'Barlow',sans-serif">
+        <option value="90">90 days</option>
+        <option value="365">1 year</option>
+        <option value="730" selected>2 years</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#F97316;cursor:pointer">
+        <input type="checkbox" id="spSV" checked onchange="updateStormPoly()" style="accent-color:#F97316"> T-storm
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#DC2626;cursor:pointer">
+        <input type="checkbox" id="spTO" checked onchange="updateStormPoly()" style="accent-color:#DC2626"> Tornado
+      </label>
+      <span id="stormPolyNote" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+    </div>
+  </div>
+  <div id="mapContainer" style="width:100%;height:calc(100vh - 190px);background:#0F1117"></div>
 </div>
 
 <!-- CALENDAR / PRODUCTION SCHEDULE PAGE -->
@@ -11591,6 +11630,29 @@ function ensureMapInit(){
   return __map;
 }
 
+// Satellite / dark style toggle
+window.__mapStyle = 'dark';
+window.toggleMapStyle = function(){
+  if(!__map) return;
+  const goSat = window.__mapStyle !== 'satellite';
+  window.__mapStyle = goSat ? 'satellite' : 'dark';
+  const url = goSat ? 'mapbox://styles/mapbox/satellite-streets-v12'
+                    : 'mapbox://styles/mapbox/dark-v11';
+  // Changing the style removes custom sources/layers — re-add them once it reloads
+  __map.once('style.load', () => {
+    // re-add roof-leads layer if it was on (source was wiped by setStyle)
+    if(window.__roofLayer && window.__roofLayer.on){
+      ensureRoofLayer();
+      setTimeout(()=>{ try{ loadRoofLeadsInView(); }catch(e){} }, 350);
+    }
+    // re-draw job markers
+    try { renderMapPage(); } catch(e){}
+  });
+  __map.setStyle(url);
+  const btn = document.getElementById('mapStyleBtn');
+  if(btn) btn.textContent = goSat ? '🗺️ Map' : '🛰️ Satellite';
+}
+
 function clearMarkers(){
   __mapMarkers.forEach(m => m.remove());
   __mapMarkers = [];
@@ -11702,6 +11764,183 @@ async function renderMapPage(){
 // ═════════════════════════════════════════════════════════════
 window.__roofLayer = { on:false, minAge:10, maxAge:15, loading:false, count:0, _t:null, nameQuery:'', onlyVietnamese:false, minVietnameseScore:80 };
 
+// ═══ STORM OVERLAY (NOAA hail + wind) ═══
+window.__stormLayer = { on:false, sinceDays:730, types:['hail','wind'], loading:false, _t:null };
+
+// ═══ STORM WARNING POLYGONS (NWS severe-tstorm + tornado areas) ═══
+window.__stormPoly = { on:false, sinceDays:730, phen:['SV','TO'], loaded:false };
+
+async function loadStormPolygons(){
+  const sp = window.__stormPoly;
+  if(!sp.on || !__map || !window.sb) return;
+  const since = new Date(Date.now() - sp.sinceDays*86400000).toISOString().slice(0,10);
+  try {
+    const { data, error } = await window.sb.rpc('storm_polygons_geojson', { since, phenomena_filter: sp.phen });
+    if(error) throw error;
+    const fc = data || {type:'FeatureCollection',features:[]};
+    if(__map.getSource('stormpoly')) __map.getSource('stormpoly').setData(fc);
+    const note=document.getElementById('stormPolyNote');
+    if(note) note.textContent = `${(fc.features||[]).length} storm areas`;
+  } catch(e){ console.error('[storm polygons]',e); }
+}
+
+function ensureStormPolyLayer(){
+  if(!__map) return;
+  if(!__map.isStyleLoaded()){ __map.once('load', ensureStormPolyLayer); return; }
+  if(__map.getSource('stormpoly')) return;
+  __map.addSource('stormpoly',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  // filled area — red tornado, orange severe tstorm
+  __map.addLayer({ id:'sp-fill', type:'fill', source:'stormpoly',
+    paint:{ 'fill-color':['match',['get','phenomena'],'TO','#DC2626','#F97316'],
+      'fill-opacity':0.18 } });
+  __map.addLayer({ id:'sp-line', type:'line', source:'stormpoly',
+    paint:{ 'line-color':['match',['get','phenomena'],'TO','#DC2626','#F97316'],
+      'line-width':1.5, 'line-opacity':0.7 } });
+  __map.on('click','sp-fill', e=>{
+    const p=e.features[0].properties;
+    new mapboxgl.Popup({offset:8})
+      .setLngLat(e.lngLat)
+      .setHTML(`<div class="map-popup"><div class="mp-row" style="font-weight:700;color:${p.phenomena==='TO'?'#DC2626':'#F97316'}">${escapeHtml(p.ptype)} Warning</div>
+        <div class="mp-row"><strong>${p.date}</strong></div>
+        <div class="mp-row" style="font-size:10px;color:#555">NWS warned area. Issued ${p.issued?String(p.issued).slice(0,16).replace('T',' '):''} UTC.</div>
+        <div class="mp-row" style="font-size:9px;color:#94a3b8;font-style:italic">Warned area, not a verified damage swath.</div></div>`)
+      .addTo(__map);
+  });
+  __map.on('mouseenter','sp-fill',()=>{__map.getCanvas().style.cursor='pointer';});
+  __map.on('mouseleave','sp-fill',()=>{__map.getCanvas().style.cursor='';});
+}
+
+window.toggleStormPoly = function(on){
+  window.__stormPoly.on = on;
+  ensureMapInit(); ensureStormPolyLayer();
+  const panel=document.getElementById('stormPolyPanel');
+  if(panel) panel.style.display = on ? 'flex' : 'none';
+  if(on){ if(window.__map && !__map.isStyleLoaded()){ __map.once('load',loadStormPolygons);} else loadStormPolygons(); }
+  else if(__map && __map.getSource('stormpoly')) __map.getSource('stormpoly').setData({type:'FeatureCollection',features:[]});
+};
+
+window.updateStormPoly = function(){
+  const sel=document.getElementById('stormPolySince');
+  window.__stormPoly.sinceDays = parseInt(sel.value);
+  const sv=document.getElementById('spSV').checked, to=document.getElementById('spTO').checked;
+  const p=[]; if(sv)p.push('SV'); if(to)p.push('TO');
+  window.__stormPoly.phen = p.length?p:['SV','TO'];
+  loadStormPolygons();
+};
+
+function stormColor(type, mag){
+  if(type==='hail'){
+    if(mag>=2) return '#DC2626';      // 2"+ huge
+    if(mag>=1.5) return '#F97316';
+    if(mag>=1) return '#FBBF24';      // 1"+ claimable-ish
+    return '#A3E635';
+  }
+  // wind
+  if(mag>=80) return '#7C3AED';
+  if(mag>=60) return '#A855F7';
+  return '#C4B5FD';
+}
+
+async function loadStormsInView(){
+  const sl = window.__stormLayer;
+  if(!sl.on || !__map || !window.sb) return;
+  if(sl.loading) return;
+  sl.loading = true;
+  const b = __map.getBounds();
+  const since = new Date(Date.now() - sl.sinceDays*86400000).toISOString().slice(0,10);
+  try {
+    const { data, error } = await window.sb.rpc('storm_events_in_view', {
+      min_lng:b.getWest(), min_lat:b.getSouth(), max_lng:b.getEast(), max_lat:b.getNorth(),
+      since, types: sl.types, max_rows:5000,
+    });
+    if(error) throw error;
+    const features = (data||[]).map(s=>({
+      type:'Feature', geometry:{type:'Point',coordinates:[s.longitude,s.latitude]},
+      properties:{
+        type:s.event_type, mag:s.magnitude, date:s.event_date,
+        loc:s.location||'', county:s.county||'', comments:s.comments||'',
+        color: stormColor(s.event_type, Number(s.magnitude)||0),
+      },
+    }));
+    if(__map.getSource('storms')) __map.getSource('storms').setData({type:'FeatureCollection',features});
+    const note=document.getElementById('stormNote');
+    if(note) note.textContent = `${features.length} storm reports`;
+  } catch(e){ console.error('[storms]',e); }
+  finally { sl.loading=false; }
+}
+
+function ensureStormLayer(){
+  if(!__map) return;
+  if(!__map.isStyleLoaded()){ __map.once('load', ensureStormLayer); return; }
+  if(__map.getSource('storms')) return;
+  __map.addSource('storms',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+  // soft "impact area" glow under each report
+  __map.addLayer({ id:'storm-glow', type:'circle', source:'storms',
+    paint:{ 'circle-color':['get','color'], 'circle-opacity':0.18,
+      'circle-radius':['interpolate',['linear'],['zoom'],8,18,12,40,15,80] } });
+  __map.addLayer({ id:'storm-pts', type:'circle', source:'storms',
+    paint:{ 'circle-color':['get','color'], 'circle-radius':5,
+      'circle-stroke-width':1,'circle-stroke-color':'#1a1a1a' } });
+  __map.on('click','storm-pts', e=>{
+    const p=e.features[0].properties;
+    const unit = p.type==='hail' ? `${p.mag}" hail` : `${p.mag} mph wind`;
+    new mapboxgl.Popup({offset:12})
+      .setLngLat(e.features[0].geometry.coordinates)
+      .setHTML(`<div class="map-popup"><div class="mp-row" style="font-weight:700">${unit}</div>
+        <div class="mp-row"><strong>${p.date}</strong></div>
+        <div class="mp-row">${escapeHtml(p.loc)}, ${escapeHtml(p.county)} Co.</div>
+        <div class="mp-row" style="font-size:10px;color:#555;max-width:230px">${escapeHtml((p.comments||'').slice(0,160))}</div></div>`)
+      .addTo(__map);
+  });
+  __map.on('mouseenter','storm-pts',()=>{__map.getCanvas().style.cursor='pointer';});
+  __map.on('mouseleave','storm-pts',()=>{__map.getCanvas().style.cursor='';});
+  __map.on('moveend', ()=>{
+    if(!window.__stormLayer.on) return;
+    clearTimeout(window.__stormLayer._t);
+    window.__stormLayer._t = setTimeout(loadStormsInView, 250);
+  });
+}
+
+window.showHomeStorms = async function(id, lat, lng){
+  const box = document.getElementById('homeStorms_'+id);
+  if(!box || !window.sb) return;
+  box.innerHTML = '<div style="font-size:10px;color:#64748b">Looking up storm history…</div>';
+  try {
+    const since = new Date(Date.now() - 730*86400000).toISOString().slice(0,10);
+    const { data, error } = await window.sb.rpc('storms_near_point', { in_lat:lat, in_lng:lng, radius_mi:10, since });
+    if(error) throw error;
+    const within = (data||[]).filter(s=>s.distance_mi<=10).slice(0,12);
+    if(!within.length){ box.innerHTML='<div style="font-size:10px;color:#64748b">No storm reports on record within 10 mi (last 2 yrs).</div>'; return; }
+    const rows = within.map(s=>{
+      const unit = s.event_type==='hail' ? `${s.magnitude}" hail` : `${s.magnitude} mph wind`;
+      return `<div style="font-size:10px;padding:3px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;gap:8px">
+        <span><strong>${s.event_date}</strong> · ${unit}</span>
+        <span style="color:#94a3b8">${s.distance_mi.toFixed(1)} mi</span></div>`;
+    }).join('');
+    box.innerHTML = `<div style="font-size:10px;font-weight:700;color:#6D28D9;margin-bottom:3px">Documented storms within 10 mi (NOAA):</div>${rows}
+      <div style="font-size:9px;color:#94a3b8;margin-top:5px;font-style:italic">Factual NOAA reports only. The date of loss is determined by the homeowner and their adjuster based on actual damage.</div>`;
+  } catch(e){ console.error(e); box.innerHTML='<div style="font-size:10px;color:#ef4444">Could not load storm history.</div>'; }
+};
+
+window.toggleStormLayer = function(on){
+  window.__stormLayer.on = on;
+  ensureMapInit(); ensureStormLayer();
+  const panel=document.getElementById('stormPanel');
+  if(panel) panel.style.display = on ? 'flex' : 'none';
+  if(on){ loadStormsInView(); }
+  else if(__map && __map.getSource('storms')) __map.getSource('storms').setData({type:'FeatureCollection',features:[]});
+};
+
+window.updateStormRange = function(){
+  const sel=document.getElementById('stormSince');
+  window.__stormLayer.sinceDays = parseInt(sel.value);
+  const h=document.getElementById('stormHail').checked, w=document.getElementById('stormWind').checked;
+  const t=[]; if(h)t.push('hail'); if(w)t.push('wind');
+  window.__stormLayer.types = t.length?t:['hail','wind'];
+  clearTimeout(window.__stormLayer._t);
+  window.__stormLayer._t=setTimeout(loadStormsInView,150);
+};
+
 function roofAgeColor(age){
   // older roof = hotter color
   if(age >= 16) return '#EF4444';      // red - very likely original/old
@@ -11716,15 +11955,12 @@ async function loadRoofLeadsInView(){
   if(!rl.on || !__map || !window.sb) return;
   const z = __map.getZoom();
   const note = document.getElementById('roofLayerNote');
-  // Show prospects from city level (z>=9). Zoomed way out, cap how many homes
-  // we pull so a metro-wide view stays fast — clustering shows where they are.
-  if(z < 9){
+  // Below neighborhood zoom there are too many homes — ask user to zoom in
+  if(z < 11){
     if(__map.getSource('roofleads')) __map.getSource('roofleads').setData({type:'FeatureCollection',features:[]});
     if(note) note.textContent = '🔍 Zoom in to load homes';
     return;
   }
-  // Row cap scales with zoom: wide view = sampled clusters, close view = full detail
-  const rowCap = z < 11 ? 8000 : (z < 13 ? 12000 : 4000);
   if(rl.loading) return;
   rl.loading = true;
   if(note) note.textContent = 'Loading homes…';
@@ -11733,7 +11969,7 @@ async function loadRoofLeadsInView(){
     const { data, error } = await window.sb.rpc('roof_leads_in_view', {
       min_lng: b.getWest(), min_lat: b.getSouth(),
       max_lng: b.getEast(), max_lat: b.getNorth(),
-      min_age: rl.minAge, max_age: rl.maxAge, max_rows: rowCap,
+      min_age: rl.minAge, max_age: rl.maxAge, max_rows: 4000,
       name_query: (rl.nameQuery || null),
       only_vietnamese: !!rl.onlyVietnamese,
       min_vietnamese_score: rl.minVietnameseScore || 80,
@@ -11774,7 +12010,7 @@ function ensureRoofLayer(){
   __map.addSource('roofleads', {
     type:'geojson',
     data:{type:'FeatureCollection',features:[]},
-    cluster:true, clusterMaxZoom:14, clusterRadius:60,
+    cluster:true, clusterMaxZoom:15, clusterRadius:45,
   });
   // Cluster bubbles
   __map.addLayer({
@@ -11806,6 +12042,7 @@ function ensureRoofLayer(){
       <div class="mp-row">${escapeHtml(p.city)} ${escapeHtml(p.zip)}</div>
       <div class="mp-row"><strong>Built ${p.year}</strong> · <span style="color:${p.color};font-weight:700">${p.age} yr roof</span></div>
       ${p.owner?`<div class="mp-row" style="color:#475569"><i class="ti ti-user"></i> ${escapeHtml(p.owner)}</div>`:''}
+      <div id="homeStorms_${p.id}" style="margin-top:6px"><button onclick="showHomeStorms('${p.id}',${f.geometry.coordinates[1]},${f.geometry.coordinates[0]})" style="width:100%;font-size:10px;padding:5px;border:none;border-radius:5px;background:#6D28D9;color:#fff;cursor:pointer"><i class="ti ti-cloud-storm"></i> Storm history near here</button></div>
       ${Number(p.vietnameseScore||0)>0?`<div class="mp-row" style="color:#c2410c"><i class="ti ti-user-check"></i> Vietnamese surname score: <strong>${p.vietnameseScore}</strong>${p.ownerSurname?` · ${escapeHtml(p.ownerSurname)}`:''}</div>`:''}
       <div style="display:flex;gap:5px;margin-top:8px">
         <button onclick="roofSetStatus('${p.id}','knocked')" style="flex:1;font-size:10px;padding:5px;border:none;border-radius:5px;background:#1a2535;color:#fff;cursor:pointer">Knocked</button>
@@ -11849,7 +12086,7 @@ window.toggleRoofLayer = function(on){
     if(__map){
       const z = __map.getZoom();
       // Only recenter if we're not already zoomed into a Houston-area neighborhood
-      if(z < 9){ __map.flyTo({ center:[-95.29, 29.55], zoom:13, duration:800 }); }
+      if(z < 11){ __map.flyTo({ center:[-95.29, 29.55], zoom:13, duration:800 }); }
     }
     setTimeout(loadRoofLeadsInView, 900);
   }
