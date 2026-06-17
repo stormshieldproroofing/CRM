@@ -2944,7 +2944,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                       style="width:100%;-webkit-appearance:none;height:4px;background:linear-gradient(to right, #34D399 0%, #34D399 0%, var(--border) 0%, var(--border) 100%);border-radius:3px;outline:none;cursor:pointer;display:block">
                     <!-- $4,000 company-floor placemark (positioned in JS) -->
                     <div id="ccFloorMarker" style="position:absolute;top:0;height:18px;width:2px;background:var(--warn);pointer-events:none;display:none">
-                      <div style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--warn);white-space:nowrap;font-weight:700">$4K floor</div>
+                      <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--warn);white-space:nowrap;font-weight:700">$4K floor</div>
                     </div>
                     <!-- ACV placemark: where the calculated minimum contract equals ACV -->
                     <div id="ccAcvMarker" style="position:absolute;top:0;height:18px;width:2px;background:#60C4FF;pointer-events:none;display:none">
@@ -3240,6 +3240,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         const acvOnFile   = parseFloat(j.acv || 0);
         const calculatedAcv = rcv > 0 ? Math.max(0, rcv - recoverableDep - nonRecovDep) : 0;
         const acvAmount = acvOnFile > 0 ? acvOnFile : calculatedAcv;
+        const snapPoints = [];
 
         // Slider max: cap profit so Customer Contribution ≤ Deductible
         // Customer Contribution ≤ Deductible  ⇒  Contract ≤ RCV − NonRecovDep
@@ -3283,6 +3284,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             const pct = range > 0 ? ((FLOOR - sliderMin) / range) * 100 : 0;
             marker.style.display = 'block';
             marker.style.left = `calc(${pct}% - 1px)`;
+            marker.title = 'Company minimum profit floor: $4,000';
+            snapPoints.push(FLOOR);
             if(warn) warn.style.display = 'none';
           }
         }
@@ -3292,16 +3295,30 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         const acvMarker = document.getElementById('ccAcvMarker');
         if(acvMarker){
           const acvProfit = (acvAmount * (1 - overheadRate)) - cost;
+          const acvSnapProfit = Math.round(acvProfit / 100) * 100;
           const range = sliderMax - sliderMin;
-          if(acvAmount > 0 && range > 0 && acvProfit >= sliderMin && acvProfit <= sliderMax){
-            const pct = ((acvProfit - sliderMin) / range) * 100;
+          if(acvAmount > 0 && range > 0 && acvSnapProfit >= sliderMin && acvSnapProfit <= sliderMax){
+            const pct = ((acvSnapProfit - sliderMin) / range) * 100;
             acvMarker.style.display = 'block';
             acvMarker.style.left = `calc(${pct}% - 1px)`;
             acvMarker.title = `Minimum contract equals ACV: $${Math.round(acvAmount).toLocaleString()}`;
+            snapPoints.push(acvSnapProfit);
           } else {
             acvMarker.style.display = 'none';
           }
         }
+
+        const snapSliderToMarker = () => {
+          const value = parseFloat(slider.value) || 0;
+          const snapDistance = 300;
+          const nearest = snapPoints.reduce((best, point) => {
+            const dist = Math.abs(value - point);
+            return dist < best.dist ? { value: point, dist } : best;
+          }, { value, dist: Infinity });
+          if(nearest.dist <= snapDistance){
+            slider.value = nearest.value;
+          }
+        };
 
         const updateContractCalc = () => {
           const profit = parseFloat(slider.value) || 0;
@@ -3345,7 +3362,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           const pct = ((profit - slider.min) / range) * 100;
           slider.style.background = `linear-gradient(to right, #34D399 0%, #34D399 ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
         };
-        slider.addEventListener('input', updateContractCalc);
+        slider.addEventListener('input', () => {
+          snapSliderToMarker();
+          updateContractCalc();
+        });
         updateContractCalc();
       }
     }
