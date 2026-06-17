@@ -9765,6 +9765,7 @@ function renderContractTab(j){
     <div class="ct-head">
       <button class="ct-back" onclick="activeTab='overview';renderDetailPanel()"><i class="ti ti-arrow-left"></i> Back to Overview</button>
     </div>
+    ${(c.sentForSignature && c.sentForSignature.at) ? `<div style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.4);color:#A78BFA;border-radius:8px;padding:9px 12px;font-size:11px;margin-bottom:12px;display:flex;align-items:center;gap:7px"><i class="ti ti-circle-check"></i> Sent for signature to ${esc(c.sentForSignature.to||'')} on ${new Date(c.sentForSignature.at).toLocaleString()}</div>` : ''}
 
     <div class="ct-sec">
       <h4>Customer &amp; Project Information</h4>
@@ -9879,6 +9880,7 @@ function renderContractTab(j){
       <button class="ct-btn" style="background:#1E253A;color:var(--text);border:1px solid var(--border)" onclick="saveContract('${j.id}')"><i class="ti ti-device-floppy"></i> Save Contract</button>
       <button class="ct-btn" style="background:var(--brand);color:#0F1117" onclick="printContract('${j.id}')"><i class="ti ti-printer"></i> Save &amp; Print PDF</button>
       <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailContract('${j.id}')"><i class="ti ti-mail"></i> Email Contract</button>
+      <button class="ct-btn" style="background:#7C3AED;color:#fff" onclick="sendContractForSignature('${j.id}')"><i class="ti ti-signature"></i> Send for Signature</button>
     </div>
     <div class="ct-note">Electronic signatures capture the drawn signature plus a date/time stamp. Have your contract language reviewed by a Texas attorney to ensure it meets home-improvement and insurance-claim disclosure requirements.</div>
   </div>`;
@@ -9943,6 +9945,49 @@ window.saveContract = function(jobId){
   j.contract = gatherContract(j);
   if(typeof saveToStorage==='function') saveToStorage();
   if(typeof toast==='function') toast('Contract saved');
+};
+
+window.sendContractForSignature = async function(jobId){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
+  j.contract = gatherContract(j);
+  if(typeof saveToStorage==='function') saveToStorage();
+  const c = j.contract;
+  const homeownerName = (c.customer||j.name||'').trim();
+  const homeownerEmail = (c.email||j.email||'').trim();
+  if(!homeownerName || !homeownerEmail){
+    alert('Need the customer name and email before sending for signature. Fill them in the Customer Information section.');
+    return;
+  }
+  if(!confirm(`Send this contract to ${homeownerName} (${homeownerEmail}) for electronic signature via Verdocs?`)) return;
+
+  if(typeof toast==='function') toast('Sending contract for signature…');
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-contract`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
+      body: JSON.stringify({
+        homeownerName,
+        homeownerEmail,
+        repName: (c.rep||j.salesman||'').trim() || undefined,
+        envelopeName: `StormShield Contract - ${homeownerName}`,
+      }),
+    });
+    const data = await res.json();
+    if(data && data.ok){
+      // record that it was sent
+      c.sentForSignature = { at:new Date().toISOString(), envelopeId:(data.envelope&&data.envelope.id)||null, to:homeownerEmail };
+      j.contract = c;
+      if(typeof saveToStorage==='function') saveToStorage();
+      if(typeof renderContractTab==='function') renderContractTab(j);
+      alert(`Contract sent to ${homeownerName} for signature.\n\nThey'll receive a Verdocs email to sign. You'll get a copy at the office email when complete.`);
+    } else {
+      console.error('Send contract error:', data);
+      alert('Could not send the contract.\n\n'+(data && (data.detail||data.error) || 'Unknown error')+'\n\nCheck that the customer email is valid and try again.');
+    }
+  } catch(e){
+    console.error(e);
+    alert('Network error sending the contract. Please try again.');
+  }
 };
 
 window.emailContract = function(jobId){
