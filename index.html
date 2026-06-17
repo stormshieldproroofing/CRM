@@ -2958,6 +2958,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
                 <button onclick="openInsuranceEstimator(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-calculator" style="font-size:13px"></i>Insurance Contribution Estimator</button>
                 <button onclick="activeTab='quote';renderDetailPanel()" style="width:100%;margin-top:6px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.35);color:#FBBF24;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>Quote &amp; Estimate</button>
+                <button onclick="activeTab='contract';renderDetailPanel()" style="width:100%;margin-top:6px;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.35);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-certificate" style="font-size:13px"></i>Contract</button>
                 <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>
                 <button onclick="openSubVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt" style="font-size:13px"></i>Payment Breakdown / Receipt</button>
                 <button onclick="openFinalInvoice(openJobId)" style="width:100%;margin-top:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>Final Invoice / Depreciation Request</button>`
@@ -4620,6 +4621,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
   } else if(activeTab==='quote'){
     renderQuoteTab(j);
+  } else if(activeTab==='contract'){
+    renderContractTab(j);
 
   } else if(activeTab==='contract'){
     if(!j.contracts) j.contracts=[];
@@ -9695,7 +9698,423 @@ function renderQuoteTab(j){
   $('quoteModeCash').addEventListener('click', () => switchQuoteMode(j, 'cash'));
 }
 
-// Serialize a sections array back to "##"-prefixed scope text.
+// ═══════════════════════════════════════════════════════════
+// CONTRACT TAB — editable, checkable, e-signable contract
+// ═══════════════════════════════════════════════════════════
+function renderContractTab(j){
+  const panel = document.getElementById('detailPanel') || document.getElementById('jobDetailBody') || document.querySelector('.detail-body');
+  if(!panel) return;
+  const c = j.contract || {};
+  // prefill from job
+  const pf = {
+    customer: c.customer || j.name || '',
+    street: c.street || (j.address ? j.address.split(',')[0] : ''),
+    citystatezip: c.citystatezip || (j.address ? j.address.split(',').slice(1).join(',').trim() : ''),
+    email: c.email || j.email || '',
+    cell: c.cell || j.phone || '',
+    rep: c.rep || j.salesman || j.assignedTo || '',
+    contractDate: c.contractDate || new Date().toISOString().slice(0,10),
+    buildDate: c.buildDate || '',
+    rcv: c.rcv || j.rcv || '',
+    netClaim: c.netClaim || '',
+    deductible: c.deductible || j.deductible || '',
+    depreciation: c.depreciation || j.recovDep || '',
+  };
+  const chk = c.checks || {};
+  const qty = c.qty || {};
+  const addl = c.addl || ['','','','','','','',''];
+  const isC = (k)=> chk[k] ? 'checked' : '';
+  const qv = (k)=> qty[k]!=null ? String(qty[k]).replace(/"/g,'&quot;') : '';
+
+  const box = (k,label)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> ${label}</label>`;
+  const boxQ = (k,label,qk,unit)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> ${label} <input type="text" class="ct-qty" data-q="${qk}" value="${qv(qk)}" placeholder=""> ${unit||''}</label>`;
+  const boxT = (k,label,qk)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> ${label} <input type="text" class="ct-qty ct-qty-wide" data-q="${qk}" value="${qv(qk)}"></label>`;
+
+  panel.innerHTML = `
+  <style>
+    .ct-wrap{padding:4px 2px 40px;color:var(--text)}
+    .ct-head{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+    .ct-back{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px}
+    .ct-sec{background:var(--card,#161B26);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+    .ct-sec h4{margin:0 0 10px;font-size:12px;letter-spacing:.04em;color:var(--brand);text-transform:uppercase}
+    .ct-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+    .ct-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 16px}
+    .ct-fld{display:flex;flex-direction:column;gap:3px;margin-bottom:7px}
+    .ct-fld label{font-size:10px;color:var(--muted);font-weight:600}
+    .ct-fld input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:12px;font-family:inherit}
+    .ct-col h5{margin:0 0 6px;font-size:11px;color:var(--text);font-weight:700;border-bottom:1px solid var(--border);padding-bottom:3px}
+    .ct-chk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);padding:2px 0;cursor:pointer;flex-wrap:wrap}
+    .ct-chk input[type=checkbox]{accent-color:var(--brand);width:14px;height:14px;cursor:pointer}
+    .ct-qty{width:46px;background:#1E253A;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px}
+    .ct-qty-wide{width:90px}
+    .ct-pay{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;max-width:360px}
+    .ct-pay label{font-size:11px;color:var(--text);font-weight:600;text-align:right}
+    .ct-pay input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:12px}
+    .ct-sign{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
+    .ct-sign-pad{border:1px dashed var(--border);border-radius:8px;background:#0d1018;height:120px;position:relative;touch-action:none}
+    .ct-sign-pad canvas{width:100%;height:100%;display:block;border-radius:8px}
+    .ct-sign-lbl{font-size:10px;color:var(--muted);margin-top:4px;display:flex;justify-content:space-between}
+    .ct-clear{background:none;border:none;color:var(--brand);font-size:10px;cursor:pointer}
+    .ct-addl{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
+    .ct-addl input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--text);font-size:11px;width:100%}
+    .ct-actions{display:flex;gap:10px;margin-top:16px}
+    .ct-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
+    .ct-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
+  </style>
+  <div class="ct-wrap">
+    <div class="ct-head">
+      <button class="ct-back" onclick="activeTab='overview';renderDetailPanel()"><i class="ti ti-arrow-left"></i> Back to Overview</button>
+    </div>
+
+    <div class="ct-sec">
+      <h4>Customer &amp; Project Information</h4>
+      <div class="ct-grid2">
+        <div class="ct-fld"><label>Customer</label><input data-f="customer" value="${esc(pf.customer)}"></div>
+        <div class="ct-fld"><label>Cell #</label><input data-f="cell" value="${esc(pf.cell)}"></div>
+        <div class="ct-fld"><label>Street Address</label><input data-f="street" value="${esc(pf.street)}"></div>
+        <div class="ct-fld"><label>Representative</label><input data-f="rep" value="${esc(pf.rep)}"></div>
+        <div class="ct-fld"><label>City / State / Zip</label><input data-f="citystatezip" value="${esc(pf.citystatezip)}"></div>
+        <div class="ct-fld"><label>Contract Date</label><input data-f="contractDate" type="date" value="${esc(pf.contractDate)}"></div>
+        <div class="ct-fld"><label>Email Address</label><input data-f="email" value="${esc(pf.email)}"></div>
+        <div class="ct-fld"><label>Build Date</label><input data-f="buildDate" type="date" value="${esc(pf.buildDate)}"></div>
+      </div>
+    </div>
+
+    <div class="ct-sec">
+      <h4>Material &amp; Specifications</h4>
+      <div class="ct-grid4">
+        <div class="ct-col">
+          <h5>Shingles</h5>
+          ${box('sh_certainteed','CertainTeed')}${box('sh_ct20','CT20')}${box('sh_xt2s','XT2S')}${box('sh_xt30ir','XT30IR')}
+          ${box('sh_landmark','Landmark')}${box('sh_lmaxdef','Landmark Max Def')}${box('sh_lpro','Landmark Pro')}${box('sh_lprem','Landmark Premium')}
+          ${box('sh_ltl','Landmark TL')}${box('sh_ltlir','Landmark TL IR')}${box('sh_highland','Highland State')}${box('sh_presshake','Presidential Shake')}
+          ${box('sh_prestl','Presidential TL')}${box('sh_carriage','Carriage House')}${box('sh_centennial','Centennial Slate')}${box('sh_grandmanor','Grand Manor')}
+          ${box('sh_symphony','Symphony')}${box('sh_independence','Independence')}${box('sh_hatteras','Hatteras')}${box('sh_tamkotitan','Tamko Titan XT')}
+          ${box('sh_solaris','Solaris')}${boxT('sh_other','Other','sh_other_txt')}
+        </div>
+        <div class="ct-col">
+          <h5>Colors</h5>
+          ${box('cl_burntsienna','Burnt Sienna')}${box('cl_cobblestone','Cobblestone Gray')}${box('cl_colonial','Colonial Slate')}${box('cl_georgetown','Georgetown Gray')}
+          ${box('cl_heather','Heather Blend')}${box('cl_hunter','Hunter Green')}${box('cl_moire','Moire Black')}${box('cl_resawn','Resawn Shake')}
+          ${box('cl_silver','Silver Birch')}${box('cl_weathered','Weathered Wood')}${boxT('cl_other','Other','cl_other_txt')}
+        </div>
+        <div class="ct-col">
+          <h5>Start Strip</h5>
+          ${box('ss_swift','Swift Start')}${boxT('ss_other','Other','ss_other_txt')}
+          <h5 style="margin-top:10px">Underlayment</h5>
+          ${box('ul_roofrunner','Roof Runner')}${box('ul_synthetic','Synthetic')}${box('ul_radiant','Radiant Barrier')}${boxT('ul_other','Other','ul_other_txt')}
+          <h5 style="margin-top:10px">Ridge</h5>
+          ${box('rg_xt25','XT-25')}${box('rg_shadow','Shadow Ridge')}${box('rg_cedar','Cedar Crest')}${box('rg_mountain','Mountain Ridge')}${boxT('rg_other','Other','rg_other_txt')}
+        </div>
+        <div class="ct-col">
+          <h5>Valley</h5>
+          ${box('vl_ice','Ice &amp; Watershield')}${box('vl_wmetal','&quot;W&quot; Metal')}${box('vl_valleymetal','Valley Metal')}${boxT('vl_color','Color','vl_color_txt')}
+          <h5 style="margin-top:10px">Drip Edge</h5>
+          ${box('de_existing','Use Existing')}${box('de_prefinished','Pre-Finished Edge')}${boxT('de_size','Material/Size','de_size_txt')}
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Color: ${box('de_black','Black')}${box('de_white','White')}${box('de_tan','Tan')}${box('de_brown','Brown')}${box('de_almond','Almond')}${box('de_bronze','Bronze')}${box('de_gray','Gray')}</div>
+        </div>
+      </div>
+      <div class="ct-grid4" style="margin-top:14px">
+        <div class="ct-col">
+          <h5>Ventilation</h5>
+          ${boxQ('vn_ridge','Ridge Vent','vn_ridge_lf','LF')}${boxQ('vn_power','Power Vents','vn_power_qty','QTY')}${boxQ('vn_solar','Solar Vents','vn_solar_qty','QTY')}
+          ${boxQ('vn_static','Static','vn_static_qty','QTY')}${boxQ('vn_turbine','Turbine','vn_turbine_qty','QTY')}${boxT('vn_color','Color','vn_color_txt')}
+        </div>
+        <div class="ct-col">
+          <h5>Plumbing Stacks</h5>
+          ${boxQ('pb_3in1','3in1','pb_3in1_qty','')}${boxQ('pb_15lead','1-1/2&quot; Lead','pb_15_qty','')}${boxQ('pb_2lead','2&quot; Lead','pb_2_qty','')}${boxQ('pb_3lead','3&quot; Lead','pb_3_qty','')}
+        </div>
+        <div class="ct-col">
+          <h5>Decking</h5>
+          ${box('dk_osb','OSB')}${box('dk_plywood','Plywood')}${box('dk_radiant','Radiant Barrier')}${boxT('dk_other','Other','dk_other_txt')}
+        </div>
+        <div class="ct-col"></div>
+      </div>
+    </div>
+
+    <div class="ct-sec">
+      <h4>Additional Items</h4>
+      <div class="ct-addl">
+        ${addl.map((v,i)=>`<input data-addl="${i}" value="${esc(v)}" placeholder="${i+1}.">`).join('')}
+      </div>
+    </div>
+
+    <div class="ct-sec">
+      <h4>Warranty</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">
+        ${box('wr_standard','Standard')}${box('wr_3star','3-Star (20-Yr Non-Prorated)')}${box('wr_4star','4-Star (50-Yr Non-Prorated)')}${box('wr_5star','5-Star')}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px">
+        ${box('wr_lifetime','Lifetime Workmanship')}${box('wr_class3','Class 3 Impact + 160mph wind + 10yr Algae')}
+      </div>
+    </div>
+
+    <div class="ct-sec">
+      <h4>Payment Schedule</h4>
+      <div class="ct-pay">
+        <label>RCV Total Charge $</label><input data-f="rcv" value="${esc(pf.rcv)}">
+        <label>Net Claim Due $</label><input data-f="netClaim" value="${esc(pf.netClaim)}">
+        <label>Deductible Due $</label><input data-f="deductible" value="${esc(pf.deductible)}">
+        <label>Depreciation Due $</label><input data-f="depreciation" value="${esc(pf.depreciation)}">
+      </div>
+      <label class="ct-chk" style="margin-top:8px">${box('reviews_submitted','All reviews have been submitted')}</label>
+    </div>
+
+    <div class="ct-sec">
+      <h4>Authorization &amp; Signatures</h4>
+      <div class="ct-note" style="margin-bottom:10px">By executing this two-page master restoration agreement, the customer acknowledges receipt, review, and acceptance of both the work order specifications (Page 1) and the Terms &amp; Conditions (Page 2).</div>
+      <div class="ct-sign">
+        <div>
+          <div class="ct-sign-pad" data-sig="homeowner"><canvas></canvas></div>
+          <div class="ct-sign-lbl"><span>Homeowner Signature</span><button class="ct-clear" data-clear="homeowner">Clear</button></div>
+        </div>
+        <div>
+          <div class="ct-sign-pad" data-sig="rep"><canvas></canvas></div>
+          <div class="ct-sign-lbl"><span>StormShield Pro Representative</span><button class="ct-clear" data-clear="rep">Clear</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ct-actions">
+      <button class="ct-btn" style="background:#1E253A;color:var(--text);border:1px solid var(--border)" onclick="saveContract('${j.id}')"><i class="ti ti-device-floppy"></i> Save Contract</button>
+      <button class="ct-btn" style="background:var(--brand);color:#0F1117" onclick="printContract('${j.id}')"><i class="ti ti-printer"></i> Save &amp; Print PDF</button>
+      <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailContract('${j.id}')"><i class="ti ti-mail"></i> Email Contract</button>
+    </div>
+    <div class="ct-note">Electronic signatures capture the drawn signature plus a date/time stamp. Have your contract language reviewed by a Texas attorney to ensure it meets home-improvement and insurance-claim disclosure requirements.</div>
+  </div>`;
+
+  initContractSignPads(j);
+}
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Signature pad setup (draw with mouse/finger)
+function initContractSignPads(j){
+  const c = j.contract || {};
+  const sigs = c.signatures || {};
+  document.querySelectorAll('.ct-sign-pad').forEach(pad=>{
+    const key = pad.getAttribute('data-sig');
+    const canvas = pad.querySelector('canvas');
+    const rect = pad.getBoundingClientRect();
+    canvas.width = rect.width || 300; canvas.height = rect.height || 120;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.lineCap='round'; ctx.lineJoin='round';
+    // restore saved signature
+    if(sigs[key] && sigs[key].img){
+      const img = new Image(); img.onload=()=>ctx.drawImage(img,0,0,canvas.width,canvas.height); img.src = sigs[key].img;
+    }
+    let drawing=false, last=null;
+    const pos = e=>{ const r=canvas.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left, y:t.clientY-r.top}; };
+    const start=e=>{ drawing=true; last=pos(e); e.preventDefault(); };
+    const move=e=>{ if(!drawing)return; const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; canvas.__dirty=true; e.preventDefault(); };
+    const end=()=>{ drawing=false; };
+    canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+    canvas.addEventListener('touchstart',start,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); canvas.addEventListener('touchend',end);
+  });
+  document.querySelectorAll('.ct-clear').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const key=btn.getAttribute('data-clear');
+      const pad=document.querySelector(`.ct-sign-pad[data-sig="${key}"] canvas`);
+      if(pad){ pad.getContext('2d').clearRect(0,0,pad.width,pad.height); pad.__dirty=true; pad.__cleared=true; }
+    });
+  });
+}
+
+function gatherContract(j){
+  const c = JSON.parse(JSON.stringify(j.contract || {}));
+  c.checks = c.checks || {}; c.qty = c.qty || {}; c.signatures = c.signatures || {};
+  document.querySelectorAll('[data-f]').forEach(el=>{ c[el.getAttribute('data-f')] = el.value; });
+  document.querySelectorAll('[data-ck]').forEach(el=>{ c.checks[el.getAttribute('data-ck')] = el.checked; });
+  document.querySelectorAll('[data-q]').forEach(el=>{ c.qty[el.getAttribute('data-q')] = el.value; });
+  c.addl = Array.from(document.querySelectorAll('[data-addl]')).map(el=>el.value);
+  // signatures
+  document.querySelectorAll('.ct-sign-pad').forEach(pad=>{
+    const key=pad.getAttribute('data-sig'); const canvas=pad.querySelector('canvas');
+    if(canvas.__cleared && !canvas.__dirty){ c.signatures[key]=null; return; }
+    if(canvas.__dirty){
+      c.signatures[key] = { img: canvas.toDataURL('image/png'), signedAt: new Date().toISOString() };
+    }
+  });
+  return c;
+}
+
+window.saveContract = function(jobId){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
+  j.contract = gatherContract(j);
+  if(typeof saveToStorage==='function') saveToStorage();
+  if(typeof toast==='function') toast('Contract saved');
+};
+
+window.emailContract = function(jobId){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
+  j.contract = gatherContract(j);
+  if(typeof saveToStorage==='function') saveToStorage();
+  const c = j.contract;
+  const to = (c.email||'').trim();
+  const customer = c.customer || j.name || 'Customer';
+  const subject = encodeURIComponent(`Your StormShield Pro Roofing Contract — ${customer}`);
+  const body = encodeURIComponent(
+`Hi ${customer},
+
+Please find your StormShield Pro Roofing & Construction contract attached for your review and signature.
+
+A few notes:
+- The contract covers the materials, specifications, and payment schedule we discussed.
+- Page 2 contains the full terms and conditions.
+- If you have any questions before signing, just reply to this email or call us at (832) 910-7735.
+
+Thank you for choosing StormShield Pro Roofing.
+
+StormShield Pro Roofing & Construction
+12111 Forest Sage Ln, Pearland, TX 77584
+(832) 910-7735 | office@stormshieldproroofing.com`
+  );
+
+  // Browsers can't auto-attach a file to a mailto link, so:
+  // 1) generate the PDF (print dialog -> Save as PDF)
+  // 2) open the pre-filled email; user attaches the saved PDF
+  const proceed = confirm(
+    "To email the contract:\n\n" +
+    "1. The contract PDF will open in a print window — choose \"Save as PDF\".\n" +
+    "2. Your email app will open with a message ready for " + (to||"the customer") + ".\n" +
+    "3. Attach the PDF you just saved, then send.\n\n" +
+    (to ? "" : "NOTE: This job has no customer email on file — you'll need to type it in.\n\n") +
+    "Tip: For remote e-signature, attach the PDF in your e-sign tool (Dropbox Sign / Verdocs) instead.\n\n" +
+    "Continue?"
+  );
+  if(!proceed) return;
+
+  // open PDF for saving
+  printContract(jobId);
+  // then open email draft shortly after
+  setTimeout(()=>{
+    window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
+  }, 1200);
+};
+
+window.printContract = function(jobId){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
+  j.contract = gatherContract(j);
+  if(typeof saveToStorage==='function') saveToStorage();
+  const c = j.contract; const ck=c.checks||{}; const q=c.qty||{};
+  const on=(k)=>ck[k]?'☑':'☐';
+  const qt=(k)=>q[k]?(' '+q[k]):'';
+  const row=(items)=>items.map(x=>`<span style="display:inline-block;width:48%;font-size:10px;padding:1px 0">${x}</span>`).join('');
+  const sig=(k)=> (c.signatures&&c.signatures[k]&&c.signatures[k].img) ? `<img src="${c.signatures[k].img}" style="height:46px">` : '';
+  const sigDate=(k)=> (c.signatures&&c.signatures[k]&&c.signatures[k].signedAt) ? new Date(c.signatures[k].signedAt).toLocaleDateString() : '';
+
+  const terms = [
+    ['Contractual Payment Terms','Payment is due in full to Storm Shield Pro Roofing & Construction in Houston, Texas immediately upon completion of the work. For projects extending beyond thirty (30) days on site, progress billing for materials delivered and work completed is due and payable on the tenth (10th) day of each calendar month following performance. Customer obligations remain absolute regardless of invoice receipt.'],
+    ['Delinquency & Collection Costs','Payments not received within five (5) calendar days of the due date are deemed in default and shall bear interest from the due date at the lesser of 15% per annum or the maximum legal rate. Customer agrees to pay all collection costs, including reasonable attorney fees and filing fees, incurred to recover delinquent balances.'],
+    ['Structural Workspace Hazard Notice','Roofing work involves heavy construction, tearing, and demolition, creating risks of falling debris. Customer agrees to keep guests, invitees, and occupants clear of the active work area. Storm Shield Pro is not liable for injuries to anyone entering the construction zone.'],
+    ['Internal Structural Dust & Attic Management','Roofing replacement generates significant vibrations and dust. Airborne particles and small debris will enter the attic space. Customer should use extreme caution when lowering attic stairs post-construction to prevent falling debris from causing facial or eye injuries.'],
+    ['Exterior Landscaping Protections','While crews utilize protective tarps and property safeguards, minor accidental impact to vegetation, shrubbery, or lawns may occur during tear-off. Storm Shield Pro is not responsible for minor landscaping or plant damage resulting from standard construction operations.'],
+    ['Driveway Structural Clearance','Customer must provide clear, unobstructed driveway access for material delivery trucks and equipment. The machinery and bundles required are extremely heavy. Storm Shield Pro is not responsible for driveway, curb, or sidewalk damage resulting from natural settling, compression, or inadequate sub-slab structural support.'],
+    ['Hidden Rafter Flaws & Deflection','Stripping existing roof layers frequently exposes pre-existing structural issues. Correcting structural defects, sagging framing, or warped trusses is excluded from this scope unless explicitly added. New shingles may accentuate pre-existing deck deflections, for which Storm Shield Pro bears no responsibility.'],
+    ['Utility Routing Under Sheathing','Standard building codes require mechanical lines, HVAC conduits, water pipes, and electrical lines to be secured a safe distance below the roof deck. Storm Shield Pro is not responsible for accidental punctures caused by fasteners striking lines improperly run flush against the underside of the wood sheathing.'],
+    ['Shingle Surface Settlement & Thermal Variables','Fiberglass and asphalt shingles installed during cooler temperatures require solar heat exposure to activate the thermal sealing strips. Heavier architectural or triple-lam shingles may not lay completely flat immediately. This is a natural material characteristic and does not constitute an installation defect.'],
+    ['Wall Flashing & Exterior Siding Disruption','Proper shingle installation requires integrating flashing with existing wall siding. Brittle, weathered, or aging siding immediately adjacent to flashing zones may crack, chip, or tear during detachment and re-roofing. Storm Shield Pro is not responsible for repairing or replacing such pre-existing fragile siding components.'],
+    ['Vibration Impact on Internal Ceilings & Finishes','Roof demolition transmits significant vibrations throughout the building framework. Customer is strictly required to remove all mirrors, pictures, artifacts, loose light fixtures, and chandeliers from interior walls and ceilings prior to commencement. Storm Shield Pro is not liable for damage to items falling inside or outside the property.'],
+    ['Mechanical Satellites & Rooftop Electronics','It may be operationally necessary to temporarily detach satellite dishes, solar devices, or antennas. Customer is responsible for scheduling and paying for recalibration or realignment. Storm Shield Pro may remove these items to facilitate the installation but holds no obligation to re-align or restore electronic signals.'],
+    ['High Voltage Electrical Accessories','Installation crews are not licensed electrical technicians. Customer must retain a qualified electrician to safely disconnect, reconnect, or wire powered ventilation fans or rooftop electrical systems if required during the roofing process.'],
+    ['Unforeseen Substrate Code Supplements','If building code inspectors require unexpected field modifications during construction (including extensive rotted deck replacement, supplemental insulation, or corrected ventilation), customer authorizes Storm Shield Pro to supplement the insurance carrier for additional funds. These supplemental payments are fully payable directly to Storm Shield Pro.'],
+    ['Exclusive Remedy & Workmanship Standards','We warrant that our installers will perform their work in a good, workmanlike manner and that the roof area handled will remain free from leaks caused by workmanship defects for the period specified. Our liability is strictly limited to providing labor to repair the specific leaked area, which constitutes the sole remedy available under this contract. This labor warranty is transferable to a new owner for up to one year from property transfer or until original expiration, whichever occurs first.'],
+    ['Manufacturer Product Warranties','All material product warranties are issued directly by the shingle manufacturer. Storm Shield Pro will transfer all product warranties to the customer upon receipt of final contract payment in full. Customer is responsible for submitting any registration cards.'],
+    ['Water Intrusion Assessment Deadlines','Customer must notify Storm Shield Pro within seventy-two (72) hours of discovering any roof leak and take immediate reasonable actions to mitigate interior damage. Customer agrees to grant safe access to interior and exterior areas at reasonable times to conduct required multi-stage inspections.'],
+    ['Environmental Mold & Hazard Mitigation Exclusion','Customer explicitly releases Storm Shield Pro Roofing & Construction from any liability, claims, or damages regarding environmental hazards or toxic conditions, including the growth, presence, or mitigation of mold, mildew, or airborne spores resulting from moisture or water entry, regardless of alleged negligence.'],
+    ['Casualty Loss & Insurance Maintenance','Storm Shield Pro is not responsible for damage caused by fire, windstorms, hail, tornadoes, hurricanes, lightning, or acts of God to work in progress or completed systems. Customer must maintain standard homeowner casualty insurance in full force. There are no other warranties, express or implied, including merchantability or fitness for a particular purpose, applicable to this contract.'],
+    ['Binding Arbitration Agreement','Any dispute, claim, or controversy arising out of or relating to the performance of services or materials under this contract shall be settled exclusively via binding arbitration conducted in accordance with the Commercial Arbitration Rules of the American Arbitration Association (AAA). Judgment on the award may be entered in any court of competent jurisdiction in Harris County, Texas, or the county where the work was performed.'],
+    ['Fully Integrated Execution Covenant','This two-page contract represents the complete agreement between both parties and supersedes all prior written or oral representations. Any modifications must be executed in writing by both parties. This contract is governed by and construed under the laws of the State of Texas. If any provision is deemed unenforceable, remaining terms remain in full force.'],
+  ];
+  const termsHtml = terms.map((t,i)=>`<p style="margin:0 0 7px;font-size:8.5px;line-height:1.35"><b>${i+1}. ${t[0]}:</b> ${t[1]}</p>`).join('');
+
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>Contract - ${esc(c.customer||j.name||'')}</title>
+  <style>
+    @page{size:letter;margin:0.4in}
+    *{box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;font-size:11px}
+    .pg{page-break-after:always;padding:6px}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:10px}
+    .hd h1{font-size:16px;margin:0;color:#1e3a5f}.hd .sub{font-size:9px;color:#555}
+    .hd .r{text-align:right;color:#1e3a5f;font-size:11px;font-weight:bold}
+    .sech{background:#eef2f7;border-left:3px solid #1e3a5f;padding:4px 8px;font-size:11px;font-weight:bold;color:#1e3a5f;margin:10px 0 6px;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse}
+    .info td{padding:3px 6px;font-size:11px;border-bottom:1px solid #ddd}
+    .info .lb{color:#555;font-weight:bold;width:90px}
+    .cols{display:flex;gap:14px}.cols>div{flex:1}
+    .cols h5{font-size:10px;margin:0 0 3px;border-bottom:1px solid #ccc;padding-bottom:2px}
+    .ci{font-size:9.5px;padding:1px 0}
+    .pay{margin-top:6px}.pay td{font-size:11px;padding:3px 6px}.pay .lb{text-align:right;font-weight:bold}
+    .sigrow{display:flex;gap:30px;margin-top:18px}.sigrow>div{flex:1}
+    .sigline{border-top:1px solid #333;margin-top:48px;padding-top:3px;font-size:9px;color:#555}
+    .sigimg{height:46px;position:absolute;margin-top:0}
+    .terms2{column-count:2;column-gap:18px}
+    .legal{font-size:8px;color:#444;line-height:1.4;margin-top:10px}
+  </style></head><body>
+  <div class="pg">
+    <div class="hd"><div><h1>STORM SHIELD PRO</h1><div class="sub">ROOFING AND CONSTRUCTION<br>Office: (832) 910-7735 | office@stormshieldproroofing.com</div></div>
+      <div class="r">CONTRACT CONFIRMATION<br><span style="font-size:9px;font-weight:normal">PAGE 1 OF 2</span></div></div>
+
+    <div class="sech">Customer &amp; Project Information</div>
+    <table class="info"><tr><td class="lb">Customer</td><td>${esc(c.customer)}</td><td class="lb">Cell #</td><td>${esc(c.cell)}</td></tr>
+    <tr><td class="lb">Street</td><td>${esc(c.street)}</td><td class="lb">Representative</td><td>${esc(c.rep)}</td></tr>
+    <tr><td class="lb">City/St/Zip</td><td>${esc(c.citystatezip)}</td><td class="lb">Contract Date</td><td>${esc(c.contractDate)}</td></tr>
+    <tr><td class="lb">Email</td><td>${esc(c.email)}</td><td class="lb">Build Date</td><td>${esc(c.buildDate)}</td></tr></table>
+
+    <div class="sech">Material &amp; Specifications</div>
+    <div class="cols">
+      <div><h5>SHINGLES</h5>
+        <div class="ci">${on('sh_certainteed')} CertainTeed &nbsp; ${on('sh_landmark')} Landmark &nbsp; ${on('sh_lpro')} Landmark Pro</div>
+        <div class="ci">${on('sh_ltl')} Landmark TL &nbsp; ${on('sh_presshake')} Presidential Shake &nbsp; ${on('sh_grandmanor')} Grand Manor</div>
+        <div class="ci">${on('sh_tamkotitan')} Tamko Titan XT &nbsp; ${on('sh_solaris')} Solaris &nbsp; ${on('sh_other')} Other ${esc(q.sh_other_txt||'')}</div>
+      </div>
+      <div><h5>COLORS</h5>
+        <div class="ci">${on('cl_weathered')} Weathered Wood &nbsp; ${on('cl_moire')} Moire Black &nbsp; ${on('cl_hunter')} Hunter Green</div>
+        <div class="ci">${on('cl_georgetown')} Georgetown Gray &nbsp; ${on('cl_colonial')} Colonial Slate</div>
+        <div class="ci">${on('cl_other')} Other ${esc(q.cl_other_txt||'')}</div>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:8px">
+      <div><h5>UNDERLAYMENT</h5><div class="ci">${on('ul_synthetic')} Synthetic &nbsp; ${on('ul_radiant')} Radiant Barrier</div></div>
+      <div><h5>RIDGE</h5><div class="ci">${on('rg_xt25')} XT-25 &nbsp; ${on('rg_shadow')} Shadow Ridge &nbsp; ${on('rg_cedar')} Cedar Crest</div></div>
+      <div><h5>VALLEY</h5><div class="ci">${on('vl_ice')} Ice &amp; Water &nbsp; ${on('vl_wmetal')} "W" Metal</div></div>
+    </div>
+    <div class="cols" style="margin-top:8px">
+      <div><h5>VENTILATION</h5><div class="ci">${on('vn_ridge')} Ridge${qt('vn_ridge_lf')} LF &nbsp; ${on('vn_power')} Power${qt('vn_power_qty')} &nbsp; ${on('vn_turbine')} Turbine${qt('vn_turbine_qty')}</div></div>
+      <div><h5>PLUMBING STACKS</h5><div class="ci">${on('pb_3in1')} 3in1${qt('pb_3in1_qty')} &nbsp; ${on('pb_15lead')} 1½"${qt('pb_15_qty')} &nbsp; ${on('pb_2lead')} 2"${qt('pb_2_qty')} &nbsp; ${on('pb_3lead')} 3"${qt('pb_3_qty')}</div></div>
+      <div><h5>DECKING</h5><div class="ci">${on('dk_osb')} OSB &nbsp; ${on('dk_plywood')} Plywood &nbsp; ${on('dk_radiant')} Radiant</div></div>
+    </div>
+
+    ${(c.addl||[]).some(x=>x)?`<div class="sech">Additional Items</div><div style="font-size:10px">${(c.addl||[]).filter(x=>x).map((x,i)=>`${i+1}. ${esc(x)}`).join('<br>')}</div>`:''}
+
+    <div class="sech">Warranty</div>
+    <div class="ci">${on('wr_standard')} Standard &nbsp; ${on('wr_3star')} 3-Star (20yr) &nbsp; ${on('wr_4star')} 4-Star (50yr) &nbsp; ${on('wr_5star')} 5-Star &nbsp; ${on('wr_lifetime')} Lifetime Workmanship &nbsp; ${on('wr_class3')} Class 3 Impact</div>
+
+    <div class="sech">Payment Schedule</div>
+    <table class="pay" style="max-width:340px"><tr><td class="lb">RCV Total Charge</td><td>$ ${esc(c.rcv)}</td></tr>
+    <tr><td class="lb">Net Claim Due</td><td>$ ${esc(c.netClaim)}</td></tr>
+    <tr><td class="lb">Deductible Due</td><td>$ ${esc(c.deductible)}</td></tr>
+    <tr><td class="lb">Depreciation Due</td><td>$ ${esc(c.depreciation)}</td></tr></table>
+    <div style="font-size:9px;color:#b00;margin-top:4px">Please make checks payable to: STORMSHIELD PRO ROOFING</div>
+
+    <div class="legal">Due to the unique nature of repairs to insurance claims, this contract does not include an explicit price because the final scope has not been agreed upon with the insurer. By signing, you authorize StormShield Pro Roofing to reach agreement on the price and scope of repairs on your behalf, bidding the work using Xactimate at customary insurance industry rates (10% overhead, 10% profit). Substantial additions or deductions will be handled by written change orders. By executing this two-page agreement, the customer acknowledges receipt, review, and acceptance of both Page 1 and the Terms &amp; Conditions on Page 2.</div>
+
+    <div class="sigrow">
+      <div style="position:relative"><div class="sigimg">${sig('homeowner')}</div><div class="sigline">Authorized Homeowner Signature &nbsp;&nbsp; Date: ${sigDate('homeowner')}</div></div>
+      <div style="position:relative"><div class="sigimg">${sig('rep')}</div><div class="sigline">StormShield Pro Representative &nbsp;&nbsp; Date: ${sigDate('rep')}</div></div>
+    </div>
+  </div>
+
+  <div class="pg">
+    <div class="hd"><div><h1 style="font-size:13px">STORM SHIELD PRO ROOFING AND CONSTRUCTION</h1><div class="sub">Master Contract Terms &amp; Conditions • Legal Addendum Riders</div></div><div class="r" style="font-size:9px">PAGE 2 OF 2</div></div>
+    <div class="terms2">${termsHtml}</div>
+  </div>
+  </body></html>`);
+  w.document.close();
+  setTimeout(()=>{ w.focus(); w.print(); }, 400);
+  if(typeof toast==='function') toast('Contract ready to print/save as PDF');
+};
 // Preserves section order and blank line between sections for readability.
 function serializeScopeSections(sections){
   const blocks = sections.map(sec => {
