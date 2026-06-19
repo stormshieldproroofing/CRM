@@ -305,6 +305,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}</script>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
@@ -9785,49 +9786,49 @@ function renderContractTab(j){
       <h4>Material &amp; Specifications</h4>
       <div class="ct-grid4">
         <div class="ct-col">
-          <h5>Shingles</h5>
-          ${box('sh_certainteed','CertainTeed')}${box('sh_ct20','CT20')}${box('sh_xt2s','XT2S')}${box('sh_xt30ir','XT30IR')}
-          ${box('sh_landmark','Landmark')}${box('sh_lmaxdef','Landmark Max Def')}${box('sh_lpro','Landmark Pro')}${box('sh_lprem','Landmark Premium')}
-          ${box('sh_ltl','Landmark TL')}${box('sh_ltlir','Landmark TL IR')}${box('sh_highland','Highland State')}${box('sh_presshake','Presidential Shake')}
-          ${box('sh_prestl','Presidential TL')}${box('sh_carriage','Carriage House')}${box('sh_centennial','Centennial Slate')}${box('sh_grandmanor','Grand Manor')}
-          ${box('sh_symphony','Symphony')}${box('sh_independence','Independence')}${box('sh_hatteras','Hatteras')}${box('sh_tamkotitan','Tamko Titan XT')}
-          ${box('sh_solaris','Solaris')}${boxT('sh_other','Other','sh_other_txt')}
+          <h5>Shingles — CertainTeed</h5>
+          ${box('shingles_certainteed_1','CertainTeed')}${box('shingles_certainteed_2','Landmark')}${box('shingles_certainteed_3','Landmark Pro')}${box('shingles_certainteed_4','Landmark Climate Flex')}
+          ${box('shingles_certainteed_5','Presidential Shake')}${box('shingles_certainteed_6','Presidential Shake TL')}${box('shingles_certainteed_7','Carriage House')}${box('shingles_certainteed_8','Belmont')}
+          ${box('shingles_certainteed_9','Grand Manor')}${box('shingles_certainteed_10','Solaris')}
+          <h5 style="margin-top:10px">Shingles — Tamko</h5>
+          ${box('shingles_tamko_1','Tamko')}${box('shingles_tamko_2','Heritage')}${box('shingles_tamko_3','Titan XT')}${box('shingles_tamko_4','StormFighter FLEX')}
+          ${box('shingles_tamko_5','HailGuard')}${boxT('shingles_tamko_6','Other','shingles_other')}
         </div>
         <div class="ct-col">
           <h5>Colors</h5>
-          ${box('cl_burntsienna','Burnt Sienna')}${box('cl_cobblestone','Cobblestone Gray')}${box('cl_colonial','Colonial Slate')}${box('cl_georgetown','Georgetown Gray')}
-          ${box('cl_heather','Heather Blend')}${box('cl_hunter','Hunter Green')}${box('cl_moire','Moire Black')}${box('cl_resawn','Resawn Shake')}
-          ${box('cl_silver','Silver Birch')}${box('cl_weathered','Weathered Wood')}${boxT('cl_other','Other','cl_other_txt')}
+          ${box('colors_1','Burnt Sienna / Rustic Hickory')}${box('colors_2','Georgetown / Oxford Gray')}${box('colors_3','Cobblestone Gray / Antique Slate')}${box('colors_4','Thunderstorm Gray')}
+          ${box('colors_5','Espresso / Black Walnut')}${box('colors_6','Heather Blend / Natural Timber')}${box('colors_7','Moire Black / Rustic Black')}${box('colors_8','Silver Birch / Old English Pewter')}
+          ${box('colors_9','Resawn Shake / Rustic Cedar')}${box('colors_10','Weathered Wood')}${boxT('colors_11','Other','color_other')}
         </div>
         <div class="ct-col">
           <h5>Start Strip</h5>
-          ${box('ss_swift','Swift Start')}${boxT('ss_other','Other','ss_other_txt')}
+          ${box('start_strip_1','Swift Start')}${box('start_strip_2','Tamko Starter Strip')}${boxT('start_strip_3','Other','start_strip_other')}
           <h5 style="margin-top:10px">Underlayment</h5>
-          ${box('ul_roofrunner','Roof Runner')}${box('ul_synthetic','Synthetic')}${box('ul_radiant','Radiant Barrier')}${boxT('ul_other','Other','ul_other_txt')}
+          ${box('underlayment_1','Roof Runner')}${box('underlayment_2','Synthetic')}${box('underlayment_3','Radiant Barrier')}${boxT('underlayment_4','Other','underlayment_other')}
           <h5 style="margin-top:10px">Ridge</h5>
-          ${box('rg_xt25','XT-25')}${box('rg_shadow','Shadow Ridge')}${box('rg_cedar','Cedar Crest')}${box('rg_mountain','Mountain Ridge')}${boxT('rg_other','Other','rg_other_txt')}
+          ${box('ridge_1','Shadow Ridge')}${box('ridge_2','Cedar Crest')}${box('ridge_3','Tamko Heritage')}${box('ridge_4','Tamko Heritage Designer')}${box('ridge_5','Tamko Proline')}${boxT('ridge_6','Other','ridge_other')}
         </div>
         <div class="ct-col">
           <h5>Valley</h5>
-          ${box('vl_ice','Ice &amp; Watershield')}${box('vl_wmetal','&quot;W&quot; Metal')}${box('vl_valleymetal','Valley Metal')}${boxT('vl_color','Color','vl_color_txt')}
+          ${box('valley_1','Ice &amp; Watershield')}${box('valley_2','&quot;W&quot; Metal')}${box('valley_3','Valley Metal')}${boxT('valley_4','Other','valley_other')}
           <h5 style="margin-top:10px">Drip Edge</h5>
-          ${box('de_existing','Use Existing')}${box('de_prefinished','Pre-Finished Edge')}${boxT('de_size','Material/Size','de_size_txt')}
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">Color: ${box('de_black','Black')}${box('de_white','White')}${box('de_tan','Tan')}${box('de_brown','Brown')}${box('de_almond','Almond')}${box('de_bronze','Bronze')}${box('de_gray','Gray')}</div>
+          ${box('drip_edge_1','Use Existing')}${box('drip_edge_2','Pre-Finished Edge')}${boxT('drip_edge_size_box','Material/Size','drip_edge_size')}
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Color: ${box('de_color_black','Black')}${box('de_color_white','White')}${box('de_color_tan','Tan')}${box('de_color_brown','Brown')}${box('de_color_almond','Almond')}${box('de_color_bronze','Bronze')}${box('de_color_gray','Gray')}</div>
         </div>
       </div>
       <div class="ct-grid4" style="margin-top:14px">
         <div class="ct-col">
           <h5>Ventilation</h5>
-          ${boxQ('vn_ridge','Ridge Vent','vn_ridge_lf','LF')}${boxQ('vn_power','Power Vents','vn_power_qty','QTY')}${boxQ('vn_solar','Solar Vents','vn_solar_qty','QTY')}
-          ${boxQ('vn_static','Static','vn_static_qty','QTY')}${boxQ('vn_turbine','Turbine','vn_turbine_qty','QTY')}${boxT('vn_color','Color','vn_color_txt')}
+          ${boxQ('vent_left_1','Ridge Vent','vent_ridge_lf','LF')}${boxQ('vent_left_2','Power Vents','vent_power_qty','QTY')}${boxQ('vent_left_3','Solar Vents','vent_solar_qty','QTY')}
+          ${boxQ('vent_right_1','Static','vent_static_qty','QTY')}${boxQ('vent_right_2','Turbine','vent_turbine_qty','QTY')}${boxT('vent_right_3','Color','vent_color_qty')}
         </div>
         <div class="ct-col">
           <h5>Plumbing Stacks</h5>
-          ${boxQ('pb_3in1','3in1','pb_3in1_qty','')}${boxQ('pb_15lead','1-1/2&quot; Lead','pb_15_qty','')}${boxQ('pb_2lead','2&quot; Lead','pb_2_qty','')}${boxQ('pb_3lead','3&quot; Lead','pb_3_qty','')}
+          ${boxQ('plumbing_1','3in1','plumbing_3in1_qty','')}${boxQ('plumbing_2','1-1/2&quot; Lead','plumbing_1_5_lead_qty','')}${boxQ('plumbing_3','2&quot; Lead','plumbing_2_lead_qty','')}${boxQ('plumbing_4','3&quot; Lead','plumbing_3_lead_qty','')}
         </div>
         <div class="ct-col">
           <h5>Decking</h5>
-          ${box('dk_osb','OSB')}${box('dk_plywood','Plywood')}${box('dk_radiant','Radiant Barrier')}${boxT('dk_other','Other','dk_other_txt')}
+          ${box('decking_1','OSB')}${box('decking_2','Plywood')}${box('decking_3','Radiant Barrier')}${boxT('decking_4','Other','decking_other')}
         </div>
         <div class="ct-col"></div>
       </div>
@@ -9843,10 +9844,10 @@ function renderContractTab(j){
     <div class="ct-sec">
       <h4>Warranty</h4>
       <div style="display:flex;flex-wrap:wrap;gap:14px">
-        ${box('wr_standard','Standard')}${box('wr_3star','3-Star (20-Yr Non-Prorated)')}${box('wr_4star','4-Star (50-Yr Non-Prorated)')}${box('wr_5star','5-Star')}
+        ${box('warranty_standard','Standard')}${box('warranty_3star','3-Star (20-Yr Non-Prorated)')}${box('warranty_4star','4-Star (50-Yr Non-Prorated)')}${box('warranty_5star','5-Star')}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px">
-        ${box('wr_lifetime','Lifetime Workmanship')}${box('wr_class3','Class 3 Impact + 160mph wind + 10yr Algae')}
+        ${box('warranty_lifetime','Lifetime Workmanship')}${box('warranty_class3','Class 3 Impact + 160mph wind + 10yr Algae')}
       </div>
     </div>
 
@@ -9858,7 +9859,7 @@ function renderContractTab(j){
         <label>Deductible Due $</label><input data-f="deductible" value="${esc(pf.deductible)}">
         <label>Depreciation Due $</label><input data-f="depreciation" value="${esc(pf.depreciation)}">
       </div>
-      <label class="ct-chk" style="margin-top:8px">${box('reviews_submitted','All reviews have been submitted')}</label>
+      <label class="ct-chk" style="margin-top:8px">${box('review_submitted','All reviews have been submitted')}</label>
     </div>
 
     <div class="ct-sec">
@@ -9878,7 +9879,7 @@ function renderContractTab(j){
 
     <div class="ct-actions">
       <button class="ct-btn" style="background:#1E253A;color:var(--text);border:1px solid var(--border)" onclick="saveContract('${j.id}')"><i class="ti ti-device-floppy"></i> Save Contract</button>
-      <button class="ct-btn" style="background:var(--brand);color:#0F1117" onclick="printContract('${j.id}')"><i class="ti ti-printer"></i> Save &amp; Print PDF</button>
+      <button class="ct-btn" style="background:var(--brand);color:#0F1117" onclick="printFilledContract('${j.id}')"><i class="ti ti-printer"></i> Print Filled Contract</button>
       <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailContract('${j.id}')"><i class="ti ti-mail"></i> Email Contract</button>
       <button class="ct-btn" style="background:#7C3AED;color:#fff" onclick="sendContractForSignature('${j.id}')"><i class="ti ti-signature"></i> Send for Signature</button>
     </div>
@@ -9947,6 +9948,31 @@ window.saveContract = function(jobId){
   if(typeof toast==='function') toast('Contract saved');
 };
 
+// Build a flat { pdf_field_name: value } object from contract data,
+// matching the fillable PDF's field names (used for Verdocs prefill).
+function buildContractFields(c){
+  c = c || {};
+  const f = {};
+  // text fields
+  const tmap = {
+    customer:c.customer, street_address:c.street, city_state_zip:c.citystatezip,
+    email_address:c.email, cell_number:c.cell, representative:c.rep,
+    contract_date: formatContractDate(c.contractDate), build_date: formatContractDate(c.buildDate),
+    rcv_total_charge:c.rcv, net_claim_amount_due:c.netClaim,
+    deductible_amount_due:c.deductible, depreciation_amount_due:c.depreciation,
+  };
+  for(const k in tmap){ if(tmap[k]!=null && tmap[k]!=='') f[k]=String(tmap[k]); }
+  // additional items
+  (c.addl||[]).forEach((v,i)=>{ if(v) f['additional_item_'+(i+1)]=String(v); });
+  // qty/other text
+  const qty=c.qty||{};
+  for(const qk in (window.CONTRACT_QTY_MAP||{})){ if(qty[qk]) f[(window.CONTRACT_QTY_MAP||{})[qk]]=String(qty[qk]); }
+  // checkboxes (keys already match PDF field names)
+  const ck=c.checks||{};
+  for(const k in ck){ if(ck[k]===true) f[k]=true; }
+  return f;
+}
+
 window.sendContractForSignature = async function(jobId){
   const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
   j.contract = gatherContract(j);
@@ -9962,6 +9988,7 @@ window.sendContractForSignature = async function(jobId){
 
   if(typeof toast==='function') toast('Sending contract for signature…');
   try {
+    const fields = buildContractFields(c);
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-contract`, {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
@@ -9970,6 +9997,7 @@ window.sendContractForSignature = async function(jobId){
         homeownerEmail,
         repName: (c.rep||j.salesman||'').trim() || undefined,
         envelopeName: `StormShield Contract - ${homeownerName}`,
+        fields,
       }),
     });
     const data = await res.json();
@@ -10035,6 +10063,101 @@ StormShield Pro Roofing & Construction
   setTimeout(()=>{
     window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
   }, 1200);
+};
+
+// URL of the blank fillable contract template (host alongside index.html on GitHub Pages)
+const CONTRACT_TEMPLATE_URL = 'StormShield_Contract_FILLABLE.pdf';
+
+// QTY text fields: CRM qty key -> PDF text field name
+window.CONTRACT_QTY_MAP = {
+  vent_ridge_lf:'vent_ridge_lf', vent_power_qty:'vent_power_qty', vent_solar_qty:'vent_solar_qty',
+  vent_static_qty:'vent_static_qty', vent_turbine_qty:'vent_turbine_qty', vent_color_qty:'vent_color_qty',
+  plumbing_3in1_qty:'plumbing_3in1_qty', plumbing_1_5_lead_qty:'plumbing_1_5_lead_qty',
+  plumbing_2_lead_qty:'plumbing_2_lead_qty', plumbing_3_lead_qty:'plumbing_3_lead_qty',
+  shingles_other:'shingles_other', color_other:'color_other', start_strip_other:'start_strip_other',
+  underlayment_other:'underlayment_other', ridge_other:'ridge_other', valley_other:'valley_other',
+  drip_edge_size:'drip_edge_size', decking_other:'decking_other',
+};
+
+// Build the filled PDF bytes from a job's contract data. Returns Uint8Array.
+async function fillContractPDF(j){
+  if(!window.PDFLib){ alert('PDF library not loaded yet. Please wait a moment and try again.'); return null; }
+  const c = j.contract || {};
+  const ck = c.checks || {}, qty = c.qty || {}, addl = c.addl || [];
+  // fetch template
+  let bytes;
+  try {
+    const resp = await fetch(CONTRACT_TEMPLATE_URL);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    bytes = await resp.arrayBuffer();
+  } catch(e){
+    alert('Could not load the contract template ('+CONTRACT_TEMPLATE_URL+'). Make sure the fillable PDF is uploaded to the same folder as the CRM on GitHub.\n\n'+e.message);
+    return null;
+  }
+  const { PDFDocument } = window.PDFLib;
+  const pdf = await PDFDocument.load(bytes);
+  const form = pdf.getForm();
+
+  const setText = (name,val)=>{ try{ const f=form.getTextField(name); f.setText(String(val==null?'':val)); }catch(e){} };
+  const setCheck = (name)=>{ try{ form.getCheckBox(name).check(); }catch(e){} };
+
+  // Text fields (customer + project)
+  setText('customer', c.customer);
+  setText('street_address', c.street);
+  setText('city_state_zip', c.citystatezip);
+  setText('email_address', c.email);
+  setText('cell_number', c.cell);
+  setText('representative', c.rep);
+  setText('contract_date', formatContractDate(c.contractDate));
+  setText('build_date', formatContractDate(c.buildDate));
+  // Payment
+  setText('rcv_total_charge', c.rcv);
+  setText('net_claim_amount_due', c.netClaim);
+  setText('deductible_amount_due', c.deductible);
+  setText('depreciation_amount_due', c.depreciation);
+  // Additional items 1-8
+  (addl||[]).forEach((v,i)=>{ if(v) setText('additional_item_'+(i+1), v); });
+  // QTY / other text fields
+  for(const qk in window.CONTRACT_QTY_MAP){ if(qty[qk]) setText(window.CONTRACT_QTY_MAP[qk], qty[qk]); }
+
+  // Checkboxes — CRM keys now match PDF field names 1:1
+  for(const key in ck){
+    if(ck[key]===true) setCheck(key);
+  }
+
+  // ensure values render in all viewers
+  try { form.getFields(); } catch(e){}
+  pdf.getForm().updateFieldAppearances && pdf.getForm().updateFieldAppearances();
+  // set NeedAppearances
+  try {
+    const acro = form.acroForm;
+    const { PDFName, PDFBool } = window.PDFLib;
+    acro.dict.set(PDFName.of('NeedAppearances'), PDFBool.True);
+  } catch(e){}
+
+  return await pdf.save();
+}
+
+function formatContractDate(d){
+  if(!d) return '';
+  // input is yyyy-mm-dd; output mm/dd/yyyy
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : d;
+}
+
+// Fill the PDF and open it in a new tab for printing / tablet signing
+window.printFilledContract = async function(jobId){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
+  j.contract = gatherContract(j);
+  if(typeof saveToStorage==='function') saveToStorage();
+  if(typeof toast==='function') toast('Generating filled contract…');
+  const out = await fillContractPDF(j);
+  if(!out) return;
+  const blob = new Blob([out], {type:'application/pdf'});
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank');
+  if(w){ w.addEventListener('load', ()=>{ try{ w.focus(); }catch(e){} }); }
+  if(typeof toast==='function') toast('Filled contract ready');
 };
 
 window.printContract = function(jobId){
