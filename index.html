@@ -10094,11 +10094,26 @@ async function fillContractPDF(j){
     alert('Could not load the contract template ('+CONTRACT_TEMPLATE_URL+'). Make sure the fillable PDF is uploaded to the same folder as the CRM on GitHub.\n\n'+e.message);
     return null;
   }
-  const { PDFDocument } = window.PDFLib;
+  const { PDFDocument, StandardFonts, PDFName, PDFString, PDFBool } = window.PDFLib;
   const pdf = await PDFDocument.load(bytes);
   const form = pdf.getForm();
+  // embed a font so field values are actually drawn into appearances
+  let helv = null;
+  try { helv = await pdf.embedFont(StandardFonts.Helvetica); } catch(e){}
+  // CRITICAL: register the font in AcroForm /DR (Default Resources) so the
+  // field /DA "/Helvetica" can be resolved by the viewer — without this,
+  // text fields render BLANK in browsers even when values are set.
+  try {
+    const acro = form.acroForm.dict;
+    let dr = acro.get(PDFName.of('DR'));
+    if(!dr){ dr = pdf.context.obj({}); acro.set(PDFName.of('DR'), dr); }
+    let fontDict = dr.get(PDFName.of('Font'));
+    if(!fontDict){ fontDict = pdf.context.obj({}); dr.set(PDFName.of('Font'), fontDict); }
+    if(helv){ fontDict.set(PDFName.of('Helvetica'), helv.ref); }
+    acro.set(PDFName.of('DA'), PDFString.of('/Helvetica 0 Tf 0 g'));
+  } catch(e){ console.warn('DR setup:', e && e.message); }
 
-  const setText = (name,val)=>{ try{ const f=form.getTextField(name); f.setText(String(val==null?'':val)); }catch(e){} };
+  const setText = (name,val)=>{ try{ const f=form.getTextField(name); f.setText(String(val==null?'':val)); if(helv){ try{ f.updateAppearances(helv); }catch(e){} } }catch(e){} };
   const setCheck = (name)=>{ try{ form.getCheckBox(name).check(); }catch(e){} };
 
   // Text fields (customer + project)
@@ -10121,19 +10136,19 @@ async function fillContractPDF(j){
   for(const qk in window.CONTRACT_QTY_MAP){ if(qty[qk]) setText(window.CONTRACT_QTY_MAP[qk], qty[qk]); }
 
   // Checkboxes — CRM keys now match PDF field names 1:1
+  let checkedCount = 0;
   for(const key in ck){
-    if(ck[key]===true) setCheck(key);
+    if(ck[key]===true){ setCheck(key); checkedCount++; }
   }
 
-  // ensure values render in all viewers
-  try { form.getFields(); } catch(e){}
-  pdf.getForm().updateFieldAppearances && pdf.getForm().updateFieldAppearances();
-  // set NeedAppearances
+  // Force-render all field appearances with the embedded font
+  try { if(helv) form.updateFieldAppearances(helv); } catch(e){}
+  // Set NeedAppearances so viewers (incl. Chrome) regenerate field visuals
   try {
-    const acro = form.acroForm;
     const { PDFName, PDFBool } = window.PDFLib;
-    acro.dict.set(PDFName.of('NeedAppearances'), PDFBool.True);
+    form.acroForm.dict.set(PDFName.of('NeedAppearances'), PDFBool.True);
   } catch(e){}
+  console.log('[contract] filled', checkedCount, 'checkboxes; customer=', c.customer||'(empty)');
 
   return await pdf.save();
 }
