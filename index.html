@@ -9986,9 +9986,20 @@ window.sendContractForSignature = async function(jobId){
   }
   if(!confirm(`Send this contract to ${homeownerName} (${homeownerEmail}) for electronic signature via Verdocs?`)) return;
 
-  if(typeof toast==='function') toast('Sending contract for signature…');
+  if(typeof toast==='function') toast('Preparing filled contract…');
   try {
-    const fields = buildContractFields(c);
+    // Fill the PDF (same as Print Filled Contract), then send it to Verdocs
+    const pdfBytes = await fillContractPDF(j);
+    if(!pdfBytes){ alert('Could not generate the filled contract PDF.'); return; }
+    // convert to base64
+    let binary = '';
+    const chunk = 0x8000;
+    for(let i=0;i<pdfBytes.length;i+=chunk){
+      binary += String.fromCharCode.apply(null, pdfBytes.subarray(i, i+chunk));
+    }
+    const pdfBase64 = btoa(binary);
+
+    if(typeof toast==='function') toast('Sending contract for signature…');
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-contract`, {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
@@ -9997,7 +10008,7 @@ window.sendContractForSignature = async function(jobId){
         homeownerEmail,
         repName: (c.rep||j.salesman||'').trim() || undefined,
         envelopeName: `StormShield Contract - ${homeownerName}`,
-        fields,
+        pdfBase64,
       }),
     });
     const data = await res.json();
