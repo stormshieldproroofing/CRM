@@ -9935,6 +9935,14 @@ function gatherContract(j){
     const key=pad.getAttribute('data-sig'); const canvas=pad.querySelector('canvas');
     if(canvas.__cleared && !canvas.__dirty){ c.signatures[key]=null; return; }
     if(canvas.__dirty){
+      // Check the canvas actually has strokes (non-transparent pixels). A blank/cleared
+      // pad must NOT save a signature (which would wrongly draw a date next to it).
+      let hasInk = false;
+      try {
+        const chk = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+        for(let i=3;i<chk.length;i+=4){ if(chk[i] > 10){ hasInk = true; break; } }
+      } catch(e){ hasInk = true; } // if we can't check, assume signed
+      if(!hasInk){ c.signatures[key] = null; return; }
       // The pad draws white strokes (visible on the dark pad). For the PDF we need
       // black strokes on transparent, so recolor white pixels -> black before saving.
       let imgData;
@@ -9946,7 +9954,6 @@ function gatherContract(j){
         const d = tctx.getImageData(0, 0, tmp.width, tmp.height);
         const px = d.data;
         for(let i=0;i<px.length;i+=4){
-          // wherever there's any stroke (non-transparent), force black
           if(px[i+3] > 10){ px[i]=0; px[i+1]=0; px[i+2]=0; }
         }
         tctx.putImageData(d, 0, 0);
@@ -10177,16 +10184,20 @@ async function fillContractPDF(j){
   const fmtSigDate = (iso)=>{ try{ const d=new Date(iso); return ('0'+(d.getMonth()+1)).slice(-2)+'/'+('0'+d.getDate()).slice(-2)+'/'+d.getFullYear(); }catch(e){ return ''; } };
   const drawSig = async (sigKey, fieldName, dateFieldName)=>{
     const s = sigs[sigKey];
-    if(!s || !s.img) return;
+    // Only proceed if there is a real signature image for THIS signer.
+    if(!s || !s.img || typeof s.img !== 'string' || s.img.length < 200) return;
     const r = CO[fieldName]; if(!r) return;
     const [x,y,w,h] = r;
+    let drew = false;
     try {
       const png = await pdf.embedPng(s.img);
       const maxW = w>10 ? w : 180, maxH = 40;
       const dims = png.scale(Math.min(maxW/png.width, maxH/png.height));
       page.drawImage(png, { x: x, y: y, width: dims.width, height: dims.height });
-    } catch(e){}
-    if(s.signedAt && dateFieldName) drawText(dateFieldName, fmtSigDate(s.signedAt));
+      drew = true;
+    } catch(e){ drew = false; }
+    // Draw the date ONLY when the signature image actually drew.
+    if(drew && s.signedAt && dateFieldName) drawText(dateFieldName, fmtSigDate(s.signedAt));
   };
   await drawSig('homeowner', 'authorized_homeowner_signature', 'homeowner_signature_date');
   await drawSig('rep', 'representative_signature', 'representative_signature_date');
