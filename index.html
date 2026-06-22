@@ -9734,9 +9734,9 @@ function renderContractTab(j){
   const isC = (k)=> chk[k] ? 'checked' : '';
   const qv = (k)=> qty[k]!=null ? String(qty[k]).replace(/"/g,'&quot;') : '';
 
-  const box = (k,label)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> ${label}</label>`;
-  const boxQ = (k,label,qk,unit)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> ${label} <input type="text" class="ct-qty" data-q="${qk}" value="${qv(qk)}" placeholder=""> ${unit||''}</label>`;
-  const boxT = (k,label,qk)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> ${label} <input type="text" class="ct-qty ct-qty-wide" data-q="${qk}" value="${qv(qk)}"></label>`;
+  const box = (k,label)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> <span>${label}</span></label>`;
+  const boxQ = (k,label,qk,unit)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> <span>${label} <input type="text" class="ct-qty" data-q="${qk}" value="${qv(qk)}" placeholder=""> ${unit||''}</span></label>`;
+  const boxT = (k,label,qk)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> <span>${label} <input type="text" class="ct-qty ct-qty-wide" data-q="${qk}" value="${qv(qk)}"></span></label>`;
 
   panel.innerHTML = `
   <style>
@@ -9751,8 +9751,9 @@ function renderContractTab(j){
     .ct-fld label{font-size:10px;color:var(--muted);font-weight:600}
     .ct-fld input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:12px;font-family:inherit}
     .ct-col h5{margin:0 0 6px;font-size:11px;color:var(--text);font-weight:700;border-bottom:1px solid var(--border);padding-bottom:3px}
-    .ct-chk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);padding:2px 0;cursor:pointer;flex-wrap:wrap}
-    .ct-chk input[type=checkbox]{accent-color:var(--brand);width:14px;height:14px;cursor:pointer}
+    .ct-chk{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--text);padding:3px 0;cursor:pointer;line-height:1.3}
+    .ct-chk > span{flex:1;min-width:0}
+    .ct-chk input[type=checkbox]{accent-color:var(--brand);width:14px;height:14px;cursor:pointer;flex-shrink:0;margin-top:1px}
     .ct-qty{width:46px;background:#1E253A;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px}
     .ct-qty-wide{width:90px}
     .ct-pay{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;max-width:360px}
