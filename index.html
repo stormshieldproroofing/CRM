@@ -869,6 +869,11 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-unsched-search-wrap{position:relative;margin-top:9px}
 .cal-unsched-search-wrap i{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);pointer-events:none}
 .cal-unsched-search{width:100%;height:30px;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 9px 7px 28px;color:var(--brand);font-size:12px;font-family:'Barlow',sans-serif;outline:none}
+.cal-rd-card{background:var(--rdbg);border:1px solid color-mix(in srgb,var(--rd) 30%,transparent);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;transition:transform .12s ease,box-shadow .12s ease}
+.cal-rd-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,0.25)}
+.cal-rd-card .cal-rd-ic{font-size:16px;color:var(--rd);opacity:.85;margin-bottom:2px}
+.cal-rd-card .cal-rd-n{color:var(--rd);font-weight:800;font-size:26px;line-height:1;font-family:'Barlow',sans-serif}
+.cal-rd-card .cal-rd-lbl{color:var(--muted);font-weight:700;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;margin-top:4px}
 .cal-unsched-search:focus{border-color:var(--brand-light)}
 .cal-unsched-search::placeholder{color:rgba(226,232,244,0.32)}
 
@@ -9839,11 +9844,6 @@ function renderContractTab(j){
     .ct-addl{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
     .ct-addl input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--text);font-size:11px;width:100%}
     .ct-actions{display:flex;gap:10px;margin-top:16px}
-    .cal-rd-card{background:var(--rdbg);border:1px solid color-mix(in srgb,var(--rd) 30%,transparent);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;transition:transform .12s ease,box-shadow .12s ease}
-    .cal-rd-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,0.25)}
-    .cal-rd-card .cal-rd-ic{font-size:16px;color:var(--rd);opacity:.85;margin-bottom:2px}
-    .cal-rd-card .cal-rd-n{color:var(--rd);font-weight:800;font-size:26px;line-height:1;font-family:'Barlow',sans-serif}
-    .cal-rd-card .cal-rd-lbl{color:var(--muted);font-weight:700;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;margin-top:4px}
 
     .ct-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
     .ct-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
