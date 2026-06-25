@@ -105,6 +105,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .card-meta{display:flex;align-items:center;gap:2px;font-size:10px;color:var(--muted)}
 .card-meta i{font-size:11px}
 .card-meta.warn{color:var(--warn)}
+.card-meta.stage-stale{color:#EF4444;font-weight:700}
 .user-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;flex-shrink:0}
 .add-col-btn{width:44px;height:44px;border-radius:9px;background:rgba(255,255,255,0.03);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:20px;margin-top:4px;flex-shrink:0}
 .add-col-btn:hover{border-color:var(--brand-light);color:var(--brand-light);background:rgba(77,157,224,0.08)}
@@ -876,6 +877,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-conf-btn{margin-top:6px;width:100%;font-size:10px;font-weight:700;padding:4px 6px;border-radius:5px;border:1px solid var(--border);background:#1E253A;color:var(--brand-light);cursor:pointer}
 .cal-conf-btn:hover{border-color:var(--brand-light);background:rgba(77,157,224,0.12)}
 .cal-mchip-conf{display:inline-flex;align-items:center;font-size:11px;margin-left:2px}
+.cal-mchip-conf.cal-conf-clickable{cursor:pointer;padding:2px;border-radius:4px}
+.cal-mchip-conf.cal-conf-clickable:hover{background:rgba(255,255,255,0.12)}
 .cal-mchip-conf.cal-conf-no{color:#FBBF24}
 .cal-mchip-conf.cal-conf-yes{color:#34D399}
 .cal-unsched-search-wrap{position:relative;margin-top:9px}
@@ -1713,6 +1716,32 @@ function daysSinceCreated(j){
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.max(0, Math.floor((today - createdDay) / 86400000));
 }
+
+// Days the job has been sitting in its CURRENT stage. Uses the most recent
+// 'stage' timeline event ("Stage changed"); falls back to created date.
+function daysInStage(j){
+  let startMs = null;
+  if(Array.isArray(j.timeline)){
+    for(let i = j.timeline.length - 1; i >= 0; i--){
+      const ev = j.timeline[i];
+      if(ev && ev.type === 'stage' && /stage changed/i.test(ev.label || '')){
+        const t = new Date(ev.at).getTime();
+        if(!Number.isNaN(t)){ startMs = t; break; }
+      }
+    }
+  }
+  if(startMs == null){
+    const raw = j.createdAt || j.created;
+    const d = typeof raw === 'number' ? new Date(raw) : new Date(String(raw||'').replace(' at ', ' '));
+    startMs = Number.isNaN(d.getTime()) ? Date.now() : d.getTime();
+  }
+  const startDay = new Date(new Date(startMs).getFullYear(), new Date(startMs).getMonth(), new Date(startMs).getDate());
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(0, Math.floor((today - startDay) / 86400000));
+}
+// Number of days in a stage before the indicator turns red (stalled).
+const STAGE_STALE_DAYS = 7;
 
 function getStageChecklist(col){
   if(!col) return [];
@@ -2693,6 +2722,7 @@ function renderCard(j){
   const col=columns.find(c=>c.id===j.col);
   const hasInsurance=j.carrier||j.claimNum;
   const ageDays=daysSinceCreated(j);
+  const stageDays=daysInStage(j);
   const progress=stageChecklistProgress(j,col);
   const taskMeta=progress.total?`${progress.done}/${progress.total}`:(j.tasks>0?`${j.tasksDone}/${j.tasks}`:'');
   // Build date label: short "Jun 12" form for the footer
@@ -2737,6 +2767,7 @@ function renderCard(j){
     <div class="card-phone" style="margin-top:5px"><i class="ti ti-phone" aria-hidden="true"></i>${formatPhone(j.phone) || j.phone || ''}</div>
     <div class="card-footer">
       <div class="card-meta" title="Days since created"><i class="ti ti-clock" aria-hidden="true"></i>${ageDays}d</div>
+      <div class="card-meta${stageDays>=STAGE_STALE_DAYS?' stage-stale':''}" title="Days in current stage${stageDays>=STAGE_STALE_DAYS?' — stalled':''}"><i class="ti ti-hourglass" aria-hidden="true"></i>${stageDays}d</div>
       ${taskMeta?`<div class="card-meta ${(progress.total&&progress.done<progress.total)||(!progress.total&&j.tasksDone<j.tasks)?'warn':''}"><i class="ti ti-checkbox" aria-hidden="true"></i>${taskMeta}</div>`:''}
       ${buildDateLabel ? `<div class="card-meta${buildIsBad?' warn':''}" title="${buildIsBad?'⚠ High rain risk on this date · ':''}Scheduled build date"><i class="ti ti-calendar-event" aria-hidden="true"></i>${buildDateLabel}${buildIsBad?` <i class="ti ti-alert-triangle" style="font-size:10px;color:#EF4444;margin-left:2px"></i>`:''}</div>` : ''}
       <div style="flex:1"></div>
@@ -6914,9 +6945,11 @@ function renderCalMonthChip(j){
   const isBad = isBadWeatherDay(j.buildDate);
   const rc = calReadinessColor(calReadinessBucket(j));
   const confirmed = !!j.buildConfirmed;
-  const confIcon = confirmed
-    ? `<span class="cal-mchip-conf cal-conf-yes" title="Confirmed with crew"><i class="ti ti-circle-check-filled"></i></span>`
-    : `<span class="cal-mchip-conf cal-conf-no" title="Not yet confirmed with crew"><i class="ti ti-clock-question"></i></span>`;
+  const admin = isAdmin();
+  const confTitle = confirmed
+    ? (admin ? 'Confirmed with crew — tap to mark unconfirmed' : 'Confirmed with crew')
+    : (admin ? 'Unconfirmed — tap to confirm with crew' : 'Not yet confirmed with crew');
+  const confIcon = `<span class="cal-mchip-conf ${confirmed?'cal-conf-yes':'cal-conf-no'}${admin?' cal-conf-clickable':''}" ${admin?`data-cal-confirm="${j.id}"`:''} title="${confTitle}"><i class="ti ${confirmed?'ti-circle-check-filled':'ti-clock-question'}"></i></span>`;
   return `
     <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}${confirmed?'':' cal-card-unconfirmed'}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${escapeHtml(title)}${confirmed?'':' · Unconfirmed'}${isBad?' · ⚠ High rain risk':''}">
       ${calSalesAvatarHtml(j)}
@@ -7388,6 +7421,8 @@ function wireCalMonthInteractions(){
   });
   document.querySelectorAll('.cal-mchip').forEach(chip => {
     chip.addEventListener('click', e => {
+      // Don't open detail when tapping the confirm toggle icon.
+      if(e.target.closest('[data-cal-confirm]')) return;
       e.stopPropagation();
       const id = chip.dataset.calJob;
       const j = jobs.find(x => x.id === id);
