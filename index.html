@@ -6739,8 +6739,9 @@ function calParseKey(key){
   return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
 }
 function calJobsOnDay(dateKey){
-  // Calendar shows only jobs at or after Contract Signed.
-  return jobs.filter(j => j.buildDate === dateKey && calIsContractOrAfter(j));
+  // If a job has a build date on this day, it was explicitly scheduled — always show it,
+  // regardless of stage. (The stage filter only governs which UNSCHEDULED jobs are offered.)
+  return jobs.filter(j => j.buildDate === dateKey);
 }
 // True if the job is at the "contract" stage or later (Contract Signed, Invoiced, ...),
 // excluding closed/fork stages.
