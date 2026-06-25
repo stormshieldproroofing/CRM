@@ -868,6 +868,16 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-job-card .cjc-name{font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-job-card .cjc-addr{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-job-card .cjc-pill{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px;background:rgba(77,157,224,0.15);color:var(--brand-light);margin-top:4px}
+.cal-card-unconfirmed{border-style:dashed !important}
+.cjc-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
+.cal-conf-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px}
+.cal-conf-badge.cal-conf-no{background:rgba(245,158,11,0.18);color:#FBBF24}
+.cal-conf-badge.cal-conf-yes{background:rgba(52,211,153,0.18);color:#34D399}
+.cal-conf-btn{margin-top:6px;width:100%;font-size:10px;font-weight:700;padding:4px 6px;border-radius:5px;border:1px solid var(--border);background:#1E253A;color:var(--brand-light);cursor:pointer}
+.cal-conf-btn:hover{border-color:var(--brand-light);background:rgba(77,157,224,0.12)}
+.cal-mchip-conf{display:inline-flex;align-items:center;font-size:11px;margin-left:2px}
+.cal-mchip-conf.cal-conf-no{color:#FBBF24}
+.cal-mchip-conf.cal-conf-yes{color:#34D399}
 .cal-unsched-search-wrap{position:relative;margin-top:9px}
 .cal-unsched-search-wrap i{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);pointer-events:none}
 .cal-unsched-search{width:100%;height:30px;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 9px 7px 28px;color:var(--brand);font-size:12px;font-family:'Barlow',sans-serif;outline:none}
@@ -6796,7 +6806,9 @@ function calReadinessColor(bucket){
 function calReadinessCounts(){
   let scheduled = 0, build_ready = 0, almost_ready = 0, not_ready = 0;
   jobs.forEach(j => {
-    if(j.buildDate && calIsContractOrAfter(j)) scheduled++;
+    // Scheduled = has a build date (placeholder or confirmed).
+    if(j.buildDate){ scheduled++; return; } // already on the calendar — don't also count as "needs scheduling"
+    // Readiness buckets only count UNSCHEDULED jobs (still need a build date).
     const b = calReadinessBucket(j);
     if(b === 'build_ready') build_ready++;
     else if(b === 'almost_ready') almost_ready++;
@@ -6868,13 +6880,18 @@ function renderCalMonthChip(j){
   const title = [j.name, addr, calSalesmanForJob(j)?.name].filter(Boolean).join(' - ');
   const isBad = isBadWeatherDay(j.buildDate);
   const rc = calReadinessColor(calReadinessBucket(j));
+  const confirmed = !!j.buildConfirmed;
+  const confIcon = confirmed
+    ? `<span class="cal-mchip-conf cal-conf-yes" title="Confirmed with crew"><i class="ti ti-circle-check-filled"></i></span>`
+    : `<span class="cal-mchip-conf cal-conf-no" title="Not yet confirmed with crew"><i class="ti ti-clock-question"></i></span>`;
   return `
-    <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${escapeHtml(title)}${isBad?' · ⚠ High rain risk':''}">
+    <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}${confirmed?'':' cal-card-unconfirmed'}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${escapeHtml(title)}${confirmed?'':' · Unconfirmed'}${isBad?' · ⚠ High rain risk':''}">
       ${calSalesAvatarHtml(j)}
       <div class="cal-mchip-main">
         <div class="cal-mchip-name">${escapeHtml(j.name || 'Job')}</div>
         <div class="cal-mchip-addr">${escapeHtml(addr || 'No address')}</div>
       </div>
+      ${confIcon}
       ${isBad?`<span class="cal-wx-warn" title="High rain risk on this date"><i class="ti ti-alert-triangle"></i></span>`:''}
     </div>`;
 }
@@ -7416,14 +7433,22 @@ function renderCalJobCard(j){
   const carrier = j.carrier ? `<span class="cjc-pill">${escapeHtml(j.carrier)}</span>` : '';
   const isBad = isBadWeatherDay(j.buildDate);
   const rc = calReadinessColor(calReadinessBucket(j));
+  const confirmed = !!j.buildConfirmed;
+  const confBadge = confirmed
+    ? `<span class="cal-conf-badge cal-conf-yes" title="Build date confirmed with crew"><i class="ti ti-circle-check"></i></span>`
+    : `<span class="cal-conf-badge cal-conf-no" title="Not yet confirmed with crew">Unconfirmed</span>`;
+  const confBtn = isAdmin()
+    ? `<button class="cal-conf-btn" data-cal-confirm="${j.id}" title="${confirmed?'Mark as unconfirmed':'Confirm build date with crew'}">${confirmed?'Unconfirm':'Confirm'}</button>`
+    : '';
   return `
-    <div class="cal-job-card" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${isBad?'⚠ High rain risk — consider rescheduling':''}">
+    <div class="cal-job-card${confirmed?'':' cal-card-unconfirmed'}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${isBad?'⚠ High rain risk — consider rescheduling':''}">
       <div class="cjc-top">
         ${calSalesAvatarHtml(j)}
         <div class="cjc-main">
           <div class="cjc-name">${escapeHtml(j.name || '—')}${isBad?` <i class="ti ti-alert-triangle" style="color:#EF4444;font-size:12px;margin-left:4px" title="High rain risk on this date"></i>`:''}</div>
           <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
-          ${carrier}
+          <div class="cjc-foot">${confBadge}${carrier}</div>
+          ${confBtn}
         </div>
       </div>
     </div>
@@ -7433,6 +7458,18 @@ function renderCalJobCard(j){
 let calDraggingId = null;
 
 function wireCalDragDrop(){
+  // Confirm / unconfirm build date (admin only)
+  document.querySelectorAll('[data-cal-confirm]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.calConfirm;
+      const j = jobs.find(x => x.id === id);
+      if(!j) return;
+      j.buildConfirmed = !j.buildConfirmed;
+      if(typeof saveToStorage === 'function') saveToStorage();
+      renderCalendarPage();
+    });
+  });
   // Draggable cards — both week-view full cards and month-view chips
   document.querySelectorAll('.cal-job-card, .cal-mchip').forEach(card => {
     card.addEventListener('dragstart', e => {
@@ -7478,6 +7515,8 @@ function wireCalDragDrop(){
         }
       }
       j.buildDate = key;
+      // A newly placed/moved date starts UNCONFIRMED — manager must confirm with crew.
+      if(prev !== key) j.buildConfirmed = false;
       if(prev !== key){
         const fromLabel = prev ? prev : 'unscheduled';
         if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);

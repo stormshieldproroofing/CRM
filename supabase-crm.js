@@ -202,6 +202,7 @@ async function loadAllFromSupabase() {
         roofEstimate: r.roof_estimate || null,
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
         buildDate: r.build_date || null,
+        buildConfirmed: !!(r.contract && typeof r.contract === 'object' && r.contract.__buildConfirmed),
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
@@ -322,7 +323,11 @@ async function pushAllToSupabase() {
         quote: (j.quote && typeof j.quote === 'object') ? j.quote : null,
         abc_order: (j.abcOrder && typeof j.abcOrder === 'object') ? j.abcOrder : null,
         sub_voucher: (j.subVoucher && typeof j.subVoucher === 'object') ? j.subVoucher : null,
-        contract: (j.contract && typeof j.contract === 'object') ? j.contract : null,
+        contract: (() => {
+          const base = (j.contract && typeof j.contract === 'object') ? { ...j.contract } : {};
+          base.__buildConfirmed = !!j.buildConfirmed;
+          return base;
+        })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
         project_manager: j.projectManager || null,
         pm_fee: (j.pmFee != null) ? j.pmFee : 250,
