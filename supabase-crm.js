@@ -126,12 +126,20 @@ async function loadAllFromSupabase() {
     }
   }
 
-  // jobs + children
-  const { data: jobRows, error: jobErr } = await sb.from('jobs').select('*').order('created_at', { ascending:false });
-  const { data: deps }    = await sb.from('deposits').select('*');
-  const { data: exps }    = await sb.from('expenses').select('*');
-  const { data: files }   = await sb.from('job_files').select('*');
-  const { data: chk }     = await sb.from('stage_checklist_done').select('*');
+  // jobs + children — fire all independent queries in PARALLEL (was sequential)
+  const [
+    { data: jobRows, error: jobErr },
+    { data: deps },
+    { data: exps },
+    { data: files },
+    { data: chk },
+  ] = await Promise.all([
+    sb.from('jobs').select('*').order('created_at', { ascending:false }),
+    sb.from('deposits').select('*'),
+    sb.from('expenses').select('*'),
+    sb.from('job_files').select('*'),
+    sb.from('stage_checklist_done').select('*'),
+  ]);
 
   if (jobErr) { console.error('[Supabase] jobs load failed:', jobErr); }
   else {
@@ -543,6 +551,11 @@ async function bootSupabase() {
   installOverrides();
   await loadAllFromSupabase();
   console.log('[Supabase] boot complete. jobs:', (window.jobs||[]).length, 'team:', (window.TEAM||[]).length);
+  // Data has arrived — re-render whatever page the user is currently on so it
+  // populates (fixes blank pages when navigating during the initial load).
+  if (typeof window.rerenderActivePage === 'function') {
+    window.rerenderActivePage();
+  }
   return true;
 }
 window.bootSupabase = bootSupabase;

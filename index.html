@@ -304,10 +304,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}</script>
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script>window.addEventListener('load',function(){if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}});</script>
+<script defer src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
 <script src="supabase-crm.js"></script>
 
@@ -6611,6 +6611,7 @@ function switchPage(pageName){
   if(pageName === 'profits' && !isAdmin()){
     pageName = 'summary';
   }
+  window.__activePage = pageName;
   document.getElementById('summaryPage').style.display = (pageName === 'summary') ? '' : 'none';
   document.getElementById('boardsPage').style.display  = (pageName === 'boards') ? '' : 'none';
   document.getElementById('jobsPage').style.display    = (pageName === 'jobs')   ? '' : 'none';
@@ -6639,6 +6640,14 @@ function switchPage(pageName){
   if(pageName === 'todo') renderTodoPage();
   if(pageName === 'payroll') renderPayrollPage();
 }
+
+// Re-render whatever page is currently showing (used after async data loads).
+window.rerenderActivePage = function(){
+  const p = window.__activePage || 'summary';
+  try { switchPage(p); } catch(e){ console.warn('rerenderActivePage failed', e); }
+  // The board (boards page) renders via its own path; refresh it too if present.
+  try { if(typeof renderBoard === 'function') renderBoard(); } catch(e){}
+};
 
 // Wire up the nav links
 (function wireNav(){
@@ -6771,6 +6780,13 @@ function calReadinessBucket(j){
   if(approvedI >= 0 && jobIndex === approvedI) return 'almost_ready';
   return 'not_ready';
 }
+// Color for a readiness bucket (matches the summary cards).
+function calReadinessColor(bucket){
+  return bucket === 'build_ready' ? '#34D399'
+       : bucket === 'almost_ready' ? '#F59E0B'
+       : bucket === 'not_ready' ? '#EF4444'
+       : '#4D9DE0'; // fallback (e.g. completed/closed)
+}
 function calReadinessCounts(){
   let scheduled = 0, build_ready = 0, almost_ready = 0, not_ready = 0;
   jobs.forEach(j => {
@@ -6838,8 +6854,9 @@ function renderCalMonthChip(j){
   const addr = calJobAddressFull(j);
   const title = [j.name, addr, calSalesmanForJob(j)?.name].filter(Boolean).join(' - ');
   const isBad = isBadWeatherDay(j.buildDate);
+  const rc = calReadinessColor(calReadinessBucket(j));
   return `
-    <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}" draggable="true" data-cal-job="${j.id}" title="${escapeHtml(title)}${isBad?' · ⚠ High rain risk':''}">
+    <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${escapeHtml(title)}${isBad?' · ⚠ High rain risk':''}">
       ${calSalesAvatarHtml(j)}
       <div class="cal-mchip-main">
         <div class="cal-mchip-name">${escapeHtml(j.name || 'Job')}</div>
@@ -7385,8 +7402,9 @@ function renderCalJobCard(j){
   const addr = calJobAddressShort(j);
   const carrier = j.carrier ? `<span class="cjc-pill">${escapeHtml(j.carrier)}</span>` : '';
   const isBad = isBadWeatherDay(j.buildDate);
+  const rc = calReadinessColor(calReadinessBucket(j));
   return `
-    <div class="cal-job-card" draggable="true" data-cal-job="${j.id}" title="${isBad?'⚠ High rain risk — consider rescheduling':''}">
+    <div class="cal-job-card" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${isBad?'⚠ High rain risk — consider rescheduling':''}">
       <div class="cjc-top">
         ${calSalesAvatarHtml(j)}
         <div class="cjc-main">
@@ -12353,10 +12371,16 @@ var __map = null;
 var __mapMarkers = [];
 var __mapFilters = { salesman: 'all', pipeline: 'all', stage: 'all' };
 
-// Set Mapbox token globally on script load so any map (Map page, Quick Measure) can use it.
-if(typeof mapboxgl !== 'undefined'){
-  mapboxgl.accessToken = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
+// Set Mapbox token once the (deferred) mapbox library has loaded.
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
+function ensureMapboxToken(){
+  if(typeof mapboxgl !== 'undefined' && !mapboxgl.accessToken){
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+  }
+  return (typeof mapboxgl !== 'undefined');
 }
+if(typeof mapboxgl !== 'undefined'){ mapboxgl.accessToken = MAPBOX_TOKEN; }
+else { window.addEventListener('load', ensureMapboxToken); }
 
 function getStageColor(pipelineId, stageId){
   const p = (pipelines || []).find(x => x.id === pipelineId) || (pipelines || [])[0];
@@ -12400,9 +12424,10 @@ function populateMapFilters(){
 function ensureMapInit(){
   if(__map) return __map;
   if(typeof mapboxgl === 'undefined'){
-    document.getElementById('mapContainer').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Map library failed to load. Check internet connection.</div>';
+    document.getElementById('mapContainer').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Map library is still loading — please try again in a moment.</div>';
     return null;
   }
+  ensureMapboxToken();
   __map = new mapboxgl.Map({
     container: 'mapContainer',
     style: 'mapbox://styles/mapbox/dark-v11',
@@ -13004,6 +13029,8 @@ function qmPersistToJob(){
 const GEOAPIFY_KEY = 'cffb7a7c4225478b80647d5539985398'; // (unused — kept for reference)
 
 function qmInitMap(lat, lng){
+  if(typeof mapboxgl === 'undefined'){ alert('Map library is still loading — please try again in a moment.'); return; }
+  ensureMapboxToken();
   __qmMap = new mapboxgl.Map({
     container: 'qmMap',
     style: 'mapbox://styles/mapbox/satellite-streets-v12',
