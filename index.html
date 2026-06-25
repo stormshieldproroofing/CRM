@@ -6774,10 +6774,16 @@ function calReadinessBucket(j){
   if(jobIndex < 0) return null;
   const stage = cols[jobIndex];
   if(stage?.closed === true) return null; // completed/denied/closed — not a readiness state
+  const stageName = (stage?.name || '').toLowerCase();
+  // "Closing" stage is treated as Almost Ready (override), regardless of position.
+  if(stageName.includes('closing')) return 'almost_ready';
   const approvedI = idxOf('approved');
   const contractI = idxOf('contract');
+  // Contract Signed and after = Build Ready.
   if(contractI >= 0 && jobIndex >= contractI) return 'build_ready';
+  // Approved = Almost Ready.
   if(approvedI >= 0 && jobIndex === approvedI) return 'almost_ready';
+  // Anything before Approved = Not Ready.
   return 'not_ready';
 }
 // Color for a readiness bucket (matches the summary cards).
@@ -6837,7 +6843,7 @@ function calIsApprovedOrAfterStage(j){
 let calUnschedSearch = '';
 function calUnscheduledJobs(){
   const q = calUnschedSearch.trim().toLowerCase();
-  return jobs.filter(j => {
+  const list = jobs.filter(j => {
     if(j.buildDate) return false;
     if(!calIsApprovedOrAfterStage(j)) return false;
     if(!q) return true;
@@ -6848,6 +6854,13 @@ function calUnscheduledJobs(){
       jobStageInfo(j)?.name
     ].filter(Boolean).join(' ').toLowerCase();
     return haystack.includes(q);
+  });
+  // Order by readiness: Build Ready first, then Almost Ready, then Not Ready.
+  const rank = { build_ready: 0, almost_ready: 1, not_ready: 2 };
+  return list.sort((a,b) => {
+    const ra = rank[calReadinessBucket(a)] ?? 3;
+    const rb = rank[calReadinessBucket(b)] ?? 3;
+    return ra - rb;
   });
 }
 function renderCalMonthChip(j){
