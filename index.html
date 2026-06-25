@@ -550,6 +550,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
   </div>
+  <div id="calReadinessBar" style="padding:8px 20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div class="cal-rd-pill" style="--rd:#38BDF8"><span class="cal-rd-n" id="calRdScheduled">0</span> Scheduled</div>
+    <div class="cal-rd-pill" style="--rd:#34D399"><span class="cal-rd-n" id="calRdBuildReady">0</span> Build Ready</div>
+    <div class="cal-rd-pill" style="--rd:#F59E0B"><span class="cal-rd-n" id="calRdAlmostReady">0</span> Almost Ready</div>
+    <div class="cal-rd-pill" style="--rd:#EF4444"><span class="cal-rd-n" id="calRdNotReady">0</span> Not Ready</div>
+  </div>
   <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
     <div style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
@@ -6710,7 +6716,47 @@ function calParseKey(key){
   return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
 }
 function calJobsOnDay(dateKey){
-  return jobs.filter(j => j.buildDate === dateKey);
+  // Calendar shows only jobs at or after Contract Signed.
+  return jobs.filter(j => j.buildDate === dateKey && calIsContractOrAfter(j));
+}
+// True if the job is at the "contract" stage or later (Contract Signed, Invoiced, ...),
+// excluding closed/fork stages.
+function calIsContractOrAfter(j){
+  const cols = columnsForPipeline(j?.pipeline || 'insurance');
+  const contractIndex = cols.findIndex(c => c.id === 'contract');
+  const jobIndex = cols.findIndex(c => c.id === j?.col);
+  if(contractIndex < 0 || jobIndex < 0) return false;
+  const stage = cols[jobIndex];
+  return jobIndex >= contractIndex && stage?.closed !== true;
+}
+// Readiness bucket for a job, based on its stage:
+//   build_ready  = Contract Signed or Invoiced (post-contract, pre-completion)
+//   almost_ready = Approved
+//   not_ready    = anything before Approved (Lead, Inspection)
+// Returns null for closed/completed/fork stages.
+function calReadinessBucket(j){
+  const cols = columnsForPipeline(j?.pipeline || 'insurance');
+  const idxOf = id => cols.findIndex(c => c.id === id);
+  const jobIndex = cols.findIndex(c => c.id === j?.col);
+  if(jobIndex < 0) return null;
+  const stage = cols[jobIndex];
+  if(stage?.closed === true) return null; // completed/denied/closed — not a readiness state
+  const approvedI = idxOf('approved');
+  const contractI = idxOf('contract');
+  if(contractI >= 0 && jobIndex >= contractI) return 'build_ready';
+  if(approvedI >= 0 && jobIndex === approvedI) return 'almost_ready';
+  return 'not_ready';
+}
+function calReadinessCounts(){
+  let scheduled = 0, build_ready = 0, almost_ready = 0, not_ready = 0;
+  jobs.forEach(j => {
+    if(j.buildDate && calIsContractOrAfter(j)) scheduled++;
+    const b = calReadinessBucket(j);
+    if(b === 'build_ready') build_ready++;
+    else if(b === 'almost_ready') almost_ready++;
+    else if(b === 'not_ready') not_ready++;
+  });
+  return { scheduled, build_ready, almost_ready, not_ready };
 }
 function calCanScheduleOnDay(dateKey){
   // For salesmen: respect crew capacity. Admins can always override.
@@ -7076,6 +7122,16 @@ function renderCalendarPage(){
   if(calView === 'month') renderCalendarMonth();
   else renderCalendarWeek();
   renderCalendarSidebar();
+  updateCalendarReadinessBar();
+}
+
+function updateCalendarReadinessBar(){
+  const c = calReadinessCounts();
+  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+  set('calRdScheduled', c.scheduled);
+  set('calRdBuildReady', c.build_ready);
+  set('calRdAlmostReady', c.almost_ready);
+  set('calRdNotReady', c.not_ready);
 }
 
 function renderCalendarWeek(){
@@ -9767,6 +9823,9 @@ function renderContractTab(j){
     .ct-addl{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
     .ct-addl input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--text);font-size:11px;width:100%}
     .ct-actions{display:flex;gap:10px;margin-top:16px}
+    .cal-rd-pill{display:inline-flex;align-items:center;gap:6px;background:#1E253A;border:1px solid var(--border);border-left:3px solid var(--rd);border-radius:6px;padding:5px 11px;font-size:11px;color:var(--muted);font-weight:600;font-family:'Barlow',sans-serif}
+    .cal-rd-pill .cal-rd-n{color:#fff;font-weight:800;font-size:13px;min-width:14px;text-align:center}
+
     .ct-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
     .ct-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
   </style>
