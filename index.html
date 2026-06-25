@@ -4232,6 +4232,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(!j.stageChecklistDone[col.id]) j.stageChecklistDone[col.id]={};
       if(box.checked) j.stageChecklistDone[col.id][itemId]=checklistCompletionRecord(j);
       else delete j.stageChecklistDone[col.id][itemId];
+      // Auto-confirm build date if this was the "notify crew lead" item in preproduction.
+      if(typeof calCheckAutoConfirm === 'function') calCheckAutoConfirm(j);
       saveToStorage();
       renderBoard();
       renderDetailPanel();
@@ -6803,6 +6805,37 @@ function calReadinessColor(bucket){
        : bucket === 'not_ready' ? '#EF4444'
        : '#4D9DE0'; // fallback (e.g. completed/closed)
 }
+// Auto-confirm: if a job is in a "Preproduction" stage AND the checklist item
+// "Notify crew lead of upcoming build" is checked, treat the build as confirmed.
+function calCheckAutoConfirm(j){
+  if(!j) return false;
+  const cols = columnsForPipeline(j.pipeline || 'insurance');
+  const col = cols.find(c => c.id === j.col);
+  if(!col) return false;
+  const stageName = (col.name || '').toLowerCase();
+  if(!stageName.includes('preproduction') && !stageName.includes('pre-production') && !stageName.includes('pre production')) return false;
+  // find the checklist item by text
+  const items = Array.isArray(col.checklist) ? col.checklist : [];
+  const target = items.find(it => {
+    const t = (typeof it === 'string' ? it : (it?.text || '')).toLowerCase();
+    return t.includes('notify crew lead') && t.includes('upcoming build');
+  });
+  if(!target) return false;
+  const itemId = (typeof target === 'string') ? null : target.id;
+  const doneMap = j.stageChecklistDone?.[col.id] || {};
+  const isDone = itemId ? !!doneMap[itemId] : false;
+  if(isDone && !j.buildConfirmed){
+    j.buildConfirmed = true;
+    return true; // changed
+  }
+  return false;
+}
+// Run auto-confirm across all jobs; returns true if any changed.
+function calRunAutoConfirm(){
+  let changed = false;
+  jobs.forEach(j => { if(calCheckAutoConfirm(j)) changed = true; });
+  return changed;
+}
 function calReadinessCounts(){
   let scheduled = 0, build_ready = 0, almost_ready = 0, not_ready = 0;
   jobs.forEach(j => {
@@ -7150,6 +7183,10 @@ let calAnchor = null;  // First-of-month for month view, Monday for week view
 
 function renderCalendarPage(){
   const today = new Date(); today.setHours(0,0,0,0);
+  // Apply auto-confirm (preproduction + "notify crew lead" checked) before rendering.
+  if(typeof calRunAutoConfirm === 'function'){
+    if(calRunAutoConfirm() && typeof saveToStorage === 'function') saveToStorage();
+  }
   if(!calAnchor){
     calAnchor = calView === 'month'
       ? new Date(today.getFullYear(), today.getMonth(), 1)
@@ -7249,7 +7286,7 @@ function renderCalendarWeek(){
           <div class="cal-day-cap ${capCls}">${dayJobs.length} / ${calCrewsPerDay}</div>
         </div>
         <div class="cal-day-body" data-cal-body="${key}">
-          ${dayJobs.map(j => renderCalJobCard(j)).join('')}
+          ${dayJobs.map(j => renderCalJobCard(j, true)).join('')}
         </div>
         ${wxBadge ? `<div class="cal-day-wx-corner">${wxBadge}</div>` : ''}
       </div>`;
@@ -7428,20 +7465,24 @@ function openCalDayPopup(dateKey){
   document.getElementById('calDayPopupBg').classList.add('open');
 }
 
-function renderCalJobCard(j){
+function renderCalJobCard(j, onCalendar){
   const addr = calJobAddressShort(j);
   const carrier = j.carrier ? `<span class="cjc-pill">${escapeHtml(j.carrier)}</span>` : '';
   const isBad = isBadWeatherDay(j.buildDate);
   const rc = calReadinessColor(calReadinessBucket(j));
   const confirmed = !!j.buildConfirmed;
-  const confBadge = confirmed
-    ? `<span class="cal-conf-badge cal-conf-yes" title="Build date confirmed with crew"><i class="ti ti-circle-check"></i></span>`
-    : `<span class="cal-conf-badge cal-conf-no" title="Not yet confirmed with crew">Unconfirmed</span>`;
-  const confBtn = isAdmin()
-    ? `<button class="cal-conf-btn" data-cal-confirm="${j.id}" title="${confirmed?'Mark as unconfirmed':'Confirm build date with crew'}">${confirmed?'Unconfirm':'Confirm'}</button>`
+  // Confirmation badge + toggle only appear on the CALENDAR (not the left sidebar list).
+  const confBadge = onCalendar
+    ? (confirmed
+        ? `<span class="cal-conf-badge cal-conf-yes" title="Build date confirmed with crew"><i class="ti ti-circle-check"></i> Confirmed</span>`
+        : `<span class="cal-conf-badge cal-conf-no" title="Not yet confirmed with crew">Unconfirmed</span>`)
     : '';
+  const confBtn = (onCalendar && isAdmin())
+    ? `<button class="cal-conf-btn" data-cal-confirm="${j.id}" title="${confirmed?'Mark as unconfirmed':'Confirm build date with crew'}">${confirmed?'Mark Unconfirmed':'Confirm with Crew'}</button>`
+    : '';
+  const unconfClass = (onCalendar && !confirmed) ? ' cal-card-unconfirmed' : '';
   return `
-    <div class="cal-job-card${confirmed?'':' cal-card-unconfirmed'}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${isBad?'⚠ High rain risk — consider rescheduling':''}">
+    <div class="cal-job-card${unconfClass}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${isBad?'⚠ High rain risk — consider rescheduling':''}">
       <div class="cjc-top">
         ${calSalesAvatarHtml(j)}
         <div class="cjc-main">
