@@ -550,11 +550,27 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
   </div>
-  <div id="calReadinessBar" style="padding:8px 20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
-    <div class="cal-rd-pill" style="--rd:#38BDF8"><span class="cal-rd-n" id="calRdScheduled">0</span> Scheduled</div>
-    <div class="cal-rd-pill" style="--rd:#34D399"><span class="cal-rd-n" id="calRdBuildReady">0</span> Build Ready</div>
-    <div class="cal-rd-pill" style="--rd:#F59E0B"><span class="cal-rd-n" id="calRdAlmostReady">0</span> Almost Ready</div>
-    <div class="cal-rd-pill" style="--rd:#EF4444"><span class="cal-rd-n" id="calRdNotReady">0</span> Not Ready</div>
+  <div id="calReadinessBar" style="padding:14px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;border-bottom:1px solid var(--border)">
+    <div class="cal-rd-card" style="--rd:#38BDF8;--rdbg:rgba(56,189,248,0.10)">
+      <i class="ti ti-calendar-event cal-rd-ic"></i>
+      <div class="cal-rd-n" id="calRdScheduled">0</div>
+      <div class="cal-rd-lbl">Scheduled</div>
+    </div>
+    <div class="cal-rd-card" style="--rd:#34D399;--rdbg:rgba(52,211,153,0.10)">
+      <i class="ti ti-circle-check cal-rd-ic"></i>
+      <div class="cal-rd-n" id="calRdBuildReady">0</div>
+      <div class="cal-rd-lbl">Build Ready</div>
+    </div>
+    <div class="cal-rd-card" style="--rd:#F59E0B;--rdbg:rgba(245,158,11,0.10)">
+      <i class="ti ti-sparkles cal-rd-ic"></i>
+      <div class="cal-rd-n" id="calRdAlmostReady">0</div>
+      <div class="cal-rd-lbl">Almost Ready</div>
+    </div>
+    <div class="cal-rd-card" style="--rd:#EF4444;--rdbg:rgba(239,68,68,0.10)">
+      <i class="ti ti-alert-triangle cal-rd-ic"></i>
+      <div class="cal-rd-n" id="calRdNotReady">0</div>
+      <div class="cal-rd-lbl">Not Ready</div>
+    </div>
   </div>
   <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
@@ -9823,8 +9839,11 @@ function renderContractTab(j){
     .ct-addl{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
     .ct-addl input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--text);font-size:11px;width:100%}
     .ct-actions{display:flex;gap:10px;margin-top:16px}
-    .cal-rd-pill{display:inline-flex;align-items:center;gap:6px;background:#1E253A;border:1px solid var(--border);border-left:3px solid var(--rd);border-radius:6px;padding:5px 11px;font-size:11px;color:var(--muted);font-weight:600;font-family:'Barlow',sans-serif}
-    .cal-rd-pill .cal-rd-n{color:#fff;font-weight:800;font-size:13px;min-width:14px;text-align:center}
+    .cal-rd-card{background:var(--rdbg);border:1px solid color-mix(in srgb,var(--rd) 30%,transparent);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;transition:transform .12s ease,box-shadow .12s ease}
+    .cal-rd-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,0.25)}
+    .cal-rd-card .cal-rd-ic{font-size:16px;color:var(--rd);opacity:.85;margin-bottom:2px}
+    .cal-rd-card .cal-rd-n{color:var(--rd);font-weight:800;font-size:26px;line-height:1;font-family:'Barlow',sans-serif}
+    .cal-rd-card .cal-rd-lbl{color:var(--muted);font-weight:700;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;margin-top:4px}
 
     .ct-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
     .ct-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
