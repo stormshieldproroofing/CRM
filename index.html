@@ -550,28 +550,6 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
   </div>
-  <div id="calReadinessBar" style="padding:14px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;border-bottom:1px solid var(--border)">
-    <div class="cal-rd-card" style="--rd:#38BDF8;--rdbg:rgba(56,189,248,0.10)">
-      <i class="ti ti-calendar-event cal-rd-ic"></i>
-      <div class="cal-rd-n" id="calRdScheduled">0</div>
-      <div class="cal-rd-lbl">Scheduled</div>
-    </div>
-    <div class="cal-rd-card" style="--rd:#34D399;--rdbg:rgba(52,211,153,0.10)">
-      <i class="ti ti-circle-check cal-rd-ic"></i>
-      <div class="cal-rd-n" id="calRdBuildReady">0</div>
-      <div class="cal-rd-lbl">Build Ready</div>
-    </div>
-    <div class="cal-rd-card" style="--rd:#F59E0B;--rdbg:rgba(245,158,11,0.10)">
-      <i class="ti ti-sparkles cal-rd-ic"></i>
-      <div class="cal-rd-n" id="calRdAlmostReady">0</div>
-      <div class="cal-rd-lbl">Almost Ready</div>
-    </div>
-    <div class="cal-rd-card" style="--rd:#EF4444;--rdbg:rgba(239,68,68,0.10)">
-      <i class="ti ti-alert-triangle cal-rd-ic"></i>
-      <div class="cal-rd-n" id="calRdNotReady">0</div>
-      <div class="cal-rd-lbl">Not Ready</div>
-    </div>
-  </div>
   <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
     <div style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
@@ -585,8 +563,32 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       </div>
       <div id="calUnschedList" style="padding:8px 10px"></div>
     </div>
-    <!-- Week grid -->
-    <div id="calWeekGrid" style="flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--border);overflow:auto"></div>
+    <!-- Right side: readiness cards + calendar grid -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
+    <div id="calReadinessBar" style="padding:14px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div class="cal-rd-card" style="--rd:#38BDF8;--rdbg:rgba(56,189,248,0.10)">
+        <i class="ti ti-calendar-event cal-rd-ic"></i>
+        <div class="cal-rd-n" id="calRdScheduled">0</div>
+        <div class="cal-rd-lbl">Scheduled</div>
+      </div>
+      <div class="cal-rd-card" style="--rd:#34D399;--rdbg:rgba(52,211,153,0.10)">
+        <i class="ti ti-circle-check cal-rd-ic"></i>
+        <div class="cal-rd-n" id="calRdBuildReady">0</div>
+        <div class="cal-rd-lbl">Build Ready</div>
+      </div>
+      <div class="cal-rd-card" style="--rd:#F59E0B;--rdbg:rgba(245,158,11,0.10)">
+        <i class="ti ti-sparkles cal-rd-ic"></i>
+        <div class="cal-rd-n" id="calRdAlmostReady">0</div>
+        <div class="cal-rd-lbl">Almost Ready</div>
+      </div>
+      <div class="cal-rd-card" style="--rd:#EF4444;--rdbg:rgba(239,68,68,0.10)">
+        <i class="ti ti-alert-triangle cal-rd-ic"></i>
+        <div class="cal-rd-n" id="calRdNotReady">0</div>
+        <div class="cal-rd-lbl">Not Ready</div>
+      </div>
+    </div>
+      <div id="calWeekGrid" style="flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--border);overflow:auto"></div>
+    </div>
   </div>
 </div>
 
