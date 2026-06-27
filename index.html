@@ -9687,6 +9687,21 @@ function getJobQuote(j){
   return j.quote;
 }
 
+// Sum of all section prices that belong to sections currently in the scope (cash quotes).
+function sumSectionPrices(j){
+  const q = getJobQuote(j);
+  const prices = q.sectionPrices || {};
+  const sections = parseScopeSections(q.scope);
+  let total = 0;
+  sections.forEach(sec => {
+    const key = sec.title || '';
+    const v = parseFloat(prices[key] || 0);
+    if(!Number.isNaN(v)) total += v;
+  });
+  // also include any stored prices whose section title may not parse (defensive)
+  return total;
+}
+
 // Parse scope text into [{title, items: []}] sections.
 // Lines starting with "## " begin a section. Plain lines are items. Blanks ignored.
 function parseScopeSections(text){
@@ -9734,6 +9749,11 @@ function renderQuoteTab(j){
   const q = getJobQuote(j);
   const ci = getCompanyInfo();
   const isInsurance = q.mode === 'insurance';
+  // Cash quotes: contract amount is the sum of section prices (auto-calculated).
+  if(q.mode === 'cash'){
+    const sum = sumSectionPrices(j);
+    if(sum > 0) q.contractAmount = String(sum);
+  }
   // Pre-fill from insurance fields if available
   if(!q.contractAmount && j.potVal) q.contractAmount = String(j.potVal);
   if(!q.deductible && j.deductible) q.deductible = String(j.deductible);
@@ -9825,7 +9845,7 @@ function renderQuoteTab(j){
           <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Pricing</span>
         </div>
         <div style="display:grid;grid-template-columns:${isInsurance?'1fr 1fr 1fr':'1fr 1fr'};gap:10px">
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount</label><input id="qContract" type="text" inputmode="decimal" value="${escapeHtml(String(q.contractAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount${!isInsurance ? ' <span style="color:var(--brand-light);text-transform:none;letter-spacing:0">(auto from sections)</span>' : ''}</label><input id="qContract" type="text" inputmode="decimal" ${!isInsurance ? 'readonly' : ''} value="${escapeHtml(String(q.contractAmount||''))}" placeholder="${!isInsurance ? 'Enter section prices below' : '0.00 (try 800+1200)'}" style="width:100%;background:${!isInsurance ? '#161B28' : '#1E253A'};border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none${!isInsurance ? ';cursor:not-allowed' : ''}"></div>
           ${isInsurance ? `<div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="text" inputmode="decimal" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>` : ''}
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit (50% suggested)'}</label><input id="qDeposit" type="text" inputmode="decimal" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
         </div>
@@ -9879,7 +9899,7 @@ function renderQuoteTab(j){
     qq.shingleModel = $('qShingleModel').value;
     qq.shingleColor = $('qShingleColor').value;
     qq.scope = $('qScope').value;
-    qq.contractAmount = $('qContract').value;
+    qq.contractAmount = (qq.mode === 'cash') ? String(sumSectionPrices(j) || '') : $('qContract').value;
     qq.deductible = $('qDeductible')?.value || '';
     qq.depositAmount = $('qDeposit').value;
     qq.terms = $('qTerms').value;
@@ -10686,8 +10706,15 @@ function renderScopeSelector(j){
       const v = inp.value.trim();
       if(v === '') delete q.sectionPrices[key];
       else q.sectionPrices[key] = v;
+      // Cash quotes: contract amount = sum of section prices.
+      if(q.mode === 'cash'){
+        const sum = sumSectionPrices(j);
+        q.contractAmount = sum ? String(sum) : '';
+        const cf = document.getElementById('qContract');
+        if(cf) cf.value = q.contractAmount;
+      }
       saveToStorage();
-      // don't re-render (would lose input focus); price total updates on save/PDF
+      // don't re-render (would lose input focus)
     });
   });
   // Section toggles
