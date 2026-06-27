@@ -6822,17 +6822,31 @@ function calReadinessBucket(j){
   const jobIndex = cols.findIndex(c => c.id === j?.col);
   if(jobIndex < 0) return null;
   const stage = cols[jobIndex];
-  if(stage?.closed === true) return null; // completed/denied/closed — not a readiness state
+  const stageId = (stage?.id || '').toLowerCase();
   const stageName = (stage?.name || '').toLowerCase();
-  // "Closing" stage is treated as Almost Ready (override), regardless of position.
+
+  // 1) Successfully completed jobs are DONE — not part of readiness tracking.
+  if(stageId === 'completed' || stageName.includes('completed')) return null;
+
+  // 2) Off-Track / Closed / Denied / dead-end jobs = Not Ready.
+  //    (closed:true stages other than "completed", plus name-based catches)
+  if(stage?.closed === true) return 'not_ready';
+  if(stageName.includes('closed') || stageName.includes('denied') || stageName.includes('off-track') || stageName.includes('off track')) return 'not_ready';
+
+  // 3) "Closing" stage = Almost Ready (override, regardless of position).
   if(stageName.includes('closing')) return 'almost_ready';
+
+  // 4) Fork stages that are still pre-build (Appeal, Going Retail) = Not Ready.
+  if(stageId === 'appeal' || stageId === 'retail' || stageName.includes('appeal') || stageName.includes('retail')) return 'not_ready';
+
+  // 5) Position-based for the main pipeline:
   const approvedI = idxOf('approved');
   const contractI = idxOf('contract');
-  // Contract Signed and after = Build Ready.
+  // Contract Signed and after (contract, invoiced) = Build Ready.
   if(contractI >= 0 && jobIndex >= contractI) return 'build_ready';
   // Approved = Almost Ready.
   if(approvedI >= 0 && jobIndex === approvedI) return 'almost_ready';
-  // Anything before Approved = Not Ready.
+  // Anything before Approved (Lead, Inspection, etc.) = Not Ready.
   return 'not_ready';
 }
 // Color for a readiness bucket (matches the summary cards).
