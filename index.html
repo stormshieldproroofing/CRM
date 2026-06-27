@@ -6692,7 +6692,7 @@ function switchPage(pageName){
 
 // Re-render whatever page is currently showing (used after async data loads).
 window.rerenderActivePage = function(){
-  const p = window.__activePage || 'summary';
+  const p = window.__activePage || 'boards';
   try { switchPage(p); } catch(e){ console.warn('rerenderActivePage failed', e); }
   // The board (boards page) renders via its own path; refresh it too if present.
   try { if(typeof renderBoard === 'function') renderBoard(); } catch(e){}
@@ -9682,6 +9682,8 @@ function getJobQuote(j){
     j.quote.mode = (j.pipeline === 'insurance') ? 'insurance' : 'cash';
   }
   if(!Array.isArray(j.quote.scopeExclude)) j.quote.scopeExclude = [];
+  if(!j.quote.sectionPrices || typeof j.quote.sectionPrices !== 'object') j.quote.sectionPrices = {};
+  if(typeof j.quote.lumpSumOnly !== 'boolean') j.quote.lumpSumOnly = false;
   return j.quote;
 }
 
@@ -9828,6 +9830,15 @@ function renderQuoteTab(j){
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit (50% suggested)'}</label><input id="qDeposit" type="text" inputmode="decimal" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:6px">${isInsurance?'For insurance jobs, contract amount typically = RCV. Deductible = customer out-of-pocket.':'Cash quote: contract amount is total due. No deductible, no insurance coverage applied.'}</div>
+        ${!isInsurance ? `
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">
+          <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px">Pricing Display on Quote</label>
+          <div style="display:flex;gap:6px">
+            <button type="button" data-qprice-mode="itemized" class="qprice-toggle ${!q.lumpSumOnly?'active':''}" style="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${!q.lumpSumOnly?'var(--brand-light)':'var(--border)'};background:${!q.lumpSumOnly?'rgba(77,157,224,0.15)':'#1E253A'};color:${!q.lumpSumOnly?'var(--brand-light)':'var(--muted)'}">Itemized by Section</button>
+            <button type="button" data-qprice-mode="lump" class="qprice-toggle ${q.lumpSumOnly?'active':''}" style="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${q.lumpSumOnly?'var(--brand-light)':'var(--border)'};background:${q.lumpSumOnly?'rgba(77,157,224,0.15)':'#1E253A'};color:${q.lumpSumOnly?'var(--brand-light)':'var(--muted)'}">Lump Sum Only</button>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:5px">Itemized shows each section's price on the PDF. Lump sum shows only the total.</div>
+        </div>` : ''}
       </div>
 
       <!-- Terms -->
@@ -9906,6 +9917,14 @@ function renderQuoteTab(j){
 
   // Scope selector — re-render whenever the textarea changes
   renderScopeSelector(j);
+  // Pricing display toggle (itemized vs lump sum) — cash quotes
+  document.querySelectorAll('[data-qprice-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      q.lumpSumOnly = (btn.dataset.qpriceMode === 'lump');
+      saveToStorage();
+      renderQuoteTab(j);
+    });
+  });
   $('qScope').addEventListener('input', () => {
     // The textarea is the master scope. Update j.quote.scope then re-render the selector.
     q.scope = $('qScope').value;
@@ -10611,6 +10630,7 @@ function renderScopeSelector(j){
   const wrap = document.getElementById('qScopeSelector');
   if(!wrap) return;
   const q = getJobQuote(j);
+  const isCashQuote = q.mode === 'cash';
   const sections = parseScopeSections(q.scope);
   const exclude = new Set(q.scopeExclude || []);
   if(!sections.length){
@@ -10639,6 +10659,7 @@ function renderScopeSelector(j){
           <button data-scope-sec-toggle="${sIdx}" ${total === 0 ? 'disabled' : ''} style="background:rgba(255,255,255,0.04);border:1px solid ${stateColor}55;color:${stateColor};font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:${total === 0 ? 'default' : 'pointer'};font-family:'Barlow',sans-serif" title="${total === 0 ? 'No items to toggle' : 'Toggle entire section'}">${stateText}</button>
           <strong style="font-size:11px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">${escapeHtml(sec.title || 'Scope of Work')}</strong>
           <div style="flex:1"></div>
+          ${isCashQuote ? `<div style="display:flex;align-items:center;gap:3px"><span style="font-size:11px;color:var(--muted)">$</span><input type="text" inputmode="decimal" data-scope-sec-price="${escapeHtml(sec.title || ('__sec'+sIdx))}" value="${escapeHtml(String(q.sectionPrices[sec.title || ('__sec'+sIdx)] || ''))}" placeholder="0.00" style="width:80px;background:#0F1422;border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--brand);outline:none;text-align:right"></div>` : ''}
           <button data-scope-sec-add="${sIdx}" style="background:rgba(77,157,224,0.10);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif" title="Add a new line item to this section"><i class="ti ti-plus" style="font-size:10px"></i> Add</button>
         </div>
         ${itemsHtml}
@@ -10658,6 +10679,17 @@ function renderScopeSelector(j){
     saveToStorage();
     renderScopeSelector(j);
   }));
+  // Per-section price inputs (cash mode)
+  wrap.querySelectorAll('[data-scope-sec-price]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const key = inp.dataset.scopeSecPrice;
+      const v = inp.value.trim();
+      if(v === '') delete q.sectionPrices[key];
+      else q.sectionPrices[key] = v;
+      saveToStorage();
+      // don't re-render (would lose input focus); price total updates on save/PDF
+    });
+  });
   // Section toggles
   wrap.querySelectorAll('[data-scope-sec-toggle]').forEach(btn => btn.addEventListener('click', () => {
     if(btn.disabled) return;
@@ -10765,13 +10797,15 @@ function openQuotePreview(j){
 
   // Parse + filter by exclusion list. Sections that become empty are dropped.
   const excludeSet = new Set(q.scopeExclude || []);
+  const showItemizedPrices = isCash && !q.lumpSumOnly;
   const scopeSections = parseScopeSections(q.scope).map(sec => ({
     title: sec.title,
     items: sec.items.filter(it => !excludeSet.has(it)),
+    price: parseFloat(q.sectionPrices?.[sec.title || ''] || 0) || 0,
   })).filter(sec => sec.items.length > 0);
   const scopeHtml = scopeSections.length
     ? scopeSections.map(sec => `
-        ${sec.title ? `<div class="q-scope-sec-title">${escapeHtml(sec.title)}</div>` : ''}
+        ${sec.title ? `<div class="q-scope-sec-title" style="display:flex;justify-content:space-between;align-items:baseline">${escapeHtml(sec.title)}${showItemizedPrices && sec.price > 0 ? `<span style="font-weight:700;color:#1a3a6a">${fmt(sec.price)}</span>` : ''}</div>` : ''}
         <ul class="q-scope">${sec.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
       `).join('')
     : `<ul class="q-scope"><li>—</li></ul>`;
@@ -10783,7 +10817,13 @@ function openQuotePreview(j){
   // Mode-specific pricing table
   let pricingTable;
   if(isCash){
+    const sectionPriceRows = (showItemizedPrices)
+      ? scopeSections.filter(s => s.price > 0).map(s =>
+          `<tr><td class="label">${escapeHtml(s.title || 'Section')}</td><td class="val">${fmt(s.price)}</td></tr>`
+        ).join('')
+      : '';
     pricingTable = `
+      ${sectionPriceRows}
       <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
       ${deposit > 0 ? `
       <tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>
@@ -13655,5 +13695,6 @@ document.addEventListener('keydown', e => {
 saveTeam();
 // One-time cleanup of pre-Supabase team data lingering in localStorage
 try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
+window.__activePage = 'boards';
 bootSupabase().then(ok => { if (ok) { syncActivePipeline(); renderBoard(); renderTeamPage?.(); updateProfitsNavVisibility?.(); loadInsuranceCarriers?.(); loadCompanyInfo?.(); } });
 </script>
