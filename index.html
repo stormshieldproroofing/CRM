@@ -1682,6 +1682,135 @@ function parseCheckText(text){
 
   return { amount, checkNum };
 }
+
+// Parse OCR text from an insurance loss statement / Xactimate summary.
+// Returns { rcv, acv, deductible, recoverableDep, nonRecoverableDep, netClaim }.
+// Each value is a number or null. Verify before relying on these.
+function parseLossStatementText(text){
+  const out = { rcv:null, acv:null, deductible:null, recoverableDep:null, nonRecoverableDep:null, netClaim:null };
+  if(!text) return out;
+
+  // Pull a dollar amount that appears AFTER a label on the same or next line.
+  const moneyRe = /\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+(?:\.[0-9]{2})?)/;
+  const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const fullLower = text.toLowerCase();
+
+  // Helper: find the amount associated with a set of label patterns.
+  // Looks for the label, then grabs the first money value on that line; if none,
+  // checks the next 1-2 lines (labels and values are often on separate lines).
+  function grab(labelPatterns){
+    for(let i=0;i<lines.length;i++){
+      const lower = lines[i].toLowerCase();
+      if(labelPatterns.some(p => p.test(lower))){
+        // try same line first (value after the label)
+        const afterLabel = lines[i].replace(/^[^$0-9]*/, '');
+        let m = afterLabel.match(moneyRe);
+        if(m && /[0-9]/.test(m[1])){
+          const v = parseFloat(m[1].replace(/,/g,''));
+          if(isFinite(v) && v > 0) return v;
+        }
+        // try next two lines (value on its own line)
+        for(let k=1;k<=2 && i+k<lines.length;k++){
+          m = lines[i+k].match(moneyRe);
+          if(m && /[0-9]/.test(m[1])){
+            const v = parseFloat(m[1].replace(/,/g,''));
+            if(isFinite(v) && v > 0) return v;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // Like grab(), but skips lines that ALSO match an exclusion pattern.
+  function grabExcluding(labelPatterns, excludeRe){
+    for(let i=0;i<lines.length;i++){
+      const lower = lines[i].toLowerCase();
+      if(excludeRe.test(lower)) continue;
+      if(labelPatterns.some(p => p.test(lower))){
+        const afterLabel = lines[i].replace(/^[^$0-9]*/, '');
+        let m = afterLabel.match(moneyRe);
+        if(m && /[0-9]/.test(m[1])){ const v = parseFloat(m[1].replace(/,/g,'')); if(isFinite(v) && v > 0) return v; }
+        for(let k=1;k<=2 && i+k<lines.length;k++){
+          if(excludeRe.test(lines[i+k].toLowerCase())) continue;
+          m = lines[i+k].match(moneyRe);
+          if(m && /[0-9]/.test(m[1])){ const v = parseFloat(m[1].replace(/,/g,'')); if(isFinite(v) && v > 0) return v; }
+        }
+      }
+    }
+    return null;
+  }
+  // For recoverable depreciation, exclude lines containing "non-recoverable".
+  out.nonRecoverableDep = grab([/non-?recoverable\s+depreciation/]);
+  out.recoverableDep = grabExcluding([/recoverable\s+depreciation/, /\brcv\s*-\s*acv\b/], /non-?recoverable/);
+  out.rcv = grab([/replacement\s+cost\s+value/, /\brcv\b/, /total\s+rcv/]);
+  out.acv = grab([/actual\s+cash\s+value/, /\bacv\b/, /net\s+actual\s+cash\s+value/]);
+  out.deductible = grab([/less\s+deductible/, /deductible/]);
+  out.netClaim = grab([/net\s+claim/, /net\s+amount\s+payable/, /total\s+amount\s+payable/, /net\s+claim\s+if\s+incurred/]);
+
+  // Derive missing values from the relationships when possible.
+  // ACV = RCV − total depreciation; Recoverable dep = RCV − ACV.
+  if(out.rcv != null && out.acv != null && out.recoverableDep == null){
+    const diff = +(out.rcv - out.acv).toFixed(2);
+    if(diff > 0) out.recoverableDep = diff;
+  }
+  if(out.rcv != null && out.recoverableDep != null && out.acv == null){
+    const acv = +(out.rcv - out.recoverableDep).toFixed(2);
+    if(acv > 0) out.acv = acv;
+  }
+
+  return out;
+}
+
+// OCR a loss file (PDF or image) using Google Vision. For PDFs, render the first
+// few pages to images via pdf.js and OCR each. Returns combined text.
+async function ocrLossFile(f){
+  const API_KEY = 'AIzaSyAkwB1-yQIBajaxb6HLo-3tMwHX8gCsReU';
+  async function visionOCR(base64){
+    const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ requests:[{ image:{ content: base64 }, features:[{ type:'DOCUMENT_TEXT_DETECTION' }] }] }),
+    });
+    const data = await res.json();
+    if(data.error || data.responses?.[0]?.error){
+      throw new Error(data.error?.message || data.responses[0].error.message || 'OCR failed');
+    }
+    return data.responses?.[0]?.fullTextAnnotation?.text || '';
+  }
+  // Get the file bytes via its URL (Supabase) or an in-memory blob.
+  let blob = null;
+  if(f.url){ const r = await fetch(f.url); blob = await r.blob(); }
+  else if(f._file instanceof Blob){ blob = f._file; }
+  else throw new Error('No accessible file data');
+
+  const isPdf = (f.name||'').toLowerCase().endsWith('.pdf') || blob.type === 'application/pdf';
+  if(isPdf){
+    if(typeof pdfjsLib === 'undefined') throw new Error('PDF reader still loading — try again');
+    const buf = await blob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const maxPages = Math.min(pdf.numPages, 6);
+    let text = '';
+    for(let p=1; p<=maxPages; p++){
+      const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      const b64 = canvas.toDataURL('image/png').split(',')[1];
+      try { text += '\n' + await visionOCR(b64); } catch(e){ console.warn('page OCR failed', p, e); }
+    }
+    return text;
+  } else {
+    const b64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = () => reject(new Error('Could not read file'));
+      reader.readAsDataURL(blob);
+    });
+    return await visionOCR(b64);
+  }
+}
+
 function currentAgentView(){return currentAgentViewId==='all'?null:(USERS.find(u=>u.id===currentAgentViewId)||USERS[0])}
 function activeBoardUserId(){return filterUser || (currentAgentViewId==='all'?null:currentAgentViewId)}
 
@@ -5058,32 +5187,52 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     };
     window.lossDelete=async function(i){
       const f=j.lossFiles[i];
-      if(f && (f.path||f.storagePath) && window.deleteJobFile){ try{ await window.deleteJobFile(f.path||f.storagePath); }catch(e){} }
+      if(f && window.deleteJobFile){ try{ await window.deleteJobFile(f); }catch(e){ console.warn('loss file delete failed', e); } }
       j.lossFiles.splice(i,1);
       saveToStorage();
       body.innerHTML=lossHTML(false);
     };
     window.lossSyncField=function(field,val){ j[field]=val; saveToStorage(); };  // live sync to job + persist
     window.lossSave=function(){saveToStorage();toast('Insurance details saved');};
-    window.lossAutofill=function(){
-      body.innerHTML=lossHTML(true);
-      // Simulate AI extraction after a short delay then populate with sample parsed data
-      setTimeout(()=>{
-        // In production this would call an AI/OCR API with the uploaded document
-        const parsed={
-          carrier:   j.carrier||'State Farm',
-          claimNum:  j.claimNum||'SF-2026-88821',
-          dateOfLoss:j.dateOfLoss||'2026-05-10',
-          claimType: j.claimType||'Hail Damage',
-          rcv:       j.rcv||'14250.00',
-          deductible:j.deductible||'1500.00',
-          acv:       j.acv||'12750.00',
+    window.lossAutofill=async function(){
+      if(!j.lossFiles || !j.lossFiles.length){ toast('Upload a loss statement first'); return; }
+      body.innerHTML=lossHTML(true); // show analyzing state
+      try {
+        // OCR every uploaded loss file and combine the text (statement + Xactimate).
+        let combinedText = '';
+        for(const f of j.lossFiles){
+          try {
+            const txt = await ocrLossFile(f);
+            if(txt) combinedText += '\n' + txt;
+          } catch(e){ console.warn('OCR failed for', f.name, e); }
+        }
+        if(!combinedText.trim()){
+          body.innerHTML=lossHTML(false);
+          toast('Could not read text from the document(s). Try a clearer scan.');
+          return;
+        }
+        const parsed = parseLossStatementText(combinedText);
+        const applied = [];
+        const setIf = (field, val, label) => {
+          if(val != null && (!j[field] || String(j[field]).trim()==='')){
+            j[field] = String(val.toFixed ? val.toFixed(2) : val);
+            applied.push(label);
+          }
         };
-        Object.entries(parsed).forEach(([k,v])=>{ if(!j[k]) j[k]=v; });
+        setIf('rcv', parsed.rcv, 'RCV');
+        setIf('acv', parsed.acv, 'ACV');
+        setIf('deductible', parsed.deductible, 'Deductible');
+        setIf('recoverableDep', parsed.recoverableDep, 'Recoverable Depreciation');
+        if(parsed.nonRecoverableDep != null && (!j.nonRecoverableDep)) { j.nonRecoverableDep = String(parsed.nonRecoverableDep.toFixed(2)); applied.push('Non-Recoverable Dep'); }
         saveToStorage();
         body.innerHTML=lossHTML(false);
-        toast('Fields autofilled from loss statement');
-      },1800);
+        if(applied.length) toast('Found: ' + applied.join(', ') + ' · verify before saving');
+        else toast('No matching values found — please enter manually');
+      } catch(err){
+        console.warn('Loss autofill failed', err);
+        body.innerHTML=lossHTML(false);
+        toast('Extraction failed: ' + (err.message || 'unknown error'));
+      }
     };
 
   } else if(activeTab==='roof'){
@@ -10052,6 +10201,12 @@ function renderContractTab(j){
     .ct-addl{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
     .ct-addl input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--text);font-size:11px;width:100%}
     .ct-actions{display:flex;gap:10px;margin-top:16px}
+    .sc-zone{border:2px dashed var(--border);border-radius:10px;padding:20px 16px;text-align:center;transition:border-color .15s,background .15s}
+    .sc-zone.dragover{background:rgba(52,211,153,0.05);border-color:#34D399}
+    .sc-upload-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
+    .sc-upload-btn:hover{background:rgba(255,255,255,0.1);border-color:#34D399}
+    .sc-upload-btn.primary{background:#059669;border-color:#059669;color:#fff}
+    .sc-upload-btn.primary:hover{background:#047857}
 
     .ct-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
     .ct-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
@@ -10177,6 +10332,39 @@ function renderContractTab(j){
       <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailContract('${j.id}')"><i class="ti ti-mail"></i> Email Contract</button>
       <button class="ct-btn" style="background:#7C3AED;color:#fff" onclick="sendContractForSignature('${j.id}')"><i class="ti ti-signature"></i> Send for Signature</button>
     </div>
+
+    <!-- Signed Contract on File -->
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Signed Contract on File</div>
+      <div class="sc-zone"
+        ondragover="event.preventDefault();this.classList.add('dragover')"
+        ondragleave="this.classList.remove('dragover')"
+        ondrop="event.preventDefault();this.classList.remove('dragover');signedContractAddFiles('${j.id}', event.dataTransfer.files)">
+        <i class="ti ti-file-certificate" style="font-size:26px;color:var(--brand-light);opacity:.6;display:block;margin-bottom:6px"></i>
+        <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:2px">Upload the signed copy</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">PDF, JPG, or PNG — the executed/signed contract for your records</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <label class="sc-upload-btn primary">
+            <i class="ti ti-upload"></i> Upload Signed Copy
+            <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
+          </label>
+          <label class="sc-upload-btn">
+            <i class="ti ti-camera"></i> Scan
+            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
+          </label>
+        </div>
+      </div>
+      ${(j.signedContractFiles && j.signedContractFiles.length) ? `
+      <div style="margin-top:12px">
+        ${j.signedContractFiles.map((f,i)=>`
+        <div onclick="openJobStoredFile('signedContractFiles',${i})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer">
+          ${retainedFileIcon(f,'#34D399')}
+          <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</div><div style="font-size:10px;color:var(--muted)">${esc(f.date||'')}</div></div>
+          <button onclick="event.stopPropagation();signedContractDelete('${j.id}',${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>
+
     <div class="ct-note">Electronic signatures capture the drawn signature plus a date/time stamp. Have your contract language reviewed by a Texas attorney to ensure it meets home-improvement and insurance-claim disclosure requirements.</div>
   </div>`;
 
@@ -10508,6 +10696,30 @@ function formatContractDate(d){
 }
 
 // Fill the PDF and open it in a new tab for printing / tablet signing
+window.signedContractAddFiles = async function(jobId, files){
+  const j = jobs.find(x => x.id === jobId); if(!j) return;
+  const pending = Array.from(files || []); if(!pending.length) return;
+  if(!Array.isArray(j.signedContractFiles)) j.signedContractFiles = [];
+  try {
+    const records = await Promise.all(pending.map(f => intakeJobFile(f, 'signed_contract', null)));
+    j.signedContractFiles.push(...records);
+    saveToStorage();
+    toast('Signed contract uploaded');
+  } catch(e){
+    console.warn('signed contract upload failed', e);
+    toast('Upload failed — try again');
+  }
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
+};
+window.signedContractDelete = async function(jobId, i){
+  const j = jobs.find(x => x.id === jobId); if(!j || !Array.isArray(j.signedContractFiles)) return;
+  const f = j.signedContractFiles[i];
+  if(f && window.deleteJobFile){ try{ await window.deleteJobFile(f); }catch(e){ console.warn('delete failed', e); } }
+  j.signedContractFiles.splice(i, 1);
+  saveToStorage();
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
+};
+
 window.printFilledContract = async function(jobId){
   const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
   j.contract = gatherContract(j);
