@@ -129,10 +129,9 @@ async function loadAllFromSupabase() {
   // Stages considered "closed" (completed / lost). These are NOT loaded on boot —
   // they're fetched on demand (when the user toggles "Show Completed/Lost" or searches),
   // so initial load stays fast no matter how many completed jobs accumulate.
-  // Stages deferred off boot (loaded on demand): Job Completed, Closed-Denied, and
-  // Lost Lead. Plain "Denied" is intentionally LOADED on boot so it stays visible.
-  // (Lost Lead is a custom stage; if its id differs, it's also caught client-side.)
-  const CLOSED_STAGE_IDS = ['completed','closed-denied','lost-lead','lost_lead'];
+  // Stages deferred off boot (loaded on demand): only Job Completed and Lost Lead.
+  // Denied and Closed-Denied load on boot so they stay visible.
+  const CLOSED_STAGE_IDS = ['completed','lost-lead','lost_lead'];
   window.CLOSED_STAGE_IDS = CLOSED_STAGE_IDS;
 
   // Load jobs + their children for a given set of job rows. Shared by the

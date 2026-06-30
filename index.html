@@ -2830,11 +2830,10 @@ function isToggleHiddenStage(col){
   if(!col) return false;
   const id = (col.id || '').toLowerCase();
   const name = (col.name || '').toLowerCase();
-  if(id === 'denied' || name === 'denied') return false; // never hide plain Denied
-  if(id === 'completed' || id === 'closed-denied') return true;
-  if(name.includes('completed')) return true;
-  if(name.includes('closed') && name.includes('denied')) return true;
-  if(name.includes('lost lead') || name.includes('lost-lead')) return true;
+  // Toggle hides ONLY Job Completed and Lost Lead.
+  // Denied and Closed-Denied stay visible.
+  if(id === 'completed' || name.includes('completed')) return true;
+  if(name.includes('lost lead') || name.includes('lost-lead') || id === 'lost-lead' || id === 'lost_lead') return true;
   return false;
 }
 
@@ -2851,9 +2850,20 @@ function renderBoard(){
   // Stages marked closed (or stages on the "fork" path: denied/appeal/retail/closed-denied) render in a separate bottom strip.
   // We use both the `closed` flag AND a hardcoded set of fork-stage IDs so this works even when Supabase doesn't store the flag.
   const FORK_STAGE_IDS = new Set(['denied','appeal','retail','closed-denied']);
-  const isForkStage = (col) => col.closed === true || FORK_STAGE_IDS.has(col.id);
+  const isLostLead = (col) => {
+    const n=(col.name||'').toLowerCase(), id=(col.id||'').toLowerCase();
+    return n.includes('lost lead') || n.includes('lost-lead') || id==='lost-lead' || id==='lost_lead';
+  };
+  const isForkStage = (col) => col.closed === true || FORK_STAGE_IDS.has(col.id) || isLostLead(col);
   const activeCols = columns.filter(c => !isForkStage(c));
-  const forkCols   = columns.filter(c =>  isForkStage(c));
+  // Desired fork order: Denied → Appeal → Going Retail → Closed-Denied → Lost Lead → (others).
+  const forkOrder = ['denied','appeal','retail','closed-denied'];
+  const forkRank = (col) => {
+    if(isLostLead(col)) return forkOrder.length + 1; // Lost Lead after Closed-Denied
+    const idx = forkOrder.indexOf(col.id);
+    return idx === -1 ? forkOrder.length : idx;
+  };
+  const forkCols = columns.filter(c => isForkStage(c)).sort((a,b) => forkRank(a) - forkRank(b));
 
   const renderColumnInto = (container, col) => {
     let colJobs = filteredJobs().filter(j => j.col === col.id);
@@ -10313,6 +10323,38 @@ function renderContractTab(j){
     </div>
     ${(c.sentForSignature && c.sentForSignature.at) ? `<div style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.4);color:#A78BFA;border-radius:8px;padding:9px 12px;font-size:11px;margin-bottom:12px;display:flex;align-items:center;gap:7px"><i class="ti ti-circle-check"></i> Sent for signature to ${esc(c.sentForSignature.to||'')} on ${new Date(c.sentForSignature.at).toLocaleString()}</div>` : ''}
 
+    <!-- Signed Contract on File -->
+    <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Signed Contract on File</div>
+      <div class="sc-zone"
+        ondragover="event.preventDefault();this.classList.add('dragover')"
+        ondragleave="this.classList.remove('dragover')"
+        ondrop="event.preventDefault();this.classList.remove('dragover');signedContractAddFiles('${j.id}', event.dataTransfer.files)">
+        <i class="ti ti-file-certificate" style="font-size:26px;color:var(--brand-light);opacity:.6;display:block;margin-bottom:6px"></i>
+        <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:2px">Upload the signed copy</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">PDF, JPG, or PNG — the executed/signed contract for your records</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <label class="sc-upload-btn primary">
+            <i class="ti ti-upload"></i> Upload Signed Copy
+            <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
+          </label>
+          <label class="sc-upload-btn">
+            <i class="ti ti-camera"></i> Scan
+            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
+          </label>
+        </div>
+      </div>
+      ${(j.signedContractFiles && j.signedContractFiles.length) ? `
+      <div style="margin-top:12px">
+        ${j.signedContractFiles.map((f,i)=>`
+        <div onclick="openJobStoredFile('signedContractFiles',${i})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer">
+          ${retainedFileIcon(f,'#34D399')}
+          <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</div><div style="font-size:10px;color:var(--muted)">${esc(f.date||'')}</div></div>
+          <button onclick="event.stopPropagation();signedContractDelete('${j.id}',${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>
+
     <div class="ct-sec">
       <h4>Customer &amp; Project Information</h4>
       <div class="ct-grid2">
@@ -10429,37 +10471,6 @@ function renderContractTab(j){
       <button class="ct-btn" style="background:#7C3AED;color:#fff" onclick="sendContractForSignature('${j.id}')"><i class="ti ti-signature"></i> Send for Signature</button>
     </div>
 
-    <!-- Signed Contract on File -->
-    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Signed Contract on File</div>
-      <div class="sc-zone"
-        ondragover="event.preventDefault();this.classList.add('dragover')"
-        ondragleave="this.classList.remove('dragover')"
-        ondrop="event.preventDefault();this.classList.remove('dragover');signedContractAddFiles('${j.id}', event.dataTransfer.files)">
-        <i class="ti ti-file-certificate" style="font-size:26px;color:var(--brand-light);opacity:.6;display:block;margin-bottom:6px"></i>
-        <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:2px">Upload the signed copy</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">PDF, JPG, or PNG — the executed/signed contract for your records</div>
-        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-          <label class="sc-upload-btn primary">
-            <i class="ti ti-upload"></i> Upload Signed Copy
-            <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
-          </label>
-          <label class="sc-upload-btn">
-            <i class="ti ti-camera"></i> Scan
-            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
-          </label>
-        </div>
-      </div>
-      ${(j.signedContractFiles && j.signedContractFiles.length) ? `
-      <div style="margin-top:12px">
-        ${j.signedContractFiles.map((f,i)=>`
-        <div onclick="openJobStoredFile('signedContractFiles',${i})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer">
-          ${retainedFileIcon(f,'#34D399')}
-          <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</div><div style="font-size:10px;color:var(--muted)">${esc(f.date||'')}</div></div>
-          <button onclick="event.stopPropagation();signedContractDelete('${j.id}',${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>
-        </div>`).join('')}
-      </div>` : ''}
-    </div>
 
     <div class="ct-note">Electronic signatures capture the drawn signature plus a date/time stamp. Have your contract language reviewed by a Texas attorney to ensure it meets home-improvement and insurance-claim disclosure requirements.</div>
   </div>`;
