@@ -2748,6 +2748,33 @@ function renderBoardSalesSummary(){
     if(ar!==br) return br-ar;
     return a.jobName.localeCompare(b.jobName);
   });
+  // To-Do panel markup (placed high on the page, right under the KPI cards).
+  const todoPanelHtml = `
+    <div class="summary-panel" style="display:flex;flex-direction:column;margin-top:12px;min-width:720px">
+      <div class="summary-panel-title">
+        <span>Open To-Do Items</span>
+        <span style="font-size:10px;color:var(--muted)">${todoOpenCount} open · ${todoReqCount} required</span>
+      </div>
+      ${todoGroups.length?`<div style="flex:1;max-height:430px;overflow:auto;margin:0 -4px">${todoGroups.map(g=>{
+        const reqInGroup = g.items.filter(i=>i.required).length;
+        return `
+        <div style="margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:7px;padding:7px 8px;background:rgba(255,255,255,0.04);border-left:3px solid ${g.stageColor};border-radius:4px;position:sticky;top:0;backdrop-filter:blur(2px)">
+            <i class="ti ti-folder" style="font-size:13px;color:${g.stageColor};flex-shrink:0"></i>
+            <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.jobName)}</span>
+            <span style="font-size:9px;color:${g.stageColor};white-space:nowrap">${escapeHtml(g.stage)}</span>
+            <span style="font-size:9px;color:var(--muted);background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:8px;white-space:nowrap">${g.items.length}${reqInGroup?` · ${reqInGroup} req`:''}</span>
+          </div>
+          ${g.items.map(t=>`
+            <label class="sum-todo-item" style="display:flex;align-items:flex-start;gap:9px;padding:7px 8px 7px 20px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:${(!t.canCheck)?'not-allowed':'pointer'};opacity:${(!t.canCheck)?'0.55':'1'}">
+              <input type="checkbox" data-sum-todo-check="${g.jobId}|${g.colId}|${t.itemId}" ${(!t.canCheck)?'disabled':''} style="margin-top:2px;flex-shrink:0;cursor:inherit;accent-color:var(--brand-light)">
+              <div style="flex:1;min-width:0;font-size:12px;color:var(--brand);line-height:1.35">${escapeHtml(t.text)}</div>
+              ${t.required?`<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--warn);padding:1px 5px;border:1px solid var(--warn);border-radius:3px;flex-shrink:0;margin-top:1px">REQ</span>`:''}
+            </label>
+          `).join('')}
+        </div>`;
+      }).join('')}</div>`:`<div class="summary-empty" style="flex:1;display:flex;align-items:center;justify-content:center;min-height:80px">No open to-do items. All caught up!</div>`}
+    </div>`;
   wrap.innerHTML=`
     <div class="summary-head">
       <div class="summary-title">
@@ -2763,6 +2790,7 @@ function renderBoardSalesSummary(){
           </div>
         `).join('')}
       </div>
+      ${todoPanelHtml}
       <div class="summary-focus">
         <div class="focus-card">
           <div class="focus-kicker"><i class="ti ti-target-arrow" aria-hidden="true"></i>Collection Progress</div>
@@ -2782,9 +2810,8 @@ function renderBoardSalesSummary(){
           <div class="focus-sub">${nextWin?`${moneyText(nextWin.balance||moneyValue(nextWin.potVal))} ${nextWin.balance?'left to collect':'potential value'}`:'Add a lead to start the board'}</div>
         </div>
       </div>
-      <div class="summary-visuals">
-        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
-          <div class="summary-panel">
+      <div class="summary-visuals" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+        <div class="summary-panel">
             <div class="summary-panel-title">
               <span>${user?'My Pipeline Value':'Sales Value by Agent'}</span>
               <span style="font-size:10px;color:var(--muted)">Avg ${moneyText(avgDeal)}</span>
@@ -2811,33 +2838,6 @@ function renderBoardSalesSummary(){
               `).join('')}
             </div>
           </div>
-        </div>
-
-        <!-- Right side: open to-do items across jobs -->
-        <div class="summary-panel" style="display:flex;flex-direction:column">
-          <div class="summary-panel-title">
-            <span>Open To-Do Items</span>
-            <span style="font-size:10px;color:var(--muted)">${todoOpenCount} open · ${todoReqCount} required</span>
-          </div>
-          ${todoGroups.length?`<div style="flex:1;max-height:430px;overflow:auto;margin:0 -4px">${todoGroups.map(g=>{
-            const reqInGroup = g.items.filter(i=>i.required).length;
-            return `
-            <div style="margin-bottom:4px">
-              <div style="display:flex;align-items:center;gap:7px;padding:7px 8px;background:rgba(255,255,255,0.04);border-left:3px solid ${g.stageColor};border-radius:4px;position:sticky;top:0;backdrop-filter:blur(2px)">
-                <i class="ti ti-folder" style="font-size:13px;color:${g.stageColor};flex-shrink:0"></i>
-                <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.jobName)}</span>
-                <span style="font-size:9px;color:${g.stageColor};white-space:nowrap">${escapeHtml(g.stage)}</span>
-                <span style="font-size:9px;color:var(--muted);background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:8px;white-space:nowrap">${g.items.length}${reqInGroup?` · ${reqInGroup} req`:''}</span>
-              </div>
-              ${g.items.map(t=>`
-                <label class="sum-todo-item" style="display:flex;align-items:flex-start;gap:9px;padding:7px 8px 7px 20px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:${(!t.canCheck)?'not-allowed':'pointer'};opacity:${(!t.canCheck)?'0.55':'1'}">
-                  <input type="checkbox" data-sum-todo-check="${g.jobId}|${g.colId}|${t.itemId}" ${(!t.canCheck)?'disabled':''} style="margin-top:2px;flex-shrink:0;cursor:inherit;accent-color:var(--brand-light)">
-                  <div style="flex:1;min-width:0;font-size:12px;color:var(--brand);line-height:1.35">${escapeHtml(t.text)}</div>
-                  ${t.required?`<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--warn);padding:1px 5px;border:1px solid var(--warn);border-radius:3px;flex-shrink:0;margin-top:1px">REQ</span>`:''}
-                </label>
-              `).join('')}
-            </div>`;
-          }).join('')}</div>`:`<div class="summary-empty" style="flex:1;display:flex;align-items:center;justify-content:center">No open to-do items. All caught up!</div>`}
         </div>
       </div>
     </div>`;
