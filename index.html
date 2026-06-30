@@ -329,6 +329,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link">My To-Do</span>
   <span class="nav-link">Insurance</span>
   <span class="nav-link" id="navProfits" style="display:none">Profits</span>
+  <span class="nav-link" id="navCompanyDocs" style="display:none">Company Docs</span>
   <span class="nav-link">Contacts</span>
   <span class="nav-link">Payments</span>
   <div style="flex:1"></div>
@@ -712,6 +713,26 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   </div>
   <div id="insBody" style="padding:18px 20px;overflow:auto;height:calc(100vh - 110px)"></div>
 </div>
+
+<!-- COMPANY DOCUMENTS (OneNote-style, admin only) -->
+<div id="companyDocsPage" style="display:none">
+  <div style="display:flex;height:calc(100vh - 64px)">
+    <!-- Section sidebar -->
+    <div id="cdocSidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);background:#11141F;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:14px 14px 10px;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px">Company Docs</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Internal reference</div>
+      </div>
+      <div id="cdocSectionList" style="flex:1;overflow:auto;padding:8px"></div>
+      <div style="padding:10px;border-top:1px solid var(--border)">
+        <button onclick="cdocAddSection()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:8px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-plus" style="font-size:13px"></i> Add Section</button>
+      </div>
+    </div>
+    <!-- Main content -->
+    <div id="cdocMain" style="flex:1;overflow:auto;padding:20px 26px"></div>
+  </div>
+</div>
+
 
 <!-- Carrier edit modal -->
 <div class="modal-bg" id="insModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;align-items:center;justify-content:center">
@@ -2657,7 +2678,15 @@ function renderBoardSalesSummary(){
     .filter(j=>j.balance>0)
     .sort((a,b)=>b.balance-a.balance);
   const nextWin=openReceivables[0]||activeJobs.slice().sort((a,b)=>moneyValue(b.potVal)-moneyValue(a.potVal))[0]||null;
-  const stageRows=columns.map(col=>{
+  // Pipeline states: only the active sales stages Lead → Contract Signed.
+  const SUMMARY_STAGE_IDS = ['lead','inspection','approved','contract'];
+  const summaryStages = columns.filter(col => {
+    const id=(col.id||'').toLowerCase(); const nm=(col.name||'').toLowerCase();
+    if(SUMMARY_STAGE_IDS.includes(id)) return true;
+    // also catch by name in case of custom ids
+    return nm==='lead'||nm==='inspection'||nm==='approved'||nm.includes('contract signed');
+  });
+  const stageRows=summaryStages.map(col=>{
     const colJobs=summaryJobs.filter(j=>j.col===col.id);
     return {
       name:col.name,
@@ -2688,6 +2717,22 @@ function renderBoardSalesSummary(){
     {label:'Account Receivable',value:moneyText(summary.receivable),color:summary.receivable>0?'var(--warn)':'var(--success)'},
     {label:'Pending Commission',value:moneyText(summary.pendingCommission),color:'#A78BFA'}
   ];
+  // Open to-do/checklist items across the visible (active, non-closed) jobs.
+  const todoList = [];
+  summaryJobs.forEach(j => {
+    const cols = columnsForPipeline(j.pipeline || 'insurance');
+    const col = cols.find(c => c.id === j.col);
+    if(!col || col.closed === true) return;
+    const combined = (typeof getCombinedChecklistItems === 'function') ? getCombinedChecklistItems(j, col) : [];
+    const doneMap = j.stageChecklistDone?.[col.id] || {};
+    combined.filter(it => !doneMap[it.id]).forEach(it => {
+      todoList.push({ jobId:j.id, jobName:j.name, stage:col.name, stageColor:col.color||'var(--brand-light)', text:it.text, required:!!it.required });
+    });
+  });
+  // Required items first, then by job
+  todoList.sort((a,b) => (b.required?1:0)-(a.required?1:0));
+  const todoOpenCount = todoList.length;
+  const todoReqCount = todoList.filter(t=>t.required).length;
   wrap.innerHTML=`
     <div class="summary-head">
       <div class="summary-title">
@@ -2723,55 +2768,53 @@ function renderBoardSalesSummary(){
         </div>
       </div>
       <div class="summary-visuals">
-        <div class="summary-panel">
-          <div class="summary-panel-title">
-            <span>${user?'My Pipeline Value':'Sales Value by Agent'}</span>
-            <span style="font-size:10px;color:var(--muted)">Avg ${moneyText(avgDeal)}</span>
-          </div>
-          ${agentRows.length?agentRows.map(row=>`
-            <div class="viz-row">
-              <div class="viz-name">${escapeHtml(row.name)}</div>
-              <div class="viz-track"><div class="viz-fill" style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
-              <div class="viz-amt">${moneyText(row.value)}</div>
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <div class="summary-panel">
+            <div class="summary-panel-title">
+              <span>${user?'My Pipeline Value':'Sales Value by Agent'}</span>
+              <span style="font-size:10px;color:var(--muted)">Avg ${moneyText(avgDeal)}</span>
             </div>
-          `).join(''):`<div class="summary-empty">No sales activity in this view yet.</div>`}
+            ${agentRows.length?agentRows.map(row=>`
+              <div class="viz-row">
+                <div class="viz-name">${escapeHtml(row.name)}</div>
+                <div class="viz-track"><div class="viz-fill" style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
+                <div class="viz-amt">${moneyText(row.value)}</div>
+              </div>
+            `).join(''):`<div class="summary-empty">No sales activity in this view yet.</div>`}
+          </div>
+          <div class="summary-panel">
+            <div class="summary-panel-title">
+              <span>Pipeline Stages</span>
+              <span style="font-size:10px;color:var(--muted)">Lead → Contract Signed</span>
+            </div>
+            <div class="stage-list">
+              ${stageRows.map(row=>`
+                <div class="stage-chip">
+                  <div class="stage-chip-name"><span style="width:8px;height:8px;border-radius:50%;background:${row.color};flex-shrink:0"></span><span>${escapeHtml(row.name)}</span></div>
+                  <strong>${row.count}</strong>
+                </div>
+              `).join('')}
+            </div>
+          </div>
         </div>
-        <div class="summary-panel">
+
+        <!-- Right side: open to-do items across jobs -->
+        <div class="summary-panel" style="display:flex;flex-direction:column">
           <div class="summary-panel-title">
-            <span>Pipeline Stage Mix</span>
-            <span style="font-size:10px;color:var(--muted)">${summaryJobs.length} total jobs</span>
+            <span>Open To-Do Items</span>
+            <span style="font-size:10px;color:var(--muted)">${todoOpenCount} open · ${todoReqCount} required</span>
           </div>
-          <div class="stage-strip">
-            ${stageRows.filter(row=>row.count).map(row=>`<div class="stage-seg" title="${escapeHtml(row.name)}" style="width:${Math.max(3,Math.round((row.count/stageTotal)*100))}%;background:${row.color}"></div>`).join('')}
-          </div>
-          <div class="stage-list">
-            ${stageRows.map(row=>`
-              <div class="stage-chip">
-                <div class="stage-chip-name"><span style="width:8px;height:8px;border-radius:50%;background:${row.color};flex-shrink:0"></span><span>${escapeHtml(row.name)}</span></div>
-                <strong>${row.count}</strong>
+          ${todoList.length?`<div style="flex:1;max-height:430px;overflow:auto;margin:0 -4px">${todoList.slice(0,60).map(t=>`
+            <div onclick="switchPage('todo')" style="display:flex;align-items:flex-start;gap:9px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer">
+              <i class="ti ${t.required?'ti-alert-circle':'ti-circle'}" style="font-size:14px;color:${t.required?'var(--warn)':'var(--muted)'};flex-shrink:0;margin-top:1px"></i>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;color:var(--brand);line-height:1.35">${escapeHtml(t.text)}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:1px">${escapeHtml(t.jobName)} · <span style="color:${t.stageColor}">${escapeHtml(t.stage)}</span></div>
               </div>
-            `).join('')}
-          </div>
+              ${t.required?`<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--warn);padding:1px 5px;border:1px solid var(--warn);border-radius:3px;flex-shrink:0;margin-top:1px">REQ</span>`:''}
+            </div>
+          `).join('')}${todoList.length>60?`<div style="padding:10px;text-align:center;font-size:11px;color:var(--muted);cursor:pointer" onclick="switchPage('todo')">+ ${todoList.length-60} more — open full To-Do page</div>`:''}</div>`:`<div class="summary-empty" style="flex:1;display:flex;align-items:center;justify-content:center">No open to-do items. All caught up!</div>`}
         </div>
-      </div>
-      <div class="summary-panel" style="margin-top:12px;min-width:720px">
-        <div class="summary-panel-title">
-          <span>Top Follow-ups</span>
-          <span style="font-size:10px;color:var(--muted)">Biggest balances and opportunities</span>
-        </div>
-        ${topOpportunities.length?topOpportunities.map(job=>{
-          const col=columns.find(c=>c.id===job.col);
-          const label=job.balance?'Collect':'Move';
-          return `
-            <div class="opportunity-row">
-              <div style="min-width:0">
-                <div class="opportunity-name">${escapeHtml(job.name)}</div>
-                <div class="opportunity-meta">${escapeHtml(col?.name||'Pipeline')} &middot; ${escapeHtml(userNameById(job.user))}</div>
-              </div>
-              <div class="opportunity-value">${moneyText(job.balance||moneyValue(job.potVal))}</div>
-              <div class="opportunity-tag">${label}</div>
-            </div>`;
-        }).join(''):`<div class="summary-empty">No open follow-ups right now.</div>`}
       </div>
     </div>`;
 }
@@ -2830,10 +2873,12 @@ function isToggleHiddenStage(col){
   if(!col) return false;
   const id = (col.id || '').toLowerCase();
   const name = (col.name || '').toLowerCase();
-  // Toggle hides ONLY Job Completed and Lost Lead.
-  // Denied and Closed-Denied stay visible.
+  // Toggle hides: Job Completed, Lost Lead, and Closed-Denied.
+  // Plain "Denied" stays visible.
+  if(id === 'denied' || name === 'denied') return false;
   if(id === 'completed' || name.includes('completed')) return true;
   if(name.includes('lost lead') || name.includes('lost-lead') || id === 'lost-lead' || id === 'lost_lead') return true;
+  if(id === 'closed-denied' || (name.includes('closed') && name.includes('denied'))) return true;
   return false;
 }
 
@@ -2889,9 +2934,11 @@ function renderBoard(){
     container.appendChild(d);
   };
 
-  // Active stages → top strip
+  // Active stages → top strip. Completed/Lost-Lead/Closed-Denied that happen to sit
+  // in the active strip (custom pipelines may not flag them) still respect the toggle.
   const board = $('board'); board.innerHTML = '';
-  activeCols.forEach(col => renderColumnInto(board, col));
+  const visibleActiveCols = activeCols.filter(col => showClosed ? true : !isToggleHiddenStage(col));
+  visibleActiveCols.forEach(col => renderColumnInto(board, col));
 
   // Fork stages → bottom strip. When "show closed" is OFF, hide the truly-closed
   // ones (Completed / Denied / Closed-Denied); keep active forks (Appeal, Retail).
@@ -6904,6 +6951,9 @@ function switchPage(pageName){
   if(pageName === 'profits' && !isAdmin()){
     pageName = 'summary';
   }
+  if(pageName === 'companydocs' && !isAdmin()){
+    pageName = 'summary';
+  }
   window.__activePage = pageName;
   document.getElementById('summaryPage').style.display = (pageName === 'summary') ? '' : 'none';
   document.getElementById('boardsPage').style.display  = (pageName === 'boards') ? '' : 'none';
@@ -6920,6 +6970,8 @@ function switchPage(pageName){
   if(todoPg) todoPg.style.display = (pageName === 'todo') ? '' : 'none';
   const commPg = document.getElementById('payrollPage');
   if(commPg) commPg.style.display = (pageName === 'payroll') ? '' : 'none';
+  const cdocPg = document.getElementById('companyDocsPage');
+  if(cdocPg) cdocPg.style.display = (pageName === 'companydocs') ? '' : 'none';
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
   });
@@ -6938,6 +6990,7 @@ function switchPage(pageName){
   if(pageName === 'insurance') renderInsurancePage();
   if(pageName === 'todo') renderTodoPage();
   if(pageName === 'payroll') renderPayrollPage();
+  if(pageName === 'companydocs') renderCompanyDocs();
 }
 
 // Re-render whatever page is currently showing (used after async data loads).
@@ -6963,6 +7016,7 @@ window.rerenderActivePage = function(){
     else if(txt === 'insurance') l.dataset.page = 'insurance';
     else if(txt === 'my to-do') l.dataset.page = 'todo';
     else if(txt === 'payroll') l.dataset.page = 'payroll';
+    else if(txt === 'company docs') l.dataset.page = 'companydocs';
     l.addEventListener('click', () => {
       if(l.dataset.page) switchPage(l.dataset.page);
     });
@@ -6974,6 +7028,8 @@ window.rerenderActivePage = function(){
 function updateProfitsNavVisibility(){
   const el = document.getElementById('navProfits');
   if(el) el.style.display = isAdmin() ? '' : 'none';
+  const cd = document.getElementById('navCompanyDocs');
+  if(cd) cd.style.display = isAdmin() ? '' : 'none';
 }
 window.updateProfitsNavVisibility = updateProfitsNavVisibility;
 
@@ -7125,6 +7181,8 @@ function calCheckAutoConfirm(j){
   const itemId = (typeof target === 'string') ? null : target.id;
   const doneMap = j.stageChecklistDone?.[col.id] || {};
   const isDone = itemId ? !!doneMap[itemId] : false;
+  // Don't auto-confirm if the admin manually unconfirmed this build.
+  if(j.__manualUnconfirm) return false;
   if(isDone && !j.buildConfirmed){
     j.buildConfirmed = true;
     return true; // changed
@@ -7219,7 +7277,7 @@ function renderCalMonthChip(j){
   const confTitle = confirmed
     ? (admin ? 'Confirmed with crew — tap to mark unconfirmed' : 'Confirmed with crew')
     : (admin ? 'Unconfirmed — tap to confirm with crew' : 'Not yet confirmed with crew');
-  const confIcon = `<span class="cal-mchip-conf ${confirmed?'cal-conf-yes':'cal-conf-no'}${admin?' cal-conf-clickable':''}" ${admin?`data-cal-confirm="${j.id}"`:''} title="${confTitle}"><i class="ti ${confirmed?'ti-circle-check-filled':'ti-clock-question'}"></i></span>`;
+  const confIcon = `<span class="cal-mchip-conf ${confirmed?'cal-conf-yes':'cal-conf-no'}${admin?' cal-conf-clickable':''}" ${admin?`data-cal-confirm="${j.id}" draggable="false" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"`:''} title="${confTitle}"><i class="ti ${confirmed?'ti-circle-check-filled':'ti-clock-question'}"></i></span>`;
   return `
     <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}${confirmed?'':' cal-card-unconfirmed'}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${escapeHtml(title)}${confirmed?'':' · Unconfirmed'}${isBad?' · ⚠ High rain risk':''}">
       ${calSalesAvatarHtml(j)}
@@ -7804,17 +7862,22 @@ function renderCalJobCard(j, onCalendar){
 let calDraggingId = null;
 
 function wireCalDragDrop(){
-  // Confirm / unconfirm build date (admin only)
+  // Confirm / unconfirm build date (admin only). Bind on the icon directly; stop the
+  // event early so the chip's drag/open handlers don't swallow or override it.
   document.querySelectorAll('[data-cal-confirm]').forEach(btn => {
-    btn.addEventListener('click', e => {
+    const handler = e => {
+      e.preventDefault();
       e.stopPropagation();
       const id = btn.dataset.calConfirm;
       const j = jobs.find(x => x.id === id);
       if(!j) return;
       j.buildConfirmed = !j.buildConfirmed;
+      // Track manual intent so auto-confirm doesn't immediately revert an unconfirm.
+      j.__manualUnconfirm = !j.buildConfirmed;
       if(typeof saveToStorage === 'function') saveToStorage();
       renderCalendarPage();
-    });
+    };
+    btn.addEventListener('click', handler);
   });
   // Draggable cards — both week-view full cards and month-view chips
   document.querySelectorAll('.cal-job-card, .cal-mchip').forEach(card => {
@@ -11496,6 +11559,201 @@ function fmtMoney(n){
 }
 
 // Top-level page render — dispatches to the right tab renderer
+// ── COMPANY DOCUMENTS (OneNote-style, admin only) ──
+const CDOC_KEY = 'stormshield_company_docs_v1';
+let cdocData = null;          // { sections: [{id, title, notes, files:[{name,path,url,isPdf}]}] }
+let cdocActiveId = null;
+let cdocLoaded = false;
+
+function cdocDefault(){
+  const mk = (title) => ({ id: 'sec-' + Math.random().toString(36).slice(2,9), title, notes: '', files: [] });
+  return { sections: [
+    mk('Storm Dates'),
+    mk('Subcontractors'),
+    mk('Company Proof of Liability'),
+    mk('Pitch'),
+    mk('Objections and Rebuttals'),
+  ]};
+}
+
+function cdocPersist(){
+  try { localStorage.setItem(CDOC_KEY, JSON.stringify(cdocData)); } catch(e){}
+  if(typeof window.saveCompanyDocs === 'function') window.saveCompanyDocs(cdocData);
+}
+
+async function renderCompanyDocs(){
+  if(!isAdmin()) return;
+  // Load once: prefer Supabase, fall back to local cache, then defaults.
+  if(!cdocLoaded){
+    cdocLoaded = true;
+    let loaded = null;
+    if(typeof window.loadCompanyDocs === 'function'){
+      try { loaded = await window.loadCompanyDocs(); } catch(e){}
+    }
+    if(!loaded){
+      try { const raw = localStorage.getItem(CDOC_KEY); if(raw) loaded = JSON.parse(raw); } catch(e){}
+    }
+    cdocData = (loaded && Array.isArray(loaded.sections)) ? loaded : cdocDefault();
+    if(!cdocActiveId && cdocData.sections.length) cdocActiveId = cdocData.sections[0].id;
+    // persist defaults on first ever load so the team shares them
+    if(!loaded) cdocPersist();
+  }
+  if(!cdocData) cdocData = cdocDefault();
+  if(!cdocActiveId && cdocData.sections.length) cdocActiveId = cdocData.sections[0].id;
+  cdocRenderSidebar();
+  cdocRenderMain();
+}
+
+function cdocRenderSidebar(){
+  const list = document.getElementById('cdocSectionList');
+  if(!list) return;
+  if(!cdocData.sections.length){
+    list.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:10px;text-align:center">No sections yet.</div>`;
+    return;
+  }
+  list.innerHTML = cdocData.sections.map(sec => {
+    const active = sec.id === cdocActiveId;
+    const count = (sec.files||[]).length;
+    return `<div onclick="cdocSelect('${sec.id}')" style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:6px;cursor:pointer;margin-bottom:3px;${active?'background:rgba(77,157,224,0.16);border:1px solid rgba(77,157,224,0.35)':'border:1px solid transparent'}">
+      <i class="ti ti-file-text" style="font-size:14px;color:${active?'var(--brand-light)':'var(--muted)'};flex-shrink:0"></i>
+      <span style="flex:1;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--brand)':'rgba(255,255,255,0.75)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sec.title)}</span>
+      ${count?`<span style="font-size:9px;color:var(--muted);background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:8px">${count}</span>`:''}
+    </div>`;
+  }).join('');
+}
+
+function cdocRenderMain(){
+  const main = document.getElementById('cdocMain');
+  if(!main) return;
+  const sec = cdocData.sections.find(s => s.id === cdocActiveId);
+  if(!sec){ main.innerHTML = `<div style="color:var(--muted);font-size:13px">Select or add a section.</div>`; return; }
+  main.innerHTML = `
+    <style>
+      .cdoc-titleinput{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;color:var(--brand);background:transparent;border:none;outline:none;width:100%;text-transform:uppercase;letter-spacing:.5px}
+      .cdoc-titleinput:focus{border-bottom:1px solid var(--brand-light)}
+      .cdoc-notes{width:100%;min-height:260px;background:#141927;border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;line-height:1.6;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical}
+      .cdoc-notes:focus{border-color:var(--brand-light)}
+      .cdoc-zone{border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;margin-top:8px;transition:border-color .15s,background .15s}
+      .cdoc-zone.dragover{background:rgba(77,157,224,0.05);border-color:var(--brand-light)}
+      .cdoc-upl{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
+      .cdoc-upl.primary{background:var(--brand-light);border-color:var(--brand-light);color:#0F1117}
+    </style>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <input class="cdoc-titleinput" value="${esc(sec.title)}" onchange="cdocRenameSection('${sec.id}', this.value)">
+      <button onclick="cdocDeleteSection('${sec.id}')" title="Delete section" style="flex-shrink:0;width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center"><i class="ti ti-trash" style="font-size:14px"></i></button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">Notes</div>
+    <textarea class="cdoc-notes" placeholder="Type notes, scripts, key dates, talking points…" onchange="cdocSaveNotes('${sec.id}', this.value)">${esc(sec.notes||'')}</textarea>
+
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 6px">Attachments</div>
+    <div class="cdoc-zone"
+      ondragover="event.preventDefault();this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="event.preventDefault();this.classList.remove('dragover');cdocAddFiles('${sec.id}', event.dataTransfer.files)">
+      <i class="ti ti-paperclip" style="font-size:22px;color:var(--brand-light);opacity:.6;display:block;margin-bottom:6px"></i>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Drag &amp; drop, or attach files (PDF, images, any document)</div>
+      <label class="cdoc-upl primary"><i class="ti ti-upload"></i> Upload File<input type="file" multiple style="display:none" onchange="cdocAddFiles('${sec.id}', this.files)"></label>
+    </div>
+    ${(sec.files&&sec.files.length)?`<div style="margin-top:12px">${sec.files.map((f,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
+        <i class="ti ${f.isPdf?'ti-file-type-pdf':'ti-file'}" style="font-size:18px;color:var(--brand-light);flex-shrink:0"></i>
+        <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</span>
+        <button onclick="cdocOpenFile('${sec.id}',${i})" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:5px 10px;border-radius:5px;cursor:pointer;font-family:'Barlow',sans-serif">Open</button>
+        <button onclick="cdocDeleteFile('${sec.id}',${i})" style="width:26px;height:26px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>
+      </div>`).join('')}</div>`:''}
+  `;
+}
+
+function cdocSelect(id){ cdocActiveId = id; cdocRenderSidebar(); cdocRenderMain(); }
+
+function cdocAddSection(){
+  const sec = { id: 'sec-' + Math.random().toString(36).slice(2,9), title: 'New Section', notes: '', files: [] };
+  cdocData.sections.push(sec);
+  cdocActiveId = sec.id;
+  cdocPersist();
+  cdocRenderSidebar(); cdocRenderMain();
+}
+
+function cdocRenameSection(id, title){
+  const sec = cdocData.sections.find(s => s.id === id);
+  if(!sec) return;
+  sec.title = (title||'').trim() || 'Untitled';
+  cdocPersist();
+  cdocRenderSidebar();
+}
+
+function cdocDeleteSection(id){
+  const sec = cdocData.sections.find(s => s.id === id);
+  if(!sec) return;
+  if(!confirm(`Delete the "${sec.title}" section and its attachments? This cannot be undone.`)) return;
+  // remove stored files
+  (sec.files||[]).forEach(f => { if(f.path && window.deleteCompanyDocFile) window.deleteCompanyDocFile(f.path); });
+  cdocData.sections = cdocData.sections.filter(s => s.id !== id);
+  if(cdocActiveId === id) cdocActiveId = cdocData.sections[0]?.id || null;
+  cdocPersist();
+  cdocRenderSidebar(); cdocRenderMain();
+}
+
+function cdocSaveNotes(id, val){
+  const sec = cdocData.sections.find(s => s.id === id);
+  if(!sec) return;
+  sec.notes = val;
+  cdocPersist();
+}
+
+async function cdocAddFiles(id, files){
+  const sec = cdocData.sections.find(s => s.id === id);
+  if(!sec) return;
+  const pending = Array.from(files||[]);
+  if(!pending.length) return;
+  if(!Array.isArray(sec.files)) sec.files = [];
+  toast('Uploading…');
+  for(const f of pending){
+    if(typeof window.uploadCompanyDocFile === 'function'){
+      try {
+        const rec = await window.uploadCompanyDocFile(id, f);
+        if(rec) sec.files.push(rec);
+      } catch(e){ console.warn('cdoc upload failed', e); }
+    }
+  }
+  cdocPersist();
+  cdocRenderSidebar(); cdocRenderMain();
+  toast('Attached');
+}
+
+async function cdocOpenFile(id, i){
+  const sec = cdocData.sections.find(s => s.id === id);
+  const f = sec?.files?.[i];
+  if(!f) return;
+  let url = f.url;
+  // signed URLs expire; re-sign on open
+  if(typeof window.signCompanyDocFile === 'function' && f.path){
+    const fresh = await window.signCompanyDocFile(f.path);
+    if(fresh){ url = fresh; f.url = fresh; }
+  }
+  if(url) window.open(url, '_blank');
+  else toast('Could not open file');
+}
+
+function cdocDeleteFile(id, i){
+  const sec = cdocData.sections.find(s => s.id === id);
+  const f = sec?.files?.[i];
+  if(!f) return;
+  if(f.path && window.deleteCompanyDocFile) window.deleteCompanyDocFile(f.path);
+  sec.files.splice(i, 1);
+  cdocPersist();
+  cdocRenderSidebar(); cdocRenderMain();
+}
+window.cdocSelect = cdocSelect;
+window.cdocAddSection = cdocAddSection;
+window.cdocRenameSection = cdocRenameSection;
+window.cdocDeleteSection = cdocDeleteSection;
+window.cdocSaveNotes = cdocSaveNotes;
+window.cdocAddFiles = cdocAddFiles;
+window.cdocOpenFile = cdocOpenFile;
+window.cdocDeleteFile = cdocDeleteFile;
+window.renderCompanyDocs = renderCompanyDocs;
+
 function renderPayrollPage(){
   const body = document.getElementById('commBody');
   if(!body) return;

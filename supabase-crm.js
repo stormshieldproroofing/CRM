@@ -129,9 +129,9 @@ async function loadAllFromSupabase() {
   // Stages considered "closed" (completed / lost). These are NOT loaded on boot —
   // they're fetched on demand (when the user toggles "Show Completed/Lost" or searches),
   // so initial load stays fast no matter how many completed jobs accumulate.
-  // Stages deferred off boot (loaded on demand): only Job Completed and Lost Lead.
-  // Denied and Closed-Denied load on boot so they stay visible.
-  const CLOSED_STAGE_IDS = ['completed','lost-lead','lost_lead'];
+  // Stages deferred off boot (loaded on demand): Job Completed, Lost Lead, Closed-Denied.
+  // Plain "Denied" loads on boot so it stays visible.
+  const CLOSED_STAGE_IDS = ['completed','lost-lead','lost_lead','closed-denied'];
   window.CLOSED_STAGE_IDS = CLOSED_STAGE_IDS;
 
   // Load jobs + their children for a given set of job rows. Shared by the
@@ -566,6 +566,58 @@ async function uploadJobFile(jobId, kind, section, file) {
   return { name:file.name, path, url:data?.signedUrl, _id: row?.id, isPdf: /\.pdf$/i.test(file.name) || file.type==='application/pdf' };
 }
 window.uploadJobFile = uploadJobFile;
+
+/* ---------- COMPANY DOCUMENTS storage ---------- */
+// Files for the Company Documents page aren't tied to a job, so they upload
+// straight to the storage bucket (no job_files row). Refs are stored in the
+// company_docs app_settings jsonb instead.
+async function uploadCompanyDocFile(sectionId, file){
+  const safeName = (file.name||'file').replace(/[^\w.\-]+/g,'_');
+  const path = `company-docs/${sectionId}/${Date.now()}-${safeName}`;
+  const { error } = await sb.storage.from('job-files').upload(path, file, { contentType: file.type || undefined });
+  if(error){ console.error('[company-docs] upload failed:', error.message || error); return null; }
+  const { data } = await sb.storage.from('job-files').createSignedUrl(path, 60*60*24*7);
+  return { name:file.name, path, url:data?.signedUrl, isPdf: /\.pdf$/i.test(file.name) || file.type==='application/pdf' };
+}
+window.uploadCompanyDocFile = uploadCompanyDocFile;
+
+async function deleteCompanyDocFile(path){
+  if(!path) return;
+  try { await sb.storage.from('job-files').remove([path]); }
+  catch(e){ console.warn('[company-docs] delete failed', e); }
+}
+window.deleteCompanyDocFile = deleteCompanyDocFile;
+
+// Re-sign a stored path (signed URLs expire after 7 days).
+async function signCompanyDocFile(path){
+  if(!path) return null;
+  try {
+    const { data } = await sb.storage.from('job-files').createSignedUrl(path, 60*60*24*7);
+    return data?.signedUrl || null;
+  } catch(e){ return null; }
+}
+window.signCompanyDocFile = signCompanyDocFile;
+
+// Load + save the company_docs sections array (notes + file refs) via app_settings.
+async function loadCompanyDocs(){
+  if(!window.sb) return null;
+  try {
+    const { data, error } = await window.sb.from('app_settings').select('value').eq('key', 'company_docs').maybeSingle();
+    if(error){ console.warn('company_docs load failed', error); return null; }
+    return (data?.value && Array.isArray(data.value.sections)) ? data.value : null;
+  } catch(e){ console.warn('company_docs load error', e); return null; }
+}
+window.loadCompanyDocs = loadCompanyDocs;
+
+async function saveCompanyDocs(docObj){
+  if(!window.sb) return;
+  try {
+    await window.sb.from('app_settings').upsert({
+      key: 'company_docs', value: docObj, updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+  } catch(e){ console.warn('company_docs save error', e); }
+}
+window.saveCompanyDocs = saveCompanyDocs;
 
 /* ---------- FILE delete helper */
 async function deleteJobFile(rec){
