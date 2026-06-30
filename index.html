@@ -2824,6 +2824,20 @@ async function toggleShowClosed(){
 }
 window.toggleShowClosed = toggleShowClosed;
 
+// Stages the "Show Completed/Lost" toggle hides/shows: Job Completed, Closed-Denied,
+// and Lost Lead. NOTE: plain "Denied" is intentionally NOT included — it stays visible.
+function isToggleHiddenStage(col){
+  if(!col) return false;
+  const id = (col.id || '').toLowerCase();
+  const name = (col.name || '').toLowerCase();
+  if(id === 'denied' || name === 'denied') return false; // never hide plain Denied
+  if(id === 'completed' || id === 'closed-denied') return true;
+  if(name.includes('completed')) return true;
+  if(name.includes('closed') && name.includes('denied')) return true;
+  if(name.includes('lost lead') || name.includes('lost-lead')) return true;
+  return false;
+}
+
 function renderBoard(){
   syncActivePipeline();
   // Reflect the show-closed toggle on its button.
@@ -2845,7 +2859,7 @@ function renderBoard(){
     let colJobs = filteredJobs().filter(j => j.col === col.id);
     // Closed stages (Completed / Denied / Closed-Denied) respect the show-closed toggle
     // and, when shown, default to a recent window unless "show all" is on.
-    const colIsClosed = col.closed === true || ['denied','closed-denied'].includes(col.id);
+    const colIsClosed = isToggleHiddenStage(col);
     let closedHiddenCount = 0;
     if(colIsClosed && showClosed && !showAllClosed){
       const before = colJobs.length;
@@ -2875,7 +2889,7 @@ function renderBoard(){
   const forkLabel = $('forkBoardLabel');
   forkBoard.innerHTML = '';
   const visibleForkCols = forkCols.filter(col => {
-    const isClosed = col.closed === true || ['denied','closed-denied'].includes(col.id);
+    const isClosed = isToggleHiddenStage(col);
     return showClosed ? true : !isClosed;
   });
   if(visibleForkCols.length){
