@@ -2678,13 +2678,13 @@ function renderBoardSalesSummary(){
     .filter(j=>j.balance>0)
     .sort((a,b)=>b.balance-a.balance);
   const nextWin=openReceivables[0]||activeJobs.slice().sort((a,b)=>moneyValue(b.potVal)-moneyValue(a.potVal))[0]||null;
-  // Pipeline states: only the active sales stages Lead → Contract Signed.
-  const SUMMARY_STAGE_IDS = ['lead','inspection','approved','contract'];
+  // Pipeline states: only the active sales stages Lead → Contract Signed (incl. Claim Filed).
+  const SUMMARY_STAGE_IDS = ['lead','inspection','claim-filed','claim_filed','approved','contract'];
   const summaryStages = columns.filter(col => {
     const id=(col.id||'').toLowerCase(); const nm=(col.name||'').toLowerCase();
     if(SUMMARY_STAGE_IDS.includes(id)) return true;
     // also catch by name in case of custom ids
-    return nm==='lead'||nm==='inspection'||nm==='approved'||nm.includes('contract signed');
+    return nm==='lead'||nm==='inspection'||nm.includes('claim filed')||nm==='approved'||nm.includes('contract signed');
   });
   const stageRows=summaryStages.map(col=>{
     const colJobs=summaryJobs.filter(j=>j.col===col.id);
@@ -2726,7 +2726,7 @@ function renderBoardSalesSummary(){
     const combined = (typeof getCombinedChecklistItems === 'function') ? getCombinedChecklistItems(j, col) : [];
     const doneMap = j.stageChecklistDone?.[col.id] || {};
     combined.filter(it => !doneMap[it.id]).forEach(it => {
-      todoList.push({ jobId:j.id, jobName:j.name, stage:col.name, stageColor:col.color||'var(--brand-light)', text:it.text, required:!!it.required });
+      todoList.push({ jobId:j.id, colId:col.id, itemId:it.id, jobName:j.name, stage:col.name, stageColor:col.color||'var(--brand-light)', text:it.text, required:!!it.required, role:it.role, canCheck:(typeof canCurrentUserCheckItem==='function')?canCurrentUserCheckItem(it):true });
     });
   });
   // Required items first, then by job
@@ -2805,18 +2805,44 @@ function renderBoardSalesSummary(){
             <span style="font-size:10px;color:var(--muted)">${todoOpenCount} open · ${todoReqCount} required</span>
           </div>
           ${todoList.length?`<div style="flex:1;max-height:430px;overflow:auto;margin:0 -4px">${todoList.slice(0,60).map(t=>`
-            <div onclick="switchPage('todo')" style="display:flex;align-items:flex-start;gap:9px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer">
-              <i class="ti ${t.required?'ti-alert-circle':'ti-circle'}" style="font-size:14px;color:${t.required?'var(--warn)':'var(--muted)'};flex-shrink:0;margin-top:1px"></i>
+            <label class="sum-todo-item" style="display:flex;align-items:flex-start;gap:9px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:${(!t.canCheck)?'not-allowed':'pointer'};opacity:${(!t.canCheck)?'0.55':'1'}">
+              <input type="checkbox" data-sum-todo-check="${t.jobId}|${t.colId}|${t.itemId}" ${(!t.canCheck)?'disabled':''} style="margin-top:2px;flex-shrink:0;cursor:inherit;accent-color:var(--brand-light)">
               <div style="flex:1;min-width:0">
                 <div style="font-size:12px;color:var(--brand);line-height:1.35">${escapeHtml(t.text)}</div>
                 <div style="font-size:10px;color:var(--muted);margin-top:1px">${escapeHtml(t.jobName)} · <span style="color:${t.stageColor}">${escapeHtml(t.stage)}</span></div>
               </div>
               ${t.required?`<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--warn);padding:1px 5px;border:1px solid var(--warn);border-radius:3px;flex-shrink:0;margin-top:1px">REQ</span>`:''}
-            </div>
+            </label>
           `).join('')}${todoList.length>60?`<div style="padding:10px;text-align:center;font-size:11px;color:var(--muted);cursor:pointer" onclick="switchPage('todo')">+ ${todoList.length-60} more — open full To-Do page</div>`:''}</div>`:`<div class="summary-empty" style="flex:1;display:flex;align-items:center;justify-content:center">No open to-do items. All caught up!</div>`}
         </div>
       </div>
     </div>`;
+
+  // Wire the checkable to-do items (same behavior as the To-Do page).
+  wrap.querySelectorAll('[data-sum-todo-check]').forEach(box => {
+    box.addEventListener('change', () => {
+      const [jobId, colId, itemId] = box.dataset.sumTodoCheck.split('|');
+      const j = jobs.find(x => x.id === jobId);
+      if(!j) return;
+      const cols = columnsForPipeline(j.pipeline || 'insurance');
+      const colObj = cols.find(c => c.id === colId);
+      const combined = getCombinedChecklistItems(j, colObj);
+      const item = combined.find(it => it.id === itemId);
+      if(item && typeof canCurrentUserCheckItem === 'function' && !canCurrentUserCheckItem(item)){
+        box.checked = !box.checked;
+        const who = item.role === 'admin' ? 'admins' : (item.role === 'salesman' ? 'sales/admin' : 'team');
+        toast(`Only ${who} can check this item`);
+        return;
+      }
+      if(!j.stageChecklistDone) j.stageChecklistDone = {};
+      if(!j.stageChecklistDone[colId]) j.stageChecklistDone[colId] = {};
+      if(box.checked) j.stageChecklistDone[colId][itemId] = checklistCompletionRecord(j);
+      else delete j.stageChecklistDone[colId][itemId];
+      saveToStorage();
+      if(typeof renderBoard === 'function') renderBoard();
+      renderBoardSalesSummary(); // refresh the list + counts
+    });
+  });
 }
 
 function isForwardStageMove(j,targetColId){
@@ -11631,8 +11657,22 @@ function cdocRenderMain(){
     <style>
       .cdoc-titleinput{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;color:var(--brand);background:transparent;border:none;outline:none;width:100%;text-transform:uppercase;letter-spacing:.5px}
       .cdoc-titleinput:focus{border-bottom:1px solid var(--brand-light)}
-      .cdoc-notes{width:100%;min-height:260px;background:#141927;border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;line-height:1.6;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical}
+      .cdoc-rt-toolbar{display:flex;flex-wrap:wrap;gap:3px;align-items:center;background:#11141F;border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;padding:6px 8px}
+      .cdoc-rt-btn{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 6px;border:1px solid transparent;background:transparent;color:var(--brand);font-size:13px;border-radius:5px;cursor:pointer;font-family:'Barlow',sans-serif}
+      .cdoc-rt-btn:hover{background:rgba(255,255,255,0.08)}
+      .cdoc-rt-sep{width:1px;height:18px;background:var(--border);margin:0 3px}
+      .cdoc-rt-color{width:24px;height:24px;border:1px solid var(--border);border-radius:5px;cursor:pointer;padding:0;background:none}
+      .cdoc-notes{width:100%;min-height:300px;background:#141927;border:1px solid var(--border);border-radius:0 0 10px 10px;padding:14px;font-size:13px;line-height:1.65;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;overflow:auto}
       .cdoc-notes:focus{border-color:var(--brand-light)}
+      .cdoc-notes:empty:before{content:attr(data-placeholder);color:var(--muted)}
+      .cdoc-notes h1{font-size:20px;font-weight:700;margin:8px 0}
+      .cdoc-notes h2{font-size:16px;font-weight:700;margin:6px 0}
+      .cdoc-notes ul{margin:6px 0 6px 22px;list-style:disc}
+      .cdoc-notes ol{margin:6px 0 6px 22px;list-style:decimal}
+      .cdoc-notes a{color:var(--brand-light);text-decoration:underline}
+      .cdoc-notes table{border-collapse:collapse;margin:8px 0;min-width:60%}
+      .cdoc-notes td,.cdoc-notes th{border:1px solid var(--border);padding:6px 9px;min-width:50px;font-size:13px}
+      .cdoc-notes th{background:rgba(255,255,255,0.05);font-weight:700}
       .cdoc-zone{border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;margin-top:8px;transition:border-color .15s,background .15s}
       .cdoc-zone.dragover{background:rgba(77,157,224,0.05);border-color:var(--brand-light)}
       .cdoc-upl{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
@@ -11643,7 +11683,30 @@ function cdocRenderMain(){
       <button onclick="cdocDeleteSection('${sec.id}')" title="Delete section" style="flex-shrink:0;width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center"><i class="ti ti-trash" style="font-size:14px"></i></button>
     </div>
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">Notes</div>
-    <textarea class="cdoc-notes" placeholder="Type notes, scripts, key dates, talking points…" onchange="cdocSaveNotes('${sec.id}', this.value)">${esc(sec.notes||'')}</textarea>
+    <div class="cdoc-rt-toolbar" onmousedown="event.preventDefault()">
+      <button class="cdoc-rt-btn" title="Heading" onclick="cdocFmt('formatBlock','h1')"><i class="ti ti-h-1"></i></button>
+      <button class="cdoc-rt-btn" title="Subheading" onclick="cdocFmt('formatBlock','h2')"><i class="ti ti-h-2"></i></button>
+      <button class="cdoc-rt-btn" title="Normal text" onclick="cdocFmt('formatBlock','div')"><i class="ti ti-letter-p"></i></button>
+      <div class="cdoc-rt-sep"></div>
+      <button class="cdoc-rt-btn" title="Bold" onclick="cdocFmt('bold')" style="font-weight:800">B</button>
+      <button class="cdoc-rt-btn" title="Italic" onclick="cdocFmt('italic')" style="font-style:italic">I</button>
+      <button class="cdoc-rt-btn" title="Underline" onclick="cdocFmt('underline')" style="text-decoration:underline">U</button>
+      <button class="cdoc-rt-btn" title="Strikethrough" onclick="cdocFmt('strikeThrough')" style="text-decoration:line-through">S</button>
+      <div class="cdoc-rt-sep"></div>
+      <label class="cdoc-rt-btn" title="Text color" style="position:relative;padding:0"><i class="ti ti-palette"></i><input type="color" class="cdoc-rt-color" style="position:absolute;inset:0;opacity:0;cursor:pointer" oninput="cdocFmt('foreColor', this.value)"></label>
+      <label class="cdoc-rt-btn" title="Highlight" style="position:relative;padding:0"><i class="ti ti-highlight"></i><input type="color" class="cdoc-rt-color" style="position:absolute;inset:0;opacity:0;cursor:pointer" value="#ffe066" oninput="cdocFmt('hiliteColor', this.value)"></label>
+      <div class="cdoc-rt-sep"></div>
+      <button class="cdoc-rt-btn" title="Bullet list" onclick="cdocFmt('insertUnorderedList')"><i class="ti ti-list"></i></button>
+      <button class="cdoc-rt-btn" title="Numbered list" onclick="cdocFmt('insertOrderedList')"><i class="ti ti-list-numbers"></i></button>
+      <div class="cdoc-rt-sep"></div>
+      <button class="cdoc-rt-btn" title="Insert link" onclick="cdocInsertLink()"><i class="ti ti-link"></i></button>
+      <button class="cdoc-rt-btn" title="Insert table" onclick="cdocInsertTable()"><i class="ti ti-table"></i></button>
+      <button class="cdoc-rt-btn" title="Add row" onclick="cdocTableRow()"><i class="ti ti-row-insert-bottom"></i></button>
+      <button class="cdoc-rt-btn" title="Add column" onclick="cdocTableCol()"><i class="ti ti-column-insert-right"></i></button>
+      <div class="cdoc-rt-sep"></div>
+      <button class="cdoc-rt-btn" title="Clear formatting" onclick="cdocFmt('removeFormat')"><i class="ti ti-clear-formatting"></i></button>
+    </div>
+    <div class="cdoc-notes" id="cdocEditor" contenteditable="true" data-placeholder="Type notes, scripts, key dates, talking points…" oninput="cdocNotesDirty=true" onblur="cdocFlushNotes('${sec.id}')">${cdocNotesHTML(sec.notes||'')}</div>
 
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 6px">Attachments</div>
     <div class="cdoc-zone"
@@ -11664,7 +11727,103 @@ function cdocRenderMain(){
   `;
 }
 
-function cdocSelect(id){ cdocActiveId = id; cdocRenderSidebar(); cdocRenderMain(); }
+// If stored notes look like plain text (no HTML tags), convert newlines to <br>
+// so old notes still display. Otherwise return the stored HTML as-is.
+function cdocNotesHTML(notes){
+  if(!notes) return '';
+  const looksHtml = /<[a-z][\s\S]*>/i.test(notes);
+  if(looksHtml) return notes;
+  return esc(notes).replace(/\n/g, '<br>');
+}
+
+// Apply a formatting command to the rich-text editor.
+let cdocNotesDirty = false;
+function cdocFmt(cmd, val){
+  const ed = document.getElementById('cdocEditor');
+  if(ed) ed.focus();
+  try { document.execCommand(cmd, false, val || null); } catch(e){}
+  cdocNotesDirty = true;
+}
+function cdocInsertLink(){
+  const url = prompt('Link URL:');
+  if(url) cdocFmt('createLink', url);
+}
+function cdocInsertTable(){
+  let rows = parseInt(prompt('Number of rows:', '3'), 10);
+  let cols = parseInt(prompt('Number of columns:', '3'), 10);
+  if(!rows || rows < 1) rows = 2;
+  if(!cols || cols < 1) cols = 2;
+  rows = Math.min(rows, 20); cols = Math.min(cols, 10);
+  let html = '<table>';
+  for(let r=0; r<rows; r++){
+    html += '<tr>';
+    for(let c=0; c<cols; c++){
+      html += r===0 ? '<th>&nbsp;</th>' : '<td>&nbsp;</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</table><div><br></div>';
+  cdocFmt('insertHTML', html);
+}
+// Find the table cell the cursor is in.
+function cdocCurrentCell(){
+  const sel = window.getSelection();
+  if(!sel.rangeCount) return null;
+  let node = sel.getRangeAt(0).startContainer;
+  while(node && node.nodeType !== 1) node = node.parentNode;
+  while(node && node.tagName !== 'TD' && node.tagName !== 'TH'){
+    node = node.parentNode;
+    if(node && node.id === 'cdocEditor') return null;
+  }
+  return node && (node.tagName==='TD'||node.tagName==='TH') ? node : null;
+}
+function cdocTableRow(){
+  const cell = cdocCurrentCell();
+  if(!cell){ toast('Click inside a table first'); return; }
+  const row = cell.parentNode;
+  const table = row.closest('table');
+  const colCount = row.children.length;
+  const tr = document.createElement('tr');
+  for(let i=0;i<colCount;i++){ const td=document.createElement('td'); td.innerHTML='&nbsp;'; tr.appendChild(td); }
+  row.after(tr);
+  cdocNotesDirty = true;
+}
+function cdocTableCol(){
+  const cell = cdocCurrentCell();
+  if(!cell){ toast('Click inside a table first'); return; }
+  const table = cell.closest('table');
+  const cellIndex = Array.from(cell.parentNode.children).indexOf(cell);
+  Array.from(table.rows).forEach(r => {
+    const isHead = r.children[0] && r.children[0].tagName === 'TH';
+    const c = document.createElement(isHead ? 'th' : 'td');
+    c.innerHTML = '&nbsp;';
+    if(r.children[cellIndex]) r.children[cellIndex].after(c);
+    else r.appendChild(c);
+  });
+  cdocNotesDirty = true;
+}
+// Save the editor HTML back to the section.
+function cdocFlushNotes(id){
+  const ed = document.getElementById('cdocEditor');
+  if(!ed) return;
+  const sec = cdocData.sections.find(s => s.id === id);
+  if(!sec) return;
+  sec.notes = ed.innerHTML;
+  cdocNotesDirty = false;
+  cdocPersist();
+}
+window.cdocFmt = cdocFmt;
+window.cdocInsertLink = cdocInsertLink;
+window.cdocInsertTable = cdocInsertTable;
+window.cdocTableRow = cdocTableRow;
+window.cdocTableCol = cdocTableCol;
+window.cdocFlushNotes = cdocFlushNotes;
+
+function cdocSelect(id){
+  // Save the current editor before switching away.
+  if(cdocActiveId && cdocActiveId !== id) cdocFlushNotes(cdocActiveId);
+  cdocActiveId = id; cdocRenderSidebar(); cdocRenderMain();
+}
 
 function cdocAddSection(){
   const sec = { id: 'sec-' + Math.random().toString(36).slice(2,9), title: 'New Section', notes: '', files: [] };
@@ -11706,6 +11865,8 @@ async function cdocAddFiles(id, files){
   if(!sec) return;
   const pending = Array.from(files||[]);
   if(!pending.length) return;
+  // Preserve any unsaved note edits before the re-render.
+  cdocFlushNotes(id);
   if(!Array.isArray(sec.files)) sec.files = [];
   toast('Uploading…');
   for(const f of pending){
