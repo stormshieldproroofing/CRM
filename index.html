@@ -1,4 +1,7 @@
 
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -354,6 +357,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     <div class="filter-drop" id="filterDrop" style="display:none"></div>
   </div>
   <button class="pill-btn" id="editBoardBtn"><i class="ti ti-layout-columns" aria-hidden="true"></i>Edit Boards</button>
+  <button class="pill-btn" id="toggleClosedBtn" onclick="toggleShowClosed()"><i class="ti ti-archive" aria-hidden="true"></i><span id="toggleClosedLabel">Show Completed/Lost</span></button>
   <div class="filter-wrap">
     <button class="pill-btn" id="pipelineBtn"><i class="ti ti-adjustments-horizontal" aria-hidden="true"></i><span id="pipelineBtnLabel">Edit Pipeline</span></button>
     <div class="filter-drop" id="pipelineDrop" style="display:none;width:240px;left:auto;right:0"></div>
@@ -1560,6 +1564,10 @@ function saveToStorage(){
 syncActivePipeline();
 
 let filterUser=null,draggingId=null,editingColId=null,openJobId=null,activeTab='overview',checklistCollapsed=true;
+// Board: hide completed/lost jobs by default; when shown, default to recent only.
+let showClosed=false;            // toggle: show closed (completed/lost) stages at all
+let showAllClosed=false;         // when showing, expand beyond the recent window
+const CLOSED_RECENT_DAYS=45;     // "recent" window for closed jobs when shown
 
 function $(id){return document.getElementById(id)}
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)}
@@ -1877,6 +1885,24 @@ function daysInStage(j){
 }
 // Number of days in a stage before the indicator turns red (stalled).
 const STAGE_STALE_DAYS = 7;
+
+// Is a closed (completed/lost) job "recent"? Uses the last stage-change date,
+// falling back to created date. Used to keep the board uncluttered.
+function isRecentClosedJob(j){
+  let ms = null;
+  if(Array.isArray(j.timeline)){
+    for(let i=j.timeline.length-1;i>=0;i--){
+      const ev=j.timeline[i];
+      if(ev && ev.type==='stage'){ const t=new Date(ev.at).getTime(); if(!Number.isNaN(t)){ ms=t; break; } }
+    }
+  }
+  if(ms==null){
+    const raw=j.createdAt||j.created;
+    const d=typeof raw==='number'?new Date(raw):new Date(String(raw||'').replace(' at ',' '));
+    ms=Number.isNaN(d.getTime())?Date.now():d.getTime();
+  }
+  return (Date.now()-ms) <= CLOSED_RECENT_DAYS*86400000;
+}
 
 function getStageChecklist(col){
   if(!col) return [];
@@ -2759,9 +2785,20 @@ function isForwardStageMove(j,targetColId){
 function canMoveToStage(j,targetColId){
   // Same stage → no gate
   if(!j || j.col === targetColId) return true;
+  const cols = (typeof columnsForPipeline === 'function') ? columnsForPipeline(j.pipeline || 'insurance') : (window.columns || []);
+  // Off-track / fork / closed stages (Denied, Appeal, Retail, Closed-Denied, Off-Track)
+  // bypass the required-checklist gate — a job being shelved/closed shouldn't need the
+  // current stage's forward-progress tasks completed first.
+  const FORK_STAGE_IDS = new Set(['denied','appeal','retail','closed-denied']);
+  const target = cols.find(c => c.id === targetColId);
+  const targetName = (target?.name || '').toLowerCase();
+  const isOffTrack = target?.closed === true
+    || FORK_STAGE_IDS.has(targetColId)
+    || targetName.includes('off-track') || targetName.includes('off track')
+    || targetName.includes('closed') || targetName.includes('denied');
+  if(isOffTrack) return true;
   // Backward moves (to an earlier stage) are always allowed — the checklist gate
   // only blocks forward progress, so you can pull a job back without completing it.
-  const cols = (typeof columnsForPipeline === 'function') ? columnsForPipeline(j.pipeline || 'insurance') : (window.columns || []);
   const fromIdx = cols.findIndex(c => c.id === j.col);
   const toIdx   = cols.findIndex(c => c.id === targetColId);
   if(fromIdx !== -1 && toIdx !== -1 && toIdx < fromIdx) return true;
@@ -2772,8 +2809,28 @@ function canMoveToStage(j,targetColId){
   return false;
 }
 
+// Toggle completed/lost visibility. Loads closed jobs from Supabase on demand
+// the first time they're shown (keeps boot fast at scale).
+async function toggleShowClosed(){
+  showClosed = !showClosed;
+  showAllClosed = false;
+  const btn = document.getElementById('toggleClosedBtn');
+  if(showClosed && typeof window.loadClosedJobs === 'function'){
+    if(btn){ btn.disabled = true; const lbl=document.getElementById('toggleClosedLabel'); if(lbl) lbl.textContent='Loading…'; }
+    try { await window.loadClosedJobs(); } catch(e){ console.warn('load closed failed', e); }
+    if(btn) btn.disabled = false;
+  }
+  renderBoard();
+}
+window.toggleShowClosed = toggleShowClosed;
+
 function renderBoard(){
   syncActivePipeline();
+  // Reflect the show-closed toggle on its button.
+  const tcBtn = document.getElementById('toggleClosedBtn');
+  const tcLbl = document.getElementById('toggleClosedLabel');
+  if(tcBtn) tcBtn.classList.toggle('active', showClosed);
+  if(tcLbl) tcLbl.textContent = showClosed ? 'Hide Completed/Lost' : 'Show Completed/Lost';
   renderAgentViewChrome();
   renderPipelineChrome();
   renderBoardSalesSummary();
@@ -2785,7 +2842,16 @@ function renderBoard(){
   const forkCols   = columns.filter(c =>  isForkStage(c));
 
   const renderColumnInto = (container, col) => {
-    const colJobs = filteredJobs().filter(j => j.col === col.id);
+    let colJobs = filteredJobs().filter(j => j.col === col.id);
+    // Closed stages (Completed / Denied / Closed-Denied) respect the show-closed toggle
+    // and, when shown, default to a recent window unless "show all" is on.
+    const colIsClosed = col.closed === true || ['denied','closed-denied'].includes(col.id);
+    let closedHiddenCount = 0;
+    if(colIsClosed && showClosed && !showAllClosed){
+      const before = colJobs.length;
+      colJobs = colJobs.filter(isRecentClosedJob);
+      closedHiddenCount = before - colJobs.length;
+    }
     const d = document.createElement('div');
     d.className = 'col' + (col.locked ? ' locked' : '');
     d.dataset.col = col.id;
@@ -2795,7 +2861,7 @@ function renderBoard(){
       ${col.locked?'<i class="ti ti-lock col-lock" aria-hidden="true"></i>':''}
       <div class="col-menu-btn" data-col-menu="${col.id}" title="Edit stage checklist"><i class="ti ti-list-check" aria-hidden="true"></i></div>
     </div>
-    <div class="col-body" id="cb-${col.id}">${colJobs.length===0?`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80px;gap:6px"><i class="ti ti-inbox" style="font-size:22px;color:rgba(255,255,255,0.07)" aria-hidden="true"></i><span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.07);letter-spacing:0.08em;text-transform:uppercase">No Jobs</span></div>`:colJobs.map(renderCard).join('')}</div>`;
+    <div class="col-body" id="cb-${col.id}">${colJobs.length===0?`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80px;gap:6px"><i class="ti ti-inbox" style="font-size:22px;color:rgba(255,255,255,0.07)" aria-hidden="true"></i><span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.07);letter-spacing:0.08em;text-transform:uppercase">No Jobs</span></div>`:colJobs.map(renderCard).join('')}${closedHiddenCount>0?`<button onclick="showAllClosed=true;renderBoard()" style="width:100%;margin-top:8px;padding:8px;border-radius:6px;border:1px dashed var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif">+ Show ${closedHiddenCount} older ${closedHiddenCount===1?'job':'jobs'}</button>`:''}</div>`;
     container.appendChild(d);
   };
 
@@ -2803,11 +2869,16 @@ function renderBoard(){
   const board = $('board'); board.innerHTML = '';
   activeCols.forEach(col => renderColumnInto(board, col));
 
-  // Fork stages → bottom strip (only show the label/strip if any fork stages exist)
+  // Fork stages → bottom strip. When "show closed" is OFF, hide the truly-closed
+  // ones (Completed / Denied / Closed-Denied); keep active forks (Appeal, Retail).
   const forkBoard = $('forkBoard');
   const forkLabel = $('forkBoardLabel');
   forkBoard.innerHTML = '';
-  if(forkCols.length){
+  const visibleForkCols = forkCols.filter(col => {
+    const isClosed = col.closed === true || ['denied','closed-denied'].includes(col.id);
+    return showClosed ? true : !isClosed;
+  });
+  if(visibleForkCols.length){
     // Compute indent so the first fork column lines up under the "Approved" column on the top strip.
     // Column width + gap come from CSS: .col{width:220px} + .board{gap:12px}.
     const COL_W = 220, GAP = 12;
@@ -2818,7 +2889,7 @@ function renderBoard(){
     forkLabel.style.paddingLeft = indentPx + 'px';
     forkBoard.style.display = 'flex';
     forkBoard.style.paddingLeft = indentPx + 'px';
-    forkCols.forEach(col => renderColumnInto(forkBoard, col));
+    visibleForkCols.forEach(col => renderColumnInto(forkBoard, col));
   } else {
     forkLabel.style.display = 'none';
     forkBoard.style.display = 'none';
@@ -6828,7 +6899,13 @@ function switchPage(pageName){
   document.querySelectorAll('.topnav .nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.page === pageName);
   });
-  if(pageName === 'summary') renderBoardSalesSummary();
+  if(pageName === 'summary'){
+    if(typeof window.loadClosedJobs === 'function' && !window.__closedLoadedForReports){
+      window.__closedLoadedForReports = true;
+      window.loadClosedJobs().then(ok => { if(ok) renderBoardSalesSummary(); });
+    }
+    renderBoardSalesSummary();
+  }
   if(pageName === 'jobs') renderJobsPage();
   if(pageName === 'team') renderTeamPage();
   if(pageName === 'map')  renderMapPage();
@@ -7990,6 +8067,11 @@ function renderProfitsPage(){
     const body = document.getElementById('plBody');
     if(body) body.innerHTML = `<div class="pl-empty">This page is restricted to admins.</div>`;
     return;
+  }
+  // Profits need completed jobs — load them on demand once, then re-render.
+  if(typeof window.loadClosedJobs === 'function' && !window.__closedLoadedForReports){
+    window.__closedLoadedForReports = true;
+    window.loadClosedJobs().then(ok => { if(ok) renderProfitsPage(); });
   }
   // Update range button styles
   document.querySelectorAll('.pl-range-btn').forEach(b => {
@@ -13949,5 +14031,9 @@ saveTeam();
 // One-time cleanup of pre-Supabase team data lingering in localStorage
 try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
 window.__activePage = 'boards';
-bootSupabase().then(ok => { if (ok) { syncActivePipeline(); renderBoard(); renderTeamPage?.(); updateProfitsNavVisibility?.(); loadInsuranceCarriers?.(); loadCompanyInfo?.(); } });
+bootSupabase().then(ok => {
+  if (ok) {
+    syncActivePipeline(); renderBoard(); renderTeamPage?.(); updateProfitsNavVisibility?.(); loadInsuranceCarriers?.(); loadCompanyInfo?.();
+  }
+});
 </script>

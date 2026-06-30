@@ -126,46 +126,40 @@ async function loadAllFromSupabase() {
     }
   }
 
-  // jobs + children — fire all independent queries in PARALLEL (was sequential)
-  const [
-    { data: jobRows, error: jobErr },
-    { data: deps },
-    { data: exps },
-    { data: files },
-    { data: chk },
-  ] = await Promise.all([
-    sb.from('jobs').select('*').order('created_at', { ascending:false }),
-    sb.from('deposits').select('*'),
-    sb.from('expenses').select('*'),
-    sb.from('job_files').select('*'),
-    sb.from('stage_checklist_done').select('*'),
-  ]);
+  // Stages considered "closed" (completed / lost). These are NOT loaded on boot —
+  // they're fetched on demand (when the user toggles "Show Completed/Lost" or searches),
+  // so initial load stays fast no matter how many completed jobs accumulate.
+  const CLOSED_STAGE_IDS = ['completed','denied','closed-denied'];
+  window.CLOSED_STAGE_IDS = CLOSED_STAGE_IDS;
 
-  if (jobErr) { console.error('[Supabase] jobs load failed:', jobErr); }
-  else {
-    // Batch-generate signed URLs for all file paths so previews work after reload.
+  // Load jobs + their children for a given set of job rows. Shared by the
+  // active-on-boot load and the on-demand closed-jobs load.
+  async function buildJobsFromRows(jobRows){
+    const ids = (jobRows || []).map(r => r.id);
+    if(!ids.length) return [];
+    // Fetch children only for THESE jobs (not the whole tables).
+    const [{ data: deps }, { data: exps }, { data: files }, { data: chk }] = await Promise.all([
+      sb.from('deposits').select('*').in('job_id', ids),
+      sb.from('expenses').select('*').in('job_id', ids),
+      sb.from('job_files').select('*').in('job_id', ids),
+      sb.from('stage_checklist_done').select('*').in('job_id', ids),
+    ]);
+    // Signed URLs for these files.
     const allPaths = (files || []).map(f => f.storage_path).filter(Boolean);
     const urlMap = {};
     if(allPaths.length){
       try {
-        const { data: signed } = await sb.storage.from('job-files').createSignedUrls(allPaths, 60*60*24*7); // 7 days
+        const { data: signed } = await sb.storage.from('job-files').createSignedUrls(allPaths, 60*60*24*7);
         (signed || []).forEach(s => { if(s && s.path && s.signedUrl) urlMap[s.path] = s.signedUrl; });
       } catch(e){ console.warn('signed url batch failed', e); }
     }
     const isPdfName = n => /\.pdf$/i.test(n||'');
-    const fileRec = f => ({
-      name: f.name, path: f.storage_path, _id: f.id,
-      url: urlMap[f.storage_path] || null,
-      isPdf: isPdfName(f.name),
-    });
-    const newJobs = (jobRows || []).map(r => {
+    const fileRec = f => ({ name: f.name, path: f.storage_path, _id: f.id, url: urlMap[f.storage_path] || null, isPdf: isPdfName(f.name) });
+    return (jobRows || []).map(r => {
       const jobFiles = (files || []).filter(f => f.job_id === r.id);
       const photos = { before:[], during:[], after:[] };
-      jobFiles.filter(f => f.kind === 'photo').forEach(f => {
-        (photos[f.section] || photos.before).push(fileRec(f));
-      });
+      jobFiles.filter(f => f.kind === 'photo').forEach(f => { (photos[f.section] || photos.before).push(fileRec(f)); });
       const byKind = k => jobFiles.filter(f => f.kind === k).map(fileRec);
-
       const stageChecklistDone = {};
       (chk || []).filter(c => c.job_id === r.id).forEach(c => {
         (stageChecklistDone[c.stage_id] ||= {})[c.item_key] = {
@@ -176,7 +170,6 @@ async function loadAllFromSupabase() {
           agentRole: c.agent_role || '',
         };
       });
-
       return {
         id: r.id, _sb:true,
         name:r.name, phone:r.phone, email:r.email, address:r.address,
@@ -227,6 +220,18 @@ async function loadAllFromSupabase() {
         stageChecklistDone,
       };
     });
+  }
+  window.__buildJobsFromRows = buildJobsFromRows;
+
+  // BOOT LOAD: active jobs only (exclude closed stages).
+  const { data: jobRows, error: jobErr } = await sb.from('jobs')
+    .select('*')
+    .not('stage_id', 'in', `(${CLOSED_STAGE_IDS.join(',')})`)
+    .order('created_at', { ascending:false });
+
+  if (jobErr) { console.error('[Supabase] jobs load failed:', jobErr); }
+  else {
+    const newJobs = await buildJobsFromRows(jobRows);
     if (Array.isArray(window.jobs)) {
       window.jobs.length = 0;
       newJobs.forEach(j => window.jobs.push(j));
@@ -275,6 +280,38 @@ async function loadAllFromSupabase() {
     }
   }
 }
+
+// On-demand loader for CLOSED (completed/lost) jobs. Called when the user toggles
+// "Show Completed/Lost". Loads them once, merges into window.jobs, and skips if
+// already loaded. Keeps boot fast regardless of how many completed jobs exist.
+let __closedJobsLoaded = false;
+async function loadClosedJobs(force){
+  if(__closedJobsLoaded && !force) return true;
+  const ids = window.CLOSED_STAGE_IDS || ['completed','denied','closed-denied'];
+  try {
+    const { data: rows, error } = await sb.from('jobs')
+      .select('*')
+      .in('stage_id', ids)
+      .order('created_at', { ascending:false });
+    if(error){ console.error('[Supabase] closed jobs load failed:', error); return false; }
+    const closedJobs = await window.__buildJobsFromRows(rows);
+    // Merge: remove any existing copies of these ids, then add.
+    const closedIds = new Set(closedJobs.map(j => j.id));
+    if(Array.isArray(window.jobs)){
+      for(let i = window.jobs.length - 1; i >= 0; i--){
+        if(closedIds.has(window.jobs[i].id)) window.jobs.splice(i, 1);
+      }
+      closedJobs.forEach(j => window.jobs.push(j));
+    }
+    __closedJobsLoaded = true;
+    console.log('[Supabase] loaded', closedJobs.length, 'closed jobs on demand');
+    return true;
+  } catch(e){
+    console.error('[Supabase] loadClosedJobs error', e);
+    return false;
+  }
+}
+window.loadClosedJobs = loadClosedJobs;
 
 /* ---------- SAVE: in-memory arrays -> Supabase ----------- */
 /* Debounced full upsert. Simple and robust for a small team. */
