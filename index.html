@@ -1600,8 +1600,12 @@ const PLBL={low:'Low',med:'Med',high:'High'};
 const DEFAULT_COLUMNS=[
   {id:'lead',name:'Lead',icon:'ti-antenna',locked:false,color:'#4D9DE0'},
   {id:'inspection',name:'Inspection',icon:'ti-clipboard-list',locked:false,color:'#F59E0B'},
+  {id:'claim-filed',name:'Claim Filed',icon:'ti-file-check',locked:false,color:'#2DD4BF'},
   {id:'approved',name:'Approved',icon:'ti-shield-check',locked:false,color:'#34D399'},
   {id:'contract',name:'Contract Signed',icon:'ti-writing-sign',locked:false,color:'#A78BFA'},
+  {id:'preproduction',name:'Preproduction',icon:'ti-package',locked:false,color:'#818CF8'},
+  {id:'build-day',name:'Build Day',icon:'ti-hammer',locked:false,color:'#F97316'},
+  {id:'postproduction',name:'Post Production',icon:'ti-home-check',locked:false,color:'#A3E635'},
   {id:'invoiced',name:'Invoiced',icon:'ti-cash',locked:false,color:'#FB923C'},
   {id:'completed',name:'Job Completed',icon:'ti-rosette-discount-check',locked:false,color:'#38BDF8',closed:true},
   // ── Fork: denial / off-track / closed paths ──
@@ -1613,13 +1617,22 @@ const DEFAULT_COLUMNS=[
 
 // Backfill: when loading a stored pipeline, make sure newer default stages exist + closed flags are applied.
 function backfillDefaultStages(){
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   pipelines.forEach(p => {
     if(!Array.isArray(p.columns)) return;
-    DEFAULT_COLUMNS.forEach(def => {
+    DEFAULT_COLUMNS.forEach((def, di) => {
       const existing = p.columns.find(c => c.id === def.id);
       if(!existing){
-        // Add any missing default stages
-        p.columns.push({...def});
+        // If a same-named column already exists (e.g. a "Claim Filed" stage the
+        // user added manually via Edit Boards, which gets an auto-generated id),
+        // leave it alone — jobs already reference that id.
+        if(p.columns.some(c => norm(c.name) === norm(def.name))) return;
+        // Insert the missing default in position: right after the preceding
+        // default stage if it's present, otherwise append.
+        const prevDef = DEFAULT_COLUMNS[di - 1];
+        const prevIdx = prevDef ? p.columns.findIndex(c => c.id === prevDef.id || norm(c.name) === norm(prevDef.name)) : -1;
+        if(prevIdx > -1){ p.columns.splice(prevIdx + 1, 0, {...def}); }
+        else { p.columns.push({...def}); }
       } else if(def.closed && existing.closed !== true){
         // Backfill the closed flag on stages that should have it
         existing.closed = true;
@@ -1783,6 +1796,74 @@ function saveJobContactToPhone(jobId){
 }
 window.saveJobContactToPhone = saveJobContactToPhone;
 
+// Stage-specific intro for the Text Lead button — the message matches where
+// the job sits on the board. Placeholders: {firstName} {repName} {company}.
+// Falls back to the 'lead' message for custom stages without an entry.
+const STAGE_TEXT_TEMPLATES = {
+  'lead':
+    'Hi {firstName}, this is {repName} with {company}. Thank you for your time today \u2014 it was great meeting you!\n\nHere\u2019s my info so you can reach me anytime:',
+  'claim-filed':
+    'Hi {firstName}, this is {repName} with {company}. Now that your claim has been filed, your insurance company will reach out to schedule the adjuster\u2019s inspection \u2014 typically within 48\u201372 hours. Please let me know the date and time as soon as they schedule it so I can be there to represent you and make sure nothing gets missed. Reach me anytime:',
+  'adjuster-meeting':
+    'Hi {firstName}, this is {repName} with {company}. Great meeting with your adjuster today! I walked the roof with them and made sure all of the storm damage was documented. Your insurance company will now review everything and send out their decision along with your loss statement \u2014 typically within 1\u20132 weeks. As soon as you receive anything from them by mail or email, please forward it to me so we can review it together. Reach me anytime:',
+  'inspection':
+    'Hi {firstName}, this is {repName} with {company}. Thank you for letting us take a look at your roof! I\u2019m putting my findings together and will walk you through the next steps for your insurance claim. Reach me anytime:',
+  'approved':
+    'Great news, {firstName}! Your insurance claim has been APPROVED. \uD83C\uDF89 When you receive your loss statement/estimate from your insurance company, please forward it to me so we can review it together and make sure nothing is missing. Next up is going over your paperwork and picking out your shingle color \u2014 here\u2019s my info in the meantime:',
+  'contract':
+    'Hi {firstName}, thank you for trusting {company} with your home! Your contract is all set and we\u2019re getting your build on the schedule. I\u2019ll keep you updated every step of the way \u2014 reach me anytime:',
+  'preproduction':
+    'Hi {firstName}, this is {repName} with {company}. We\u2019re in preproduction on your roof! Your materials are being ordered and your build is being scheduled. We\u2019re monitoring the weather closely and will confirm your build date as soon as it\u2019s locked in. Reach me anytime:',
+  'build-day':
+    'Hi {firstName}, it\u2019s almost here \u2014 your roof build is scheduled! A few quick reminders: our crew typically arrives early morning, so please have all vehicles out of the driveway and garage the night before \u2014 we\u2019ll need the driveway clear for the material delivery and dump trailer \u2014 and keep pets indoors. Call or text me with anything:',
+  'postproduction':
+    'Hi {firstName}, your new roof is on! \uD83C\uDFE0 Our team is wrapping up final cleanup \u2014 including a magnetic sweep of your yard and driveway for nails \u2014 and a final quality inspection. If you notice anything at all, just let me know and we\u2019ll take care of it. Your final paperwork and invoice will be submitted to your insurance company. Thank you for trusting {company}!',
+  'invoiced':
+    'Hi {firstName}, this is {repName} with {company}. Your invoice has been sent over. Keep an eye out for your recoverable depreciation check from your insurance company \u2014 it\u2019s typically released after they receive our final invoice. Any questions about payment or paperwork, don\u2019t hesitate to reach out:',
+  'completed':
+    'Hi {firstName}, your new roof is complete \u2014 thank you for choosing {company}! Your workmanship warranty has you covered if anything ever comes up. If you were happy with our work, a quick Google review would mean the world, and we always appreciate referrals to friends and neighbors!',
+  'denied':
+    'Hi {firstName}, this is {repName} with {company}. I saw your claim decision came back \u2014 please don\u2019t worry, this isn\u2019t the end of the road. I\u2019d like to go over your options with you, including filing an appeal. Call or text me anytime:',
+  'appeal':
+    'Hi {firstName}, quick update from {repName} at {company} \u2014 we\u2019re actively working your appeal with your insurance carrier and will let you know the moment we hear anything. Questions anytime:',
+  'retail':
+    'Hi {firstName}, this is {repName} with {company}. I\u2019ve put together pricing options so you can move forward with your roof without the insurance claim \u2014 happy to walk you through financing options too. Reach me anytime:',
+  'closed-denied':
+    'Hi {firstName}, this is {repName} with {company}. Thank you for the opportunity to work with you. If anything changes with your roof \u2014 or the next storm rolls through \u2014 we\u2019re always here to help:',
+};
+
+// Resolve the template for a job's stage: exact column-id match first, then
+// keyword match on the stage NAME so custom stages (e.g. a "Claim Filed"
+// column added via Edit Boards, whose id is auto-generated) still get the
+// right message. Falls back to the lead intro.
+function stageTemplateForJob(j){
+  if(STAGE_TEXT_TEMPLATES[j.col]) return STAGE_TEXT_TEMPLATES[j.col];
+  const jobCols = (typeof columnsForPipeline === 'function' && typeof pipelineForJob === 'function')
+    ? columnsForPipeline(pipelineForJob(j)?.id) : [];
+  // Squash the stage name ("Pre-Production" / "Pre Production" -> "preproduction")
+  // so spelling variations still match.
+  const colName = (jobCols.find(c => c.id === j.col)?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const KEYWORDS = [
+    ['adjuster',       'adjuster-meeting'],
+    ['claim',          'claim-filed'],
+    ['inspect',        'inspection'],
+    ['approv',         'approved'],
+    ['contract',       'contract'],
+    ['preproduction',  'preproduction'],   // must run before 'build'
+    ['postproduction', 'postproduction'],
+    ['build',          'build-day'],
+    ['invoice',        'invoiced'],
+    ['complet',        'completed'],
+    ['appeal',         'appeal'],
+    ['retail',         'retail'],
+    ['denied',         'denied'],
+  ];
+  for(const [kw, key] of KEYWORDS){
+    if(colName.includes(kw)) return STAGE_TEXT_TEMPLATES[key];
+  }
+  return STAGE_TEXT_TEMPLATES['lead'];
+}
+
 // Open the phone's Messages app pre-filled with a warm intro + a text business
 // card (salesman name/cell + company name/phone/address). The salesman can edit
 // before sending. SMS links can't attach files, so the card is plain text.
@@ -1805,13 +1886,18 @@ function textLeadWithCard(jobId){
   // First name of the lead for a friendlier greeting.
   const firstName = (j.name || '').trim().split(/\s+/)[0] || 'there';
 
-  // Build the message: warm intro + business card.
+  // Pick the intro that matches the job's current stage (fallback: lead intro).
+  const intro = stageTemplateForJob(j)
+    .replace(/\{firstName\}/g, firstName)
+    .replace(/\{repName\}/g, repName || 'your rep')
+    .replace(/\{company\}/g, coName);
+
+  // Build the message: stage intro + business card.
   // Cell = the salesman's own contact number; Office = fixed company line.
   const OFFICE_PHONE = '(832) 910-7735';
   const lines = [];
-  lines.push(`Hi ${firstName}, this is ${repName || 'your rep'} with ${coName}. Thank you for your time today — it was great meeting you!`);
+  lines.push(intro);
   lines.push('');
-  lines.push('Here\u2019s my info so you can reach me anytime:');
   if(repName) lines.push(repName);
   if(repCell) lines.push(`Cell: ${repCell}`);
   lines.push(`Office: ${OFFICE_PHONE}`);
