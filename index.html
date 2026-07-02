@@ -327,6 +327,40 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .card-move-btn{display:inline-flex}
 }
 
+/* ===== Tablet tier (iPad portrait/landscape, small desktop windows) =====
+   Sits between the phone layout (<=760px) and full desktop (>1180px). */
+@media (min-width:761px) and (max-width:1180px){
+  /* Nav: keep the links but let the bar scroll sideways instead of overflowing */
+  .topnav{overflow-x:auto;padding:0 12px;scrollbar-width:none}
+  .topnav::-webkit-scrollbar{display:none}
+  .nav-search{width:170px;min-width:130px;font-size:16px}
+
+  /* Subbar: wrap instead of overflowing under the board */
+  .subbar{height:auto;min-height:46px;padding:8px 12px;row-gap:6px}
+
+  /* Kanban: comfortable fixed-width columns, 2-3 visible, gentle snapping */
+  .board-wrap{scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .col{width:320px;scroll-snap-align:start}
+
+  /* Mild card scale-up for 320px columns (phones get the bigger 1.4x scale) */
+  .card-name{font-size:14px}
+  .card-sub,.card-phone{font-size:12px}
+  .card-meta{font-size:11px}
+  .card-meta i{font-size:12px}
+  .job-card{padding:10px 12px}
+  .user-dot{width:23px;height:23px;font-size:9px}
+  .card-move-btn{width:30px;height:30px}
+
+  /* Modals: never wider than the screen */
+  .m-overlay .modal{max-width:92vw!important;max-height:92vh;overflow-y:auto}
+
+  /* Summary grids fit the screen instead of desktop's fixed 720px minimum */
+  .summary-visuals,.summary-focus{min-width:0}
+
+  /* 16px inputs stop iPad Safari's zoom-on-focus */
+  input,select,textarea{font-size:16px}
+}
+
 @media (max-width:760px){
   /* Top nav: collapse links into hamburger drawer */
   .topnav{padding:0 8px;gap:8px}
@@ -364,8 +398,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .col-title{font-size:14px}
   .col-count{font-size:12px;padding:2px 8px}
 
-  /* Job detail modal: stack side-by-side cards into one column */
-  .two-col{grid-template-columns:1fr}
+  /* Job detail modal keeps its two-column layout down to 640px (covers iPad
+     Mini portrait at 744px) — the single-column collapse lives in the
+     phone-only block below this one */
 
   /* Modals: never wider than the screen, scroll internally */
   .m-overlay{padding:10px;padding-top:16px}
@@ -380,12 +415,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
   .team-table{display:table;white-space:normal}
 
+  /* 16px inputs prevent iOS auto-zoom on focus */
+  input,select,textarea{font-size:16px!important}
+}
+
+/* True phone widths only — iPad Mini portrait (744px) stays two-column */
+@media (max-width:640px){
+  /* Job detail modal: stack side-by-side cards into one column */
+  .two-col{grid-template-columns:1fr}
   /* Collapse inline-styled two-column grids to one column */
   [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr!important}
   [style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr)!important}
-
-  /* 16px inputs prevent iOS auto-zoom on focus */
-  input,select,textarea{font-size:16px!important}
 }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
