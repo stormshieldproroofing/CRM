@@ -376,27 +376,26 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   #boardPipelineTabs{flex:1 1 100%;margin-right:0}
   .pill-btn{padding:7px 11px}
 
-  /* Kanban: exactly one stage per screen, swipe to page between stages */
-  .board-wrap{padding:10px 10px 24px;scroll-snap-type:x mandatory;scroll-padding-left:10px;-webkit-overflow-scrolling:touch}
-  .col{width:calc(100vw - 20px);scroll-snap-align:start;scroll-snap-stop:always}
+  /* Kanban (641-760px, e.g. iPad Mini portrait): tablet-style columns —
+     2+ visible at 320px with gentle snapping. True phones get the
+     one-stage-per-swipe board from the 640px block below. */
+  .board-wrap{padding:10px 10px 24px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .col{width:320px;scroll-snap-align:start}
 
-  /* Cards were sized for 220px columns — scale text/icons up ~1.4x so
-     they keep the same proportions at full screen width */
-  .job-card{padding:12px 14px;border-radius:9px;margin-bottom:8px}
-  .card-name{font-size:16px}
-  .card-sub{font-size:13px}
-  .card-phone{font-size:13px;gap:5px;margin-top:4px}
-  .card-phone i{font-size:15px}
-  .card-meta{font-size:12px;gap:4px}
-  .card-meta i{font-size:14px}
-  .card-footer{margin-top:9px;padding-top:8px;gap:9px}
-  .user-dot{width:27px;height:27px;font-size:11px}
-  .card-move-btn{width:34px;height:34px}
-  .card-move-btn i{font-size:18px!important}
-  .job-card [style*="font-size:9px"]{font-size:12px!important}
-  .col-header{padding:11px 12px}
-  .col-title{font-size:14px}
-  .col-count{font-size:12px;padding:2px 8px}
+  /* Mild card scale for 320px columns (phones get the bigger 1.4x scale below) */
+  .job-card{padding:10px 12px;border-radius:9px;margin-bottom:7px}
+  .card-name{font-size:14px}
+  .card-sub{font-size:12px}
+  .card-phone{font-size:12px;gap:4px;margin-top:3px}
+  .card-phone i{font-size:13px}
+  .card-meta{font-size:11px;gap:3px}
+  .card-meta i{font-size:12px}
+  .card-footer{margin-top:8px;padding-top:7px;gap:7px}
+  .user-dot{width:23px;height:23px;font-size:9px}
+  .card-move-btn{width:30px;height:30px}
+  .card-move-btn i{font-size:16px!important}
+  .col-title{font-size:13px}
+  .col-count{font-size:11px}
 
   /* Job detail modal keeps its two-column layout down to 640px (covers iPad
      Mini portrait at 744px) — the single-column collapse lives in the
@@ -426,6 +425,28 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   /* Collapse inline-styled two-column grids to one column */
   [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr!important}
   [style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr)!important}
+
+  /* Kanban: exactly one stage per screen, swipe to page between stages */
+  .board-wrap{scroll-snap-type:x mandatory;scroll-padding-left:10px}
+  .col{width:calc(100vw - 20px);scroll-snap-stop:always}
+
+  /* Cards were sized for 220px columns — scale text/icons up ~1.4x so
+     they keep the same proportions at full screen width */
+  .job-card{padding:12px 14px;margin-bottom:8px}
+  .card-name{font-size:16px}
+  .card-sub{font-size:13px}
+  .card-phone{font-size:13px;gap:5px;margin-top:4px}
+  .card-phone i{font-size:15px}
+  .card-meta{font-size:12px;gap:4px}
+  .card-meta i{font-size:14px}
+  .card-footer{margin-top:9px;padding-top:8px;gap:9px}
+  .user-dot{width:27px;height:27px;font-size:11px}
+  .card-move-btn{width:34px;height:34px}
+  .card-move-btn i{font-size:18px!important}
+  .job-card [style*="font-size:9px"]{font-size:12px!important}
+  .col-header{padding:11px 12px}
+  .col-title{font-size:14px}
+  .col-count{font-size:12px;padding:2px 8px}
 }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
