@@ -1600,12 +1600,8 @@ const PLBL={low:'Low',med:'Med',high:'High'};
 const DEFAULT_COLUMNS=[
   {id:'lead',name:'Lead',icon:'ti-antenna',locked:false,color:'#4D9DE0'},
   {id:'inspection',name:'Inspection',icon:'ti-clipboard-list',locked:false,color:'#F59E0B'},
-  {id:'claim-filed',name:'Claim Filed',icon:'ti-file-check',locked:false,color:'#2DD4BF'},
   {id:'approved',name:'Approved',icon:'ti-shield-check',locked:false,color:'#34D399'},
   {id:'contract',name:'Contract Signed',icon:'ti-writing-sign',locked:false,color:'#A78BFA'},
-  {id:'preproduction',name:'Preproduction',icon:'ti-package',locked:false,color:'#818CF8'},
-  {id:'build-day',name:'Build Day',icon:'ti-hammer',locked:false,color:'#F97316'},
-  {id:'postproduction',name:'Post Production',icon:'ti-home-check',locked:false,color:'#A3E635'},
   {id:'invoiced',name:'Invoiced',icon:'ti-cash',locked:false,color:'#FB923C'},
   {id:'completed',name:'Job Completed',icon:'ti-rosette-discount-check',locked:false,color:'#38BDF8',closed:true},
   // ── Fork: denial / off-track / closed paths ──
@@ -3726,6 +3722,7 @@ function renderDetailPanel(){
   $('detailOverlay').onclick=e=>{if(e.target===$('detailOverlay'))$('detailOverlay').classList.remove('open')};
 
   renderDetailTab(j,u,col,jobPipeline,jobColumns);
+  renderJobWeather(j); // fills #jobWxBox when the overview tab is showing (no-op otherwise)
 }
 
 function renderDetailTab(j,u,col,jobPipeline,jobColumns){
@@ -3855,10 +3852,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <button onclick="textLeadCardPhoto('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.4);color:#FB923C;font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-id" style="font-size:15px"></i>Send Card</button>
             <button onclick="saveJobContactToPhone('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.4);color:#34D399;font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-user-plus" style="font-size:15px"></i>Save to Contacts</button>
           </div>
-          <div class="weather-box">
+          <div class="weather-box" id="jobWxBox">
             <i class="ti ti-cloud" style="font-size:28px;color:#93C5FD;display:block;margin-bottom:5px" aria-hidden="true"></i>
-            <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:3px">Weather forecast will appear here</div>
-            <div style="font-size:11px;color:var(--muted);line-height:1.5">Add a property address to see the 7-day forecast for this job site</div>
+            <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:3px">${(j.address && j.address!=='—') ? 'Loading 7-day forecast\u2026' : 'Weather forecast will appear here'}</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.5">${(j.address && j.address!=='—') ? escapeHtml(j.address) : 'Add a property address to see the 7-day forecast for this job site'}</div>
           </div>
           <div class="dp-card" style="margin-top:10px">
             <button id="quickMeasureBtn" onclick="openQuickMeasure()" style="width:100%;padding:9px;border:1px solid var(--brand-light);border-radius:7px;background:rgba(77,157,224,0.08);color:var(--brand-light);font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
@@ -8147,6 +8144,129 @@ async function fetchWeatherForecast(force){
 function getWeatherForDate(dateKey){
   if(!dateKey || !window.__wxByDate) return null;
   return window.__wxByDate[dateKey] || null;
+}
+
+// ── JOB-SITE 7-DAY FORECAST (job detail modal) ──
+// Same NWS stack as the calendar, but fetched for the job's own coordinates.
+// Forecasts are cached in-memory per ~1km grid cell for 6 hours; geocode
+// results (for older jobs saved without coordinates) are cached per job id.
+window.__jobWxCache  = window.__jobWxCache  || {}; // "lat,lng" -> {fetchedAt, byDate}
+window.__jobGeoCache = window.__jobGeoCache || {}; // jobId -> {lat,lng} | 'failed'
+
+function jobWxIcon(w){
+  const s = ((w?.shortDay || w?.shortNight) || '').toLowerCase();
+  if(/thunder|t-storm/.test(s))        return ['ti-cloud-storm', '#F87171'];
+  if(/snow|sleet|ice|wintry/.test(s))  return ['ti-snowflake',   '#93C5FD'];
+  if(/rain|shower|drizzle/.test(s))    return ['ti-cloud-rain',  '#60A5FA'];
+  if(/fog|haze|mist/.test(s))          return ['ti-cloud-fog',   '#9CA3AF'];
+  if(/wind|breezy|gust/.test(s))       return ['ti-wind',        '#A5B4FC'];
+  if(/mostly cloudy|cloudy|overcast/.test(s)) return ['ti-cloud', '#93C5FD'];
+  if(/partly/.test(s))                 return ['ti-sun-high',    '#FCD34D'];
+  return ['ti-sun', '#FBBF24'];
+}
+
+async function fetchJobForecast(lat, lng){
+  const key = lat.toFixed(2) + ',' + lng.toFixed(2);
+  const cached = window.__jobWxCache[key];
+  if(cached && (Date.now() - cached.fetchedAt) < WX_CACHE_MS) return cached.byDate;
+  const ptResp = await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`, { headers: { 'Accept': 'application/geo+json' } });
+  if(!ptResp.ok) throw new Error(`NWS points lookup failed (${ptResp.status})`);
+  const pt = await ptResp.json();
+  const forecastUrl = pt?.properties?.forecast;
+  if(!forecastUrl) throw new Error('NWS did not return a forecast URL');
+  const fcResp = await fetch(forecastUrl, { headers: { 'Accept': 'application/geo+json' } });
+  if(!fcResp.ok) throw new Error(`NWS forecast fetch failed (${fcResp.status})`);
+  const fc = await fcResp.json();
+  const periods = fc?.properties?.periods || [];
+  const byDate = {};
+  periods.forEach(p => {
+    const dateKey = p.startTime.slice(0, 10);
+    if(!byDate[dateKey]) byDate[dateKey] = { precip: null, tempHi: null, tempLo: null, windMax: 0, shortDay: '', shortNight: '' };
+    const slot = byDate[dateKey];
+    const pop = p.probabilityOfPrecipitation?.value;
+    if(typeof pop === 'number') slot.precip = Math.max(slot.precip ?? 0, pop);
+    const wHi = (p.windSpeed || '').match(/(\d+)\s*to\s*(\d+)\s*mph/);
+    const wm  = (p.windSpeed || '').match(/(\d+)\s*mph$/);
+    if(wHi) slot.windMax = Math.max(slot.windMax, parseInt(wHi[2]));
+    else if(wm) slot.windMax = Math.max(slot.windMax, parseInt(wm[1]));
+    if(p.isDaytime){ slot.tempHi = p.temperature; slot.shortDay = p.shortForecast || ''; }
+    else { slot.tempLo = p.temperature; slot.shortNight = p.shortForecast || ''; }
+  });
+  window.__jobWxCache[key] = { fetchedAt: Date.now(), byDate };
+  return byDate;
+}
+
+async function renderJobWeather(j){
+  const box = document.getElementById('jobWxBox');
+  if(!box || !j) return;
+  if(!j.address || j.address === '—') return; // placeholder already explains
+
+  // Coordinates: saved with the job, else geocode the address once and remember.
+  let lat = (typeof j.latitude === 'number') ? j.latitude : null;
+  let lng = (typeof j.longitude === 'number') ? j.longitude : null;
+  if(lat == null || lng == null){
+    const g = window.__jobGeoCache[j.id];
+    if(g === 'failed') { jobWxError(box, 'Couldn\u2019t locate this address'); return; }
+    if(g){ lat = g.lat; lng = g.lng; }
+    else if(typeof geocodeAddress === 'function'){
+      const geo = await geocodeAddress(j.address);
+      if(!geo){ window.__jobGeoCache[j.id] = 'failed'; jobWxError(box, 'Couldn\u2019t locate this address'); return; }
+      window.__jobGeoCache[j.id] = geo; lat = geo.lat; lng = geo.lng;
+    } else { jobWxError(box, 'Location unavailable'); return; }
+  }
+
+  let byDate;
+  try { byDate = await fetchJobForecast(lat, lng); }
+  catch(e){ console.warn('[job weather]', e); jobWxError(box, 'Forecast unavailable right now'); return; }
+
+  // Modal may have been closed / re-rendered for another job while fetching.
+  const live = document.getElementById('jobWxBox');
+  if(!live || openJobId !== j.id) return;
+
+  // Build the next 7 days.
+  const days = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  for(let i = 0; i < 7; i++){
+    const d = new Date(today.getTime() + i * 86400000);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    days.push({ key, d, w: byDate[key] || null });
+  }
+  const buildKey = j.buildDate || '';
+
+  const tiles = days.map(({key, d, w}, i) => {
+    const [icon, iconColor] = jobWxIcon(w);
+    const lvl = (typeof classifyWeather === 'function') ? classifyWeather(w).level : 'unknown';
+    const tint = lvl === 'bad' ? 'rgba(239,68,68,0.10)' : lvl === 'caution' ? 'rgba(245,158,11,0.08)' : 'transparent';
+    const bord = key === buildKey ? '#F97316' : (lvl === 'bad' ? 'rgba(239,68,68,0.45)' : 'var(--border)');
+    const dayLbl = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' });
+    const hi = (w && w.tempHi != null) ? w.tempHi + '\u00B0' : '\u2014';
+    const lo = (w && w.tempLo != null) ? w.tempLo + '\u00B0' : '';
+    const pr = (w && w.precip != null && w.precip > 0) ? `<div style="font-size:10px;color:#60A5FA;font-weight:600">${w.precip}%</div>` : `<div style="font-size:10px;color:transparent">\u00B7</div>`;
+    const title = [d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), w?.shortDay || '', (w?.windMax ? `Wind up to ${w.windMax} mph` : ''), key===buildKey ? '\u2605 BUILD DAY' : ''].filter(Boolean).join(' \u00B7 ');
+    return `<div title="${escapeHtml(title)}" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border-radius:8px;border:1px solid ${bord};background:${tint};${key===buildKey?'box-shadow:0 0 0 1px #F97316;':''}">
+      <div style="font-size:10px;font-weight:700;color:${key===buildKey?'#FB923C':'var(--muted)'};text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">${key===buildKey?'\u2605 '+dayLbl:dayLbl}</div>
+      <i class="ti ${icon}" style="font-size:19px;color:${iconColor}" aria-hidden="true"></i>
+      <div style="font-size:11px;font-weight:700;color:var(--brand)">${hi}${lo?`<span style="color:var(--muted);font-weight:500"> ${lo}</span>`:''}</div>
+      ${pr}
+    </div>`;
+  }).join('');
+
+  live.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <i class="ti ti-cloud" style="font-size:14px;color:#93C5FD" aria-hidden="true"></i>
+      <span style="font-size:11px;font-weight:700;color:var(--brand);letter-spacing:.02em">7-DAY FORECAST \u00B7 JOB SITE</span>
+      <span style="flex:1"></span>
+      <span style="font-size:10px;color:var(--muted)">weather.gov</span>
+    </div>
+    <div style="display:flex;gap:5px">${tiles}</div>`;
+  live.style.textAlign = 'left';
+}
+
+function jobWxError(box, msg){
+  box.innerHTML = `
+    <i class="ti ti-cloud-off" style="font-size:24px;color:var(--muted);display:block;margin-bottom:5px" aria-hidden="true"></i>
+    <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:3px">${escapeHtml(msg)}</div>
+    <div style="font-size:11px;color:var(--muted)">Tap the job\u2019s Edit button to check the address, or try again later</div>`;
 }
 
 function classifyWeather(w){
