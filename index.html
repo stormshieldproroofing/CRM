@@ -8168,13 +8168,19 @@ function jobWxIcon(w){
 async function fetchJobForecast(lat, lng){
   const key = lat.toFixed(2) + ',' + lng.toFixed(2);
   const cached = window.__jobWxCache[key];
-  if(cached && (Date.now() - cached.fetchedAt) < WX_CACHE_MS) return cached.byDate;
+  if(cached && (Date.now() - cached.fetchedAt) < WX_CACHE_MS) return cached;
   const ptResp = await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`, { headers: { 'Accept': 'application/geo+json' } });
   if(!ptResp.ok) throw new Error(`NWS points lookup failed (${ptResp.status})`);
   const pt = await ptResp.json();
   const forecastUrl = pt?.properties?.forecast;
+  const hourlyUrl   = pt?.properties?.forecastHourly;
   if(!forecastUrl) throw new Error('NWS did not return a forecast URL');
-  const fcResp = await fetch(forecastUrl, { headers: { 'Accept': 'application/geo+json' } });
+
+  // Daily + hourly in parallel; hourly is best-effort (rain timing detail).
+  const [fcResp, hrResp] = await Promise.all([
+    fetch(forecastUrl, { headers: { 'Accept': 'application/geo+json' } }),
+    hourlyUrl ? fetch(hourlyUrl, { headers: { 'Accept': 'application/geo+json' } }).catch(() => null) : Promise.resolve(null)
+  ]);
   if(!fcResp.ok) throw new Error(`NWS forecast fetch failed (${fcResp.status})`);
   const fc = await fcResp.json();
   const periods = fc?.properties?.periods || [];
@@ -8192,8 +8198,56 @@ async function fetchJobForecast(lat, lng){
     if(p.isDaytime){ slot.tempHi = p.temperature; slot.shortDay = p.shortForecast || ''; }
     else { slot.tempLo = p.temperature; slot.shortNight = p.shortForecast || ''; }
   });
-  window.__jobWxCache[key] = { fetchedAt: Date.now(), byDate };
-  return byDate;
+
+  // Hourly rain-chance per date: hourlyByDate["YYYY-MM-DD"] = [{h:0..23, pop, short}]
+  const hourlyByDate = {};
+  try {
+    if(hrResp && hrResp.ok){
+      const hr = await hrResp.json();
+      (hr?.properties?.periods || []).forEach(p => {
+        const dateKey = p.startTime.slice(0, 10);
+        const hour = parseInt(p.startTime.slice(11, 13));
+        if(!hourlyByDate[dateKey]) hourlyByDate[dateKey] = [];
+        hourlyByDate[dateKey].push({ h: hour, pop: p.probabilityOfPrecipitation?.value ?? 0, short: p.shortForecast || '' });
+      });
+    }
+  } catch(e){ console.warn('[job weather] hourly parse failed', e); }
+
+  const result = { fetchedAt: Date.now(), byDate, hourlyByDate };
+  window.__jobWxCache[key] = result;
+  return result;
+}
+
+// Summarize when rain is expected on a given day from hourly data.
+// Returns { text, hours } — text like "Rain expected 1 PM – 6 PM, heaviest around 3 PM (85%)".
+function jobWxRainTiming(hours){
+  if(!hours || !hours.length) return null;
+  const fmt = h => { const ap = h >= 12 ? 'PM' : 'AM'; const hh = h % 12 === 0 ? 12 : h % 12; return `${hh} ${ap}`; };
+  const THRESH = 30; // % chance considered "rain expected"
+  // Contiguous windows of hours at/above threshold
+  const windows = [];
+  let cur = null;
+  hours.slice().sort((a,b)=>a.h-b.h).forEach(x => {
+    if(x.pop >= THRESH){
+      if(cur && x.h === cur.end + 1){
+        cur.end = x.h;
+        if(x.pop > cur.peakPop){ cur.peakPop = x.pop; cur.peakH = x.h; }
+      } else {
+        cur = { start: x.h, end: x.h, peakPop: x.pop, peakH: x.h };
+        windows.push(cur);
+      }
+    } else cur = null;
+  });
+  if(!windows.length) return { text: 'No measurable rain expected', windows: [] };
+  const main = windows.reduce((a,b) => (b.end - b.start) > (a.end - a.start) ? b : a);
+  let text;
+  if(main.start === main.end){
+    text = `Rain possible around ${fmt(main.start)} (${main.peakPop}%)`;
+  } else {
+    text = `Rain expected ${fmt(main.start)} \u2013 ${fmt(main.end + 1)}, heaviest around ${fmt(main.peakH)} (${main.peakPop}%)`;
+  }
+  if(windows.length > 1) text += ` \u00B7 +${windows.length - 1} more window${windows.length > 2 ? 's' : ''}`;
+  return { text, windows };
 }
 
 async function renderJobWeather(j){
@@ -8215,9 +8269,10 @@ async function renderJobWeather(j){
     } else { jobWxError(box, 'Location unavailable'); return; }
   }
 
-  let byDate;
-  try { byDate = await fetchJobForecast(lat, lng); }
+  let wx;
+  try { wx = await fetchJobForecast(lat, lng); }
   catch(e){ console.warn('[job weather]', e); jobWxError(box, 'Forecast unavailable right now'); return; }
+  const byDate = wx.byDate, hourlyByDate = wx.hourlyByDate || {};
 
   // Modal may have been closed / re-rendered for another job while fetching.
   const live = document.getElementById('jobWxBox');
@@ -8242,8 +8297,7 @@ async function renderJobWeather(j){
     const hi = (w && w.tempHi != null) ? w.tempHi + '\u00B0' : '\u2014';
     const lo = (w && w.tempLo != null) ? w.tempLo + '\u00B0' : '';
     const pr = (w && w.precip != null && w.precip > 0) ? `<div style="font-size:10px;color:#60A5FA;font-weight:600">${w.precip}%</div>` : `<div style="font-size:10px;color:transparent">\u00B7</div>`;
-    const title = [d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), w?.shortDay || '', (w?.windMax ? `Wind up to ${w.windMax} mph` : ''), key===buildKey ? '\u2605 BUILD DAY' : ''].filter(Boolean).join(' \u00B7 ');
-    return `<div title="${escapeHtml(title)}" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border-radius:8px;border:1px solid ${bord};background:${tint};${key===buildKey?'box-shadow:0 0 0 1px #F97316;':''}">
+    return `<div class="jwx-tile" data-wxday="${key}" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border-radius:8px;border:1px solid ${bord};background:${tint};cursor:pointer;${key===buildKey?'box-shadow:0 0 0 1px #F97316;':''}">
       <div style="font-size:10px;font-weight:700;color:${key===buildKey?'#FB923C':'var(--muted)'};text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">${key===buildKey?'\u2605 '+dayLbl:dayLbl}</div>
       <i class="ti ${icon}" style="font-size:19px;color:${iconColor}" aria-hidden="true"></i>
       <div style="font-size:11px;font-weight:700;color:var(--brand)">${hi}${lo?`<span style="color:var(--muted);font-weight:500"> ${lo}</span>`:''}</div>
@@ -8258,8 +8312,56 @@ async function renderJobWeather(j){
       <span style="flex:1"></span>
       <span style="font-size:10px;color:var(--muted)">weather.gov</span>
     </div>
-    <div style="display:flex;gap:5px">${tiles}</div>`;
+    <div style="display:flex;gap:5px">${tiles}</div>
+    <div id="jobWxDetail" style="margin-top:8px"></div>`;
   live.style.textAlign = 'left';
+
+  // Tap a day -> show its detail (conditions, wind, rain timing + hourly bar).
+  const showDay = (key) => {
+    live.querySelectorAll('.jwx-tile').forEach(t => {
+      t.style.outline = t.dataset.wxday === key ? '2px solid var(--brand-light)' : 'none';
+    });
+    const info = days.find(x => x.key === key);
+    const det = document.getElementById('jobWxDetail');
+    if(!info || !det) return;
+    const w = info.w;
+    const dateLbl = info.d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    const hours = hourlyByDate[key] || null;
+    const timing = jobWxRainTiming(hours);
+    const rainColor = timing && /^Rain/.test(timing.text) ? '#60A5FA' : 'var(--muted)';
+
+    // 24-hour rain-chance mini bar (6a / 12p / 6p markers)
+    let bar = '';
+    if(hours && hours.length){
+      const byH = {}; hours.forEach(x => byH[x.h] = x.pop);
+      const cells = Array.from({length: 24}, (_, h) => {
+        const pop = byH[h];
+        const known = typeof pop === 'number';
+        const hgt = known ? Math.max(2, Math.round(pop / 100 * 22)) : 2;
+        const clr = !known ? 'rgba(255,255,255,0.06)' : pop >= 70 ? '#EF4444' : pop >= 30 ? '#60A5FA' : 'rgba(255,255,255,0.14)';
+        const hl = h % 12 === 0 ? 12 : h % 12;
+        return `<div title="${hl} ${h>=12?'PM':'AM'}${known?` \u00B7 ${pop}% rain`:''}" style="flex:1;display:flex;align-items:flex-end;height:22px"><div style="width:100%;height:${hgt}px;background:${clr};border-radius:1px"></div></div>`;
+      }).join('');
+      bar = `<div style="display:flex;gap:1px;margin-top:6px">${cells}</div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:2px"><span>12A</span><span>6A</span><span>12P</span><span>6P</span><span>11P</span></div>`;
+    }
+
+    det.innerHTML = `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:9px 11px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;color:var(--brand)">${dateLbl}${key===buildKey?' <span style="color:#FB923C">\u2605 Build Day</span>':''}</span>
+        ${w && w.shortDay ? `<span style="font-size:11px;color:var(--muted)">\u00B7 ${escapeHtml(w.shortDay)}</span>` : ''}
+        ${w && w.windMax ? `<span style="font-size:11px;color:var(--muted)">\u00B7 Wind up to ${w.windMax} mph</span>` : ''}
+      </div>
+      <div style="font-size:11px;font-weight:600;color:${rainColor};margin-top:4px">
+        <i class="ti ti-cloud-rain" style="font-size:12px" aria-hidden="true"></i>
+        ${timing ? escapeHtml(timing.text) : 'Hourly detail not available yet for this day'}
+      </div>
+      ${bar}
+    </div>`;
+  };
+  live.querySelectorAll('.jwx-tile').forEach(t => t.addEventListener('click', () => showDay(t.dataset.wxday)));
+  // Default selection: the build day if it's in the window, otherwise today.
+  showDay(days.some(x => x.key === buildKey) ? buildKey : days[0].key);
 }
 
 function jobWxError(box, msg){
