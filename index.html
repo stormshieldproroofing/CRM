@@ -336,9 +336,18 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .nav-search{width:0;flex:1;min-width:80px;font-size:16px}
   .card-move-btn{display:inline-flex}
 
-  /* Kanban: tap-friendly columns with snap scrolling */
-  .board-wrap{padding:10px 10px 24px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
-  .col{width:min(82vw,300px);scroll-snap-align:start}
+  /* Subbar (Filter / Edit Boards / Show Completed): let it wrap and grow
+     instead of overflowing under the board at its fixed 46px height */
+  .subbar{height:auto;min-height:46px;padding:8px 10px;row-gap:6px}
+  #boardPipelineTabs{flex:1 1 100%;margin-right:0}
+  .pill-btn{padding:7px 11px}
+
+  /* Kanban: exactly one stage per screen, swipe to page between stages */
+  .board-wrap{padding:10px 10px 24px;scroll-snap-type:x mandatory;scroll-padding-left:10px;-webkit-overflow-scrolling:touch}
+  .col{width:calc(100vw - 20px);scroll-snap-align:start;scroll-snap-stop:always}
+
+  /* Job detail modal: stack side-by-side cards into one column */
+  .two-col{grid-template-columns:1fr}
 
   /* Modals: never wider than the screen, scroll internally */
   .m-overlay{padding:10px;padding-top:16px}
