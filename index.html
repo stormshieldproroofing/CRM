@@ -9692,7 +9692,8 @@ async function loadCompanyInfo(){
 // then prints a one-page voucher to attach to the sub's check.
 const SUB_PAY = {
   base: 75,        // $/sq
-  storyAdder: 5,   // +$/sq for 2-story
+  storyAdder: 5,   // +$/sq per story above 1 (2-story = +$5, 3-story = +$10)
+  handNailAdder: 5,// +$/sq when the roof is hand nailed
   perSheet: 40,    // $/sheet of decking
   // Steep pitch charge tiers — cumulative $5 steps. `charge` is $/sq added to base.
   steepTiers: [
@@ -9707,37 +9708,43 @@ function steepChargeFor(key){ const t=SUB_PAY.steepTiers.find(t=>t.key===key); r
 // bd = { mixedPitch, squares, sqStd, sq_<tier>, story, pitch, sheets, extraLines:[{desc,amount}] }
 function computeLaborFromBreakdown(bd){
   bd = bd || {};
-  const storyAdd = (parseInt(bd.story)===2) ? SUB_PAY.storyAdder : 0;
+  const story = parseInt(bd.story)||1;
+  const storyAdd = Math.max(0, story-1) * SUB_PAY.storyAdder;   // 2-story +$5/sq, 3-story +$10/sq
+  const handNailAdd = bd.handNail ? SUB_PAY.handNailAdder : 0;  // +$5/sq when hand nailed
+  const repair = !!bd.repair;                                   // repair: no base/squares, extras only
   const sheets = parseFloat(bd.sheets)||0;
-  let sq, laborBase, laborStory, laborSteep, labor, tiers, ratePerSq=null;
-  if(bd.mixedPitch){
+  let sq, laborBase, laborStory, laborSteep, laborHandNail, labor, tiers, ratePerSq=null;
+  if(repair){
+    sq = 0; laborBase = 0; laborStory = 0; laborSteep = 0; laborHandNail = 0; labor = 0; tiers = [];
+  } else if(bd.mixedPitch){
     const sqStd = parseFloat(bd.sqStd)||0;
     const tierSquares = SUB_PAY.steepTiers.map(t=>({ ...t, sq:parseFloat(bd['sq_'+t.key])||0 }));
     sq = sqStd + tierSquares.reduce((s,t)=>s+t.sq,0);
-    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd;
+    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborHandNail = sq*handNailAdd;
     laborSteep = tierSquares.reduce((s,t)=>s+t.sq*t.charge,0);
-    labor = laborBase+laborStory+laborSteep;
+    labor = laborBase+laborStory+laborSteep+laborHandNail;
     tiers = [{label:'Standard ≤7/12',sq:sqStd,adder:0},...tierSquares.map(t=>({label:t.label,sq:t.sq,adder:t.charge}))].filter(t=>t.sq>0);
   } else {
     sq = parseFloat(bd.squares)||0;
     const steepAdd = steepChargeFor(bd.pitch);
-    ratePerSq = SUB_PAY.base+storyAdd+steepAdd;
-    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborSteep = sq*steepAdd;
+    ratePerSq = SUB_PAY.base+storyAdd+steepAdd+handNailAdd;
+    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborSteep = sq*steepAdd; laborHandNail = sq*handNailAdd;
     labor = sq*ratePerSq;
     tiers = [{label:'',sq,adder:steepAdd}];
   }
   const decking = sheets*SUB_PAY.perSheet;
   const extras = (bd.extraLines||[]).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
   const total = labor+decking+extras;
-  return { sq, storyAdd, sheets, mixedPitch:!!bd.mixedPitch, tiers, ratePerSq, laborBase, laborStory, laborSteep, labor, decking, extras, total };
+  return { sq, story, storyAdd, handNail:!!bd.handNail, handNailAdd, repair, sheets, mixedPitch:!!bd.mixedPitch, tiers, ratePerSq, laborBase, laborStory, laborSteep, laborHandNail, labor, decking, extras, total };
 }
 // Short human summary of a breakdown for inline display.
 function laborBreakdownSummary(bd){
   const c = computeLaborFromBreakdown(bd);
-  const parts = [`${c.sq} sq`];
-  if(c.storyAdd) parts.push('2-story');
-  if(bd.mixedPitch) parts.push('mixed pitch');
-  else if(bd.pitch && bd.pitch!=='0'){ const t=SUB_PAY.steepTiers.find(t=>t.key===bd.pitch); if(t) parts.push(t.label); }
+  const parts = c.repair ? ['repair'] : [`${c.sq} sq`];
+  if(!c.repair && c.storyAdd) parts.push(`${c.story}-story`);
+  if(!c.repair && c.handNail) parts.push('hand nail');
+  if(!c.repair && bd.mixedPitch) parts.push('mixed pitch');
+  else if(!c.repair && bd.pitch && bd.pitch!=='0'){ const t=SUB_PAY.steepTiers.find(t=>t.key===bd.pitch); if(t) parts.push(t.label); }
   if(c.sheets) parts.push(`${c.sheets} decking`);
   if(c.extras) parts.push('+ extras');
   return parts.join(' · ') + ` = $${Math.round(c.total).toLocaleString()}`;
@@ -9759,7 +9766,10 @@ function openLaborBreakdownCalc(initial, onDone){
       <div style="padding:16px 18px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div><label class="ie-lbl">Total Squares</label><input id="lbSquares" class="ie-inp" type="text" inputmode="decimal" value="${saved.squares??''}" placeholder="28" ${mixedPitch?'disabled style="opacity:0.5"':''}></div>
-          <div><label class="ie-lbl">Stories</label><select id="lbStory" class="ie-inp" style="cursor:pointer"><option value="1" ${saved.story!=2?'selected':''}>1 story</option><option value="2" ${saved.story==2?'selected':''}>2 story (+$${SUB_PAY.storyAdder}/sq)</option></select></div>
+          <div><label class="ie-lbl">Stories</label><select id="lbStory" class="ie-inp" style="cursor:pointer"><option value="1" ${(saved.story!=2&&saved.story!=3)?'selected':''}>1 story</option><option value="2" ${saved.story==2?'selected':''}>2 story (+$${SUB_PAY.storyAdder}/sq)</option><option value="3" ${saved.story==3?'selected':''}>3 story (+$${SUB_PAY.storyAdder*2}/sq)</option></select></div>
+          <div style="grid-column:1/-1">
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px"><input id="lbHandNail" type="checkbox" ${saved.handNail?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">Hand nail (+$${SUB_PAY.handNailAdder}/sq)</label>
+          </div>
           <div style="grid-column:1/-1">
             <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px"><input id="lbMixed" type="checkbox" ${mixedPitch?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">Mixed pitch (squares per tier)</label>
             <div id="lbSingleWrap" style="${mixedPitch?'display:none':''}">
@@ -9801,6 +9811,7 @@ function openLaborBreakdownCalc(initial, onDone){
       sqStd:num('lbSqStd'),
       ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key,num('lbSq_'+t.key)])),
       story:parseInt(overlay.querySelector('#lbStory').value)||1,
+      handNail:!!overlay.querySelector('#lbHandNail')?.checked,
       pitch:overlay.querySelector('#lbPitch')?.value||'0',
       sheets:num('lbSheets'),
       extraLines,
@@ -9817,7 +9828,8 @@ function openLaborBreakdownCalc(initial, onDone){
     const c=computeLaborFromBreakdown(collect());
     const row=(l,v,sub)=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+l+'</span>':'<span>'+l+'</span>'}<span>${v}</span></div>`;
     let html=row(`Base — ${c.sq} sq × $${SUB_PAY.base}`,fmt(c.laborBase));
-    if(c.storyAdd) html+=row(`2-story charge — ${c.sq} sq × $${c.storyAdd}`,fmt(c.laborStory),true);
+    if(c.storyAdd) html+=row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`,fmt(c.laborStory),true);
+    if(c.laborHandNail) html+=row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`,fmt(c.laborHandNail),true);
     c.tiers.filter(t=>t.adder>0).forEach(t=>{ if(c.mixedPitch) html+=row(`${t.label} charge — ${t.sq} sq × $${t.adder}`,fmt(t.sq*t.adder),true); });
     if(!c.mixedPitch && c.laborSteep) html+=row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`,fmt(c.laborSteep),true);
     if(c.decking) html+=row(`Decking — ${c.sheets} × $${SUB_PAY.perSheet}`,fmt(c.decking));
@@ -9832,7 +9844,7 @@ function openLaborBreakdownCalc(initial, onDone){
     const sqEl=overlay.querySelector('#lbSquares'); sqEl.disabled=mixedPitch; sqEl.style.opacity=mixedPitch?'0.5':'';
     render();
   });
-  overlay.querySelectorAll('#lbSquares,#lbStory,#lbPitch,#lbSheets,#lbSqStd,'+SUB_PAY.steepTiers.map(t=>'#lbSq_'+t.key).join(',')).forEach(el=>{el.addEventListener('input',render);el.addEventListener('change',render);});
+  overlay.querySelectorAll('#lbSquares,#lbStory,#lbHandNail,#lbPitch,#lbSheets,#lbSqStd,'+SUB_PAY.steepTiers.map(t=>'#lbSq_'+t.key).join(',')).forEach(el=>{el.addEventListener('input',render);el.addEventListener('change',render);});
   overlay.querySelector('#lbAddLine').addEventListener('click',()=>{extraLines.push({desc:'',amount:''});renderExtras();});
   overlay.querySelector('#lbApply').addEventListener('click',()=>{
     const bd=collect(); const c=computeLaborFromBreakdown(bd);
@@ -10106,18 +10118,31 @@ async function openSubVoucher(jobId){
               ${subs.map(s=>`<option value="${s.id}" ${saved.subId===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
             </select>
           </div>
-          <div>
+          <div style="grid-column:1 / -1">
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#F97316;cursor:pointer">
+              <input id="svRepairToggle" type="checkbox" ${saved.repair?'checked':''} style="cursor:pointer;accent-color:#F97316">
+              Repair job — no base charge / squares, additional work line items only
+            </label>
+          </div>
+          <div id="svSquaresWrap" style="${saved.repair?'display:none':''}">
             <label class="ie-lbl">Total Squares</label>
             <input id="svSquares" class="ie-inp" type="text" inputmode="decimal" value="${saved.squares??squares}" placeholder="28" ${saved.mixedPitch?'disabled style="opacity:0.5"':''}>
           </div>
-          <div>
+          <div id="svStoryWrap" style="${saved.repair?'display:none':''}">
             <label class="ie-lbl">Stories</label>
             <select id="svStory" class="ie-inp" style="cursor:pointer">
-              <option value="1" ${saved.story!=2?'selected':''}>1 story</option>
+              <option value="1" ${(saved.story!=2&&saved.story!=3)?'selected':''}>1 story</option>
               <option value="2" ${saved.story==2?'selected':''}>2 story (+$${SUB_PAY.storyAdder}/sq)</option>
+              <option value="3" ${saved.story==3?'selected':''}>3 story (+$${SUB_PAY.storyAdder*2}/sq)</option>
             </select>
           </div>
-          <div style="grid-column:1 / -1">
+          <div id="svHandNailWrap" style="grid-column:1 / -1;${saved.repair?'display:none':''}">
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer">
+              <input id="svHandNail" type="checkbox" ${saved.handNail?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">
+              Hand nail (+$${SUB_PAY.handNailAdder}/sq)
+            </label>
+          </div>
+          <div id="svPitchOuterWrap" style="grid-column:1 / -1;${saved.repair?'display:none':''}">
             <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px">
               <input id="svMixedToggle" type="checkbox" ${saved.mixedPitch?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">
               Mixed pitch (enter squares per pitch tier)
@@ -10177,7 +10202,7 @@ async function openSubVoucher(jobId){
           <div style="flex:1"></div>
           <button id="svPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Voucher</button>
         </div>
-        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · ${SUB_PAY.steepTiers.map(t=>`+$${t.charge} (${t.label})`).join(' · ')} · $${SUB_PAY.perSheet}/decking sheet.</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · +$${SUB_PAY.storyAdder*2}/sq 3-story · +$${SUB_PAY.handNailAdder}/sq hand nail · ${SUB_PAY.steepTiers.map(t=>`+$${t.charge} (${t.label})`).join(' · ')} · $${SUB_PAY.perSheet}/decking sheet.</div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -10202,40 +10227,21 @@ async function openSubVoucher(jobId){
   }
 
   let mixedPitch = !!saved.mixedPitch;
+  let repairMode = !!saved.repair;
 
   function compute(){
-    const story = parseInt(overlay.querySelector('#svStory').value)||1;
-    const storyAdd = (story===2) ? SUB_PAY.storyAdder : 0;
-    const sheets = num('svSheets');
-
-    let sq, laborBase, laborStory, laborSteep, labor, tiers, ratePerSq=null;
-    if(mixedPitch){
-      const sqStd = num('svSqStd');
-      const tierSquares = SUB_PAY.steepTiers.map(t=>({ ...t, sq:num('svSq_'+t.key) }));
-      sq = sqStd + tierSquares.reduce((s,t)=>s+t.sq,0);
-      laborBase = sq * SUB_PAY.base;
-      laborStory = sq * storyAdd;
-      laborSteep = tierSquares.reduce((s,t)=>s+t.sq*t.charge,0);
-      labor = laborBase + laborStory + laborSteep;
-      tiers = [
-        { label:'Standard ≤7/12', sq:sqStd, adder:0 },
-        ...tierSquares.map(t=>({ label:t.label, sq:t.sq, adder:t.charge })),
-      ].filter(t=>t.sq>0);
-    } else {
-      sq = num('svSquares');
-      const pitch = overlay.querySelector('#svPitch').value;
-      const steepAdd = steepChargeFor(pitch);
-      ratePerSq = SUB_PAY.base + storyAdd + steepAdd;
-      laborBase = sq * SUB_PAY.base;
-      laborStory = sq * storyAdd;
-      laborSteep = sq * steepAdd;
-      labor = sq * ratePerSq;
-      tiers = [{ label:'', sq, adder:steepAdd }];
-    }
-    const decking = sheets * SUB_PAY.perSheet;
-    const extras = extraLines.reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
-    const total = labor + decking + extras;
-    return { sq, story, storyAdd, sheets, mixedPitch, tiers, ratePerSq, laborBase, laborStory, laborSteep, labor, decking, extras, total };
+    return computeLaborFromBreakdown({
+      repair: repairMode,
+      mixedPitch,
+      squares: num('svSquares'),
+      sqStd: num('svSqStd'),
+      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, num('svSq_'+t.key)])),
+      story: parseInt(overlay.querySelector('#svStory').value)||1,
+      handNail: !!overlay.querySelector('#svHandNail')?.checked,
+      pitch: overlay.querySelector('#svPitch')?.value || '0',
+      sheets: num('svSheets'),
+      extraLines,
+    });
   }
 
   const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -10244,14 +10250,18 @@ async function openSubVoucher(jobId){
     const c = compute();
     const row=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+label+'</span>':'<span>'+label+'</span>'}<span style="font-variant-numeric:tabular-nums">${val}</span></div>`;
     let laborRows = '';
-    if(c.mixedPitch){
+    if(c.repair){
+      laborRows = row('Repair — no base charge', fmt(0));
+    } else if(c.mixedPitch){
       laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
-      if(c.storyAdd) laborRows += row(`2-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
       c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} charge — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
       laborRows += row(`Labor subtotal`, fmt(c.labor));
     } else {
       laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
-      if(c.storyAdd) laborRows += row(`2-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
       if(c.laborSteep) laborRows += row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
       laborRows += row(`Labor subtotal — ${c.sq} sq × $${c.ratePerSq}/sq`, fmt(c.labor));
     }
@@ -10266,6 +10276,16 @@ async function openSubVoucher(jobId){
     if(sumEl && mixedPitch) sumEl.textContent = `Total: ${c.sq} squares`;
   }
 
+  // Repair toggle — hides base-charge inputs, extras (and decking) only
+  overlay.querySelector('#svRepairToggle').addEventListener('change', e=>{
+    repairMode = e.target.checked;
+    ['svSquaresWrap','svStoryWrap','svHandNailWrap','svPitchOuterWrap'].forEach(id=>{
+      const el = overlay.querySelector('#'+id);
+      if(el) el.style.display = repairMode ? 'none' : '';
+    });
+    renderBreakdown();
+  });
+
   // Mixed-pitch toggle
   overlay.querySelector('#svMixedToggle').addEventListener('change', e=>{
     mixedPitch = e.target.checked;
@@ -10277,7 +10297,7 @@ async function openSubVoucher(jobId){
   });
 
   overlay.querySelectorAll('#svSquares,#svStory,#svPitch,#svSheets,#svSqStd,'+SUB_PAY.steepTiers.map(t=>'#svSq_'+t.key).join(',')).forEach(el=>el.addEventListener('input',renderBreakdown));
-  overlay.querySelectorAll('#svStory,#svPitch').forEach(el=>el.addEventListener('change',renderBreakdown));
+  overlay.querySelectorAll('#svStory,#svPitch,#svHandNail').forEach(el=>el.addEventListener('change',renderBreakdown));
   overlay.querySelector('#svAddLine').addEventListener('click',()=>{ extraLines.push({desc:'',amount:''}); renderExtras(); });
 
   // Paid toggle — warn when switching to NOT paid
@@ -10299,6 +10319,8 @@ async function openSubVoucher(jobId){
       sqStd: num('svSqStd'),
       ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, num('svSq_'+t.key)])),
       story: parseInt(overlay.querySelector('#svStory').value)||1,
+      handNail: !!overlay.querySelector('#svHandNail')?.checked,
+      repair: repairMode,
       pitch: overlay.querySelector('#svPitch')?.value || '0',
       sheets: num('svSheets'),
       checkNo: overlay.querySelector('#svCheckNo').value||'',
@@ -10332,7 +10354,7 @@ async function openSubVoucher(jobId){
     const checkNo = overlay.querySelector('#svCheckNo').value||'';
     const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
     if(!sub){ toast('Select a subcontractor first'); return; }
-    if(c.total<=0){ toast('Enter squares to calculate pay'); return; }
+    if(c.total<=0){ toast(c.repair ? 'Add additional work line items to calculate pay' : 'Enter squares to calculate pay'); return; }
     if(j){
       const vd = collectVoucher();
       j.subVoucher = vd;
@@ -10357,7 +10379,9 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
   if(!Array.isArray(j.expenses)) j.expenses = [];
   const tag = 'subvoucher';
   const today = new Date().toISOString().slice(0,10);
-  const desc = `Sub labor — ${c.sq} sq${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`;
+  const desc = c.repair
+    ? `Sub labor — repair${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`
+    : `Sub labor — ${c.sq} sq${c.handNail?' hand nail':''}${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`;
   // Match the specific voucher by its unique id (so multiple per sub/job are kept distinct)
   const vid = (voucherData && voucherData._vid) ? voucherData._vid : null;
   let exp = vid ? j.expenses.find(e=>e._vid===vid)
@@ -10379,7 +10403,8 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
       squares: voucherData.squares,
       sqStd: voucherData.sqStd,
       ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, voucherData['sq_'+t.key]])),
-      story: voucherData.story, pitch: voucherData.pitch, sheets: voucherData.sheets,
+      story: voucherData.story, handNail: !!voucherData.handNail, repair: !!voucherData.repair,
+      pitch: voucherData.pitch, sheets: voucherData.sheets,
       extraLines: voucherData.extraLines,
     };
   }
@@ -10439,15 +10464,18 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
 
   const breakdownBlock = `
       <div class="v-section" style="margin-bottom:0">
-        <div class="v-label">Labor Breakdown</div>
+        <div class="v-label">${c.repair?'Repair Work Breakdown':'Labor Breakdown'}</div>
         <table>
+          ${c.repair ? '' : `
           ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
-          ${c.storyAdd?line(`2-story charge — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
+          ${c.storyAdd?line(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
+          ${c.laborHandNail?line(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}/sq`, fmt(c.laborHandNail)):''}
           ${c.mixedPitch
             ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} charge — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder))).join('')
-            : (c.laborSteep?line(`Steep pitch charge — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep)):'')}
+            : (c.laborSteep?line(`Steep pitch charge — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep)):'')}`}
           ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
           ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
+          ${(c.repair && !extraLines.some(l=>(parseFloat(l.amount)||0)>0) && !c.decking)?line('Repair — see additional work','—'):''}
           <tr class="v-total"><td>TOTAL PAYMENT</td><td style="text-align:right">${fmt(c.total)}</td></tr>
         </table>
       </div>`;
@@ -10477,13 +10505,24 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     </div>`;
 
   const page2 = `
-    <div class="v-page v-page-last">
+    <div class="v-page">
       <div class="v-panel">${headBlock('Office Copy — retained by '+escapeHtml(ci.name||'company'))}</div>
       <div class="v-panel">${breakdownBlock}</div>
       <div class="v-panel">
         <div class="v-issued">Check #${checkNo?escapeHtml(checkNo):'____________'} issued ${today} · Amount ${fmt(c.total)}</div>
         ${signRow}
         <div class="v-filenote">Retain this signed original for company records.</div>
+      </div>
+    </div>`;
+
+  const page3 = `
+    <div class="v-page v-page-last">
+      <div class="v-panel">${headBlock('Accounting Copy — file with payables')}</div>
+      <div class="v-panel">${breakdownBlock}</div>
+      <div class="v-panel">
+        <div class="v-issued">Check #${checkNo?escapeHtml(checkNo):'____________'} issued ${today} · Amount ${fmt(c.total)}</div>
+        ${signRow}
+        <div class="v-filenote">Forward this copy to accounting for bookkeeping and reconciliation.</div>
       </div>
     </div>`;
 
@@ -10537,6 +10576,7 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
     ${page1}
     ${page2}
+    ${page3}
   </body></html>`);
   win.document.close();
 }
@@ -13416,6 +13456,7 @@ function subsGatherData(){
   jobs.forEach(j => {
     (j.expenses || []).forEach((e, idx) => {
       if(!e.vendor && !e.vendorName) return;  // only show expenses with a vendor
+      if((e.cat||'') === 'Materials' || (e.vendorName||'') === 'ABC Supply') return; // materials/supplier invoices don't belong in Payroll → Subs
       const amount = moneyValue(e.amount) || 0;
       if(amount <= 0) return;
       const vendorName = e.vendorName || (window.subcontractors || []).find(s => s.id === e.vendor)?.name || e.vendor || 'Unknown';
@@ -13503,7 +13544,7 @@ async function renderPayrollSubs(){
         <thead><tr><th>Job</th><th>Vendor</th><th>Category</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map(r => {
           const addr = (r.job.address || '').split(',')[0] || '';
-          return `<tr>
+          return `<tr data-sub-view="${r.job.id}|${r.expenseIdx}" style="cursor:pointer" title="Click to view summary / receipt">
             <td>
               <div style="font-weight:600;cursor:pointer" data-comm-open-job="${r.job.id}">${escapeHtml(r.job.name||'—')}</div>
               <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(addr)}</div>
@@ -13543,10 +13584,104 @@ async function renderPayrollSubs(){
     const [jobId, idxStr] = b.dataset.subUnpay.split('|');
     unpayCommission(jobId, '__SUB__' + idxStr);
   }));
-  body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', () => {
+  body.querySelectorAll('[data-sub-view]').forEach(tr => tr.addEventListener('click', () => {
+    const [jobId, idxStr] = tr.dataset.subView.split('|');
+    openSubExpenseSummary(jobId, parseInt(idxStr));
+  }));
+  body.querySelectorAll('[data-comm-open-job]').forEach(el => el.addEventListener('click', e => {
+    e.stopPropagation();
     if(typeof openDetail === 'function') openDetail(el.dataset.commOpenJob);
   }));
 }
+
+// Payroll → Subs: click an expense line to see the itemized summary / receipt.
+function openSubExpenseSummary(jobId, expenseIdx){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  const e = j.expenses?.[expenseIdx];
+  if(!e) return;
+
+  const vendorName = e.vendorName || (window.subcontractors||[]).find(s=>s.id===e.vendor)?.name || e.vendor || 'Vendor';
+  const amount = moneyValue(e.amount) || 0;
+  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Rebuild the itemized breakdown. Falls back to a single line for plain vendor expenses.
+  const bd = e.breakdown || null;
+  const c = bd ? computeLaborFromBreakdown(bd)
+               : computeLaborFromBreakdown({ repair:true, extraLines:[{ desc: e.desc || e.cat || 'Expense', amount: amount }] });
+  const extraLines = (bd?.extraLines || (bd ? [] : [{ desc: e.desc || e.cat || 'Expense', amount: amount }])).filter(l=>(parseFloat(l.amount)||0)>0);
+
+  // Check # — prefer the saved voucher, then parse from paid notes
+  let checkNo = '';
+  if(e._vid && j.subVoucher && j.subVoucher._vid === e._vid) checkNo = j.subVoucher.checkNo || '';
+  if(!checkNo && e.paidNotes){ const m = String(e.paidNotes).match(/check\s*#?\s*(\S+)/i); if(m) checkNo = m[1]; }
+
+  const isVoucher = e._src === 'subvoucher' || !!e._vid;
+
+  const row = (label, val, sub) => `<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+label+'</span>':'<span>'+label+'</span>'}<span style="font-variant-numeric:tabular-nums">${val}</span></div>`;
+
+  let laborRows = '';
+  if(bd){
+    if(c.repair){
+      laborRows = row('Repair — no base charge', fmt(0));
+    } else {
+      laborRows = row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase));
+      if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
+      if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
+      if(c.mixedPitch){
+        c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} charge — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
+      } else if(c.laborSteep){
+        laborRows += row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
+      }
+      laborRows += row('Labor subtotal', fmt(c.labor));
+    }
+    if(c.decking) laborRows += row(`Decking — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking));
+    extraLines.forEach(l=>{ laborRows += row(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0)); });
+  } else {
+    laborRows = row(escapeHtml(e.desc || e.cat || 'Expense'), fmt(amount));
+  }
+
+  const statusHtml = e.paid
+    ? `<span class="comm-status-pill comm-status-paid">PAID</span><span style="font-size:10px;color:var(--muted);margin-left:8px">${escapeHtml(e.paidDate||'')}${e.paidMethod?' · '+escapeHtml(e.paidMethod):''}${checkNo?' · Check #'+escapeHtml(checkNo):''}</span>`
+    : `<span class="comm-status-pill comm-status-owed">OWED</span>`;
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:420;display:flex;align-items:center;justify-content:center;padding:14px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:480px;max-width:100%;max-height:92vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">${escapeHtml(vendorName)} — ${isVoucher?'Payment Receipt':'Expense Summary'}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(j.name||'')}${j.address&&j.address!=='—'?' · '+escapeHtml(j.address.split(',')[0]):''}</div>
+        </div>
+        <button id="sesClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="margin-bottom:12px">${statusHtml}</div>
+        ${laborRows}
+        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:#34D399;border-top:2px solid var(--border);padding-top:9px;margin-top:8px"><span>TOTAL</span><span style="font-variant-numeric:tabular-nums">${fmt(bd ? c.total : amount)}</span></div>
+        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+          <button id="sesCloseBtn" class="btn-cancel" style="font-size:12px;padding:9px 14px">Close</button>
+          <div style="flex:1"></div>
+          ${isVoucher ? `<button id="sesEdit" class="btn-cancel" style="font-size:12px;padding:9px 14px;display:flex;align-items:center;gap:6px"><i class="ti ti-receipt"></i>Open Payment Breakdown</button>` : ''}
+          <button id="sesPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Receipt</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>overlay.remove();
+  overlay.querySelector('#sesClose').addEventListener('click', close);
+  overlay.querySelector('#sesCloseBtn').addEventListener('click', close);
+  overlay.addEventListener('click', ev=>{ if(ev.target===overlay) close(); });
+
+  overlay.querySelector('#sesPrint').addEventListener('click', ()=>{
+    const sub = (window.subcontractors||[]).find(s=>s.id===e.vendor) || { name: vendorName };
+    printSubVoucher(j, sub, c, checkNo, extraLines);
+  });
+  const editBtn = overlay.querySelector('#sesEdit');
+  if(editBtn) editBtn.addEventListener('click', ()=>{ close(); openSubVoucher(jobId); });
+}
+window.openSubExpenseSummary = openSubExpenseSummary;
 
 // Sub payment — marks an expense line as paid
 function openSubPaidModal(jobId, expenseIdx){
