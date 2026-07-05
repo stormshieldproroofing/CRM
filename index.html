@@ -681,7 +681,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- CALENDAR / PRODUCTION SCHEDULE PAGE -->
 <div id="calendarPage" style="display:none">
-  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+  <div class="cal-toolbar" style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Production Schedule</div>
     <button id="calPrev" class="icon-btn" title="Previous"><i class="ti ti-chevron-left"></i></button>
     <div id="calWeekLabel" style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;color:#fff;min-width:200px;text-align:center"></div>
@@ -703,10 +703,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
   </div>
-  <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
+  <div class="cal-layout" style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
-    <div style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
-      <div style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
+    <div class="cal-sidebar" style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
+      <div class="cal-sidebar-head" style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
         <div id="calUnschedCount" style="font-size:10px;color:var(--muted);margin-top:2px">0 jobs awaiting build date</div>
         <div class="cal-unsched-search-wrap">
@@ -717,7 +717,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <div id="calUnschedList" style="padding:8px 10px"></div>
     </div>
     <!-- Right side: readiness cards + calendar grid -->
-    <div style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
+    <div class="cal-main" style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
     <div id="calReadinessBar" style="padding:14px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;border-bottom:1px solid var(--border);flex-shrink:0">
       <div class="cal-rd-card" style="--rd:#38BDF8;--rdbg:rgba(56,189,248,0.10)">
         <i class="ti ti-calendar-event cal-rd-ic"></i>
@@ -1048,6 +1048,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-conf-badge.cal-conf-yes{background:rgba(52,211,153,0.18);color:#34D399}
 .cal-conf-btn{margin-top:6px;width:100%;font-size:10px;font-weight:700;padding:4px 6px;border-radius:5px;border:1px solid var(--border);background:#1E253A;color:var(--brand-light);cursor:pointer}
 .cal-conf-btn:hover{border-color:var(--brand-light);background:rgba(77,157,224,0.12)}
+.cal-sched-btn{display:none;margin-top:6px;width:100%;font-size:11px;font-weight:700;padding:6px;border-radius:5px;border:1px solid rgba(77,157,224,0.35);background:rgba(77,157,224,0.10);color:var(--brand-light);cursor:pointer;align-items:center;justify-content:center;gap:5px}
+.cal-sched-btn i{font-size:13px}
+@media (pointer:coarse){.cal-sched-btn{display:flex}}
 .cal-mchip-conf{display:inline-flex;align-items:center;font-size:11px;margin-left:2px}
 .cal-mchip-conf.cal-conf-clickable{cursor:pointer;padding:2px;border-radius:4px}
 .cal-mchip-conf.cal-conf-clickable:hover{background:rgba(255,255,255,0.12)}
@@ -1118,6 +1121,56 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-day-popup{background:#141927;border:1px solid var(--border);border-radius:10px;width:380px;max-width:92vw;max-height:80vh;overflow:hidden;display:flex;flex-direction:column}
 .cal-day-popup-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .cal-day-popup-body{padding:12px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+
+/* ===== Calendar: phone layout (<=760px) ===== */
+@media (max-width:760px){
+  /* Stack the page vertically and let the whole page scroll */
+  #calendarPage .cal-layout{flex-direction:column;height:auto;overflow:visible}
+  #calendarPage .cal-main{overflow:visible;height:auto}
+
+  /* Unscheduled: full-width horizontal strip instead of a 260px side column */
+  #calendarPage .cal-sidebar{width:100%!important;border-right:none;border-bottom:1px solid var(--border);overflow:visible}
+  #calendarPage .cal-sidebar-head{position:static;padding:10px 12px}
+  #calUnschedList{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px 12px}
+  #calUnschedList .cal-job-card{min-width:230px;max-width:230px;flex-shrink:0}
+  #calUnschedList > div[style*="text-align:center"]{min-width:100%}
+
+  /* Toolbar: tighter, wraps naturally */
+  #calendarPage .cal-toolbar{padding:10px 12px;gap:8px}
+  #calWeekLabel{min-width:0;flex:1;text-align:left;font-size:12px}
+
+  /* Readiness cards: compact 4-across strip */
+  #calReadinessBar{grid-template-columns:repeat(4,1fr)!important;gap:8px;padding:10px 12px}
+  .cal-rd-card{padding:8px 6px;border-radius:9px}
+  .cal-rd-card .cal-rd-ic{display:none}
+  .cal-rd-card .cal-rd-n{font-size:19px}
+  .cal-rd-card .cal-rd-lbl{font-size:8px;letter-spacing:0.03em;margin-top:2px}
+
+  /* Grid scrolls with the page, not inside a locked box */
+  #calWeekGrid{overflow:visible;flex:none}
+
+  /* WEEK view: one day per row, stacked */
+  #calWeekGrid:not(.cal-month){grid-template-columns:1fr!important;grid-auto-rows:auto}
+  #calWeekGrid:not(.cal-month) .cal-day-body{min-height:52px}
+  #calWeekGrid:not(.cal-month) .cal-day-header{padding:8px 12px}
+
+  /* MONTH view: keep 7 columns but strip cells down to date + count.
+     Job chips become slim colored bars; tap the day to see its jobs. */
+  #calWeekGrid.cal-month{grid-template-columns:repeat(7,1fr)!important;grid-auto-rows:minmax(58px,auto)}
+  .cal-mday{padding:4px 3px 14px;gap:2px}
+  .cal-mday-num{font-size:12px}
+  .cal-mday-cap{font-size:8px;padding:1px 4px}
+  .cal-mchip{pointer-events:none;padding:0;height:5px;border-radius:3px;background:var(--brand-light);border:none;overflow:hidden}
+  .cal-mchip.cal-card-unconfirmed{background:rgba(77,157,224,0.45)}
+  .cal-mchip > *{display:none}
+  .cal-mmore{pointer-events:none;font-size:8px;padding:0}
+  .cal-mday-wx-corner{bottom:2px;right:2px}
+  .cal-wx{font-size:8px;padding:0 3px}
+  .cal-mday .cal-wx span{display:none}   /* icon only inside tiny month cells */
+
+  /* Bigger tap target already handled: tapping anywhere in a day opens the day popup */
+}
+
 .map-popup .mp-name{font-weight:700;font-size:13px;color:#0F1117;margin-bottom:3px}
 .map-popup .mp-row{font-size:11px;color:#475569;margin-top:2px}
 .map-popup .mp-stage{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:11px;color:#fff;margin-top:5px;text-transform:uppercase;letter-spacing:.3px}
@@ -2932,6 +2985,23 @@ async function importAbcInvoice(file){
   overlay.querySelector('#abcCancel').addEventListener('click',close);
   overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
   overlay.querySelector('#abcConfirm').addEventListener('click', async ()=>{
+    // Duplicate guard — this invoice (same Order#/PO# or same ABC amount) already on the job
+    if(Array.isArray(j.expenses)){
+      const existing = j.expenses.find(e => {
+        if(!e || (e.vendorName||'') !== 'ABC Supply') return false;
+        const d = e.desc || '';
+        if(parsed.orderNum && d.includes('Order #'+parsed.orderNum)) return true;
+        if(parsed.po && d.includes('PO #'+parsed.po)) return true;
+        return ((parseFloat(e.amount)||0).toFixed(2)) === parsed.total.toFixed(2);
+      });
+      if(existing){
+        const proceed = confirm(
+          `Possible duplicate invoice.\n\nThis job already has an ABC Supply expense that matches:\n` +
+          `${existing.desc||'ABC Supply'} — $${(parseFloat(existing.amount)||0).toFixed(2)}\n\nAdd it again anyway?`
+        );
+        if(!proceed) return;
+      }
+    }
     overlay.querySelector('#abcConfirm').textContent='Adding…';
     overlay.querySelector('#abcConfirm').disabled=true;
     // 1) Create the Materials expense
@@ -4957,6 +5027,17 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(vendorId){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';
+      }
+
+      // Duplicate guard — same amount + vendor + category (or same desc) already on this job
+      const dup = findDuplicateExpense(j2, exp);
+      if(dup){
+        const dupWho = dup.vendorName || dup.vendor || '';
+        const proceed = confirm(
+          `Possible duplicate.\n\nAn expense with the same ${dupWho?'vendor, ':''}amount and category already exists on this job:\n` +
+          `${dupWho?dupWho+' — ':''}${fmtMoney(parseFloat(dup.amount)||0)} · ${dup.desc||dup.cat}\n\nAdd it anyway?`
+        );
+        if(!proceed) return;
       }
       let linkedToVoucher = false;
       if(isLabor && vendorId){
@@ -8896,10 +8977,66 @@ function renderCalJobCard(j, onCalendar){
           <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
           <div class="cjc-foot">${confBadge}${carrier}</div>
           ${confBtn}
+          ${!onCalendar ? `<button class="cal-sched-btn" data-cal-sched="${j.id}"><i class="ti ti-calendar-plus"></i>Schedule…</button>` : ''}
         </div>
       </div>
     </div>
   `;
+}
+
+// Shared scheduling logic — used by desktop drag-drop AND the mobile tap-to-schedule picker
+function calScheduleJobOn(jobId, key){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j || !key) return false;
+  if(!calCanScheduleOnDay(key)){
+    toast(`Day is full (${calCrewsPerDay} crews booked). Ask admin to override.`);
+    return false;
+  }
+  const prev = j.buildDate || null;
+  const isBad = isBadWeatherDay(key);
+  if(isBad){
+    const w = getWeatherForDate(key);
+    const reason = w ? `${w.shortDay || 'Forecast'} · ${w.precip != null ? Math.round(w.precip)+'% rain' : ''}${w.windMax ? ' · '+w.windMax+' mph wind' : ''}` : 'Heavy rain expected';
+    if(!confirm(`⚠ Weather warning for ${key}\n\n${reason}\n\nSchedule ${j.name} anyway?`)) return false;
+  }
+  j.buildDate = key;
+  if(prev !== key) j.buildConfirmed = false;
+  if(prev !== key){
+    const fromLabel = prev ? prev : 'unscheduled';
+    if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
+  }
+  saveToStorage();
+  toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
+  renderCalendarPage();
+  return true;
+}
+
+// Touch-friendly date picker — drag-and-drop doesn't exist on phones/tablets
+function calOpenSchedulePicker(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  const today = new Date().toISOString().slice(0,10);
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:420;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:340px;max-width:100%;padding:18px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Schedule Build</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">${escapeHtml(j.name||'')}${j.address?' · '+escapeHtml(j.address.split(',')[0]):''}</div>
+      <input id="calSchedDate" type="date" value="${j.buildDate||today}" style="width:100%;margin-top:14px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:11px 12px;font-size:16px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;color-scheme:dark">
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button id="calSchedCancel" class="btn-cancel" style="flex:1;font-size:13px;padding:10px">Cancel</button>
+        <button id="calSchedSave" class="btn-primary" style="flex:1;font-size:13px;padding:10px">Schedule</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>overlay.remove();
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+  overlay.querySelector('#calSchedCancel').addEventListener('click', close);
+  overlay.querySelector('#calSchedSave').addEventListener('click', ()=>{
+    const key = overlay.querySelector('#calSchedDate').value;
+    if(!key){ toast('Pick a date'); return; }
+    if(calScheduleJobOn(jobId, key)) close();
+  });
 }
 
 let calDraggingId = null;
@@ -8921,6 +9058,14 @@ function wireCalDragDrop(){
       renderCalendarPage();
     };
     btn.addEventListener('click', handler);
+  });
+  // Tap-to-schedule (touch devices can't drag) — button only shows on coarse pointers
+  document.querySelectorAll('[data-cal-sched]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      calOpenSchedulePicker(btn.dataset.calSched);
+    });
   });
   // Draggable cards — both week-view full cards and month-view chips
   document.querySelectorAll('.cal-job-card, .cal-mchip').forEach(card => {
@@ -8951,31 +9096,7 @@ function wireCalDragDrop(){
       e.preventDefault();
       day.classList.remove('cal-drop-ok','cal-drop-bad');
       if(!calDraggingId) return;
-      const j = jobs.find(x => x.id === calDraggingId);
-      if(!j) return;
-      if(!calCanScheduleOnDay(key)){
-        toast(`Day is full (${calCrewsPerDay} crews booked). Ask admin to override.`);
-        return;
-      }
-      const prev = j.buildDate || null;
-      const isBad = isBadWeatherDay(key);
-      if(isBad){
-        const w = getWeatherForDate(key);
-        const reason = w ? `${w.shortDay || 'Forecast'} · ${w.precip != null ? Math.round(w.precip)+'% rain' : ''}${w.windMax ? ' · '+w.windMax+' mph wind' : ''}` : 'Heavy rain expected';
-        if(!confirm(`⚠ Weather warning for ${key}\n\n${reason}\n\nSchedule ${j.name} anyway?`)){
-          return;
-        }
-      }
-      j.buildDate = key;
-      // A newly placed/moved date starts UNCONFIRMED — manager must confirm with crew.
-      if(prev !== key) j.buildConfirmed = false;
-      if(prev !== key){
-        const fromLabel = prev ? prev : 'unscheduled';
-        if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
-      }
-      saveToStorage();
-      toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
-      renderCalendarPage();
+      calScheduleJobOn(calDraggingId, key);
     });
   });
 
@@ -13553,7 +13674,7 @@ async function renderPayrollSubs(){
             <td class="muted">${escapeHtml(r.cat || '—')}${r.breakdown?`<div style="font-size:9px;color:var(--muted);margin-top:2px;font-style:italic">${escapeHtml(laborBreakdownSummary(r.breakdown))}</div>`:(r.desc?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.desc)}</div>`:'')}</td>
             <td class="num">${fmtMoney(r.amount)}</td>
             <td>${r.paid ? `<span class="comm-status-pill comm-status-paid">PAID</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.paidDate)}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>` : `<span class="comm-status-pill comm-status-owed">OWED</span>`}</td>
-            <td>${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : `<button class="comm-unpay-btn" data-sub-unpay="${r.job.id}|${r.expenseIdx}" title="Revert sub payment to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>`}</td>
+            <td style="white-space:nowrap">${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : `<button class="comm-unpay-btn" data-sub-unpay="${r.job.id}|${r.expenseIdx}" title="Revert sub payment to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>`}<button data-sub-del="${r.job.id}|${r.expenseIdx}" title="Delete this payment line" style="background:transparent;border:1px solid rgba(239,68,68,0.35);color:#EF4444;font-size:10px;font-weight:600;padding:3px 7px;border-radius:5px;cursor:pointer;margin-left:6px"><i class="ti ti-trash" style="font-size:11px"></i></button></td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -13583,6 +13704,11 @@ async function renderPayrollSubs(){
     e.stopPropagation();
     const [jobId, idxStr] = b.dataset.subUnpay.split('|');
     unpayCommission(jobId, '__SUB__' + idxStr);
+  }));
+  body.querySelectorAll('[data-sub-del]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [jobId, idxStr] = b.dataset.subDel.split('|');
+    deleteSubExpense(jobId, parseInt(idxStr));
   }));
   body.querySelectorAll('[data-sub-view]').forEach(tr => tr.addEventListener('click', () => {
     const [jobId, idxStr] = tr.dataset.subView.split('|');
@@ -13662,6 +13788,7 @@ function openSubExpenseSummary(jobId, expenseIdx){
         <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:#34D399;border-top:2px solid var(--border);padding-top:9px;margin-top:8px"><span>TOTAL</span><span style="font-variant-numeric:tabular-nums">${fmt(bd ? c.total : amount)}</span></div>
         <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
           <button id="sesCloseBtn" class="btn-cancel" style="font-size:12px;padding:9px 14px">Close</button>
+          <button id="sesDelete" style="background:transparent;border:1px solid rgba(239,68,68,0.4);color:#EF4444;font-size:12px;font-weight:600;padding:9px 14px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:6px"><i class="ti ti-trash"></i>Delete</button>
           <div style="flex:1"></div>
           ${isVoucher ? `<button id="sesEdit" class="btn-cancel" style="font-size:12px;padding:9px 14px;display:flex;align-items:center;gap:6px"><i class="ti ti-receipt"></i>Open Payment Breakdown</button>` : ''}
           <button id="sesPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Receipt</button>
@@ -13680,8 +13807,58 @@ function openSubExpenseSummary(jobId, expenseIdx){
   });
   const editBtn = overlay.querySelector('#sesEdit');
   if(editBtn) editBtn.addEventListener('click', ()=>{ close(); openSubVoucher(jobId); });
+  overlay.querySelector('#sesDelete').addEventListener('click', ()=>{
+    close();
+    deleteSubExpense(jobId, expenseIdx);
+  });
 }
 window.openSubExpenseSummary = openSubExpenseSummary;
+
+// Payroll → Subs: delete a payment/expense line, with confirmation.
+function deleteSubExpense(jobId, expenseIdx){
+  if(!isAdmin()){ toast('Only admins can delete payments'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  const e = j.expenses?.[expenseIdx];
+  if(!e) return;
+  const vendorName = e.vendorName || (window.subcontractors||[]).find(s=>s.id===e.vendor)?.name || e.vendor || 'Vendor';
+  const amount = moneyValue(e.amount) || 0;
+  const paidBit = e.paid
+    ? `\n\n⚠ This line is marked PAID${e.paidDate?' on '+e.paidDate:''}${e.paidMethod?' ('+e.paidMethod+')':''}. Deleting it removes the payment record.`
+    : '';
+  const ok = confirm(
+    `Delete this payment line?\n\n` +
+    `${vendorName} — ${fmtMoney(amount)}\n` +
+    `${e.desc || e.cat || ''}${paidBit}\n\n` +
+    `It will be removed from the job's expenses and from Payroll. This cannot be undone.`
+  );
+  if(!ok) return;
+  // If this expense drives the Payment Breakdown voucher, unlink the voucher too
+  if(e._vid && j.subVoucher && j.subVoucher._vid === e._vid) j.subVoucher = null;
+  j.expenses.splice(expenseIdx, 1);
+  saveToStorage();
+  try { if(typeof refreshExpenseUI === 'function') refreshExpenseUI(); } catch(_){ /* job modal not open */ }
+  if(typeof logActivity === 'function') logActivity(j, 'expense_remove', 'Payment deleted', `${vendorName}: ${fmtMoney(amount)}${e.desc?' · '+e.desc:''}`);
+  toast('Payment deleted');
+  renderPayrollPage();
+}
+window.deleteSubExpense = deleteSubExpense;
+
+// Duplicate guard: find an existing expense on the job that looks like the one being added.
+// Matches on same amount + same vendor (or vendor name) + same category.
+function findDuplicateExpense(j, cand){
+  if(!j || !Array.isArray(j.expenses)) return null;
+  const amt = (parseFloat(cand.amount)||0).toFixed(2);
+  return j.expenses.find(e => {
+    if(!e) return false;
+    if(((parseFloat(e.amount)||0).toFixed(2)) !== amt) return false;
+    const sameVendor = (cand.vendor && e.vendor === cand.vendor) ||
+                       (cand.vendorName && (e.vendorName||'') === cand.vendorName);
+    const sameCat = (e.cat||'') === (cand.cat||'');
+    return sameVendor ? sameCat : (sameCat && (e.desc||'') === (cand.desc||''));
+  }) || null;
+}
+window.findDuplicateExpense = findDuplicateExpense;
 
 // Sub payment — marks an expense line as paid
 function openSubPaidModal(jobId, expenseIdx){
