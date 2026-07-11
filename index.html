@@ -866,12 +866,15 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <div style="display:flex;height:calc(100vh - 64px)">
     <!-- Section sidebar -->
     <div id="cdocSidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);background:#11141F;display:flex;flex-direction:column;overflow:hidden">
-      <div style="padding:14px 14px 10px;border-bottom:1px solid var(--border)">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px">Company Docs</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">Internal reference</div>
+      <div style="padding:14px 14px 10px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px">Company Docs</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Internal reference</div>
+        </div>
+        <button id="cdocEditToggle" onclick="cdocToggleEdit()" style="flex-shrink:0;display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.35);color:var(--brand-light)"><i class="ti ti-pencil" style="font-size:12px"></i><span id="cdocEditToggleLabel">Edit</span></button>
       </div>
       <div id="cdocSectionList" style="flex:1;overflow:auto;padding:8px"></div>
-      <div style="padding:10px;border-top:1px solid var(--border)">
+      <div id="cdocAddSectionFooter" style="padding:10px;border-top:1px solid var(--border);display:none">
         <button onclick="cdocAddSection()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:8px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-plus" style="font-size:13px"></i> Add Section</button>
       </div>
     </div>
@@ -12842,6 +12845,16 @@ function fmtMoney(n){
 // ── COMPANY DOCUMENTS (OneNote-style, admin only) ──
 const CDOC_KEY = 'stormshield_company_docs_v1';
 let cdocData = null;          // { sections: [{id, title, notes, files:[{name,path,url,isPdf}]}] }
+let cdocEditMode = false;     // view-only by default; admin toggles Edit to make changes
+
+function cdocToggleEdit(){
+  // Save any in-progress note edits before leaving edit mode.
+  if(cdocEditMode && cdocActiveId && typeof cdocFlushNotes === 'function') cdocFlushNotes(cdocActiveId);
+  cdocEditMode = !cdocEditMode;
+  cdocRenderSidebar();
+  cdocRenderMain();
+}
+window.cdocToggleEdit = cdocToggleEdit;
 let cdocActiveId = null;
 let cdocLoaded = false;
 
@@ -12863,6 +12876,8 @@ function cdocPersist(){
 
 async function renderCompanyDocs(){
   if(!isAdmin()) return;
+  // Always open in view-only mode; admin taps Edit to make changes.
+  cdocEditMode = false;
   // Load once: prefer Supabase, fall back to local cache, then defaults.
   if(!cdocLoaded){
     cdocLoaded = true;
@@ -12885,6 +12900,25 @@ async function renderCompanyDocs(){
 }
 
 function cdocRenderSidebar(){
+  // Reflect edit mode in the toggle button + Add Section footer.
+  const tog = document.getElementById('cdocEditToggle');
+  const togLbl = document.getElementById('cdocEditToggleLabel');
+  const addFooter = document.getElementById('cdocAddSectionFooter');
+  if(tog && togLbl){
+    togLbl.textContent = cdocEditMode ? 'Done' : 'Edit';
+    tog.querySelector('i').className = cdocEditMode ? 'ti ti-check' : 'ti ti-pencil';
+    if(cdocEditMode){
+      tog.style.background = 'rgba(52,211,153,0.15)';
+      tog.style.borderColor = 'rgba(52,211,153,0.4)';
+      tog.style.color = '#34D399';
+    } else {
+      tog.style.background = 'rgba(77,157,224,0.12)';
+      tog.style.borderColor = 'rgba(77,157,224,0.35)';
+      tog.style.color = 'var(--brand-light)';
+    }
+  }
+  if(addFooter) addFooter.style.display = cdocEditMode ? '' : 'none';
+
   const list = document.getElementById('cdocSectionList');
   if(!list) return;
   if(!cdocData.sections.length){
@@ -12936,10 +12970,13 @@ function cdocRenderMain(){
       .cdoc-upl.primary{background:var(--brand-light);border-color:var(--brand-light);color:#0F1117}
     </style>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <input class="cdoc-titleinput" value="${esc(sec.title)}" onchange="cdocRenameSection('${sec.id}', this.value)">
-      <button onclick="cdocDeleteSection('${sec.id}')" title="Delete section" style="flex-shrink:0;width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center"><i class="ti ti-trash" style="font-size:14px"></i></button>
+      ${cdocEditMode
+        ? `<input class="cdoc-titleinput" value="${esc(sec.title)}" onchange="cdocRenameSection('${sec.id}', this.value)">
+           <button onclick="cdocDeleteSection('${sec.id}')" title="Delete section" style="flex-shrink:0;width:30px;height:30px;border-radius:6px;border:1px solid var(--border);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center"><i class="ti ti-trash" style="font-size:14px"></i></button>`
+        : `<div class="cdoc-titleinput" style="border:none">${esc(sec.title)}</div>`}
     </div>
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">Notes</div>
+    ${cdocEditMode ? `
     <div class="cdoc-rt-toolbar" onmousedown="event.preventDefault()">
       <button class="cdoc-rt-btn" title="Heading" onclick="cdocFmt('formatBlock','h1')"><i class="ti ti-h-1"></i></button>
       <button class="cdoc-rt-btn" title="Subheading" onclick="cdocFmt('formatBlock','h2')"><i class="ti ti-h-2"></i></button>
@@ -12964,8 +13001,12 @@ function cdocRenderMain(){
       <button class="cdoc-rt-btn" title="Clear formatting" onclick="cdocFmt('removeFormat')"><i class="ti ti-clear-formatting"></i></button>
     </div>
     <div class="cdoc-notes" id="cdocEditor" contenteditable="true" data-placeholder="Type notes, scripts, key dates, talking points…" oninput="cdocNotesDirty=true" onblur="cdocFlushNotes('${sec.id}')">${cdocNotesHTML(sec.notes||'')}</div>
+    ` : `
+    <div class="cdoc-notes" id="cdocEditor" style="border-radius:10px" contenteditable="false">${sec.notes ? cdocNotesHTML(sec.notes) : '<span style="color:var(--muted)">No notes yet. Tap Edit to add.</span>'}</div>
+    `}
 
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 6px">Attachments</div>
+    ${cdocEditMode ? `
     <div class="cdoc-zone"
       ondragover="event.preventDefault();this.classList.add('dragover')"
       ondragleave="this.classList.remove('dragover')"
@@ -12973,17 +13014,17 @@ function cdocRenderMain(){
       <i class="ti ti-paperclip" style="font-size:22px;color:var(--brand-light);opacity:.6;display:block;margin-bottom:6px"></i>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Drag &amp; drop, or attach files (PDF, images, any document)</div>
       <label class="cdoc-upl primary"><i class="ti ti-upload"></i> Upload File<input type="file" multiple style="display:none" onchange="cdocAddFiles('${sec.id}', this.files)"></label>
-    </div>
+    </div>` : ''}
     ${(sec.files&&sec.files.length)?`<div style="margin-top:12px">${sec.files.map((f,i)=>`
       <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
         <i class="ti ${f.isPdf?'ti-file-type-pdf':'ti-file'}" style="font-size:18px;color:var(--brand-light);flex-shrink:0"></i>
         <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</span>
         <button onclick="cdocOpenFile('${sec.id}',${i})" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:5px 10px;border-radius:5px;cursor:pointer;font-family:'Barlow',sans-serif">Open</button>
-        <button onclick="cdocDeleteFile('${sec.id}',${i})" style="width:26px;height:26px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>
-      </div>`).join('')}</div>`:''}
+        ${cdocEditMode?`<button onclick="cdocDeleteFile('${sec.id}',${i})" style="width:26px;height:26px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>`:''}
+      </div>`).join('')}</div>`:(cdocEditMode?'':`<div style="font-size:11px;color:var(--muted);font-style:italic">No attachments.</div>`)}
   `;
-  // Enable drag-to-resize on table columns inside the editor.
-  cdocWireTableResize();
+  // Enable drag-to-resize on table columns inside the editor (edit mode only).
+  if(cdocEditMode) cdocWireTableResize();
 }
 
 // If stored notes look like plain text (no HTML tags), convert newlines to <br>
@@ -13111,6 +13152,7 @@ function cdocTableCol(){
 }
 // Save the editor HTML back to the section.
 function cdocFlushNotes(id){
+  if(!isAdmin()) return;
   const ed = document.getElementById('cdocEditor');
   if(!ed) return;
   const sec = cdocData.sections.find(s => s.id === id);
@@ -13137,6 +13179,7 @@ function cdocSelect(id){
 }
 
 function cdocAddSection(){
+  if(!isAdmin()||!cdocEditMode) return;
   const sec = { id: 'sec-' + Math.random().toString(36).slice(2,9), title: 'New Section', notes: '', files: [] };
   cdocData.sections.push(sec);
   cdocActiveId = sec.id;
@@ -13145,6 +13188,7 @@ function cdocAddSection(){
 }
 
 function cdocRenameSection(id, title){
+  if(!isAdmin()||!cdocEditMode) return;
   const sec = cdocData.sections.find(s => s.id === id);
   if(!sec) return;
   sec.title = (title||'').trim() || 'Untitled';
@@ -13153,6 +13197,7 @@ function cdocRenameSection(id, title){
 }
 
 function cdocDeleteSection(id){
+  if(!isAdmin()||!cdocEditMode) return;
   const sec = cdocData.sections.find(s => s.id === id);
   if(!sec) return;
   if(!confirm(`Delete the "${sec.title}" section and its attachments? This cannot be undone.`)) return;
@@ -13172,6 +13217,7 @@ function cdocSaveNotes(id, val){
 }
 
 async function cdocAddFiles(id, files){
+  if(!isAdmin()||!cdocEditMode) return;
   const sec = cdocData.sections.find(s => s.id === id);
   if(!sec) return;
   const pending = Array.from(files||[]);
@@ -13208,6 +13254,7 @@ async function cdocOpenFile(id, i){
 }
 
 function cdocDeleteFile(id, i){
+  if(!isAdmin()||!cdocEditMode) return;
   const sec = cdocData.sections.find(s => s.id === id);
   const f = sec?.files?.[i];
   if(!f) return;
