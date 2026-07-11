@@ -359,18 +359,6 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
   /* 16px inputs stop iPad Safari's zoom-on-focus */
   input,select,textarea{font-size:16px}
-
-  /* Calendar month view (landscape phones / iPad): iPhone-style pills with
-     the first word of the job name — more width, so slightly larger text */
-  .cal-mchip .cal-sales-avatar{display:none}
-  .cal-mchip .cal-mchip-addr{display:none}
-  .cal-mchip .cal-mchip-name{display:none}
-  .cal-mchip .cal-mchip-conf{display:none}
-  .cal-mchip .cal-wx-warn{display:none}
-  .cal-mchip{display:block;padding:2px 7px;border:none!important;border-radius:6px;background:color-mix(in srgb,var(--rc,#4D9DE0) 26%,#10131C)}
-  .cal-mchip.cal-card-unconfirmed{background:color-mix(in srgb,var(--rc,#4D9DE0) 13%,#10131C);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rc,#4D9DE0) 40%,transparent)}
-  .cal-mchip-nick{display:block;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}
-  #calWeekGrid.cal-month{grid-auto-rows:minmax(84px,auto)}
 }
 
 @media (max-width:760px){
@@ -693,7 +681,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- CALENDAR / PRODUCTION SCHEDULE PAGE -->
 <div id="calendarPage" style="display:none">
-  <div class="cal-toolbar" style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Production Schedule</div>
     <button id="calPrev" class="icon-btn" title="Previous"><i class="ti ti-chevron-left"></i></button>
     <div id="calWeekLabel" style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;color:#fff;min-width:200px;text-align:center"></div>
@@ -715,10 +703,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
   </div>
-  <div class="cal-layout" style="display:flex;height:calc(100vh - 110px);overflow:hidden">
+  <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
-    <div class="cal-sidebar" style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
-      <div class="cal-sidebar-head" style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
+    <div style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
         <div id="calUnschedCount" style="font-size:10px;color:var(--muted);margin-top:2px">0 jobs awaiting build date</div>
         <div class="cal-unsched-search-wrap">
@@ -729,7 +717,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <div id="calUnschedList" style="padding:8px 10px"></div>
     </div>
     <!-- Right side: readiness cards + calendar grid -->
-    <div class="cal-main" style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
     <div id="calReadinessBar" style="padding:14px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;border-bottom:1px solid var(--border);flex-shrink:0">
       <div class="cal-rd-card" style="--rd:#38BDF8;--rdbg:rgba(56,189,248,0.10)">
         <i class="ti ti-calendar-event cal-rd-ic"></i>
@@ -1060,9 +1048,6 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-conf-badge.cal-conf-yes{background:rgba(52,211,153,0.18);color:#34D399}
 .cal-conf-btn{margin-top:6px;width:100%;font-size:10px;font-weight:700;padding:4px 6px;border-radius:5px;border:1px solid var(--border);background:#1E253A;color:var(--brand-light);cursor:pointer}
 .cal-conf-btn:hover{border-color:var(--brand-light);background:rgba(77,157,224,0.12)}
-.cal-sched-btn{display:none;margin-top:6px;width:100%;font-size:11px;font-weight:700;padding:6px;border-radius:5px;border:1px solid rgba(77,157,224,0.35);background:rgba(77,157,224,0.10);color:var(--brand-light);cursor:pointer;align-items:center;justify-content:center;gap:5px}
-.cal-sched-btn i{font-size:13px}
-@media (pointer:coarse){.cal-sched-btn{display:flex}}
 .cal-mchip-conf{display:inline-flex;align-items:center;font-size:11px;margin-left:2px}
 .cal-mchip-conf.cal-conf-clickable{cursor:pointer;padding:2px;border-radius:4px}
 .cal-mchip-conf.cal-conf-clickable:hover{background:rgba(255,255,255,0.12)}
@@ -1123,7 +1108,6 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-mchip .cal-sales-avatar{width:18px;height:18px;font-size:7px;margin-top:0}
 .cal-mchip-main{min-width:0;flex:1}
 .cal-mchip-name{font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cal-mchip-nick{display:none}
 .cal-mchip-addr{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .cal-mmore{font-size:9px;color:var(--brand-light);cursor:pointer;padding:1px 4px;font-weight:600}
 .cal-mmore:hover{text-decoration:underline}
@@ -1134,62 +1118,6 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-day-popup{background:#141927;border:1px solid var(--border);border-radius:10px;width:380px;max-width:92vw;max-height:80vh;overflow:hidden;display:flex;flex-direction:column}
 .cal-day-popup-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .cal-day-popup-body{padding:12px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
-
-/* ===== Calendar: phone layout (<=760px) ===== */
-@media (max-width:760px){
-  /* Stack the page vertically and let the whole page scroll */
-  #calendarPage .cal-layout{flex-direction:column;height:auto;overflow:visible}
-  #calendarPage .cal-main{overflow:visible;height:auto}
-
-  /* Unscheduled: full-width horizontal strip instead of a 260px side column */
-  #calendarPage .cal-sidebar{width:100%!important;border-right:none;border-bottom:1px solid var(--border);overflow:visible}
-  #calendarPage .cal-sidebar-head{position:static;padding:10px 12px}
-  #calUnschedList{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px 12px}
-  #calUnschedList .cal-job-card{min-width:230px;max-width:230px;flex-shrink:0}
-  #calUnschedList > div[style*="text-align:center"]{min-width:100%}
-
-  /* Toolbar: tighter, wraps naturally */
-  #calendarPage .cal-toolbar{padding:10px 12px;gap:8px}
-  #calWeekLabel{min-width:0;flex:1;text-align:left;font-size:12px}
-
-  /* Readiness cards: compact 4-across strip */
-  #calReadinessBar{grid-template-columns:repeat(4,1fr)!important;gap:8px;padding:10px 12px}
-  .cal-rd-card{padding:8px 6px;border-radius:9px}
-  .cal-rd-card .cal-rd-ic{display:none}
-  .cal-rd-card .cal-rd-n{font-size:19px}
-  .cal-rd-card .cal-rd-lbl{font-size:8px;letter-spacing:0.03em;margin-top:2px}
-
-  /* Grid scrolls with the page, not inside a locked box */
-  #calWeekGrid{overflow:visible;flex:none}
-
-  /* WEEK view: one day per row, stacked */
-  #calWeekGrid:not(.cal-month){grid-template-columns:1fr!important;grid-auto-rows:auto}
-  #calWeekGrid:not(.cal-month) .cal-day-body{min-height:52px}
-  #calWeekGrid:not(.cal-month) .cal-day-header{padding:8px 12px}
-
-  /* MONTH view: keep 7 columns; jobs render as iPhone-calendar-style pills —
-     a tinted rounded pill (readiness color) with the first word of the job
-     name on one line. Tap the day for full details. */
-  #calWeekGrid.cal-month{grid-template-columns:repeat(7,1fr)!important;grid-auto-rows:minmax(70px,auto)}
-  .cal-mday{padding:4px 2px 14px;gap:2px}
-  .cal-mday-num{font-size:12px}
-  .cal-mday-cap{font-size:8px;padding:1px 4px}
-  .cal-mchip{pointer-events:none;display:block;padding:2px 5px;border:none!important;border-radius:5px;background:color-mix(in srgb,var(--rc,#4D9DE0) 26%,#10131C)}
-  .cal-mchip.cal-card-unconfirmed{background:color-mix(in srgb,var(--rc,#4D9DE0) 13%,#10131C);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rc,#4D9DE0) 40%,transparent)}
-  .cal-mchip .cal-sales-avatar{display:none}
-  .cal-mchip .cal-mchip-addr{display:none}
-  .cal-mchip .cal-mchip-name{display:none}
-  .cal-mchip .cal-mchip-conf{display:none}
-  .cal-mchip .cal-wx-warn{display:none}
-  .cal-mchip-nick{display:block;font-size:9.5px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
-  .cal-mmore{pointer-events:none;font-size:8px;padding:0}
-  .cal-mday-wx-corner{bottom:2px;right:2px}
-  .cal-wx{font-size:8px;padding:0 3px}
-  .cal-mday .cal-wx span{display:none}   /* icon only inside tiny month cells */
-
-  /* Bigger tap target already handled: tapping anywhere in a day opens the day popup */
-}
-
 .map-popup .mp-name{font-weight:700;font-size:13px;color:#0F1117;margin-bottom:3px}
 .map-popup .mp-row{font-size:11px;color:#475569;margin-top:2px}
 .map-popup .mp-stage{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:11px;color:#fff;margin-top:5px;text-transform:uppercase;letter-spacing:.3px}
@@ -3004,23 +2932,6 @@ async function importAbcInvoice(file){
   overlay.querySelector('#abcCancel').addEventListener('click',close);
   overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
   overlay.querySelector('#abcConfirm').addEventListener('click', async ()=>{
-    // Duplicate guard — this invoice (same Order#/PO# or same ABC amount) already on the job
-    if(Array.isArray(j.expenses)){
-      const existing = j.expenses.find(e => {
-        if(!e || (e.vendorName||'') !== 'ABC Supply') return false;
-        const d = e.desc || '';
-        if(parsed.orderNum && d.includes('Order #'+parsed.orderNum)) return true;
-        if(parsed.po && d.includes('PO #'+parsed.po)) return true;
-        return ((parseFloat(e.amount)||0).toFixed(2)) === parsed.total.toFixed(2);
-      });
-      if(existing){
-        const proceed = confirm(
-          `Possible duplicate invoice.\n\nThis job already has an ABC Supply expense that matches:\n` +
-          `${existing.desc||'ABC Supply'} — $${(parseFloat(existing.amount)||0).toFixed(2)}\n\nAdd it again anyway?`
-        );
-        if(!proceed) return;
-      }
-    }
     overlay.querySelector('#abcConfirm').textContent='Adding…';
     overlay.querySelector('#abcConfirm').disabled=true;
     // 1) Create the Materials expense
@@ -4772,11 +4683,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     refreshDepositUI();
 
     // ── Expense Tracker system ────────────────────────────────────────
-    const EXP_CATS=['Materials','Roofing Labor','Additional Labor','Measurements','Permits','Appraisals','Returns'];
-    const EXP_COLORS={
-      'Materials':'#4D9DE0','Roofing Labor':'#F59E0B','Additional Labor':'#FB923C',
-      'Measurements':'#A78BFA','Permits':'#38BDF8','Appraisals':'#34D399','Returns':'#F87171'
-    };
+    const EXP_CATS = EXPENSE_CATEGORIES;
+    const EXP_COLORS = EXPENSE_CATEGORY_COLORS;
     if(!curJob().expenses) curJob().expenses=[];
 
     function fmtExp(v){return parseFloat(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -5046,17 +4954,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(vendorId){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';
-      }
-
-      // Duplicate guard — same amount + vendor + category (or same desc) already on this job
-      const dup = findDuplicateExpense(j2, exp);
-      if(dup){
-        const dupWho = dup.vendorName || dup.vendor || '';
-        const proceed = confirm(
-          `Possible duplicate.\n\nAn expense with the same ${dupWho?'vendor, ':''}amount and category already exists on this job:\n` +
-          `${dupWho?dupWho+' — ':''}${fmtMoney(parseFloat(dup.amount)||0)} · ${dup.desc||dup.cat}\n\nAdd it anyway?`
-        );
-        if(!proceed) return;
       }
       let linkedToVoucher = false;
       if(isLabor && vendorId){
@@ -8196,14 +8093,11 @@ function renderCalMonthChip(j){
     ? (admin ? 'Confirmed with crew — tap to mark unconfirmed' : 'Confirmed with crew')
     : (admin ? 'Unconfirmed — tap to confirm with crew' : 'Not yet confirmed with crew');
   const confIcon = `<span class="cal-mchip-conf ${confirmed?'cal-conf-yes':'cal-conf-no'}${admin?' cal-conf-clickable':''}" ${admin?`data-cal-confirm="${j.id}" draggable="false" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"`:''} title="${confTitle}"><i class="ti ${confirmed?'ti-circle-check-filled':'ti-clock-question'}"></i></span>`;
-  // Short label for tiny screens — first word of the name (iPhone-calendar style pill)
-  const shortName = String(j.name || 'Job').trim().split(/[\s,]+/)[0] || 'Job';
   return `
-    <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}${confirmed?'':' cal-card-unconfirmed'}" draggable="true" data-cal-job="${j.id}" style="--rc:${rc};border-left:3px solid ${rc}" title="${escapeHtml(title)}${confirmed?'':' · Unconfirmed'}${isBad?' · ⚠ High rain risk':''}">
+    <div class="cal-mchip${isBad?' cal-mchip-bad-wx':''}${confirmed?'':' cal-card-unconfirmed'}" draggable="true" data-cal-job="${j.id}" style="border-left:3px solid ${rc}" title="${escapeHtml(title)}${confirmed?'':' · Unconfirmed'}${isBad?' · ⚠ High rain risk':''}">
       ${calSalesAvatarHtml(j)}
       <div class="cal-mchip-main">
         <div class="cal-mchip-name">${escapeHtml(j.name || 'Job')}</div>
-        <div class="cal-mchip-nick">${escapeHtml(shortName)}</div>
         <div class="cal-mchip-addr">${escapeHtml(addr || 'No address')}</div>
       </div>
       ${confIcon}
@@ -8999,66 +8893,10 @@ function renderCalJobCard(j, onCalendar){
           <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
           <div class="cjc-foot">${confBadge}${carrier}</div>
           ${confBtn}
-          ${!onCalendar ? `<button class="cal-sched-btn" data-cal-sched="${j.id}"><i class="ti ti-calendar-plus"></i>Schedule…</button>` : ''}
         </div>
       </div>
     </div>
   `;
-}
-
-// Shared scheduling logic — used by desktop drag-drop AND the mobile tap-to-schedule picker
-function calScheduleJobOn(jobId, key){
-  const j = jobs.find(x => x.id === jobId);
-  if(!j || !key) return false;
-  if(!calCanScheduleOnDay(key)){
-    toast(`Day is full (${calCrewsPerDay} crews booked). Ask admin to override.`);
-    return false;
-  }
-  const prev = j.buildDate || null;
-  const isBad = isBadWeatherDay(key);
-  if(isBad){
-    const w = getWeatherForDate(key);
-    const reason = w ? `${w.shortDay || 'Forecast'} · ${w.precip != null ? Math.round(w.precip)+'% rain' : ''}${w.windMax ? ' · '+w.windMax+' mph wind' : ''}` : 'Heavy rain expected';
-    if(!confirm(`⚠ Weather warning for ${key}\n\n${reason}\n\nSchedule ${j.name} anyway?`)) return false;
-  }
-  j.buildDate = key;
-  if(prev !== key) j.buildConfirmed = false;
-  if(prev !== key){
-    const fromLabel = prev ? prev : 'unscheduled';
-    if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
-  }
-  saveToStorage();
-  toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
-  renderCalendarPage();
-  return true;
-}
-
-// Touch-friendly date picker — drag-and-drop doesn't exist on phones/tablets
-function calOpenSchedulePicker(jobId){
-  const j = jobs.find(x => x.id === jobId);
-  if(!j) return;
-  const today = new Date().toISOString().slice(0,10);
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:420;display:flex;align-items:center;justify-content:center;padding:16px';
-  overlay.innerHTML = `
-    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:340px;max-width:100%;padding:18px">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Schedule Build</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:3px">${escapeHtml(j.name||'')}${j.address?' · '+escapeHtml(j.address.split(',')[0]):''}</div>
-      <input id="calSchedDate" type="date" value="${j.buildDate||today}" style="width:100%;margin-top:14px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:11px 12px;font-size:16px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;color-scheme:dark">
-      <div style="display:flex;gap:8px;margin-top:16px">
-        <button id="calSchedCancel" class="btn-cancel" style="flex:1;font-size:13px;padding:10px">Cancel</button>
-        <button id="calSchedSave" class="btn-primary" style="flex:1;font-size:13px;padding:10px">Schedule</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  const close = ()=>overlay.remove();
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
-  overlay.querySelector('#calSchedCancel').addEventListener('click', close);
-  overlay.querySelector('#calSchedSave').addEventListener('click', ()=>{
-    const key = overlay.querySelector('#calSchedDate').value;
-    if(!key){ toast('Pick a date'); return; }
-    if(calScheduleJobOn(jobId, key)) close();
-  });
 }
 
 let calDraggingId = null;
@@ -9080,14 +8918,6 @@ function wireCalDragDrop(){
       renderCalendarPage();
     };
     btn.addEventListener('click', handler);
-  });
-  // Tap-to-schedule (touch devices can't drag) — button only shows on coarse pointers
-  document.querySelectorAll('[data-cal-sched]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      calOpenSchedulePicker(btn.dataset.calSched);
-    });
   });
   // Draggable cards — both week-view full cards and month-view chips
   document.querySelectorAll('.cal-job-card, .cal-mchip').forEach(card => {
@@ -9118,7 +8948,31 @@ function wireCalDragDrop(){
       e.preventDefault();
       day.classList.remove('cal-drop-ok','cal-drop-bad');
       if(!calDraggingId) return;
-      calScheduleJobOn(calDraggingId, key);
+      const j = jobs.find(x => x.id === calDraggingId);
+      if(!j) return;
+      if(!calCanScheduleOnDay(key)){
+        toast(`Day is full (${calCrewsPerDay} crews booked). Ask admin to override.`);
+        return;
+      }
+      const prev = j.buildDate || null;
+      const isBad = isBadWeatherDay(key);
+      if(isBad){
+        const w = getWeatherForDate(key);
+        const reason = w ? `${w.shortDay || 'Forecast'} · ${w.precip != null ? Math.round(w.precip)+'% rain' : ''}${w.windMax ? ' · '+w.windMax+' mph wind' : ''}` : 'Heavy rain expected';
+        if(!confirm(`⚠ Weather warning for ${key}\n\n${reason}\n\nSchedule ${j.name} anyway?`)){
+          return;
+        }
+      }
+      j.buildDate = key;
+      // A newly placed/moved date starts UNCONFIRMED — manager must confirm with crew.
+      if(prev !== key) j.buildConfirmed = false;
+      if(prev !== key){
+        const fromLabel = prev ? prev : 'unscheduled';
+        if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
+      }
+      saveToStorage();
+      toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
+      renderCalendarPage();
     });
   });
 
@@ -9833,10 +9687,19 @@ async function loadCompanyInfo(){
 // ── SUBCONTRACTOR PAYMENT VOUCHER ──
 // Computes labor pay from squares + story + pitch tier + decking + additional work,
 // then prints a one-page voucher to attach to the sub's check.
+// Expense categories, shared by the Expense Tracker and the Payment Breakdown
+// voucher so a permit/inspection payment files under its own category.
+const EXPENSE_CATEGORIES = ['Materials','Roofing Labor','Additional Labor','Measurements','Permits','Inspections','Appraisals','Returns'];
+const EXPENSE_CATEGORY_COLORS = {
+  'Materials':'#4D9DE0','Roofing Labor':'#F59E0B','Additional Labor':'#FB923C',
+  'Measurements':'#A78BFA','Permits':'#38BDF8','Inspections':'#22D3EE','Appraisals':'#34D399','Returns':'#F87171'
+};
+
 const SUB_PAY = {
   base: 75,        // $/sq
   storyAdder: 5,   // +$/sq per story above 1 (2-story = +$5, 3-story = +$10)
   handNailAdder: 5,// +$/sq when the roof is hand nailed
+  doubleFeltAdder: 5, // +$/sq when double felt / double underlayment is installed
   perSheet: 40,    // $/sheet of decking
   // Steep pitch charge tiers — cumulative $5 steps. `charge` is $/sq added to base.
   steepTiers: [
@@ -9847,6 +9710,31 @@ const SUB_PAY = {
 };
 function steepChargeFor(key){ const t=SUB_PAY.steepTiers.find(t=>t.key===key); return t?t.charge:0; }
 
+// Payment types for a sub voucher. Only 'roof' charges a per-square base rate;
+// the others are flat / line-item payments. The label drives what prints on the
+// receipt, so paying an inspector never shows up as "Repair" on the breakdown.
+const SUB_PAY_TYPES = [
+  { key:'roof',       label:'Full Roof',  noBase:false, expCat:'Roofing Labor' },
+  { key:'repair',     label:'Repair',     noBase:true,  expCat:'Roofing Labor' },
+  { key:'permit',     label:'Permit',     noBase:true,  expCat:'Permits' },
+  { key:'inspection', label:'Inspection', noBase:true,  expCat:'Inspections' },
+  { key:'other',      label:'Other',      noBase:true,  expCat:'Additional Labor' },
+];
+// Back-compat: older vouchers only stored a boolean `repair`.
+function payTypeKeyOf(bd){
+  if(!bd) return 'roof';
+  if(bd.payType) return bd.payType;
+  return bd.repair ? 'repair' : 'roof';
+}
+function payTypeNoBase(key){ const t=SUB_PAY_TYPES.find(t=>t.key===key); return t?t.noBase:false; }
+function payTypeExpCat(key){ const t=SUB_PAY_TYPES.find(t=>t.key===key); return t?t.expCat:'Roofing Labor'; }
+function payTypeLabelOf(bd){
+  const key = payTypeKeyOf(bd);
+  if(key==='other'){ const s=(bd&&bd.payLabel||'').trim(); return s||'Other'; }
+  const t = SUB_PAY_TYPES.find(t=>t.key===key);
+  return t?t.label:'Full Roof';
+}
+
 // Compute labor total + breakdown from a breakdown object (shared by voucher + expense).
 // bd = { mixedPitch, squares, sqStd, sq_<tier>, story, pitch, sheets, extraLines:[{desc,amount}] }
 function computeLaborFromBreakdown(bd){
@@ -9854,38 +9742,44 @@ function computeLaborFromBreakdown(bd){
   const story = parseInt(bd.story)||1;
   const storyAdd = Math.max(0, story-1) * SUB_PAY.storyAdder;   // 2-story +$5/sq, 3-story +$10/sq
   const handNailAdd = bd.handNail ? SUB_PAY.handNailAdder : 0;  // +$5/sq when hand nailed
-  const repair = !!bd.repair;                                   // repair: no base/squares, extras only
+  const doubleFeltAdd = bd.doubleFelt ? SUB_PAY.doubleFeltAdder : 0; // +$5/sq for double felt
+  const payType = payTypeKeyOf(bd);
+  const payLabel = payTypeLabelOf(bd);
+  const repair = payTypeNoBase(payType);   // no base/squares — line items only
   const sheets = parseFloat(bd.sheets)||0;
-  let sq, laborBase, laborStory, laborSteep, laborHandNail, labor, tiers, ratePerSq=null;
+  let sq, laborBase, laborStory, laborSteep, laborHandNail, laborDoubleFelt, labor, tiers, ratePerSq=null;
   if(repair){
-    sq = 0; laborBase = 0; laborStory = 0; laborSteep = 0; laborHandNail = 0; labor = 0; tiers = [];
+    sq = 0; laborBase = 0; laborStory = 0; laborSteep = 0; laborHandNail = 0; laborDoubleFelt = 0; labor = 0; tiers = [];
   } else if(bd.mixedPitch){
     const sqStd = parseFloat(bd.sqStd)||0;
     const tierSquares = SUB_PAY.steepTiers.map(t=>({ ...t, sq:parseFloat(bd['sq_'+t.key])||0 }));
     sq = sqStd + tierSquares.reduce((s,t)=>s+t.sq,0);
-    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborHandNail = sq*handNailAdd;
+    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborHandNail = sq*handNailAdd; laborDoubleFelt = sq*doubleFeltAdd;
     laborSteep = tierSquares.reduce((s,t)=>s+t.sq*t.charge,0);
-    labor = laborBase+laborStory+laborSteep+laborHandNail;
+    labor = laborBase+laborStory+laborSteep+laborHandNail+laborDoubleFelt;
     tiers = [{label:'Standard ≤7/12',sq:sqStd,adder:0},...tierSquares.map(t=>({label:t.label,sq:t.sq,adder:t.charge}))].filter(t=>t.sq>0);
   } else {
     sq = parseFloat(bd.squares)||0;
     const steepAdd = steepChargeFor(bd.pitch);
-    ratePerSq = SUB_PAY.base+storyAdd+steepAdd+handNailAdd;
-    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborSteep = sq*steepAdd; laborHandNail = sq*handNailAdd;
+    ratePerSq = SUB_PAY.base+storyAdd+steepAdd+handNailAdd+doubleFeltAdd;
+    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborSteep = sq*steepAdd; laborHandNail = sq*handNailAdd; laborDoubleFelt = sq*doubleFeltAdd;
     labor = sq*ratePerSq;
     tiers = [{label:'',sq,adder:steepAdd}];
   }
   const decking = sheets*SUB_PAY.perSheet;
   const extras = (bd.extraLines||[]).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
   const total = labor+decking+extras;
-  return { sq, story, storyAdd, handNail:!!bd.handNail, handNailAdd, repair, sheets, mixedPitch:!!bd.mixedPitch, tiers, ratePerSq, laborBase, laborStory, laborSteep, laborHandNail, labor, decking, extras, total };
+  return { sq, story, storyAdd, handNail:!!bd.handNail, handNailAdd, doubleFelt:!!bd.doubleFelt, doubleFeltAdd, laborDoubleFelt,
+           repair, payType, payLabel, sheets, mixedPitch:!!bd.mixedPitch, tiers, ratePerSq,
+           laborBase, laborStory, laborSteep, laborHandNail, labor, decking, extras, total };
 }
 // Short human summary of a breakdown for inline display.
 function laborBreakdownSummary(bd){
   const c = computeLaborFromBreakdown(bd);
-  const parts = c.repair ? ['repair'] : [`${c.sq} sq`];
+  const parts = c.repair ? [c.payLabel.toLowerCase()] : [`${c.sq} sq`];
   if(!c.repair && c.storyAdd) parts.push(`${c.story}-story`);
   if(!c.repair && c.handNail) parts.push('hand nail');
+  if(!c.repair && c.doubleFelt) parts.push('double felt');
   if(!c.repair && bd.mixedPitch) parts.push('mixed pitch');
   else if(!c.repair && bd.pitch && bd.pitch!=='0'){ const t=SUB_PAY.steepTiers.find(t=>t.key===bd.pitch); if(t) parts.push(t.label); }
   if(c.sheets) parts.push(`${c.sheets} decking`);
@@ -9912,6 +9806,7 @@ function openLaborBreakdownCalc(initial, onDone){
           <div><label class="ie-lbl">Stories</label><select id="lbStory" class="ie-inp" style="cursor:pointer"><option value="1" ${(saved.story!=2&&saved.story!=3)?'selected':''}>1 story</option><option value="2" ${saved.story==2?'selected':''}>2 story (+$${SUB_PAY.storyAdder}/sq)</option><option value="3" ${saved.story==3?'selected':''}>3 story (+$${SUB_PAY.storyAdder*2}/sq)</option></select></div>
           <div style="grid-column:1/-1">
             <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px"><input id="lbHandNail" type="checkbox" ${saved.handNail?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">Hand nail (+$${SUB_PAY.handNailAdder}/sq)</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px"><input id="lbDoubleFelt" type="checkbox" ${saved.doubleFelt?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">Double felt (+$${SUB_PAY.doubleFeltAdder}/sq)</label>
           </div>
           <div style="grid-column:1/-1">
             <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px"><input id="lbMixed" type="checkbox" ${mixedPitch?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">Mixed pitch (squares per tier)</label>
@@ -9955,6 +9850,7 @@ function openLaborBreakdownCalc(initial, onDone){
       ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key,num('lbSq_'+t.key)])),
       story:parseInt(overlay.querySelector('#lbStory').value)||1,
       handNail:!!overlay.querySelector('#lbHandNail')?.checked,
+      doubleFelt:!!overlay.querySelector('#lbDoubleFelt')?.checked,
       pitch:overlay.querySelector('#lbPitch')?.value||'0',
       sheets:num('lbSheets'),
       extraLines,
@@ -9973,6 +9869,7 @@ function openLaborBreakdownCalc(initial, onDone){
     let html=row(`Base — ${c.sq} sq × $${SUB_PAY.base}`,fmt(c.laborBase));
     if(c.storyAdd) html+=row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`,fmt(c.laborStory),true);
     if(c.laborHandNail) html+=row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`,fmt(c.laborHandNail),true);
+    if(c.laborDoubleFelt) html+=row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`,fmt(c.laborDoubleFelt),true);
     c.tiers.filter(t=>t.adder>0).forEach(t=>{ if(c.mixedPitch) html+=row(`${t.label} charge — ${t.sq} sq × $${t.adder}`,fmt(t.sq*t.adder),true); });
     if(!c.mixedPitch && c.laborSteep) html+=row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`,fmt(c.laborSteep),true);
     if(c.decking) html+=row(`Decking — ${c.sheets} × $${SUB_PAY.perSheet}`,fmt(c.decking));
@@ -9987,7 +9884,7 @@ function openLaborBreakdownCalc(initial, onDone){
     const sqEl=overlay.querySelector('#lbSquares'); sqEl.disabled=mixedPitch; sqEl.style.opacity=mixedPitch?'0.5':'';
     render();
   });
-  overlay.querySelectorAll('#lbSquares,#lbStory,#lbHandNail,#lbPitch,#lbSheets,#lbSqStd,'+SUB_PAY.steepTiers.map(t=>'#lbSq_'+t.key).join(',')).forEach(el=>{el.addEventListener('input',render);el.addEventListener('change',render);});
+  overlay.querySelectorAll('#lbSquares,#lbStory,#lbHandNail,#lbDoubleFelt,#lbPitch,#lbSheets,#lbSqStd,'+SUB_PAY.steepTiers.map(t=>'#lbSq_'+t.key).join(',')).forEach(el=>{el.addEventListener('input',render);el.addEventListener('change',render);});
   overlay.querySelector('#lbAddLine').addEventListener('click',()=>{extraLines.push({desc:'',amount:''});renderExtras();});
   overlay.querySelector('#lbApply').addEventListener('click',()=>{
     const bd=collect(); const c=computeLaborFromBreakdown(bd);
@@ -10240,6 +10137,9 @@ async function openSubVoucher(jobId){
   const subs = (window.subcontractors || []).filter(s=>s.active!==false);
   const squares = j?.roofEstimate?.totalSquares ? Math.round(j.roofEstimate.totalSquares*10)/10 : '';
   const saved = (j && j.subVoucher) ? j.subVoucher : {};
+  const savedPayType = payTypeKeyOf(saved);
+  const savedNoBase = payTypeNoBase(savedPayType);
+  const savedExpCat = saved.expCat || payTypeExpCat(savedPayType);
 
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
@@ -10255,23 +10155,35 @@ async function openSubVoucher(jobId){
       <div style="padding:16px 18px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div style="grid-column:1 / -1">
-            <label class="ie-lbl">Subcontractor</label>
+            <label class="ie-lbl">Pay To (subcontractor / vendor)</label>
             <select id="svSub" class="ie-inp" style="cursor:pointer">
-              <option value="">— Select sub —</option>
+              <option value="">— Select payee —</option>
               ${subs.map(s=>`<option value="${s.id}" ${saved.subId===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
             </select>
           </div>
           <div style="grid-column:1 / -1">
-            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#F97316;cursor:pointer">
-              <input id="svRepairToggle" type="checkbox" ${saved.repair?'checked':''} style="cursor:pointer;accent-color:#F97316">
-              Repair job — no base charge / squares, additional work line items only
-            </label>
+            <label class="ie-lbl">Payment Type</label>
+            <select id="svPayType" class="ie-inp" style="cursor:pointer">
+              ${SUB_PAY_TYPES.map(t=>`<option value="${t.key}" ${savedPayType===t.key?'selected':''}>${t.label}${t.noBase?' — no base charge':' (base charge by squares)'}</option>`).join('')}
+            </select>
+            <div style="font-size:9px;color:var(--muted);margin-top:3px">Only Full Roof charges the per-square base rate. This label is what prints on the receipt.</div>
           </div>
-          <div id="svSquaresWrap" style="${saved.repair?'display:none':''}">
+          <div id="svPayLabelWrap" style="grid-column:1 / -1;${savedPayType==='other'?'':'display:none'}">
+            <label class="ie-lbl">Custom Label (prints on receipt)</label>
+            <input id="svPayLabel" class="ie-inp" type="text" value="${escapeHtml(saved.payLabel||'')}" placeholder="e.g. Consulting, Tarp, Dump Run">
+          </div>
+          <div style="grid-column:1 / -1">
+            <label class="ie-lbl">Expense Category</label>
+            <select id="svExpCat" class="ie-inp" style="cursor:pointer">
+              ${EXPENSE_CATEGORIES.filter(c=>c!=='Returns').map(c=>`<option value="${c}" ${savedExpCat===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+            <div style="font-size:9px;color:var(--muted);margin-top:3px">Where this payment files under the job's Expenses. Follows the payment type unless you change it.</div>
+          </div>
+          <div id="svSquaresWrap" style="${savedNoBase?'display:none':''}">
             <label class="ie-lbl">Total Squares</label>
             <input id="svSquares" class="ie-inp" type="text" inputmode="decimal" value="${saved.squares??squares}" placeholder="28" ${saved.mixedPitch?'disabled style="opacity:0.5"':''}>
           </div>
-          <div id="svStoryWrap" style="${saved.repair?'display:none':''}">
+          <div id="svStoryWrap" style="${savedNoBase?'display:none':''}">
             <label class="ie-lbl">Stories</label>
             <select id="svStory" class="ie-inp" style="cursor:pointer">
               <option value="1" ${(saved.story!=2&&saved.story!=3)?'selected':''}>1 story</option>
@@ -10279,13 +10191,19 @@ async function openSubVoucher(jobId){
               <option value="3" ${saved.story==3?'selected':''}>3 story (+$${SUB_PAY.storyAdder*2}/sq)</option>
             </select>
           </div>
-          <div id="svHandNailWrap" style="grid-column:1 / -1;${saved.repair?'display:none':''}">
+          <div id="svHandNailWrap" style="grid-column:1 / -1;${savedNoBase?'display:none':''}">
             <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer">
               <input id="svHandNail" type="checkbox" ${saved.handNail?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">
               Hand nail (+$${SUB_PAY.handNailAdder}/sq)
             </label>
           </div>
-          <div id="svPitchOuterWrap" style="grid-column:1 / -1;${saved.repair?'display:none':''}">
+          <div id="svDoubleFeltWrap" style="grid-column:1 / -1;${savedNoBase?'display:none':''}">
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer">
+              <input id="svDoubleFelt" type="checkbox" ${saved.doubleFelt?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">
+              Double felt (+$${SUB_PAY.doubleFeltAdder}/sq)
+            </label>
+          </div>
+          <div id="svPitchOuterWrap" style="grid-column:1 / -1;${savedNoBase?'display:none':''}">
             <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px">
               <input id="svMixedToggle" type="checkbox" ${saved.mixedPitch?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">
               Mixed pitch (enter squares per pitch tier)
@@ -10345,13 +10263,14 @@ async function openSubVoucher(jobId){
           <div style="flex:1"></div>
           <button id="svPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Voucher</button>
         </div>
-        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · +$${SUB_PAY.storyAdder*2}/sq 3-story · +$${SUB_PAY.handNailAdder}/sq hand nail · ${SUB_PAY.steepTiers.map(t=>`+$${t.charge} (${t.label})`).join(' · ')} · $${SUB_PAY.perSheet}/decking sheet.</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · +$${SUB_PAY.storyAdder*2}/sq 3-story · +$${SUB_PAY.handNailAdder}/sq hand nail · +$${SUB_PAY.doubleFeltAdder}/sq double felt · ${SUB_PAY.steepTiers.map(t=>`+$${t.charge} (${t.label})`).join(' · ')} · $${SUB_PAY.perSheet}/decking sheet.</div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   const close=()=>overlay.remove();
   overlay.querySelector('#svClose').addEventListener('click', close);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+  // Intentionally NO backdrop-click close: this form holds real entry work, so
+  // it only closes via the X button (prevents losing a half-typed voucher).
 
   const num = id => { const el=overlay.querySelector('#'+id); if(!el) return 0; const v=evalMathExpr(el.value); return (v!=null)?v:(parseFloat(el.value)||0); };
   let extraLines = Array.isArray(saved.extraLines) ? saved.extraLines.map(l=>({...l})) : [];
@@ -10370,17 +10289,20 @@ async function openSubVoucher(jobId){
   }
 
   let mixedPitch = !!saved.mixedPitch;
-  let repairMode = !!saved.repair;
+  let payType = savedPayType;
+  let repairMode = payTypeNoBase(payType);
 
   function compute(){
     return computeLaborFromBreakdown({
-      repair: repairMode,
+      payType,
+      payLabel: overlay.querySelector('#svPayLabel')?.value || '',
       mixedPitch,
       squares: num('svSquares'),
       sqStd: num('svSqStd'),
       ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, num('svSq_'+t.key)])),
       story: parseInt(overlay.querySelector('#svStory').value)||1,
       handNail: !!overlay.querySelector('#svHandNail')?.checked,
+      doubleFelt: !!overlay.querySelector('#svDoubleFelt')?.checked,
       pitch: overlay.querySelector('#svPitch')?.value || '0',
       sheets: num('svSheets'),
       extraLines,
@@ -10394,17 +10316,19 @@ async function openSubVoucher(jobId){
     const row=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+label+'</span>':'<span>'+label+'</span>'}<span style="font-variant-numeric:tabular-nums">${val}</span></div>`;
     let laborRows = '';
     if(c.repair){
-      laborRows = row('Repair — no base charge', fmt(0));
+      laborRows = row(`${c.payLabel} — no base charge`, fmt(0));
     } else if(c.mixedPitch){
       laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
       if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
       if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
+      if(c.laborDoubleFelt) laborRows += row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
       c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} charge — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
       laborRows += row(`Labor subtotal`, fmt(c.labor));
     } else {
       laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
       if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
       if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
+      if(c.laborDoubleFelt) laborRows += row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
       if(c.laborSteep) laborRows += row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
       laborRows += row(`Labor subtotal — ${c.sq} sq × $${c.ratePerSq}/sq`, fmt(c.labor));
     }
@@ -10419,15 +10343,28 @@ async function openSubVoucher(jobId){
     if(sumEl && mixedPitch) sumEl.textContent = `Total: ${c.sq} squares`;
   }
 
-  // Repair toggle — hides base-charge inputs, extras (and decking) only
-  overlay.querySelector('#svRepairToggle').addEventListener('change', e=>{
-    repairMode = e.target.checked;
-    ['svSquaresWrap','svStoryWrap','svHandNailWrap','svPitchOuterWrap'].forEach(id=>{
+  // Payment type — anything other than Full Roof hides the base-charge inputs
+  // and prints under its own label (Repair / Permit / Inspection / custom).
+  let expCatTouched = !!saved.expCat && saved.expCat !== payTypeExpCat(savedPayType);
+  overlay.querySelector('#svExpCat').addEventListener('change', ()=>{ expCatTouched = true; });
+  overlay.querySelector('#svPayType').addEventListener('change', e=>{
+    payType = e.target.value;
+    repairMode = payTypeNoBase(payType);
+    ['svSquaresWrap','svStoryWrap','svHandNailWrap','svDoubleFeltWrap','svPitchOuterWrap'].forEach(id=>{
       const el = overlay.querySelector('#'+id);
       if(el) el.style.display = repairMode ? 'none' : '';
     });
+    const lblWrap = overlay.querySelector('#svPayLabelWrap');
+    if(lblWrap) lblWrap.style.display = (payType==='other') ? '' : 'none';
+    // Keep the expense category in step with the payment type unless the user
+    // has explicitly picked a different one.
+    if(!expCatTouched){
+      const catEl = overlay.querySelector('#svExpCat');
+      if(catEl) catEl.value = payTypeExpCat(payType);
+    }
     renderBreakdown();
   });
+  overlay.querySelector('#svPayLabel')?.addEventListener('input', renderBreakdown);
 
   // Mixed-pitch toggle
   overlay.querySelector('#svMixedToggle').addEventListener('change', e=>{
@@ -10440,7 +10377,7 @@ async function openSubVoucher(jobId){
   });
 
   overlay.querySelectorAll('#svSquares,#svStory,#svPitch,#svSheets,#svSqStd,'+SUB_PAY.steepTiers.map(t=>'#svSq_'+t.key).join(',')).forEach(el=>el.addEventListener('input',renderBreakdown));
-  overlay.querySelectorAll('#svStory,#svPitch,#svHandNail').forEach(el=>el.addEventListener('change',renderBreakdown));
+  overlay.querySelectorAll('#svStory,#svPitch,#svHandNail,#svDoubleFelt').forEach(el=>el.addEventListener('change',renderBreakdown));
   overlay.querySelector('#svAddLine').addEventListener('click',()=>{ extraLines.push({desc:'',amount:''}); renderExtras(); });
 
   // Paid toggle — warn when switching to NOT paid
@@ -10463,7 +10400,11 @@ async function openSubVoucher(jobId){
       ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, num('svSq_'+t.key)])),
       story: parseInt(overlay.querySelector('#svStory').value)||1,
       handNail: !!overlay.querySelector('#svHandNail')?.checked,
-      repair: repairMode,
+      doubleFelt: !!overlay.querySelector('#svDoubleFelt')?.checked,
+      payType,
+      payLabel: overlay.querySelector('#svPayLabel')?.value || '',
+      expCat: overlay.querySelector('#svExpCat')?.value || payTypeExpCat(payType),
+      repair: repairMode,   // kept for older readers of this record
       pitch: overlay.querySelector('#svPitch')?.value || '0',
       sheets: num('svSheets'),
       checkNo: overlay.querySelector('#svCheckNo').value||'',
@@ -10496,8 +10437,8 @@ async function openSubVoucher(jobId){
     const sub = (window.subcontractors||[]).find(s=>s.id===subId);
     const checkNo = overlay.querySelector('#svCheckNo').value||'';
     const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
-    if(!sub){ toast('Select a subcontractor first'); return; }
-    if(c.total<=0){ toast(c.repair ? 'Add additional work line items to calculate pay' : 'Enter squares to calculate pay'); return; }
+    if(!sub){ toast('Select who this is paid to first'); return; }
+    if(c.total<=0){ toast(c.repair ? `Add line items to calculate the ${(c.payLabel||'').toLowerCase()} amount` : 'Enter squares to calculate pay'); return; }
     if(j){
       const vd = collectVoucher();
       j.subVoucher = vd;
@@ -10522,9 +10463,10 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
   if(!Array.isArray(j.expenses)) j.expenses = [];
   const tag = 'subvoucher';
   const today = new Date().toISOString().slice(0,10);
+  const payLabel = c.payLabel || 'Sub labor';
   const desc = c.repair
-    ? `Sub labor — repair${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`
-    : `Sub labor — ${c.sq} sq${c.handNail?' hand nail':''}${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`;
+    ? `${payLabel}${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`
+    : `Sub labor — ${c.sq} sq${c.handNail?' hand nail':''}${c.doubleFelt?' double felt':''}${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`;
   // Match the specific voucher by its unique id (so multiple per sub/job are kept distinct)
   const vid = (voucherData && voucherData._vid) ? voucherData._vid : null;
   let exp = vid ? j.expenses.find(e=>e._vid===vid)
@@ -10534,7 +10476,8 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
     j.expenses.push(exp);
   }
   if(voucherData) exp._vid = exp._vid || vid;
-  exp.cat = 'Roofing Labor';
+  // File the payment under its own expense category (Permits, Inspections, etc.)
+  exp.cat = (voucherData && voucherData.expCat) || payTypeExpCat(c.payType || 'roof');
   exp.desc = desc;
   exp.amount = c.total.toFixed(2);
   exp.vendor = sub.id;
@@ -10546,7 +10489,13 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
       squares: voucherData.squares,
       sqStd: voucherData.sqStd,
       ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, voucherData['sq_'+t.key]])),
-      story: voucherData.story, handNail: !!voucherData.handNail, repair: !!voucherData.repair,
+      story: voucherData.story,
+      handNail: !!voucherData.handNail,
+      doubleFelt: !!voucherData.doubleFelt,
+      payType: voucherData.payType,
+      payLabel: voucherData.payLabel,
+      expCat: voucherData.expCat,
+      repair: !!voucherData.repair,
       pitch: voucherData.pitch, sheets: voucherData.sheets,
       extraLines: voucherData.extraLines,
     };
@@ -10607,18 +10556,19 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
 
   const breakdownBlock = `
       <div class="v-section" style="margin-bottom:0">
-        <div class="v-label">${c.repair?'Repair Work Breakdown':'Labor Breakdown'}</div>
+        <div class="v-label">${c.repair?`${escapeHtml(c.payLabel)} Breakdown`:'Labor Breakdown'}</div>
         <table>
           ${c.repair ? '' : `
           ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
           ${c.storyAdd?line(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
           ${c.laborHandNail?line(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}/sq`, fmt(c.laborHandNail)):''}
+          ${c.laborDoubleFelt?line(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}/sq`, fmt(c.laborDoubleFelt)):''}
           ${c.mixedPitch
             ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} charge — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder))).join('')
             : (c.laborSteep?line(`Steep pitch charge — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep)):'')}`}
           ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
           ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
-          ${(c.repair && !extraLines.some(l=>(parseFloat(l.amount)||0)>0) && !c.decking)?line('Repair — see additional work','—'):''}
+          ${(c.repair && !extraLines.some(l=>(parseFloat(l.amount)||0)>0) && !c.decking)?line(`${escapeHtml(c.payLabel)} — see additional work`,'—'):''}
           <tr class="v-total"><td>TOTAL PAYMENT</td><td style="text-align:right">${fmt(c.total)}</td></tr>
         </table>
       </div>`;
@@ -13696,7 +13646,7 @@ async function renderPayrollSubs(){
             <td class="muted">${escapeHtml(r.cat || '—')}${r.breakdown?`<div style="font-size:9px;color:var(--muted);margin-top:2px;font-style:italic">${escapeHtml(laborBreakdownSummary(r.breakdown))}</div>`:(r.desc?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.desc)}</div>`:'')}</td>
             <td class="num">${fmtMoney(r.amount)}</td>
             <td>${r.paid ? `<span class="comm-status-pill comm-status-paid">PAID</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${escapeHtml(r.paidDate)}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>` : `<span class="comm-status-pill comm-status-owed">OWED</span>`}</td>
-            <td style="white-space:nowrap">${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : `<button class="comm-unpay-btn" data-sub-unpay="${r.job.id}|${r.expenseIdx}" title="Revert sub payment to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>`}<button data-sub-del="${r.job.id}|${r.expenseIdx}" title="Delete this payment line" style="background:transparent;border:1px solid rgba(239,68,68,0.35);color:#EF4444;font-size:10px;font-weight:600;padding:3px 7px;border-radius:5px;cursor:pointer;margin-left:6px"><i class="ti ti-trash" style="font-size:11px"></i></button></td>
+            <td>${!r.paid ? `<button class="comm-pay-btn" data-sub-pay="${r.job.id}|${r.expenseIdx}"><i class="ti ti-cash"></i>Pay</button>` : `<button class="comm-unpay-btn" data-sub-unpay="${r.job.id}|${r.expenseIdx}" title="Revert sub payment to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>`}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -13727,11 +13677,6 @@ async function renderPayrollSubs(){
     const [jobId, idxStr] = b.dataset.subUnpay.split('|');
     unpayCommission(jobId, '__SUB__' + idxStr);
   }));
-  body.querySelectorAll('[data-sub-del]').forEach(b => b.addEventListener('click', e => {
-    e.stopPropagation();
-    const [jobId, idxStr] = b.dataset.subDel.split('|');
-    deleteSubExpense(jobId, parseInt(idxStr));
-  }));
   body.querySelectorAll('[data-sub-view]').forEach(tr => tr.addEventListener('click', () => {
     const [jobId, idxStr] = tr.dataset.subView.split('|');
     openSubExpenseSummary(jobId, parseInt(idxStr));
@@ -13756,7 +13701,7 @@ function openSubExpenseSummary(jobId, expenseIdx){
   // Rebuild the itemized breakdown. Falls back to a single line for plain vendor expenses.
   const bd = e.breakdown || null;
   const c = bd ? computeLaborFromBreakdown(bd)
-               : computeLaborFromBreakdown({ repair:true, extraLines:[{ desc: e.desc || e.cat || 'Expense', amount: amount }] });
+               : computeLaborFromBreakdown({ payType:'other', payLabel:'Payment', extraLines:[{ desc: e.desc || e.cat || 'Expense', amount: amount }] });
   const extraLines = (bd?.extraLines || (bd ? [] : [{ desc: e.desc || e.cat || 'Expense', amount: amount }])).filter(l=>(parseFloat(l.amount)||0)>0);
 
   // Check # — prefer the saved voucher, then parse from paid notes
@@ -13771,11 +13716,12 @@ function openSubExpenseSummary(jobId, expenseIdx){
   let laborRows = '';
   if(bd){
     if(c.repair){
-      laborRows = row('Repair — no base charge', fmt(0));
+      laborRows = row(`${c.payLabel} — no base charge`, fmt(0));
     } else {
       laborRows = row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase));
       if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
       if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
+      if(c.laborDoubleFelt) laborRows += row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
       if(c.mixedPitch){
         c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} charge — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
       } else if(c.laborSteep){
@@ -13810,7 +13756,6 @@ function openSubExpenseSummary(jobId, expenseIdx){
         <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:#34D399;border-top:2px solid var(--border);padding-top:9px;margin-top:8px"><span>TOTAL</span><span style="font-variant-numeric:tabular-nums">${fmt(bd ? c.total : amount)}</span></div>
         <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
           <button id="sesCloseBtn" class="btn-cancel" style="font-size:12px;padding:9px 14px">Close</button>
-          <button id="sesDelete" style="background:transparent;border:1px solid rgba(239,68,68,0.4);color:#EF4444;font-size:12px;font-weight:600;padding:9px 14px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:6px"><i class="ti ti-trash"></i>Delete</button>
           <div style="flex:1"></div>
           ${isVoucher ? `<button id="sesEdit" class="btn-cancel" style="font-size:12px;padding:9px 14px;display:flex;align-items:center;gap:6px"><i class="ti ti-receipt"></i>Open Payment Breakdown</button>` : ''}
           <button id="sesPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Receipt</button>
@@ -13829,58 +13774,8 @@ function openSubExpenseSummary(jobId, expenseIdx){
   });
   const editBtn = overlay.querySelector('#sesEdit');
   if(editBtn) editBtn.addEventListener('click', ()=>{ close(); openSubVoucher(jobId); });
-  overlay.querySelector('#sesDelete').addEventListener('click', ()=>{
-    close();
-    deleteSubExpense(jobId, expenseIdx);
-  });
 }
 window.openSubExpenseSummary = openSubExpenseSummary;
-
-// Payroll → Subs: delete a payment/expense line, with confirmation.
-function deleteSubExpense(jobId, expenseIdx){
-  if(!isAdmin()){ toast('Only admins can delete payments'); return; }
-  const j = jobs.find(x => x.id === jobId);
-  if(!j) return;
-  const e = j.expenses?.[expenseIdx];
-  if(!e) return;
-  const vendorName = e.vendorName || (window.subcontractors||[]).find(s=>s.id===e.vendor)?.name || e.vendor || 'Vendor';
-  const amount = moneyValue(e.amount) || 0;
-  const paidBit = e.paid
-    ? `\n\n⚠ This line is marked PAID${e.paidDate?' on '+e.paidDate:''}${e.paidMethod?' ('+e.paidMethod+')':''}. Deleting it removes the payment record.`
-    : '';
-  const ok = confirm(
-    `Delete this payment line?\n\n` +
-    `${vendorName} — ${fmtMoney(amount)}\n` +
-    `${e.desc || e.cat || ''}${paidBit}\n\n` +
-    `It will be removed from the job's expenses and from Payroll. This cannot be undone.`
-  );
-  if(!ok) return;
-  // If this expense drives the Payment Breakdown voucher, unlink the voucher too
-  if(e._vid && j.subVoucher && j.subVoucher._vid === e._vid) j.subVoucher = null;
-  j.expenses.splice(expenseIdx, 1);
-  saveToStorage();
-  try { if(typeof refreshExpenseUI === 'function') refreshExpenseUI(); } catch(_){ /* job modal not open */ }
-  if(typeof logActivity === 'function') logActivity(j, 'expense_remove', 'Payment deleted', `${vendorName}: ${fmtMoney(amount)}${e.desc?' · '+e.desc:''}`);
-  toast('Payment deleted');
-  renderPayrollPage();
-}
-window.deleteSubExpense = deleteSubExpense;
-
-// Duplicate guard: find an existing expense on the job that looks like the one being added.
-// Matches on same amount + same vendor (or vendor name) + same category.
-function findDuplicateExpense(j, cand){
-  if(!j || !Array.isArray(j.expenses)) return null;
-  const amt = (parseFloat(cand.amount)||0).toFixed(2);
-  return j.expenses.find(e => {
-    if(!e) return false;
-    if(((parseFloat(e.amount)||0).toFixed(2)) !== amt) return false;
-    const sameVendor = (cand.vendor && e.vendor === cand.vendor) ||
-                       (cand.vendorName && (e.vendorName||'') === cand.vendorName);
-    const sameCat = (e.cat||'') === (cand.cat||'');
-    return sameVendor ? sameCat : (sameCat && (e.desc||'') === (cand.desc||''));
-  }) || null;
-}
-window.findDuplicateExpense = findDuplicateExpense;
 
 // Sub payment — marks an expense line as paid
 function openSubPaidModal(jobId, expenseIdx){
