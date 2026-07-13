@@ -740,7 +740,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
         <div class="cal-rd-lbl">Not Ready</div>
       </div>
     </div>
-      <div id="calWeekGrid" style="flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--border);overflow:auto"></div>
+      <div id="calWeekGrid" style="flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);overflow:auto"></div>
     </div>
   </div>
 </div>
@@ -2941,15 +2941,27 @@ async function extractPdfText(file){
 }
 
 function parseAbcInvoice(text){
-  const out = { total:null, subTotal:null, tax:null, orderNum:'', po:'', orderName:'', account:'' };
+  const out = { total:null, subTotal:null, tax:null, orderNum:'', po:'', orderName:'', account:'', isReturn:false, docType:'' };
   const money = s => { const m = (s||'').replace(/[^0-9.]/g,''); return m ? parseFloat(m) : null; };
-  // Total: $11,187.17  (take the last "Total:" so Sub-Total doesn't win)
-  const totals = [...text.matchAll(/(?:^|\s)Total:\s*\$?([\d,]+\.\d{2})/gi)];
-  if(totals.length) out.total = money(totals[totals.length-1][1]);
-  const sub = text.match(/Sub-?Total:\s*\$?([\d,]+\.\d{2})/i);
-  if(sub) out.subTotal = money(sub[1]);
-  const tax = text.match(/Tax:\s*\$?([\d,]+\.\d{2})/i);
-  if(tax) out.tax = money(tax[1]);
+  // Document type — "Credit Memo" / "Return" means the amounts are a credit back to us.
+  const typeM = text.match(/Type:\s*([^\n]+)/i);
+  if(typeM) out.docType = typeM[1].trim();
+  out.isReturn = /credit\s*memo|return/i.test(out.docType) || /credit\s*memo/i.test(text) || /Quantity\s*Returned/i.test(text);
+  // Totals — capture an optional leading minus so credit memos read as negative.
+  // Take the LAST "Total:" so Sub-Total doesn't win.
+  const totals = [...text.matchAll(/(?:^|\s)Total:\s*(-?\$?-?[\d,]+\.\d{2})/gi)];
+  if(totals.length){
+    const raw = totals[totals.length-1][1];
+    let v = money(raw);
+    if(v!=null && /-/.test(raw)) v = -Math.abs(v);
+    out.total = v;
+  }
+  const sub = text.match(/Sub-?Total:\s*(-?\$?-?[\d,]+\.\d{2})/i);
+  if(sub){ let v=money(sub[1]); if(v!=null && /-/.test(sub[1])) v=-Math.abs(v); out.subTotal = v; }
+  const tax = text.match(/Tax:\s*(-?\$?-?[\d,]+\.\d{2})/i);
+  if(tax){ let v=money(tax[1]); if(v!=null && /-/.test(tax[1])) v=-Math.abs(v); out.tax = v; }
+  // If it's a return, force the total negative even if the sign wasn't captured.
+  if(out.isReturn && out.total!=null) out.total = -Math.abs(out.total);
   const ord = text.match(/Order\s*#:\s*(\d+)/i);
   if(ord) out.orderNum = ord[1];
   const po = text.match(/PO\s*#:\s*([A-Za-z0-9\-]+)/i);
@@ -2988,19 +3000,22 @@ async function importAbcInvoice(file){
         ? `<div style="font-size:10px;color:#34D399;margin-top:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-circle-check" style="font-size:12px"></i>PO# matches this job (${mr.match.reasons.join(', ')})</div>`
         : `<div style="font-size:10px;color:#FBBF24;margin-top:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-alert-triangle" style="font-size:12px"></i>Heads up: PO# "${escapeHtml(parsed.po||'')}" looks like it matches <strong>${escapeHtml(mr.match.job.name||'')}</strong>, not this job.</div>`)
     : '';
-  const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt = n => (n<0?'-$':'$')+(Math.round(Math.abs(n)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const isReturn = !!parsed.isReturn || (parsed.total!=null && parsed.total < 0);
+  const accent = isReturn ? '#34D399' : '#F97316';
   const overlay = document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.innerHTML = `
     <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:420px;max-width:100%;overflow:hidden">
       <div style="padding:15px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <i class="ti ti-package" style="color:#F97316;font-size:18px"></i>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">ABC Supply Invoice</div>
+        <i class="ti ${isReturn?'ti-arrow-back-up':'ti-package'}" style="color:${accent};font-size:18px"></i>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">ABC Supply ${isReturn?'Return / Credit':'Invoice'}</div>
       </div>
       <div style="padding:16px 18px">
+        ${isReturn?`<div style="font-size:10px;font-weight:700;color:#34D399;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);border-radius:6px;padding:6px 9px;margin-bottom:12px;display:flex;align-items:center;gap:6px"><i class="ti ti-info-circle" style="font-size:12px"></i>Credit Memo — records as a return (reduces material cost)</div>`:''}
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-          <span style="font-size:12px;color:var(--muted)">Total (incl. tax)</span>
-          <span style="font-size:24px;font-weight:800;color:#F97316;font-variant-numeric:tabular-nums">${fmt(parsed.total)}</span>
+          <span style="font-size:12px;color:var(--muted)">${isReturn?'Credit (incl. tax)':'Total (incl. tax)'}</span>
+          <span style="font-size:24px;font-weight:800;color:${accent};font-variant-numeric:tabular-nums">${fmt(parsed.total)}</span>
         </div>
         <div style="font-size:11px;color:var(--muted);line-height:1.8;background:#1A1F2E;border-radius:7px;padding:10px 12px">
           ${parsed.subTotal!=null?`<div style="display:flex;justify-content:space-between"><span>Sub-total</span><span>${fmt(parsed.subTotal)}</span></div>`:''}
@@ -3008,11 +3023,11 @@ async function importAbcInvoice(file){
           ${parsed.orderNum?`<div style="display:flex;justify-content:space-between"><span>Order #</span><span>${escapeHtml(parsed.orderNum)}</span></div>`:''}
           ${parsed.po?`<div style="display:flex;justify-content:space-between"><span>PO #</span><span>${escapeHtml(parsed.po)}</span></div>`:''}
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:10px">Will add a <strong style="color:var(--brand)">Materials</strong> expense to <strong style="color:var(--brand)">${escapeHtml(j.name||'this job')}</strong> and attach the PDF.</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:10px">Will add a <strong style="color:var(--brand)">${isReturn?'Returns':'Materials'}</strong> ${isReturn?'credit':'expense'} to <strong style="color:var(--brand)">${escapeHtml(j.name||'this job')}</strong> and attach the PDF.</div>
         ${matchNote}
         <div style="display:flex;gap:8px;margin-top:16px">
           <button id="abcCancel" class="btn-cancel" style="flex:1;font-size:12px;padding:9px">Cancel</button>
-          <button id="abcConfirm" class="btn-primary" style="flex:1;font-size:12px;padding:9px;background:#F97316;border-color:#F97316">Add Materials Expense</button>
+          <button id="abcConfirm" class="btn-primary" style="flex:1;font-size:12px;padding:9px;background:${accent};border-color:${accent}">${isReturn?'Record Return':'Add Materials Expense'}</button>
         </div>
       </div>
     </div>`;
@@ -3023,18 +3038,20 @@ async function importAbcInvoice(file){
   overlay.querySelector('#abcConfirm').addEventListener('click', async ()=>{
     overlay.querySelector('#abcConfirm').textContent='Adding…';
     overlay.querySelector('#abcConfirm').disabled=true;
-    // 1) Create the Materials expense
+    // 1) Create the expense — a Credit Memo becomes a "Returns" entry.
+    // The Returns category is stored as a POSITIVE amount that the profit math
+    // subtracts (netTotal = costs − returns), so use the absolute value here.
     if(!Array.isArray(j.expenses)) j.expenses=[];
-    const descBits = ['ABC Supply'];
+    const descBits = [isReturn ? 'ABC Supply Return' : 'ABC Supply'];
     if(parsed.orderNum) descBits.push('Order #'+parsed.orderNum);
     if(parsed.po) descBits.push('PO #'+parsed.po);
     j.expenses.push({
-      cat:'Materials',
+      cat: isReturn ? 'Returns' : 'Materials',
       desc: descBits.join(' · '),
-      amount: parsed.total.toFixed(2),
+      amount: (isReturn ? Math.abs(parsed.total) : parsed.total).toFixed(2),
       vendor: null,
       vendorName: 'ABC Supply',
-      paid:false,
+      paid: isReturn ? true : false,     // a credit isn't an outstanding payable
     });
     // 2) Attach the PDF to the job (under Other files)
     try {
@@ -3047,9 +3064,9 @@ async function importAbcInvoice(file){
     saveToStorage();
     if(window.refreshExpenseUI) refreshExpenseUI();
     if(typeof renderBoard==='function') renderBoard();
-    if(typeof logActivity==='function') logActivity(j,'expense','ABC Supply invoice imported',`Materials: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:''}`);
+    if(typeof logActivity==='function') logActivity(j, 'expense', isReturn?'ABC Supply return recorded':'ABC Supply invoice imported', `${isReturn?'Return (credit)':'Materials'}: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:''}`);
     close();
-    toast('Materials expense added · invoice attached');
+    toast(isReturn ? 'Return recorded as a credit · PDF attached' : 'Materials expense added · invoice attached');
   });
 }
 window.importAbcInvoice = importAbcInvoice;
@@ -3408,6 +3425,55 @@ function renderBoardSalesSummary(){
     if(ar!==br) return br-ar;
     return a.jobName.localeCompare(b.jobName);
   });
+  // ── Upcoming This Week panel — scheduled events (build dates) for the next 7 days ──
+  const weekTeam = window.TEAM || window.USERS || [];
+  const wkStart = new Date(); wkStart.setHours(0,0,0,0);
+  const wkDays = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(wkStart); d.setDate(wkStart.getDate()+i);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const dayJobs = summaryJobs.filter(j => j.buildDate === key);
+    wkDays.push({ d, key, jobs:dayJobs });
+  }
+  const wkTotal = wkDays.reduce((s,x)=>s+x.jobs.length,0);
+  const dowFull = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const todayKey = wkDays[0].key;
+  const upcomingPanelHtml = `
+    <div class="summary-panel" style="margin-top:12px">
+      <div class="summary-panel-title">
+        <span><i class="ti ti-calendar-week" style="font-size:12px;margin-right:4px"></i>Upcoming This Week</span>
+        <span style="font-size:10px;color:var(--muted)">${wkTotal} event${wkTotal===1?'':'s'} · next 7 days</span>
+      </div>
+      ${wkTotal===0 ? `<div class="summary-empty" style="padding:14px 4px">No scheduled events in the next 7 days.</div>` : `
+      <div style="display:flex;flex-direction:column;gap:2px">
+        ${wkDays.filter(x=>x.jobs.length).map(x=>{
+          const isToday = x.key===todayKey;
+          const dateLbl = `${dowFull[x.d.getDay()]} ${x.d.getMonth()+1}/${x.d.getDate()}`;
+          return `
+          <div style="padding:6px 0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:11px;font-weight:700;color:${isToday?'var(--brand-light)':'var(--brand)'}">${isToday?'Today · ':''}${escapeHtml(dateLbl)}</span>
+              <span style="flex:1;height:1px;background:rgba(255,255,255,0.06)"></span>
+              <span style="font-size:9px;color:var(--muted)">${x.jobs.length} job${x.jobs.length===1?'':'s'}</span>
+            </div>
+            ${x.jobs.map(j=>{
+              const who = (weekTeam.find(u=>u.id===j.user)||{}).name || '';
+              const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+              return `
+              <div onclick="openDetail && openDetail('${j.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:3px;cursor:pointer">
+                <i class="ti ti-hammer" style="font-size:13px;color:#38BDF8;flex-shrink:0"></i>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(j.name||'Job')}</div>
+                  ${(addr||who)?`<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(addr)}${addr&&who?' · ':''}${escapeHtml(who)}</div>`:''}
+                </div>
+                <span style="font-size:9px;color:#38BDF8;background:rgba(56,189,248,0.12);padding:1px 6px;border-radius:8px;flex-shrink:0">Install</span>
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+      </div>`}
+    </div>`;
+
   // To-Do panel markup (placed high on the page, right under the KPI cards).
   const todoPanelHtml = `
     <div class="summary-panel" style="display:flex;flex-direction:column;height:100%;min-width:300px">
@@ -3501,6 +3567,7 @@ function renderBoardSalesSummary(){
                 </div>
               </div>
           </div>
+          ${upcomingPanelHtml}
           <div class="summary-panel" style="margin-top:12px">
             <div class="summary-panel-title">
               <span><i class="ti ti-bell" style="font-size:12px;margin-right:4px"></i>Team Activity</span>
@@ -3837,6 +3904,7 @@ function openDetail(id){
   renderDetailPanel();
   $('detailOverlay').classList.add('open');
 }
+window.openDetail = openDetail;
 
 function renderDetailPanel(){
   const j=jobs.find(x=>x.id===openJobId);if(!j)return;
@@ -7987,16 +8055,15 @@ async function saveCrewsPerDay(n){
     toast('Saved locally only — could not sync to team');
   }
 }
-// Currently-displayed week — Monday of the week shown.
+// Currently-displayed week — Sunday of the week shown.
 let calWeekStart = null;
 
 function calStartOfWeek(d){
-  // Roll back to Monday
+  // Roll back to Sunday
   const dt = new Date(d);
   dt.setHours(0,0,0,0);
   const day = dt.getDay();              // 0=Sun, 1=Mon, ... 6=Sat
-  const diff = (day === 0 ? -6 : 1 - day);
-  dt.setDate(dt.getDate() + diff);
+  dt.setDate(dt.getDate() - day);       // Sunday is the first day
   return dt;
 }
 function calSameDay(a, b){
@@ -8676,7 +8743,7 @@ window.openWeatherLocationModal = openWeatherLocationModal;
 
 // View state: 'month' default, 'week' alternate. Anchor date drives navigation.
 let calView = localStorage.getItem('stormshield_cal_view') || 'month';
-let calAnchor = null;  // First-of-month for month view, Monday for week view
+let calAnchor = null;  // First-of-month for month view, Sunday for week view
 
 function renderCalendarPage(){
   const today = new Date(); today.setHours(0,0,0,0);
@@ -8744,20 +8811,20 @@ function renderCalendarWeek(){
   const label = document.getElementById('calWeekLabel');
   if(!grid) return;
   grid.classList.remove('cal-month');
-  grid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+  grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
   grid.style.gridAutoRows = '';
-  // calAnchor in week view is the Monday
-  const monday = calStartOfWeek(calAnchor);
-  calAnchor = monday;
+  // calAnchor in week view is the Sunday
+  const weekStart = calStartOfWeek(calAnchor);
+  calAnchor = weekStart;
   const days = [];
-  for(let i=0;i<6;i++){
-    const d = new Date(monday); d.setDate(monday.getDate()+i); days.push(d);
+  for(let i=0;i<7;i++){
+    const d = new Date(weekStart); d.setDate(weekStart.getDate()+i); days.push(d);
   }
   const fmt = (d,opts) => d.toLocaleDateString('en-US', opts);
-  const sameMonth = days[0].getMonth() === days[5].getMonth();
+  const sameMonth = days[0].getMonth() === days[6].getMonth();
   label.textContent = sameMonth
-    ? `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[5],{day:'numeric',year:'numeric'})}`
-    : `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[5],{month:'short',day:'numeric',year:'numeric'})}`;
+    ? `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[6],{day:'numeric',year:'numeric'})}`
+    : `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[6],{month:'short',day:'numeric',year:'numeric'})}`;
   const today = new Date(); today.setHours(0,0,0,0);
 
   grid.innerHTML = days.map(d => {
@@ -8816,7 +8883,7 @@ function renderCalendarMonth(){
   const visibleCells = trimRow6 ? cells.slice(0, 35) : cells;
 
   const today = new Date(); today.setHours(0,0,0,0);
-  const dows = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+  const dows = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
   const dowHtml = dows.map(n => `<div class="cal-month-dow">${n}</div>`).join('');
   const cellHtml = visibleCells.map(d => {
