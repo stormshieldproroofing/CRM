@@ -3071,6 +3071,139 @@ async function importAbcInvoice(file){
 }
 window.importAbcInvoice = importAbcInvoice;
 
+// ── ROOFR MEASUREMENT REPORT IMPORT ──
+// Reads a Roofr roof report PDF, extracts total area / pitch / linear measurements,
+// confirms with the user, then fills j.roofEstimate (roof size) and j.abcOrder
+// (eaves/rakes/ridges/hips/valleys for the ABC Supply Material Order calculator).
+function parseRoofrReport(text){
+  const out = { totalSqFt:null, pitch:'', facets:null, address:'',
+                eaves:null, rakes:null, ridges:null, hips:null, valleys:null,
+                stepFlash:null, wallFlash:null };
+  // "Total roof area 1535 sqft" (summary) or "Total roof area: 1535 sqft" (area page)
+  const area = text.match(/Total\s+roof\s+area:?\s*([\d,]+)\s*sq\s*ft/i);
+  if(area) out.totalSqFt = parseFloat(area[1].replace(/,/g,''));
+  // Pitch denominators are 12; text layers can merge digits ("5/127742..."), so
+  // capture only the numerator and rebuild.
+  const pitch = text.match(/Predominant\s+pitch:?\s*(\d{1,2})\s*\/\s*12/i);
+  if(pitch) out.pitch = pitch[1] + '/12';
+  const facets = text.match(/(\d+)\s*facets/i);
+  if(facets) out.facets = parseInt(facets[1],10);
+  // Address: require the house number to NOT be preceded by another digit so we
+  // skip occurrences where the text layer merged it with a prior number.
+  const addr = text.match(/(?:^|[^\d])(\d{1,5}\s+[A-Za-z][^,\n]*,\s*[^,\n]*,\s*[A-Z]{2}\s*\d{5})/);
+  if(addr) out.address = addr[1].replace(/\s+/g,' ').trim();
+  // Linear lengths: "Total eaves 160ft 1in" → decimal feet (rounded up to whole inch)
+  const ftIn = label => {
+    const m = text.match(new RegExp(label + String.raw`:?\s*(\d+)\s*ft\s*(\d+)\s*in`, 'i'));
+    if(!m) return null;
+    return Math.round((parseInt(m[1],10) + parseInt(m[2],10)/12) * 10) / 10;
+  };
+  out.eaves     = ftIn(String.raw`(?:Total\s+)?eaves`);
+  out.valleys   = ftIn(String.raw`(?:Total\s+)?valleys`);
+  out.hips      = ftIn(String.raw`(?:Total\s+)?hips`);
+  out.ridges    = ftIn(String.raw`(?:Total\s+)?ridges`);
+  out.rakes     = ftIn(String.raw`(?:Total\s+)?rakes`);
+  out.stepFlash = ftIn(String.raw`(?:Total\s+)?step\s+flashing`);
+  out.wallFlash = ftIn(String.raw`(?:Total\s+)?wall\s+flashing`);
+  return out;
+}
+window.parseRoofrReport = parseRoofrReport;
+
+async function importRoofrReport(file){
+  const jid = window.openJobId || openJobId;
+  const j = (window.jobs||[]).find(x=>x.id===jid);
+  if(!j){ toast('Open a job first'); return; }
+  toast('Reading Roofr report…');
+  let p;
+  try {
+    const text = await extractPdfText(file);
+    p = parseRoofrReport(text);
+  } catch(e){
+    console.error('[Roofr import]', e);
+    toast('Could not read this PDF.');
+    return;
+  }
+  if(!p.totalSqFt){
+    toast('Could not find "Total roof area" in this PDF — is it a Roofr report?');
+    return;
+  }
+  const squares = p.totalSqFt / 100;
+  const lf = v => v!=null ? v.toFixed(1)+' LF' : '—';
+  const row = (label,val) => `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05)"><span style="font-size:11px;color:var(--muted)">${label}</span><span style="font-size:12px;font-weight:600;color:var(--brand)">${val}</span></div>`;
+  // Address sanity check against the open job
+  const addrWarn = (p.address && j.address && j.address!=='—' &&
+      (p.address.match(/^\d+/)||[''])[0] !== (String(j.address).trim().match(/^\d+/)||[''])[0])
+    ? `<div style="font-size:10px;color:#FBBF24;margin-top:8px;display:flex;align-items:center;gap:5px"><i class="ti ti-alert-triangle" style="font-size:12px"></i>Report address "${escapeHtml(p.address)}" may not match this job's address.</div>`
+    : '';
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:400px;max-width:100%;overflow:hidden">
+      <div style="padding:15px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <i class="ti ti-ruler-measure" style="font-size:18px;color:var(--brand-light)"></i>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Roofr Measurement Report</div>
+      </div>
+      <div style="padding:14px 18px">
+        ${p.address ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${escapeHtml(p.address)}</div>` : ''}
+        ${row('Total Roof Area', p.totalSqFt.toLocaleString()+' sq ft')}
+        ${row('Squares', squares.toFixed(1))}
+        ${p.pitch ? row('Predominant Pitch', p.pitch) : ''}
+        ${p.facets ? row('Facets', p.facets) : ''}
+        ${row('Eaves', lf(p.eaves))}
+        ${row('Rakes', lf(p.rakes))}
+        ${row('Ridges', lf(p.ridges))}
+        ${row('Hips', lf(p.hips))}
+        ${row('Valleys', lf(p.valleys))}
+        ${addrWarn}
+        <div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">Applying will set this job's roof size and pre-fill the ABC Supply Material Order measurements. The PDF will be attached under Other files.</div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button id="roofrCancel" class="btn-cancel" style="flex:1;font-size:12px;padding:9px">Cancel</button>
+          <button id="roofrConfirm" class="btn-primary" style="flex:1;font-size:12px;padding:9px">Apply to Job</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>overlay.remove();
+  overlay.querySelector('#roofrCancel').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+  overlay.querySelector('#roofrConfirm').addEventListener('click', async ()=>{
+    overlay.querySelector('#roofrConfirm').disabled = true;
+    // 1) Roof size — this drives the Min. Contract Calculator, labor voucher, ballpark, etc.
+    j.roofEstimate = {
+      totalSqFt: Math.round(p.totalSqFt),
+      totalSquares: p.totalSqFt / 100,
+      sections: [],
+      source: 'roofr',
+      pitch: p.pitch || '',
+      facets: p.facets || 0,
+      updatedAt: new Date().toISOString(),
+    };
+    // 2) ABC Supply order measurements — linear feet pre-fill the material calculator
+    j.abcOrder = Object.assign({}, j.abcOrder||{}, {
+      eaves:   p.eaves   != null ? p.eaves   : (j.abcOrder?.eaves   ?? ''),
+      rakes:   p.rakes   != null ? p.rakes   : (j.abcOrder?.rakes   ?? ''),
+      ridges:  p.ridges  != null ? p.ridges  : (j.abcOrder?.ridges  ?? ''),
+      hips:    p.hips    != null ? p.hips    : (j.abcOrder?.hips    ?? ''),
+      valleys: p.valleys != null ? p.valleys : (j.abcOrder?.valleys ?? ''),
+    });
+    // 3) Attach the PDF to the job (under Other files)
+    try {
+      if(window.intakeJobFile){
+        const rec = await intakeJobFile(file, 'other', null);
+        if(!Array.isArray(j.otherFiles)) j.otherFiles=[];
+        j.otherFiles.push(rec);
+      }
+    } catch(e){ console.warn('[Roofr import] file attach failed', e); }
+    saveToStorage();
+    if(typeof logActivity==='function') logActivity(j, 'measurement', 'Roofr report imported', `${(p.totalSqFt/100).toFixed(1)} squares · ${Math.round(p.totalSqFt).toLocaleString()} sq ft${p.pitch?' · '+p.pitch+' pitch':''}`);
+    if(typeof renderDetailPanel==='function') renderDetailPanel();
+    if(typeof renderBoard==='function') renderBoard();
+    close();
+    toast('Roof size + ABC order measurements updated · PDF attached');
+  });
+}
+window.importRoofrReport = importRoofrReport;
+
 // ── ABC ORDER → JOB MATCHING ENGINE ──
 // Scores each job against an order's PO#, job-site address, and order name so an
 // ABC order (from PDF or, later, the API) can auto-link to the right job.
@@ -4086,10 +4219,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <button id="quickMeasureBtn" onclick="openQuickMeasure()" style="width:100%;padding:9px;border:1px solid var(--brand-light);border-radius:7px;background:rgba(77,157,224,0.08);color:var(--brand-light);font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
               <i class="ti ti-ruler-measure" aria-hidden="true"></i>
               ${j.roofEstimate && j.roofEstimate.totalSqFt > 0
-                ? `<span>${Math.round(j.roofEstimate.totalSqFt).toLocaleString()} sq ft · ${j.roofEstimate.totalSquares.toFixed(1)} sqs</span><span style="color:var(--muted);font-weight:400;margin-left:4px">· Re-measure</span>`
+                ? `<span>${Math.round(j.roofEstimate.totalSqFt).toLocaleString()} sq ft · ${j.roofEstimate.totalSquares.toFixed(1)} sqs${j.roofEstimate.source==='roofr'?' · Roofr':''}</span><span style="color:var(--muted);font-weight:400;margin-left:4px">· Re-measure</span>`
                 : `Quick Measure Roof`}
             </button>
-            <div style="margin-top:6px;font-size:10px;color:var(--muted);text-align:center">Rough satellite estimate · use a measurement report for final quotes</div>
+            <button onclick="document.getElementById('roofrReportFile').click()" style="width:100%;margin-top:6px;padding:9px;border:1px solid rgba(96,196,255,0.35);border-radius:7px;background:rgba(96,196,255,0.08);color:#60C4FF;font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+              <i class="ti ti-file-upload" style="font-size:13px" aria-hidden="true"></i>Import Roofr Report (PDF)
+            </button>
+            <input id="roofrReportFile" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]){importRoofrReport(this.files[0]);this.value='';}">
+            <div style="margin-top:6px;font-size:10px;color:var(--muted);text-align:center">Rough satellite estimate · import a Roofr report for exact measurements</div>
           </div>
 
           <div class="dp-card" id="contractCalcCard" style="margin-top:10px">
@@ -15778,8 +15915,9 @@ function qmPersistToJob(){
       updatedAt: new Date().toISOString(),
     };
     logActivity(j, 'measurement', 'Roof measurement saved', `${(totalRoof/100).toFixed(1)} squares · ${Math.round(totalRoof).toLocaleString()} sq ft`);
-  } else {
-    // No usable sections — clear any previous estimate
+  } else if(!(j.roofEstimate && j.roofEstimate.source === 'roofr')) {
+    // No usable sections — clear any previous estimate,
+    // but never wipe a Roofr report import (it has no drawn sections).
     delete j.roofEstimate;
   }
   saveToStorage();
