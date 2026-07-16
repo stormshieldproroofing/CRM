@@ -12829,8 +12829,19 @@ function renderScopeSelector(j){
   if(!wrap) return;
   const q = getJobQuote(j);
   const isCashQuote = q.mode === 'cash';
+  if(!q.linePrices || typeof q.linePrices !== 'object') q.linePrices = {};
+  if(!q.sectionPrices || typeof q.sectionPrices !== 'object') q.sectionPrices = {};
   const sections = parseScopeSections(q.scope);
   const exclude = new Set(q.scopeExclude || []);
+  // Any section with per-line prices auto-sums into its section total
+  // (excluded/unchecked lines don't count — they don't print).
+  sections.forEach(sec => {
+    const key = sec.title || '';
+    if(!sec.items.some(i => q.linePrices[i] != null && q.linePrices[i] !== '')) return;
+    const sum = sec.items.filter(i => !exclude.has(i)).reduce((s,i)=>s+(parseFloat(q.linePrices[i])||0),0);
+    if(sum > 0) q.sectionPrices[key] = String(Math.round(sum*100)/100);
+    else delete q.sectionPrices[key];
+  });
   if(!sections.length){
     wrap.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:6px 0">Add scope items above to enable selection.</div>`;
     return;
@@ -12848,6 +12859,7 @@ function renderScopeSelector(j){
           return `<label class="scope-sel-item" style="display:flex;align-items:flex-start;gap:7px;padding:4px 0;cursor:pointer;color:${checked ? 'var(--brand)' : 'var(--muted)'};${!checked ? 'text-decoration:line-through;text-decoration-color:rgba(248,113,113,0.4)' : ''}">
             <input type="checkbox" data-scope-item="${sIdx}|${iIdx}" ${checked ? 'checked' : ''} style="margin-top:2px;flex-shrink:0;cursor:pointer;accent-color:var(--brand-light)">
             <span style="flex:1;line-height:1.45">${escapeHtml(item)}</span>
+            ${isCashQuote ? `<span style="display:flex;align-items:center;gap:2px;flex-shrink:0"><span style="font-size:10px;color:var(--muted)">$</span><input type="text" inputmode="decimal" data-scope-line-price="${sIdx}|${iIdx}" value="${escapeHtml(String(q.linePrices[item] || ''))}" placeholder="—" onclick="event.preventDefault();event.stopPropagation()" style="width:58px;background:#0F1422;border:1px solid var(--border);border-radius:4px;padding:2px 5px;font-size:11px;color:var(--brand);outline:none;text-align:right"></span>` : ''}
             <button data-scope-item-remove="${sIdx}|${iIdx}" title="Remove this item from the scope" style="background:transparent;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'">×</button>
           </label>`;
         }).join('');
@@ -12857,7 +12869,7 @@ function renderScopeSelector(j){
           <button data-scope-sec-toggle="${sIdx}" ${total === 0 ? 'disabled' : ''} style="background:rgba(255,255,255,0.04);border:1px solid ${stateColor}55;color:${stateColor};font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:${total === 0 ? 'default' : 'pointer'};font-family:'Barlow',sans-serif" title="${total === 0 ? 'No items to toggle' : 'Toggle entire section'}">${stateText}</button>
           <strong style="font-size:11px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">${escapeHtml(sec.title || 'Scope of Work')}</strong>
           <div style="flex:1"></div>
-          ${isCashQuote ? `<div style="display:flex;align-items:center;gap:3px"><span style="font-size:11px;color:var(--muted)">$</span><input type="text" inputmode="decimal" data-scope-sec-price="${escapeHtml(sec.title || ('__sec'+sIdx))}" value="${escapeHtml(String(q.sectionPrices[sec.title || ('__sec'+sIdx)] || ''))}" placeholder="0.00" style="width:80px;background:#0F1422;border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--brand);outline:none;text-align:right"></div>` : ''}
+          ${isCashQuote ? (()=>{ const secKey = sec.title || ('__sec'+sIdx); const secHasLines = sec.items.some(i => q.linePrices[i] != null && q.linePrices[i] !== ''); return `<div style="display:flex;align-items:center;gap:3px" title="${secHasLines?'Auto: sum of line prices below':''}"><span style="font-size:11px;color:var(--muted)">$</span><input type="text" inputmode="decimal" data-scope-sec-price="${escapeHtml(secKey)}" ${secHasLines?'readonly':''} value="${escapeHtml(String(q.sectionPrices[sec.title || ''] || q.sectionPrices[secKey] || ''))}" placeholder="0.00" style="width:80px;background:${secHasLines?'#161B28':'#0F1422'};border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;color:var(--brand);outline:none;text-align:right${secHasLines?';cursor:not-allowed;opacity:0.8':''}"></div>`; })() : ''}
           <button data-scope-sec-add="${sIdx}" style="background:rgba(77,157,224,0.10);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif" title="Add a new line item to this section"><i class="ti ti-plus" style="font-size:10px"></i> Add</button>
         </div>
         ${itemsHtml}
@@ -12877,28 +12889,56 @@ function renderScopeSelector(j){
     saveToStorage();
     renderScopeSelector(j);
   }));
+  // Recompute contract total + auto-50% deposit and sync the Pricing card fields
+  function refreshCashTotals(){
+    if(q.mode !== 'cash') return;
+    const sum = sumSectionPrices(j);
+    q.contractAmount = sum ? String(sum) : '';
+    const cf = document.getElementById('qContract');
+    if(cf) cf.value = q.contractAmount;
+    if(q.depositAuto !== false){
+      q.depositAmount = sum ? String(Math.round(sum * 50) / 100) : '';
+      const df = document.getElementById('qDeposit');
+      if(df) df.value = q.depositAmount;
+    }
+  }
   // Per-section price inputs (cash mode)
   wrap.querySelectorAll('[data-scope-sec-price]').forEach(inp => {
     inp.addEventListener('input', () => {
+      if(inp.readOnly) return;
       const key = inp.dataset.scopeSecPrice;
       const v = inp.value.trim();
       if(v === '') delete q.sectionPrices[key];
       else q.sectionPrices[key] = v;
-      // Cash quotes: contract amount = sum of section prices.
-      if(q.mode === 'cash'){
-        const sum = sumSectionPrices(j);
-        q.contractAmount = sum ? String(sum) : '';
-        const cf = document.getElementById('qContract');
-        if(cf) cf.value = q.contractAmount;
-        // Keep deposit at 50% of the total unless manually overridden.
-        if(q.depositAuto !== false){
-          q.depositAmount = sum ? String(Math.round(sum * 50) / 100) : '';
-          const df = document.getElementById('qDeposit');
-          if(df) df.value = q.depositAmount;
-        }
-      }
+      refreshCashTotals();
       saveToStorage();
       // don't re-render (would lose input focus)
+    });
+  });
+  // Per-line price inputs (cash mode) — auto-sum into the section total
+  wrap.querySelectorAll('[data-scope-line-price]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const [sIdx, iIdx] = inp.dataset.scopeLinePrice.split('|').map(n => parseInt(n));
+      const sec = sections[sIdx];
+      const item = sec?.items?.[iIdx];
+      if(item == null) return;
+      const v = inp.value.trim();
+      if(v === '') delete q.linePrices[item];
+      else q.linePrices[item] = v;
+      // Auto-sum this section's included lines into its section total
+      const key = sec.title || '';
+      const hasLines = sec.items.some(i => q.linePrices[i] != null && q.linePrices[i] !== '');
+      const excl = new Set(q.scopeExclude || []);
+      if(hasLines){
+        const sum = sec.items.filter(i => !excl.has(i)).reduce((s,i)=>s+(parseFloat(q.linePrices[i])||0),0);
+        if(sum > 0) q.sectionPrices[key] = String(Math.round(sum*100)/100);
+        else delete q.sectionPrices[key];
+      }
+      // Sync the section total display without re-rendering (keeps focus)
+      const secInp = wrap.querySelector(`[data-scope-sec-price="${(window.CSS&&CSS.escape)?CSS.escape(sec.title || ('__sec'+sIdx)):(sec.title||('__sec'+sIdx))}"]`);
+      if(secInp){ secInp.value = q.sectionPrices[key] || ''; secInp.readOnly = hasLines; }
+      refreshCashTotals();
+      saveToStorage();
     });
   });
   // Section toggles
@@ -13014,10 +13054,16 @@ function openQuotePreview(j){
     items: sec.items.filter(it => !excludeSet.has(it)),
     price: parseFloat(q.sectionPrices?.[sec.title || ''] || 0) || 0,
   })).filter(sec => sec.items.length > 0);
+  const linePrices = q.linePrices || {};
   const scopeHtml = scopeSections.length
     ? scopeSections.map(sec => `
         ${sec.title ? `<div class="q-scope-sec-title">${escapeHtml(sec.title)}</div>` : ''}
-        <ul class="q-scope">${sec.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+        <ul class="q-scope">${sec.items.map(i => {
+          const lp = showItemizedPrices ? (parseFloat(linePrices[i]) || 0) : 0;
+          return lp > 0
+            ? `<li>${escapeHtml(i)}<span style="float:right;font-weight:600;color:#1a3a6a;padding-left:12px">${fmt(lp)}</span></li>`
+            : `<li>${escapeHtml(i)}</li>`;
+        }).join('')}</ul>
       `).join('')
     : `<ul class="q-scope"><li>—</li></ul>`;
   const termsHtml = (q.terms || '').split('\n\n').filter(s => s.trim()).map(p => `<p>${escapeHtml(p.trim())}</p>`).join('');
