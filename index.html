@@ -8312,9 +8312,16 @@ function calRunAutoConfirm(){
 }
 function calReadinessCounts(){
   let scheduled = 0, build_ready = 0, almost_ready = 0, not_ready = 0;
+  const t = new Date(); t.setHours(0,0,0,0);
+  const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   jobs.forEach(j => {
-    // Scheduled = has a build date (placeholder or confirmed).
-    if(j.buildDate){ scheduled++; return; } // already on the calendar — don't also count as "needs scheduling"
+    // Scheduled = has a build date TODAY or in the future. Past build dates are
+    // done/stale — they stay off this counter, but they're still on the calendar,
+    // so they don't fall into the "needs scheduling" readiness buckets either.
+    if(j.buildDate){
+      if(String(j.buildDate).slice(0,10) >= todayKey) scheduled++;
+      return;
+    }
     // Readiness buckets only count UNSCHEDULED jobs (still need a build date).
     const b = calReadinessBucket(j);
     if(b === 'build_ready') build_ready++;
@@ -9205,6 +9212,11 @@ function wireCalDragDrop(){
   // Confirm / unconfirm build date (admin only). Bind on the icon directly; stop the
   // event early so the chip's drag/open handlers don't swallow or override it.
   document.querySelectorAll('[data-cal-confirm]').forEach(btn => {
+    // wireCalDragDrop runs for both the grid and the sidebar on every render —
+    // without this guard the toggle binds twice and one tap flips the state
+    // on and immediately back off (button appears dead).
+    if(btn.dataset.confWired) return;
+    btn.dataset.confWired = '1';
     const handler = e => {
       e.preventDefault();
       e.stopPropagation();
@@ -9221,6 +9233,8 @@ function wireCalDragDrop(){
   });
   // Draggable cards — both week-view full cards and month-view chips
   document.querySelectorAll('.cal-job-card, .cal-mchip').forEach(card => {
+    if(card.dataset.dragWired) return;
+    card.dataset.dragWired = '1';
     card.addEventListener('dragstart', e => {
       calDraggingId = card.dataset.calJob;
       card.classList.add('dragging');
@@ -9236,6 +9250,8 @@ function wireCalDragDrop(){
 
   // Drop targets — week-view day columns AND month-view day cells
   document.querySelectorAll('.cal-day, .cal-mday').forEach(day => {
+    if(day.dataset.dropWired) return;
+    day.dataset.dropWired = '1';
     const key = day.dataset.calDay;
     day.addEventListener('dragover', e => {
       if(!calDraggingId) return;
@@ -10240,7 +10256,7 @@ function openFinalInvoice(jobId){
           <input id="fiDed" class="ie-inp" type="text" inputmode="decimal" value="${ded||''}" style="text-align:right">
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:7px;padding:9px 12px;margin-top:8px">
-          <span style="font-size:12px;font-weight:700;color:#A78BFA">Recoverable Depreciation Due</span>
+          <span style="font-size:12px;font-weight:700;color:#A78BFA">Depreciation Due</span>
           <span id="fiDepDue" style="font-size:15px;font-weight:800;color:#A78BFA;font-variant-numeric:tabular-nums"></span>
         </div>
         <div style="font-size:9px;color:var(--muted);margin-top:4px">Calculated: RCV − net claim collected − deductible collected. Adjust amounts above if your figures differ. (Insurance recoverable-dep on file: ${recovDep?fmt(recovDep):'—'})</div>
@@ -10381,7 +10397,7 @@ function printFinalInvoice(j, a, photos){
         <tr><td>Total Replacement Cost Value (RCV)</td><td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.rcv)}</td></tr>
         <tr><td>Less: Net claim / ACV payment received</td><td style="text-align:right;font-variant-numeric:tabular-nums">− ${fmt(a.netClaim)}</td></tr>
         <tr><td>Less: Deductible (collected from insured)</td><td style="text-align:right;font-variant-numeric:tabular-nums">− ${fmt(a.ded)}</td></tr>
-        <tr class="fi-due"><td>Recoverable Depreciation Now Due</td><td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.depDue)}</td></tr>
+        <tr class="fi-due"><td>Depreciation Now Due</td><td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.depDue)}</td></tr>
       </table>
 
       <div class="fi-note">
@@ -10579,7 +10595,7 @@ We are requesting release of the recoverable depreciation. Settlement summary:
   Total RCV: ${fmt(a.rcv)}
   Net claim / ACV payment received: ${fmt(a.netClaim)}
   Deductible collected from insured: ${fmt(a.ded)}
-  Recoverable depreciation now due: ${fmt(a.depDue)}
+  Depreciation now due: ${fmt(a.depDue)}
 
 The final invoice and completion photos are attached. Please remit the recoverable depreciation payment to ${ci.name||''}.
 
@@ -11726,6 +11742,10 @@ function renderQuoteTab(j){
   if(q.mode === 'cash'){
     const sum = sumSectionPrices(j);
     if(sum > 0) q.contractAmount = String(sum);
+    // Deposit auto-populates as 50% of the total unless manually overridden.
+    // Legacy quotes that already had a saved deposit keep their value.
+    if(q.depositAuto === undefined) q.depositAuto = !q.depositAmount;
+    if(q.depositAuto && sum > 0) q.depositAmount = String(Math.round(sum * 50) / 100);
   }
   // Pre-fill from insurance fields if available
   if(!q.contractAmount && j.potVal) q.contractAmount = String(j.potVal);
@@ -11820,7 +11840,7 @@ function renderQuoteTab(j){
         <div style="display:grid;grid-template-columns:${isInsurance?'1fr 1fr 1fr':'1fr 1fr'};gap:10px">
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount${!isInsurance ? ' <span style="color:var(--brand-light);text-transform:none;letter-spacing:0">(auto from sections)</span>' : ''}</label><input id="qContract" type="text" inputmode="decimal" ${!isInsurance ? 'readonly' : ''} value="${escapeHtml(String(q.contractAmount||''))}" placeholder="${!isInsurance ? 'Enter section prices below' : '0.00 (try 800+1200)'}" style="width:100%;background:${!isInsurance ? '#161B28' : '#1E253A'};border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none${!isInsurance ? ';cursor:not-allowed' : ''}"></div>
           ${isInsurance ? `<div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="text" inputmode="decimal" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>` : ''}
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit (50% suggested)'}</label><input id="qDeposit" type="text" inputmode="decimal" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit <span style="color:var(--brand-light);text-transform:none;letter-spacing:0">(auto 50% of total)</span>'}</label><input id="qDeposit" type="text" inputmode="decimal" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:6px">${isInsurance?'For insurance jobs, contract amount typically = RCV. Deductible = customer out-of-pocket.':'Cash quote: contract amount is total due. No deductible, no insurance coverage applied.'}</div>
         ${!isInsurance ? `
@@ -11941,6 +11961,17 @@ function renderQuoteTab(j){
   // Mode toggle handlers
   $('quoteModeInsurance').addEventListener('click', () => switchQuoteMode(j, 'insurance'));
   $('quoteModeCash').addEventListener('click', () => switchQuoteMode(j, 'cash'));
+
+  // Cash deposit: typing a custom amount turns OFF the auto-50%; clearing the
+  // field turns it back on (refills on next render / section price change).
+  if(q.mode === 'cash'){
+    const depEl = $('qDeposit');
+    if(depEl) depEl.addEventListener('input', () => {
+      q.depositAuto = depEl.value.trim() === '';
+      q.depositAmount = depEl.value;
+      saveToStorage();
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -12859,6 +12890,12 @@ function renderScopeSelector(j){
         q.contractAmount = sum ? String(sum) : '';
         const cf = document.getElementById('qContract');
         if(cf) cf.value = q.contractAmount;
+        // Keep deposit at 50% of the total unless manually overridden.
+        if(q.depositAuto !== false){
+          q.depositAmount = sum ? String(Math.round(sum * 50) / 100) : '';
+          const df = document.getElementById('qDeposit');
+          if(df) df.value = q.depositAmount;
+        }
       }
       saveToStorage();
       // don't re-render (would lose input focus)
@@ -12979,7 +13016,7 @@ function openQuotePreview(j){
   })).filter(sec => sec.items.length > 0);
   const scopeHtml = scopeSections.length
     ? scopeSections.map(sec => `
-        ${sec.title ? `<div class="q-scope-sec-title" style="display:flex;justify-content:space-between;align-items:baseline">${escapeHtml(sec.title)}${showItemizedPrices && sec.price > 0 ? `<span style="font-weight:700;color:#1a3a6a">${fmt(sec.price)}</span>` : ''}</div>` : ''}
+        ${sec.title ? `<div class="q-scope-sec-title">${escapeHtml(sec.title)}</div>` : ''}
         <ul class="q-scope">${sec.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
       `).join('')
     : `<ul class="q-scope"><li>—</li></ul>`;
@@ -12991,6 +13028,9 @@ function openQuotePreview(j){
   // Mode-specific pricing table
   let pricingTable;
   if(isCash){
+    // Itemized section prices live here under Pricing (moved out of Scope of Work).
+    // The Total Contract / Deposit / Balance summary rows were removed — TOTAL DUE
+    // is the single total line.
     const sectionPriceRows = (showItemizedPrices)
       ? scopeSections.filter(s => s.price > 0).map(s =>
           `<tr><td class="label">${escapeHtml(s.title || 'Section')}</td><td class="val">${fmt(s.price)}</td></tr>`
@@ -12998,10 +13038,6 @@ function openQuotePreview(j){
       : '';
     pricingTable = `
       ${sectionPriceRows}
-      <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
-      ${deposit > 0 ? `
-      <tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>
-      <tr><td class="label">Balance Due at Completion</td><td class="val">${fmt(balanceDue)}</td></tr>` : ''}
       <tr class="total"><td>TOTAL DUE</td><td class="val">${fmt(contract)}</td></tr>
     `;
   } else {
