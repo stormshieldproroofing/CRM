@@ -1785,6 +1785,156 @@ function logActivity(jobOrId, type, label, detail){
 }
 window.logActivity = logActivity;
 
+// ── CONTACT LOG — track last touch with the client, adjuster, or carrier ──
+// so leads don't go cold and insurance follow-ups don't slip. Entries live on
+// j.contactLog; "last contact" is derived. Optional j.nextFollowUp date.
+function logContact(jobOrId, party, method, note, opts){
+  const j = (typeof jobOrId === 'string') ? jobs.find(x => x.id === jobOrId) : jobOrId;
+  if(!j) return;
+  if(!Array.isArray(j.contactLog)) j.contactLog = [];
+  const by = (window.currentMember && (window.currentMember.name || window.currentMember.id)) || 'system';
+  j.contactLog.push({ at: new Date().toISOString(), party, method, note: note || '', by });
+  if(opts && opts.followUp) j.nextFollowUp = opts.followUp;        // 'YYYY-MM-DD'
+  if(opts && opts.clearFollowUp) delete j.nextFollowUp;
+  const partyLabel = party === 'client' ? 'Client' : (party === 'adjuster' ? 'Adjuster' : 'Carrier');
+  logActivity(j, 'contact', `${partyLabel} contact — ${method}`, note || '');
+  saveToStorage();
+}
+window.logContact = logContact;
+
+// Most recent contact entry. party: 'client' | 'adjuster' | 'carrier' |
+// 'insurance' (adjuster OR carrier) | undefined (any).
+function lastContact(j, party){
+  const log = Array.isArray(j.contactLog) ? j.contactLog : [];
+  const f = party
+    ? log.filter(e => party === 'insurance' ? (e.party === 'adjuster' || e.party === 'carrier') : e.party === party)
+    : log;
+  return f.length ? f[f.length - 1] : null;
+}
+window.lastContact = lastContact;
+
+function contactDaysSince(iso){
+  if(!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
+function contactAgoText(iso){
+  const d = contactDaysSince(iso);
+  if(d === null) return '—';
+  return d <= 0 ? 'today' : (d === 1 ? '1d ago' : d + 'd ago');
+}
+window.contactDaysSince = contactDaysSince;
+window.contactAgoText = contactAgoText;
+
+// ── FOLLOW-UP THRESHOLDS — days without contact before a job is "due" ──
+// Keyed by stage id; {client, insurance} in days, null = not tracked in that
+// stage. Tune these as the team learns what feels right.
+const CONTACT_THRESHOLDS = {
+  lead:       { client: 2,  insurance: null },   // fresh leads go cold fast
+  inspection: { client: 3,  insurance: 5  },     // claim filed / adjuster pending
+  approved:   { client: 4,  insurance: null },
+  contract:   { client: 5,  insurance: null },
+  invoiced:   { client: 7,  insurance: 10 },     // waiting on depreciation release
+  appeal:     { client: 5,  insurance: 7  },
+  retail:     { client: 4,  insurance: null },
+  _default:   { client: 7,  insurance: 10 },
+};
+
+// Is this job overdue for contact? Returns null if nothing is due, otherwise
+// { worst, due } where each item is {party, days, limit, overdueBy, never}.
+// Jobs in closed stages (Completed, Denied, etc.) are never tracked. A job
+// with no logged contact uses its age since creation as the clock.
+function followUpStatus(j){
+  const cols = (typeof columnsForPipeline === 'function') ? columnsForPipeline(j.pipeline || 'insurance') : [];
+  const col = cols.find(c => c.id === j.col);
+  if(!col || col.closed) return null;
+  const th = CONTACT_THRESHOLDS[col.id] || CONTACT_THRESHOLDS._default;
+  const items = [];
+  ['client','insurance'].forEach(party => {
+    const limit = th[party];
+    if(limit == null) return;
+    const last = lastContact(j, party);
+    const days = last ? contactDaysSince(last.at) : daysSinceCreated(j);
+    items.push({ party, days, limit, overdueBy: days - limit, last, never: !last });
+  });
+  // Explicit follow-up date takes effect the day it arrives.
+  const today = new Date().toISOString().slice(0,10);
+  if(j.nextFollowUp && j.nextFollowUp <= today){
+    const dueDays = Math.max(0, Math.floor((Date.now() - new Date(j.nextFollowUp + 'T00:00:00').getTime()) / 86400000));
+    items.push({ party: 'date', days: dueDays, limit: 0, overdueBy: dueDays, last: null, never: false });
+  }
+  const due = items.filter(i => i.overdueBy >= 0).sort((a,b) => b.overdueBy - a.overdueBy);
+  return due.length ? { worst: due[0], due } : null;
+}
+window.followUpStatus = followUpStatus;
+
+// One-tap contact logging modal: party + method chips, note, optional follow-up.
+function openLogContact(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  const chip = (group, val, label, icon) =>
+    `<button type="button" data-lc-${group}="${val}" class="lc-chip" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 4px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:#1E253A;color:var(--muted);font-family:'Barlow',sans-serif"><i class="ti ${icon}" style="font-size:13px"></i>${label}</button>`;
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:380px;max-width:100%">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px"><i class="ti ti-phone-check" style="font-size:17px;color:var(--brand-light)"></i><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Log Contact</span></div>
+        <button id="lcClose" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:14px 18px">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px">Who</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          ${chip('party','client','Client','ti-user')}
+          ${chip('party','adjuster','Adjuster','ti-user-search')}
+          ${chip('party','carrier','Carrier','ti-building-bank')}
+        </div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px">How</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          ${chip('method','call','Call','ti-phone')}
+          ${chip('method','text','Text','ti-message-2')}
+          ${chip('method','email','Email','ti-mail')}
+          ${chip('method','voicemail','VM','ti-phone-pause')}
+        </div>
+        <textarea id="lcNote" placeholder="What was said / what's next… (optional)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical;min-height:64px;box-sizing:border-box"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+          <label style="font-size:11px;color:var(--muted);flex-shrink:0">Next follow-up</label>
+          <input id="lcFollowUp" type="date" style="flex:1;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;color-scheme:dark" ${j.nextFollowUp?`value="${j.nextFollowUp}"`:''}>
+        </div>
+        <button id="lcSave" class="btn-primary" style="width:100%;margin-top:14px;font-size:13px;padding:10px" disabled>Save Contact</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const state = { party:null, method:null };
+  const saveBtn = overlay.querySelector('#lcSave');
+  const refresh = () => { saveBtn.disabled = !(state.party && state.method); };
+  ['party','method'].forEach(group => {
+    overlay.querySelectorAll(`[data-lc-${group}]`).forEach(btn => {
+      btn.addEventListener('click', () => {
+        state[group] = btn.getAttribute(`data-lc-${group}`);
+        overlay.querySelectorAll(`[data-lc-${group}]`).forEach(b => {
+          const on = b === btn;
+          b.style.borderColor = on ? 'var(--brand-light)' : 'var(--border)';
+          b.style.background = on ? 'rgba(77,157,224,0.15)' : '#1E253A';
+          b.style.color = on ? 'var(--brand-light)' : 'var(--muted)';
+        });
+        refresh();
+      });
+    });
+  });
+  const close = () => overlay.remove();
+  overlay.querySelector('#lcClose').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+  saveBtn.addEventListener('click', () => {
+    const fu = overlay.querySelector('#lcFollowUp').value;
+    logContact(j, state.party, state.method, overlay.querySelector('#lcNote').value.trim(),
+      fu ? { followUp: fu } : (j.nextFollowUp && !fu ? { clearFollowUp: true } : undefined));
+    close();
+    if(typeof renderDetailPanel === 'function') renderDetailPanel();
+    toast('Contact logged');
+  });
+}
+window.openLogContact = openLogContact;
+
 // ── TEAM ACTIVITY FEED + DISCORD NOTIFICATIONS ──
 // Events show on the Summary board feed AND push to Discord (phone notifications).
 const TEAM_FEED_KEY = 'stormshield_team_feed_v1';
@@ -2056,6 +2206,7 @@ function textLeadWithCard(jobId){
   const url = `sms:${toNum}?body=${encodeURIComponent(body)}`;
   try {
     window.location.href = url;
+    logContact(j, 'client', 'text', 'Intro text with business card sent');
   } catch(e){
     // Fallback: copy the message so they can paste it.
     if(navigator.clipboard) navigator.clipboard.writeText(body);
@@ -2220,6 +2371,7 @@ async function textLeadCardPhoto(jobId){
     if(phoneRaw){
       const toNum = phoneRaw.replace(/[^\d+]/g, '');
       setTimeout(() => { window.location.href = `sms:${toNum}?body=${encodeURIComponent(body)}`; }, 600);
+      logContact(jobId, 'client', 'text', 'Business card photo text sent');
     }
   } catch(e){
     console.warn('card share failed', e);
@@ -3569,6 +3721,44 @@ function renderBoardSalesSummary(){
     wkDays.push({ d, key, jobs:dayJobs });
   }
   const wkTotal = wkDays.reduce((s,x)=>s+x.jobs.length,0);
+
+  // ── Follow-Ups Due panel — jobs overdue for client/insurance contact ──
+  const fuRows = summaryJobs
+    .map(j => ({ j, st: (typeof followUpStatus==='function') ? followUpStatus(j) : null }))
+    .filter(x => x.st)
+    .sort((a,b) => b.st.worst.overdueBy - a.st.worst.overdueBy)
+    .slice(0, 12);
+  const fuItemLabel = it => {
+    if(it.party === 'date') return it.days === 0 ? 'Follow-up date is today' : `Follow-up date passed ${it.days}d ago`;
+    const who = it.party === 'insurance' ? 'insurance' : 'client';
+    return it.never ? `No ${who} contact yet · job is ${it.days}d old` : `${it.days}d since ${who} contact (limit ${it.limit}d)`;
+  };
+  const followUpsPanelHtml = `
+    <div class="summary-panel" style="margin-top:12px">
+      <div class="summary-panel-title">
+        <span><i class="ti ti-phone-outgoing" style="font-size:12px;margin-right:4px"></i>Follow-Ups Due</span>
+        <span style="font-size:10px;color:${fuRows.length?'#FBBF24':'var(--muted)'}">${fuRows.length ? fuRows.length + ' job' + (fuRows.length===1?'':'s') + ' need contact' : 'all caught up'}</span>
+      </div>
+      ${!fuRows.length ? `<div class="summary-empty" style="padding:14px 4px">Nobody's waiting on a call. Nice.</div>` : `
+      <div style="display:flex;flex-direction:column">
+        ${fuRows.map(({j,st}) => {
+          const sev = st.worst.overdueBy >= 7 ? '#F87171' : '#FBBF24';
+          const lastNote = st.worst.last && st.worst.last.note ? st.worst.last.note : '';
+          return `
+          <div onclick="openDetail('${j.id}')" style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+            <div style="width:34px;height:34px;border-radius:8px;background:${sev}18;border:1px solid ${sev}55;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">
+              <span style="font-size:13px;font-weight:800;color:${sev};line-height:1">${st.worst.days}d</span>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:700;color:var(--brand);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(j.name||'')}</div>
+              <div style="font-size:10px;color:${sev};margin-top:1px">${fuItemLabel(st.worst)}${st.due.length>1?` <span style="color:var(--muted)">+${st.due.length-1} more</span>`:''}</div>
+              ${lastNote?`<div style="font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Last: ${escapeHtml(lastNote)}</div>`:''}
+            </div>
+            ${j.phone && j.phone!=='—' ? `<a href="tel:${escapeHtml(j.phone)}" onclick="event.stopPropagation()" title="Call ${escapeHtml(j.name||'')}" style="width:30px;height:30px;border-radius:7px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.4);display:flex;align-items:center;justify-content:center;color:#34D399;flex-shrink:0;text-decoration:none"><i class="ti ti-phone" style="font-size:14px"></i></a>` : ''}
+          </div>`;
+        }).join('')}
+      </div>`}
+    </div>`;
   const dowFull = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const todayKey = wkDays[0].key;
   const upcomingPanelHtml = `
@@ -3700,6 +3890,7 @@ function renderBoardSalesSummary(){
                 </div>
               </div>
           </div>
+          ${followUpsPanelHtml}
           ${upcomingPanelHtml}
           <div class="summary-panel" style="margin-top:12px">
             <div class="summary-panel-title">
@@ -3927,6 +4118,7 @@ function renderCard(j){
   const col=columns.find(c=>c.id===j.col);
   const hasInsurance=j.carrier||j.claimNum;
   const ageDays=daysSinceCreated(j);
+  const fuSt=(typeof followUpStatus==='function')?followUpStatus(j):null;
   const stageDays=daysInStage(j);
   const progress=stageChecklistProgress(j,col);
   const taskMeta=progress.total?`${progress.done}/${progress.total}`:(j.tasks>0?`${j.tasksDone}/${j.tasks}`:'');
@@ -3973,6 +4165,7 @@ function renderCard(j){
     <div class="card-footer">
       <div class="card-meta" title="Days since created"><i class="ti ti-clock" aria-hidden="true"></i>${ageDays}d</div>
       <div class="card-meta${stageDays>=STAGE_STALE_DAYS?' stage-stale':''}" title="Days in current stage${stageDays>=STAGE_STALE_DAYS?' — stalled':''}"><i class="ti ti-hourglass" aria-hidden="true"></i>${stageDays}d</div>
+      ${fuSt?`<div class="card-meta" style="color:${fuSt.worst.overdueBy>=7?'#F87171':'#FBBF24'}" title="${fuSt.worst.party==='date'?'Follow-up date has passed':(fuSt.worst.never?'No '+(fuSt.worst.party==='insurance'?'insurance':'client')+' contact logged yet':fuSt.worst.days+' days since '+(fuSt.worst.party==='insurance'?'insurance':'client')+' contact')} — follow up"><i class="ti ti-phone-x" aria-hidden="true" style="color:inherit"></i>${fuSt.worst.days}d</div>`:''}
       ${taskMeta?`<div class="card-meta ${(progress.total&&progress.done<progress.total)||(!progress.total&&j.tasksDone<j.tasks)?'warn':''}"><i class="ti ti-checkbox" aria-hidden="true"></i>${taskMeta}</div>`:''}
       ${buildDateLabel ? `<div class="card-meta${buildIsBad?' warn':''}" title="${buildIsBad?'⚠ High rain risk on this date · ':''}Scheduled build date"><i class="ti ti-calendar-event" aria-hidden="true"></i>${buildDateLabel}${buildIsBad?` <i class="ti ti-alert-triangle" style="font-size:10px;color:#EF4444;margin-left:2px"></i>`:''}</div>` : ''}
       <div style="flex:1"></div>
@@ -4210,6 +4403,30 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <button onclick="textLeadCardPhoto('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.4);color:#FB923C;font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-id" style="font-size:15px"></i>Send Card</button>
             <button onclick="saveJobContactToPhone('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.4);color:#34D399;font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-user-plus" style="font-size:15px"></i>Save to Contacts</button>
           </div>
+          ${(() => {
+            const ageColor = d => d === null ? 'var(--muted)' : (d >= 14 ? '#F87171' : (d >= 7 ? '#FBBF24' : '#34D399'));
+            const methodIcon = m => ({call:'ti-phone', text:'ti-message-2', email:'ti-mail', voicemail:'ti-phone-pause'})[m] || 'ti-message-dots';
+            const row = (label, entry) => {
+              const d = entry ? contactDaysSince(entry.at) : null;
+              return `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+                <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;width:62px;flex-shrink:0;padding-top:1px">${label}</span>
+                ${entry
+                  ? `<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:5px"><i class="ti ${methodIcon(entry.method)}" style="font-size:12px;color:${ageColor(d)}"></i><span style="font-size:12px;font-weight:700;color:${ageColor(d)}">${contactAgoText(entry.at)}</span><span style="font-size:10px;color:var(--muted)">· ${escapeHtml(entry.method)} · ${escapeHtml(entry.by||'')}</span></div>${entry.note?`<div style="font-size:10px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(entry.note)}</div>`:''}</div>`
+                  : `<span style="font-size:11px;color:var(--muted);font-style:italic">no contact logged</span>`}
+              </div>`;
+            };
+            const fu = j.nextFollowUp;
+            const fuOverdue = fu && fu <= new Date().toISOString().slice(0,10);
+            return `<div class="dp-card" style="margin-top:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                <div style="display:flex;align-items:center;gap:5px"><i class="ti ti-phone-check" style="color:var(--brand-light);font-size:14px"></i><span style="font-size:12px;font-weight:700;color:var(--brand)">Last Contact</span></div>
+                <button onclick="openLogContact('${j.id}')" style="display:flex;align-items:center;gap:4px;background:rgba(77,157,224,0.14);border:1px solid rgba(77,157,224,0.4);color:var(--brand-light);font-size:11px;font-weight:700;padding:5px 10px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-plus" style="font-size:12px"></i>Log Contact</button>
+              </div>
+              ${row('Client', lastContact(j,'client'))}
+              ${row('Insurance', lastContact(j,'insurance'))}
+              ${fu ? `<div style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:${fuOverdue?'#F87171':'var(--brand-mid)'}"><i class="ti ti-bell${fuOverdue?'-ringing':''}" style="font-size:13px"></i><span>${fuOverdue?'Follow-up due':'Follow up'}: <strong>${new Date(fu+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</strong></span></div>` : ''}
+            </div>`;
+          })()}
           <div class="weather-box" id="jobWxBox">
             <i class="ti ti-cloud" style="font-size:28px;color:#93C5FD;display:block;margin-bottom:5px" aria-hidden="true"></i>
             <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:3px">${(j.address && j.address!=='—') ? 'Loading 7-day forecast\u2026' : 'Weather forecast will appear here'}</div>
@@ -10575,6 +10792,7 @@ ${ci.phone||''}${ci.email?' | '+ci.email:''}`
   if(!proceed) return;
   printCertificateOfCompletion(jobId);
   setTimeout(()=>{ window.location.href = `mailto:${to}?subject=${subject}&body=${body}`; }, 800);
+  logContact(jobId, 'client', 'email', 'Certificate of Completion emailed');
 }
 window.emailCertificateOfCompletion = emailCertificateOfCompletion;
 
@@ -10607,6 +10825,7 @@ ${ci.phone||''}${ci.email?'\n'+ci.email:''}`;
   // Copy as backup too
   navigator.clipboard?.writeText(`Subject: ${subject}\n\n${body}`).catch(()=>{});
   window.open(mailto,'_blank');
+  logContact(j, 'carrier', 'email', 'Depreciation release request emailed');
   if(!to) toast('No insurance email set — add it in Edit Job → Insurance. Email text copied to clipboard.');
   else toast('Email drafted · attach the saved PDF and send');
 }
@@ -12534,6 +12753,7 @@ StormShield Pro Roofing & Construction
   setTimeout(()=>{
     window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
   }, 1200);
+  logContact(jobId, 'client', 'email', 'Contract emailed for signature');
 };
 
 // URL of the blank fillable contract template (host alongside index.html on GitHub Pages)
