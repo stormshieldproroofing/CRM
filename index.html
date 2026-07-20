@@ -2067,6 +2067,78 @@ async function syncJobToZoho(jobId){
 }
 window.syncJobToZoho = syncJobToZoho;
 
+// ── ZOHO PHASE 2: push deposits (as payments) + expenses ──
+// Each record gets a zohoId stamped on it after sync, so re-running only
+// pushes what's new. Returns/credits are skipped (Zoho vendor credits are a
+// later phase). Expenses have no date field in the CRM, so they post with
+// today's date — Zoho's bank-feed matching goes by amount, so this is fine.
+function zohoUnsyncedCounts(j){
+  const deps = (j.deposits || []).filter(d => !d.zohoId && parseFloat(d.amount) > 0).length;
+  const exps = (j.expenses || []).filter(e => !e.zohoId && e.cat !== 'Returns' && parseFloat(e.amount) > 0).length;
+  return { deps, exps };
+}
+window.zohoUnsyncedCounts = zohoUnsyncedCounts;
+
+function zohoDepositDate(d){
+  const t = new Date(String(d.date || ''));
+  return Number.isNaN(t.getTime()) ? new Date().toISOString().slice(0,10)
+    : `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+}
+
+async function syncZohoMoney(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j){ toast('Open a job first'); return; }
+  if(window.currentMember?.role !== 'admin'){ toast('Zoho sync is admin-only'); return; }
+  if(!j.zoho?.contactId || !j.zoho?.invoiceId){ toast('Sync the customer + invoice first'); return; }
+  const btn = document.getElementById('zohoMoneyBtn');
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Pushing…'; }
+  let okPay = 0, okExp = 0; const errs = [];
+  // Payments — deposits applied against the Zoho invoice
+  for(const d of (j.deposits || [])){
+    if(d.zohoId || !(parseFloat(d.amount) > 0)) continue;
+    try {
+      const r = await callZoho('recordPayment', {
+        customerId: j.zoho.contactId,
+        invoiceId: j.zoho.invoiceId,
+        amount: Math.round(parseFloat(d.amount)*100)/100,
+        date: zohoDepositDate(d),
+        reference: d.desc || 'Payment',
+        description: `${d.desc || 'Payment'} — ${j.name || ''}`,
+        mode: 'check',
+      });
+      d.zohoId = r.payment?.payment_id || 'synced';
+      okPay++;
+      if(r.unapplied_fallback) errs.push(`"${d.desc||'Payment'}" recorded but couldn't apply to the invoice (over its balance) — apply it manually in Zoho`);
+    } catch(e){ errs.push(`Payment ${d.desc||''} $${d.amount}: ${e.message||e}`); }
+  }
+  // Expenses — skip Returns (credits)
+  for(const ex of (j.expenses || [])){
+    if(ex.zohoId || ex.cat === 'Returns' || !(parseFloat(ex.amount) > 0)) continue;
+    try {
+      const r = await callZoho('pushExpense', {
+        amount: Math.round(parseFloat(ex.amount)*100)/100,
+        categoryName: ex.cat || 'Materials',
+        description: `${ex.desc || ex.cat || 'Expense'}${ex.vendorName ? ' · ' + ex.vendorName : ''} — Job: ${j.name || ''}`,
+        reference: `CRM ${j.id}`,
+      });
+      ex.zohoId = r.expense?.expense_id || 'synced';
+      okExp++;
+    } catch(e){ errs.push(`Expense ${ex.cat||''} $${ex.amount}: ${e.message||e}`); }
+  }
+  saveToStorage();
+  if(okPay || okExp) logActivity(j, 'accounting', 'Payments/expenses pushed to Zoho', `${okPay} payment${okPay===1?'':'s'} · ${okExp} expense${okExp===1?'':'s'}${errs.length?` · ${errs.length} issue${errs.length===1?'':'s'}`:''}`);
+  if(errs.length){
+    console.warn('[zoho money]', errs);
+    toast(`Pushed ${okPay+okExp} · ${errs.length} failed: ${errs[0]}`);
+  } else if(okPay || okExp){
+    toast(`Pushed ${okPay} payment${okPay===1?'':'s'} + ${okExp} expense${okExp===1?'':'s'} to Zoho`);
+  } else {
+    toast('Nothing new to push — all payments and expenses already synced');
+  }
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
+}
+window.syncZohoMoney = syncZohoMoney;
+
 // De-dupe guard so the same job doesn't fire the alert twice in one session.
 const __contractSignedFired = new Set();
 function onContractSigned(j){
@@ -4543,6 +4615,11 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               ${synced ? `<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Invoice <strong style="color:var(--brand)">${escapeHtml(z.invoiceNumber||'')}</strong>${z.total!=null?` · $${Number(z.total).toLocaleString(undefined,{minimumFractionDigits:2})}`:''}${z.syncedAt?` · ${new Date(z.syncedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}`:''}</div>` : ''}
               ${z.error ? `<div style="font-size:10px;color:#F87171;margin-bottom:8px;line-height:1.4">${escapeHtml(z.error)}</div>` : ''}
               <button id="zohoSyncBtn" onclick="syncJobToZoho('${j.id}')" style="width:100%;padding:8px;border:1px solid rgba(245,158,11,0.4);border-radius:7px;background:rgba(245,158,11,0.08);color:#F59E0B;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-refresh" style="font-size:13px"></i>${synced?'Re-sync to Zoho Books':'Sync to Zoho Books'}</button>
+              ${synced ? (() => {
+                const u = zohoUnsyncedCounts(j);
+                const pending = u.deps + u.exps;
+                return `<button id="zohoMoneyBtn" onclick="syncZohoMoney('${j.id}')" ${pending?'':'disabled'} style="width:100%;margin-top:6px;padding:8px;border:1px solid rgba(52,211,153,0.4);border-radius:7px;background:rgba(52,211,153,0.08);color:#34D399;font-weight:700;font-size:12px;cursor:${pending?'pointer':'default'};opacity:${pending?'1':'0.5'};display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-cash" style="font-size:13px"></i>${pending ? `Push ${u.deps} payment${u.deps===1?'':'s'} + ${u.exps} expense${u.exps===1?'':'s'}` : 'Payments & expenses up to date'}</button>`;
+              })() : ''}
             </div>`;
           })() : ''}
           <div class="weather-box" id="jobWxBox">
