@@ -2118,6 +2118,7 @@ async function syncZohoMoney(jobId){
       const r = await callZoho('pushExpense', {
         amount: Math.round(parseFloat(ex.amount)*100)/100,
         categoryName: ex.cat || 'Materials',
+        customerId: j.zoho.contactId,
         description: `${ex.desc || ex.cat || 'Expense'}${ex.vendorName ? ' · ' + ex.vendorName : ''} — Job: ${j.name || ''}`,
         reference: `CRM ${j.id}`,
       });
