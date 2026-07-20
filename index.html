@@ -1967,6 +1967,106 @@ async function notifyDiscord(content){
 }
 window.notifyDiscord = notifyDiscord;
 
+// ── ZOHO BOOKS SYNC — phase 1: customer + invoice push ──
+// Calls the zoho-proxy Edge Function (credentials live server-side).
+// Idempotent: Zoho ids are stored on j.zoho so re-sync updates, never duplicates.
+async function callZoho(action, payload){
+  const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? SUPABASE_URL : (window.sb?.supabaseUrl || '');
+  const key  = (typeof SUPABASE_ANON !== 'undefined' && SUPABASE_ANON) ? SUPABASE_ANON : (window.sb?.supabaseKey || '');
+  if(!base) throw new Error('Supabase is not configured');
+  const res = await fetch(`${base}/functions/v1/zoho-proxy`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` },
+    body: JSON.stringify({ action, payload }),
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error || data.message || `Zoho call failed (HTTP ${res.status})`);
+  if(data.error) throw new Error(data.error);
+  if(typeof data.code === 'number' && data.code !== 0) throw new Error(data.message || `Zoho error code ${data.code}`);
+  return data;
+}
+window.callZoho = callZoho;
+
+// Build invoice line items from the job. Cash: quote sections with prices.
+// Insurance: single RCV line referencing the claim.
+function zohoInvoiceLines(j){
+  const q = j.quote || {};
+  const lines = [];
+  if(q.mode === 'cash'){
+    const secs = (typeof parseScopeSections === 'function') ? parseScopeSections(q.scope || '') : [];
+    secs.forEach(s => {
+      const p = parseFloat((q.sectionPrices || {})[s.title || ''] || '');
+      if(p > 0) lines.push({ name: s.title || 'Roofing work', description: `${j.address || ''}`, rate: Math.round(p*100)/100, quantity: 1 });
+    });
+    if(!lines.length){
+      const c = moneyNum(q.contractAmount);
+      if(c > 0) lines.push({ name: 'Roofing — contract total', description: `${j.address || ''}`, rate: c, quantity: 1 });
+    }
+  } else {
+    const rcv = moneyNum(j.rcv);
+    if(rcv > 0) lines.push({
+      name: 'Roof replacement per insurance scope',
+      description: `${j.address || ''}${j.carrier ? ' · ' + j.carrier : ''}${j.claimNum ? ' · Claim #' + j.claimNum : ''}`,
+      rate: rcv, quantity: 1,
+    });
+  }
+  return lines;
+}
+
+async function syncJobToZoho(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j){ toast('Open a job first'); return; }
+  if(window.currentMember?.role !== 'admin'){ toast('Zoho sync is admin-only'); return; }
+  const lines = zohoInvoiceLines(j);
+  if(!lines.length){
+    toast(j.quote?.mode === 'cash' ? 'No section prices or contract amount on the quote yet' : 'No RCV amount on this job yet — add it in the insurance fields');
+    return;
+  }
+  const btn = document.getElementById('zohoSyncBtn');
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Syncing…'; }
+  try {
+    if(!j.zoho) j.zoho = {};
+    // 1) Customer (find-or-create by name)
+    if(!j.zoho.contactId){
+      const c = await callZoho('upsertCustomer', {
+        name: j.name || 'Unknown customer',
+        email: (j.email && j.email !== '—') ? j.email : '',
+        phone: (j.phone && j.phone !== '—') ? j.phone : '',
+        address: (j.address && j.address !== '—') ? j.address : '',
+      });
+      const contact = c.contact || {};
+      if(!contact.contact_id) throw new Error('Zoho did not return a contact id');
+      j.zoho.contactId = contact.contact_id;
+    }
+    // 2) Invoice (create, or update the one we made before)
+    const inv = await callZoho('pushInvoice', {
+      customerId: j.zoho.contactId,
+      invoiceId: j.zoho.invoiceId || null,
+      reference: j.claimNum ? `Claim ${j.claimNum}` : `CRM ${j.id}`,
+      date: new Date().toISOString().slice(0,10),
+      lineItems: lines,
+      notes: `StormShield CRM job: ${j.name || ''} — ${j.address || ''}`,
+    });
+    const zi = inv.invoice || {};
+    j.zoho.invoiceId = zi.invoice_id || j.zoho.invoiceId;
+    j.zoho.invoiceNumber = zi.invoice_number || j.zoho.invoiceNumber || '';
+    j.zoho.total = zi.total != null ? zi.total : j.zoho.total;
+    j.zoho.syncedAt = new Date().toISOString();
+    delete j.zoho.error;
+    saveToStorage();
+    logActivity(j, 'accounting', 'Synced to Zoho Books', `Invoice ${j.zoho.invoiceNumber || ''} · $${(j.zoho.total||0).toLocaleString()}`);
+    toast(`Synced to Zoho Books — Invoice ${j.zoho.invoiceNumber || 'created'}`);
+  } catch(e){
+    console.error('[zoho sync]', e);
+    if(!j.zoho) j.zoho = {};
+    j.zoho.error = String(e.message || e);
+    saveToStorage();
+    toast('Zoho sync failed: ' + (e.message || e));
+  }
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
+}
+window.syncJobToZoho = syncJobToZoho;
+
 // De-dupe guard so the same job doesn't fire the alert twice in one session.
 const __contractSignedFired = new Set();
 function onContractSigned(j){
@@ -4427,6 +4527,24 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               ${fu ? `<div style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:${fuOverdue?'#F87171':'var(--brand-mid)'}"><i class="ti ti-bell${fuOverdue?'-ringing':''}" style="font-size:13px"></i><span>${fuOverdue?'Follow-up due':'Follow up'}: <strong>${new Date(fu+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</strong></span></div>` : ''}
             </div>`;
           })()}
+          ${window.currentMember?.role === 'admin' ? (() => {
+            const z = j.zoho || {};
+            const synced = !!z.invoiceId;
+            const chip = z.error
+              ? `<span style="font-size:9px;font-weight:700;color:#F87171;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.35);padding:2px 8px;border-radius:999px">SYNC ERROR</span>`
+              : synced
+                ? `<span style="font-size:9px;font-weight:700;color:#34D399;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);padding:2px 8px;border-radius:999px">SYNCED</span>`
+                : `<span style="font-size:9px;font-weight:700;color:var(--muted);background:rgba(255,255,255,0.04);border:1px solid var(--border);padding:2px 8px;border-radius:999px">NOT SYNCED</span>`;
+            return `<div class="dp-card" style="margin-top:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${synced||z.error?'6px':'8px'}">
+                <div style="display:flex;align-items:center;gap:5px"><i class="ti ti-book-2" style="color:#F59E0B;font-size:14px"></i><span style="font-size:12px;font-weight:700;color:var(--brand)">Zoho Books</span></div>
+                ${chip}
+              </div>
+              ${synced ? `<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Invoice <strong style="color:var(--brand)">${escapeHtml(z.invoiceNumber||'')}</strong>${z.total!=null?` · $${Number(z.total).toLocaleString(undefined,{minimumFractionDigits:2})}`:''}${z.syncedAt?` · ${new Date(z.syncedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}`:''}</div>` : ''}
+              ${z.error ? `<div style="font-size:10px;color:#F87171;margin-bottom:8px;line-height:1.4">${escapeHtml(z.error)}</div>` : ''}
+              <button id="zohoSyncBtn" onclick="syncJobToZoho('${j.id}')" style="width:100%;padding:8px;border:1px solid rgba(245,158,11,0.4);border-radius:7px;background:rgba(245,158,11,0.08);color:#F59E0B;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-refresh" style="font-size:13px"></i>${synced?'Re-sync to Zoho Books':'Sync to Zoho Books'}</button>
+            </div>`;
+          })() : ''}
           <div class="weather-box" id="jobWxBox">
             <i class="ti ti-cloud" style="font-size:28px;color:#93C5FD;display:block;margin-bottom:5px" aria-hidden="true"></i>
             <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:3px">${(j.address && j.address!=='—') ? 'Loading 7-day forecast\u2026' : 'Weather forecast will appear here'}</div>
