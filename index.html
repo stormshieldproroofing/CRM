@@ -2075,7 +2075,8 @@ window.syncJobToZoho = syncJobToZoho;
 function zohoUnsyncedCounts(j){
   const deps = (j.deposits || []).filter(d => !d.zohoId && parseFloat(d.amount) > 0).length;
   const exps = (j.expenses || []).filter(e =>
-    (!e.zohoId || (e.zohoId !== 'synced' && ((e.zohoAmt !== undefined && e.zohoAmt !== e.amount) || !e.zohoV)))
+    e.paid !== false
+    && (!e.zohoId || (e.zohoId !== 'synced' && ((e.zohoAmt !== undefined && e.zohoAmt !== e.amount) || !e.zohoV)))
     && e.cat !== 'Returns' && parseFloat(e.amount) > 0).length;
   return { deps, exps };
 }
@@ -2138,7 +2139,7 @@ async function syncZohoMoney(jobId){
         invoiceId: j.zoho.invoiceId,
         amount: Math.round(parseFloat(d.amount)*100)/100,
         date: zohoDepositDate(d),
-        reference: `${d.desc || 'Payment'} · ${d._pid}`,
+        reference: d._pid,
         description: `${d.desc || 'Payment'} — ${j.name || ''}`,
         mode: 'check',
       });
@@ -2152,6 +2153,10 @@ async function syncZohoMoney(jobId){
   // is updated (never re-created).
   for(const ex of (j.expenses || [])){
     if(ex.cat === 'Returns' || !(parseFloat(ex.amount) > 0)) continue;
+    // Sync-on-paid: OWED vouchers and on-account ABC purchases stay out of
+    // Zoho until the money actually moves (marked paid), keeping the books
+    // aligned with the checking account.
+    if(ex.paid === false) continue;
     const hasRealId = ex.zohoId && ex.zohoId !== 'synced';
     const changed = hasRealId && ex.zohoAmt !== undefined && ex.zohoAmt !== ex.amount;
     // One-time self-heal: expenses synced before vendor/customer linking
@@ -2162,13 +2167,13 @@ async function syncZohoMoney(jobId){
     try {
       const r = await callZoho('pushExpense', {
         expenseId: (changed || needsDetail) ? ex.zohoId : null,
-        date: ex.date || null,
+        date: ex.paidDate || ex.date || null,
         amount: Math.round(parseFloat(ex.amount)*100)/100,
         categoryName: ex.cat || 'Materials',
         customerId: j.zoho.contactId,
         vendorName: (ex.vendorName || ex.vendor || '').trim() || (ex.cat === 'Materials' ? 'ABC Supply' : ''),
         description: `${ex.desc || ex.cat || 'Expense'}${ex.vendorName ? ' · ' + ex.vendorName : ''} — Job: ${j.name || ''}`,
-        reference: `CRM ${j.id} ${ex._eid}`,
+        reference: ex._eid,
       });
       ex.zohoId = r.expense?.expense_id || ex.zohoId || 'synced';
       ex.zohoAmt = ex.amount;
@@ -3407,6 +3412,14 @@ async function importAbcInvoice(file){
           ${parsed.orderNum?`<div style="display:flex;justify-content:space-between"><span>Order #</span><span>${escapeHtml(parsed.orderNum)}</span></div>`:''}
           ${parsed.po?`<div style="display:flex;justify-content:space-between"><span>PO #</span><span>${escapeHtml(parsed.po)}</span></div>`:''}
         </div>
+        ${!isReturn ? `<div style="margin-top:10px">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px">How was this paid?</div>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="abcPayNow" style="flex:1;padding:7px 4px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--brand-light);background:rgba(77,157,224,0.15);color:var(--brand-light);font-family:'Barlow',sans-serif">Debit — paid now</button>
+            <button type="button" id="abcOnAcct" style="flex:1;padding:7px 4px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:#1E253A;color:var(--muted);font-family:'Barlow',sans-serif">On ABC account</button>
+          </div>
+          <div id="abcPayHint" style="font-size:9px;color:var(--muted);margin-top:4px">Syncs to Zoho right away, dated ${escapeHtml(parsed.date||'today')}.</div>
+        </div>` : ''}
         <div style="font-size:10px;color:var(--muted);margin-top:10px">Will add a <strong style="color:var(--brand)">${isReturn?'Returns':'Materials'}</strong> ${isReturn?'credit':'expense'} to <strong style="color:var(--brand)">${escapeHtml(j.name||'this job')}</strong> and attach the PDF.</div>
         ${matchNote}
         <div style="display:flex;gap:8px;margin-top:16px">
@@ -3416,6 +3429,16 @@ async function importAbcInvoice(file){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  let abcPaidNow = true;   // default matches today's debit-card reality
+  const pn=overlay.querySelector('#abcPayNow'), oa=overlay.querySelector('#abcOnAcct'), hint=overlay.querySelector('#abcPayHint');
+  const setPay = now => { abcPaidNow = now;
+    if(pn&&oa){ [pn,oa].forEach((b,k)=>{ const on = (k===0)===now;
+      b.style.borderColor = on?'var(--brand-light)':'var(--border)';
+      b.style.background = on?'rgba(77,157,224,0.15)':'#1E253A';
+      b.style.color = on?'var(--brand-light)':'var(--muted)'; }); }
+    if(hint) hint.textContent = now ? `Syncs to Zoho right away, dated ${parsed.date||'today'}.` : 'Held as owed to ABC — syncs to Zoho when marked paid.'; };
+  pn&&pn.addEventListener('click',()=>setPay(true));
+  oa&&oa.addEventListener('click',()=>setPay(false));
   const close=()=>overlay.remove();
   overlay.querySelector('#abcCancel').addEventListener('click',close);
   overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
@@ -3436,7 +3459,8 @@ async function importAbcInvoice(file){
       vendor: null,
       vendorName: 'ABC Supply',
       date: parsed.date || new Date().toISOString().slice(0,10),
-      paid: isReturn ? true : false,     // a credit isn't an outstanding payable
+      paid: isReturn ? true : abcPaidNow,
+      onAccount: isReturn ? false : !abcPaidNow,
     });
     // 2) Attach the PDF to the job (under Other files)
     try {
@@ -5734,7 +5758,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         if(!proceed){ $('expVendorSel')?.focus(); return; }
       }
 
-      const exp = { cat, desc, amount: amt.toFixed(2), paid: false, date: new Date().toISOString().slice(0,10) };
+      const exp = { cat, desc, amount: amt.toFixed(2), paid: true, date: new Date().toISOString().slice(0,10) };
       if(vendorId){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';
