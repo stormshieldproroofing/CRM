@@ -2128,6 +2128,7 @@ async function syncZohoMoney(jobId){
     try {
       const r = await callZoho('pushExpense', {
         expenseId: (changed || needsDetail) ? ex.zohoId : null,
+        date: ex.date || null,
         amount: Math.round(parseFloat(ex.amount)*100)/100,
         categoryName: ex.cat || 'Materials',
         customerId: j.zoho.contactId,
@@ -3313,6 +3314,12 @@ function parseAbcInvoice(text){
   if(nm) out.orderName = nm[1].trim();
   const acct = text.match(/Account\s*#:\s*([\d\-]+)/i);
   if(acct) out.account = acct[1];
+  // Invoice date — printed on ABC invoices; becomes the expense date in Zoho.
+  const dt = text.match(/(?:Invoice\s*)?Date:?\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i);
+  if(dt){
+    let yr = parseInt(dt[3],10); if(yr < 100) yr += 2000;
+    out.date = `${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`;
+  }
   return out;
 }
 
@@ -3394,6 +3401,7 @@ async function importAbcInvoice(file){
       amount: (isReturn ? Math.abs(parsed.total) : parsed.total).toFixed(2),
       vendor: null,
       vendorName: 'ABC Supply',
+      date: parsed.date || new Date().toISOString().slice(0,10),
       paid: isReturn ? true : false,     // a credit isn't an outstanding payable
     });
     // 2) Attach the PDF to the job (under Other files)
@@ -5682,7 +5690,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         if(!proceed){ $('expVendorSel')?.focus(); return; }
       }
 
-      const exp = { cat, desc, amount: amt.toFixed(2), paid: false };
+      const exp = { cat, desc, amount: amt.toFixed(2), paid: false, date: new Date().toISOString().slice(0,10) };
       if(vendorId){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';
@@ -11395,9 +11403,10 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
   // on the job — update it rather than creating a sibling.
   if(!exp && !vid) exp = j.expenses.find(e=>e._src===tag && e.vendor===sub.id);
   if(!exp){
-    exp = { _src:tag, _vid: vid || ('v'+Date.now()+Math.random().toString(36).slice(2,6)) };
+    exp = { _src:tag, _vid: vid || ('v'+Date.now()+Math.random().toString(36).slice(2,6)), date: today };
     j.expenses.push(exp);
   }
+  if(!exp.date) exp.date = today;   // backfill legacy vouchers on next touch
   if(voucherData) exp._vid = exp._vid || vid;
   // File the payment under its own expense category (Permits, Inspections, etc.)
   exp.cat = (voucherData && voucherData.expCat) || payTypeExpCat(c.payType || 'roof');
