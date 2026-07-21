@@ -1992,24 +1992,43 @@ window.callZoho = callZoho;
 function zohoInvoiceLines(j){
   const q = j.quote || {};
   const lines = [];
+  // Primary source of truth: the Contract Price shown in the Contract Summary
+  // card (j.potVal). This is what the homeowner signed and what the job's
+  // balance/profit math already uses, so the Zoho invoice matches it exactly.
+  const contractPrice = moneyNum(j.potVal);
+
   if(q.mode === 'cash'){
+    // Cash: itemize by priced quote sections IF they sum to the contract price,
+    // so the invoice reads nicely — otherwise fall back to a single line at the
+    // contract price so the total always equals the Contract Summary.
     const secs = (typeof parseScopeSections === 'function') ? parseScopeSections(q.scope || '') : [];
+    const secLines = [];
     secs.forEach(s => {
       const p = parseFloat((q.sectionPrices || {})[s.title || ''] || '');
-      if(p > 0) lines.push({ name: s.title || 'Roofing work', description: `${j.address || ''}`, rate: Math.round(p*100)/100, quantity: 1 });
+      if(p > 0) secLines.push({ name: s.title || 'Roofing work', description: `${j.address || ''}`, rate: Math.round(p*100)/100, quantity: 1 });
     });
-    if(!lines.length){
-      const c = moneyNum(q.contractAmount);
-      if(c > 0) lines.push({ name: 'Roofing — contract total', description: `${j.address || ''}`, rate: c, quantity: 1 });
+    const secSum = secLines.reduce((t,l)=>t+l.rate, 0);
+    if(secLines.length && contractPrice > 0 && Math.abs(secSum - contractPrice) < 0.5){
+      return secLines;   // sections match the contract price — itemize
     }
-  } else {
-    const rcv = moneyNum(j.rcv);
-    if(rcv > 0) lines.push({
-      name: 'Roof replacement per insurance scope',
-      description: `${j.address || ''}${j.carrier ? ' · ' + j.carrier : ''}${j.claimNum ? ' · Claim #' + j.claimNum : ''}`,
-      rate: rcv, quantity: 1,
-    });
+    if(contractPrice > 0){
+      return [{ name: 'Roofing — contract price', description: `${j.address || ''}`, rate: contractPrice, quantity: 1 }];
+    }
+    // No contract price set — last resort: use section prices or the quote amount
+    if(secLines.length) return secLines;
+    const c = moneyNum(q.contractAmount);
+    if(c > 0) lines.push({ name: 'Roofing — contract total', description: `${j.address || ''}`, rate: c, quantity: 1 });
+    return lines;
   }
+
+  // Insurance: invoice the contract price from the Contract Summary. Falls back
+  // to RCV only if no contract price has been entered yet.
+  const amount = contractPrice > 0 ? contractPrice : moneyNum(j.rcv);
+  if(amount > 0) lines.push({
+    name: 'Roof replacement per contract',
+    description: `${j.address || ''}${j.carrier ? ' · ' + j.carrier : ''}${j.claimNum ? ' · Claim #' + j.claimNum : ''}`,
+    rate: amount, quantity: 1,
+  });
   return lines;
 }
 
@@ -2019,7 +2038,7 @@ async function syncJobToZoho(jobId){
   if(window.currentMember?.role !== 'admin'){ toast('Zoho sync is admin-only'); return; }
   const lines = zohoInvoiceLines(j);
   if(!lines.length){
-    toast(j.quote?.mode === 'cash' ? 'No section prices or contract amount on the quote yet' : 'No RCV amount on this job yet — add it in the insurance fields');
+    toast('No Contract Price set yet — enter it in the Contract Summary first');
     return;
   }
   const btn = document.getElementById('zohoSyncBtn');
@@ -2155,19 +2174,18 @@ async function syncZohoMoney(jobId){
   // Expenses — skip Returns (credits). Stamped records are skipped unless
   // their amount changed since the push, in which case the SAME Zoho expense
   // is updated (never re-created).
+  const skipReasons = [];
   for(const ex of (j.expenses || [])){
-    if(ex.cat === 'Returns' || !(parseFloat(ex.amount) > 0)) continue;
+    const label = `${ex.cat||'?'} $${ex.amount||'0'}`;
+    if(ex.cat === 'Returns'){ skipReasons.push(`${label}: skipped (Returns/credit — never syncs)`); continue; }
+    if(!(parseFloat(ex.amount) > 0)){ skipReasons.push(`${label}: skipped (amount is zero or blank)`); continue; }
     // Sync-on-paid: OWED vouchers and on-account ABC purchases stay out of
-    // Zoho until the money actually moves (marked paid), keeping the books
-    // aligned with the checking account.
-    if(ex.paid === false) continue;
+    // Zoho until the money actually moves (marked paid).
+    if(ex.paid === false){ skipReasons.push(`${label}: skipped (marked UNPAID — tap the amber pill to mark paid)`); continue; }
     const hasRealId = ex.zohoId && ex.zohoId !== 'synced';
     const changed = hasRealId && ex.zohoAmt !== undefined && ex.zohoAmt !== ex.amount;
-    // One-time self-heal: expenses synced before vendor/customer linking
-    // existed (no zohoV marker) get their details re-sent on the next normal
-    // push — same Zoho record, updated in place, then marked done forever.
     const needsDetail = hasRealId && !ex.zohoV;
-    if(ex.zohoId && !changed && !needsDetail) continue;
+    if(ex.zohoId && !changed && !needsDetail){ skipReasons.push(`${label}: already synced (Zoho id ${ex.zohoId})`); continue; }
     try {
       const r = await callZoho('pushExpense', {
         expenseId: (changed || needsDetail) ? ex.zohoId : null,
@@ -2190,11 +2208,16 @@ async function syncZohoMoney(jobId){
   }
   saveToStorage();
   if(okPay || okExp) logActivity(j, 'accounting', 'Payments/expenses pushed to Zoho', `${okPay} payment${okPay===1?'':'s'} · ${okExp} expense${okExp===1?'':'s'}${errs.length?` · ${errs.length} issue${errs.length===1?'':'s'}`:''}`);
+  if(skipReasons.length) console.warn('[zoho skipped]', skipReasons);
   if(errs.length){
     console.warn('[zoho money]', errs);
     toast(`Pushed ${okPay+okExp} · ${errs.length} failed: ${errs[0]}`);
   } else if(okPay || okExp){
     toast(`Pushed ${okPay} payment${okPay===1?'':'s'} + ${okExp} expense${okExp===1?'':'s'} to Zoho`);
+  } else if(skipReasons.length){
+    // Nothing pushed AND something was skipped — show why, so a stuck expense
+    // isn't a silent mystery.
+    toast(skipReasons[0]);
   } else {
     toast('Nothing new to push — all payments and expenses already synced');
   }
