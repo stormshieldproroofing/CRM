@@ -2075,7 +2075,7 @@ window.syncJobToZoho = syncJobToZoho;
 function zohoUnsyncedCounts(j){
   const deps = (j.deposits || []).filter(d => !d.zohoId && parseFloat(d.amount) > 0).length;
   const exps = (j.expenses || []).filter(e =>
-    (!e.zohoId || (e.zohoId !== 'synced' && e.zohoAmt !== undefined && e.zohoAmt !== e.amount))
+    (!e.zohoId || (e.zohoId !== 'synced' && ((e.zohoAmt !== undefined && e.zohoAmt !== e.amount) || !e.zohoV)))
     && e.cat !== 'Returns' && parseFloat(e.amount) > 0).length;
   return { deps, exps };
 }
@@ -2118,11 +2118,16 @@ async function syncZohoMoney(jobId){
   // is updated (never re-created).
   for(const ex of (j.expenses || [])){
     if(ex.cat === 'Returns' || !(parseFloat(ex.amount) > 0)) continue;
-    const changed = ex.zohoId && ex.zohoId !== 'synced' && ex.zohoAmt !== undefined && ex.zohoAmt !== ex.amount;
-    if(ex.zohoId && !changed) continue;
+    const hasRealId = ex.zohoId && ex.zohoId !== 'synced';
+    const changed = hasRealId && ex.zohoAmt !== undefined && ex.zohoAmt !== ex.amount;
+    // One-time self-heal: expenses synced before vendor/customer linking
+    // existed (no zohoV marker) get their details re-sent on the next normal
+    // push — same Zoho record, updated in place, then marked done forever.
+    const needsDetail = hasRealId && !ex.zohoV;
+    if(ex.zohoId && !changed && !needsDetail) continue;
     try {
       const r = await callZoho('pushExpense', {
-        expenseId: changed ? ex.zohoId : null,
+        expenseId: (changed || needsDetail) ? ex.zohoId : null,
         amount: Math.round(parseFloat(ex.amount)*100)/100,
         categoryName: ex.cat || 'Materials',
         customerId: j.zoho.contactId,
@@ -2132,6 +2137,7 @@ async function syncZohoMoney(jobId){
       });
       ex.zohoId = r.expense?.expense_id || ex.zohoId || 'synced';
       ex.zohoAmt = ex.amount;
+      ex.zohoV = 1;   // details (vendor/customer/account) confirmed current
       okExp++;
       // Surface vendor-link outcome so failures aren't silent.
       if(r.vendor_note) errs.push(`Vendor: ${r.vendor_note}`);
