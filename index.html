@@ -2099,8 +2099,12 @@ async function syncZohoMoney(jobId){
   // Stable per-record ids — baked into each record's Zoho reference number so
   // the server can find existing twins even if local stamps are ever lost.
   const mkid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
-  (j.deposits || []).forEach(d => { if(!d._pid) d._pid = mkid('p'); });
-  (j.expenses || []).forEach(e => { if(!e._eid) e._eid = mkid('e'); });
+  // Stamp stable ids on ALL records (incl. legacy) and persist immediately, so
+  // a mid-push failure can't leave a record without its dedup key.
+  let _stamped = false;
+  (j.deposits || []).forEach(d => { if(!d._pid){ d._pid = mkid('p'); _stamped = true; } });
+  (j.expenses || []).forEach(e => { if(!e._eid){ e._eid = mkid('e'); _stamped = true; } });
+  if(_stamped) saveToStorage();
   // Propagate CRM deletions to Zoho before pushing anything new.
   if(j.zohoDeleted){
     for(const id of [...(j.zohoDeleted.exp || [])]){
@@ -5606,7 +5610,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <span onclick="expEditOpen(${e.origIdx})" style="font-size:11px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit · ${e.desc||cat}">${e.desc||cat}</span>
                 <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
                   <span style="font-size:11px;font-weight:600;color:${isReturn?'var(--success)':'var(--brand)'}">${isReturn?'−':''}$${fmtExp(e.amount)}</span>
-
+                  ${!isReturn ? `<span onclick="expTogglePaid(${e.origIdx})" title="${e.paid===false?'Marked UNPAID — held from Zoho. Tap to mark paid.':'Paid — syncs to Zoho. Tap to mark unpaid.'}" style="font-size:8px;font-weight:800;letter-spacing:0.3px;padding:2px 6px;border-radius:999px;cursor:pointer;border:1px solid ${e.paid===false?'rgba(251,191,36,0.5)':'rgba(52,211,153,0.5)'};background:${e.paid===false?'rgba(251,191,36,0.12)':'rgba(52,211,153,0.12)'};color:${e.paid===false?'#FBBF24':'#34D399'}">${e.paid===false?'UNPAID':'PAID'}</span>` : ''}
                   <button onclick="expDelete(${e.origIdx})" title="Remove" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(248,113,113,0.25);background:rgba(248,113,113,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--danger);padding:0;transition:background 0.1s" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">${svgTrashE}</button>
                 </div>
               </div>
@@ -5649,6 +5653,23 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const chev=document.getElementById('exp-chev-'+slug);
       if(body) body.style.display=window._expCatOpen[slug]?'block':'none';
       if(chev) chev.style.transform=window._expCatOpen[slug]?'rotate(0deg)':'rotate(-90deg)';
+    };
+    window.expTogglePaid=function(i){
+      const j2=curJob();
+      const ex=j2.expenses?.[i];
+      if(!ex) return;
+      // Flip paid state. Marking paid stamps today's date (so Zoho dates it
+      // now) unless a real date is already recorded; unpaid clears it.
+      if(ex.paid===false){
+        ex.paid=true;
+        if(!ex.paidDate) ex.paidDate=new Date().toISOString().slice(0,10);
+        ex.onAccount=false;
+      } else {
+        ex.paid=false;
+      }
+      if(typeof logActivity==='function') logActivity(j2,'expense', ex.paid?'Expense marked paid':'Expense marked unpaid', `${ex.cat||''} · $${parseFloat(ex.amount||0).toLocaleString()}`);
+      saveToStorage();
+      if(typeof renderDetailPanel==='function') renderDetailPanel();
     };
     window.expDelete=function(i){
       const j2=curJob();
