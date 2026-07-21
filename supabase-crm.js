@@ -210,12 +210,16 @@ async function loadAllFromSupabase() {
         pmFeePaidDate: r.pm_fee_paid_date || null,
         pmFeePaidMethod: r.pm_fee_paid_method || null,
         pmFeePaidNotes: r.pm_fee_paid_notes || null,
+        contactLog: Array.isArray(r.contact_log) ? r.contact_log : [],
+        nextFollowUp: r.next_follow_up || undefined,
+        zoho: (r.zoho && typeof r.zoho === 'object') ? r.zoho : undefined,
+        zohoDeleted: (r.zoho_deleted && typeof r.zoho_deleted === 'object') ? r.zoho_deleted : undefined,
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
-          .map(d=>({amount:String(d.amount),desc:d.description})),
+          .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,_src:e.src||null,_vid:e.vid||null})),
+          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         signedContractFiles:byKind('signed_contract'),
@@ -375,6 +379,10 @@ async function pushAllToSupabase() {
         pm_fee_paid_date: j.pmFeePaidDate || null,
         pm_fee_paid_method: j.pmFeePaidMethod || null,
         pm_fee_paid_notes: j.pmFeePaidNotes || null,
+        contact_log: Array.isArray(j.contactLog) ? j.contactLog : [],
+        next_follow_up: j.nextFollowUp || null,
+        zoho: (j.zoho && typeof j.zoho === 'object') ? j.zoho : null,
+        zoho_deleted: (j.zohoDeleted && typeof j.zohoDeleted === 'object') ? j.zohoDeleted : null,
       };
       if (typeof j.id === 'string' && j.id.length > 20) {
         existingJobs.push({ ...base, id: j.id });
@@ -428,7 +436,8 @@ async function pushAllToSupabase() {
       if (!j.id) continue;
       await sb.from('deposits').delete().eq('job_id', j.id);
       if (j.deposits?.length) await sb.from('deposits').insert(
-        j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc })));
+        j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
+          zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null })));
 
       await sb.from('expenses').delete().eq('job_id', j.id);
       if (j.expenses?.length) await sb.from('expenses').insert(
@@ -446,6 +455,12 @@ async function pushAllToSupabase() {
           breakdown: (e.breakdown && typeof e.breakdown === 'object') ? e.breakdown : null,
           src: e._src || null,
           vid: e._vid || null,
+          zoho_id: e.zohoId || null,
+          zoho_amt: (e.zohoAmt != null) ? String(e.zohoAmt) : null,
+          zoho_v: (e.zohoV != null) ? e.zohoV : null,
+          eid: e._eid || null,
+          exp_date: e.date || null,
+          on_account: !!e.onAccount,
         })));
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
