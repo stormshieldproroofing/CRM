@@ -2185,7 +2185,20 @@ async function syncZohoMoney(jobId){
     const hasRealId = ex.zohoId && ex.zohoId !== 'synced';
     const changed = hasRealId && ex.zohoAmt !== undefined && ex.zohoAmt !== ex.amount;
     const needsDetail = hasRealId && !ex.zohoV;
-    if(ex.zohoId && !changed && !needsDetail){ skipReasons.push(`${label}: already synced (Zoho id ${ex.zohoId})`); continue; }
+    if(ex.zohoId && !changed && !needsDetail){
+      // Trust-but-verify: a stamp can be orphaned if the Zoho expense was
+      // deleted manually (e.g. duplicate cleanup). Confirm it still exists;
+      // if not, clear the stamp and fall through to re-push it as new.
+      let stillThere = true;
+      try {
+        const chk = await callZoho('expenseExists', { expenseId: ex.zohoId, reference: ex._eid });
+        stillThere = !!chk.exists;
+        if(chk.exists && chk.expense_id && chk.expense_id !== ex.zohoId) ex.zohoId = chk.expense_id;
+      } catch(e){ /* if the check fails, don't risk a duplicate — leave as-is */ }
+      if(stillThere){ skipReasons.push(`${label}: already synced (Zoho id ${ex.zohoId})`); continue; }
+      // Orphaned — reset so it re-creates cleanly below.
+      delete ex.zohoId; delete ex.zohoAmt; delete ex.zohoV;
+    }
     try {
       const r = await callZoho('pushExpense', {
         expenseId: (changed || needsDetail) ? ex.zohoId : null,
