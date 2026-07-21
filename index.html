@@ -2074,7 +2074,9 @@ window.syncJobToZoho = syncJobToZoho;
 // today's date — Zoho's bank-feed matching goes by amount, so this is fine.
 function zohoUnsyncedCounts(j){
   const deps = (j.deposits || []).filter(d => !d.zohoId && parseFloat(d.amount) > 0).length;
-  const exps = (j.expenses || []).filter(e => !e.zohoId && e.cat !== 'Returns' && parseFloat(e.amount) > 0).length;
+  const exps = (j.expenses || []).filter(e =>
+    (!e.zohoId || (e.zohoId !== 'synced' && e.zohoAmt !== undefined && e.zohoAmt !== e.amount))
+    && e.cat !== 'Returns' && parseFloat(e.amount) > 0).length;
   return { deps, exps };
 }
 window.zohoUnsyncedCounts = zohoUnsyncedCounts;
@@ -2111,19 +2113,29 @@ async function syncZohoMoney(jobId){
       if(r.unapplied_fallback) errs.push(`"${d.desc||'Payment'}" recorded but couldn't apply to the invoice (over its balance) — apply it manually in Zoho`);
     } catch(e){ errs.push(`Payment ${d.desc||''} $${d.amount}: ${e.message||e}`); }
   }
-  // Expenses — skip Returns (credits)
+  // Expenses — skip Returns (credits). Stamped records are skipped unless
+  // their amount changed since the push, in which case the SAME Zoho expense
+  // is updated (never re-created).
   for(const ex of (j.expenses || [])){
-    if(ex.zohoId || ex.cat === 'Returns' || !(parseFloat(ex.amount) > 0)) continue;
+    if(ex.cat === 'Returns' || !(parseFloat(ex.amount) > 0)) continue;
+    const changed = ex.zohoId && ex.zohoId !== 'synced' && ex.zohoAmt !== undefined && ex.zohoAmt !== ex.amount;
+    if(ex.zohoId && !changed) continue;
     try {
       const r = await callZoho('pushExpense', {
+        expenseId: changed ? ex.zohoId : null,
         amount: Math.round(parseFloat(ex.amount)*100)/100,
         categoryName: ex.cat || 'Materials',
         customerId: j.zoho.contactId,
+        vendorName: (ex.vendorName || ex.vendor || '').trim() || (ex.cat === 'Materials' ? 'ABC Supply' : ''),
         description: `${ex.desc || ex.cat || 'Expense'}${ex.vendorName ? ' · ' + ex.vendorName : ''} — Job: ${j.name || ''}`,
         reference: `CRM ${j.id}`,
       });
-      ex.zohoId = r.expense?.expense_id || 'synced';
+      ex.zohoId = r.expense?.expense_id || ex.zohoId || 'synced';
+      ex.zohoAmt = ex.amount;
       okExp++;
+      // Surface vendor-link outcome so failures aren't silent.
+      if(r.vendor_note) errs.push(`Vendor: ${r.vendor_note}`);
+      else if(r.vendor_linked === false) errs.push('Vendor not linked (no vendor name reached Zoho — check that the latest app version is deployed)');
     } catch(e){ errs.push(`Expense ${ex.cat||''} $${ex.amount}: ${e.message||e}`); }
   }
   saveToStorage();
@@ -11313,6 +11325,9 @@ async function openSubVoucher(jobId){
   overlay.querySelector('#svSave').addEventListener('click',()=>{
     if(j){
       const vd = collectVoucher();
+      // Carry the voucher's identity forward — without this, every reprint
+      // loses _vid, fails to find the existing expense, and creates a duplicate.
+      if(j.subVoucher && j.subVoucher._vid) vd._vid = j.subVoucher._vid;
       j.subVoucher = vd;
       const subId = overlay.querySelector('#svSub').value;
       const sub = (window.subcontractors||[]).find(s=>s.id===subId);
@@ -11337,6 +11352,9 @@ async function openSubVoucher(jobId){
     if(c.total<=0){ toast(c.repair ? `Add line items to calculate the ${(c.payLabel||'').toLowerCase()} amount` : 'Enter squares to calculate pay'); return; }
     if(j){
       const vd = collectVoucher();
+      // Carry the voucher's identity forward — without this, every reprint
+      // loses _vid, fails to find the existing expense, and creates a duplicate.
+      if(j.subVoucher && j.subVoucher._vid) vd._vid = j.subVoucher._vid;
       j.subVoucher = vd;
       const vid = createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, vd);
       j.subVoucher._vid = vid;
@@ -11367,6 +11385,9 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
   const vid = (voucherData && voucherData._vid) ? voucherData._vid : null;
   let exp = vid ? j.expenses.find(e=>e._vid===vid)
                 : j.expenses.find(e=>e._src===tag && !e._vid);
+  // Legacy fallback: no vid match, but this sub already has a voucher expense
+  // on the job — update it rather than creating a sibling.
+  if(!exp && !vid) exp = j.expenses.find(e=>e._src===tag && e.vendor===sub.id);
   if(!exp){
     exp = { _src:tag, _vid: vid || ('v'+Date.now()+Math.random().toString(36).slice(2,6)) };
     j.expenses.push(exp);
