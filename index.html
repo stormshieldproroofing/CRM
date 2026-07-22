@@ -2074,7 +2074,7 @@ async function syncJobToZoho(jobId){
     delete j.zoho.error;
     saveToStorage();
     logActivity(j, 'accounting', 'Synced to Zoho Books', `Invoice ${j.zoho.invoiceNumber || ''} · $${(j.zoho.total||0).toLocaleString()}`);
-    toast(`Synced to Zoho Books — Invoice ${j.zoho.invoiceNumber || 'created'}`);
+    toast(`Zoho invoice ${j.zoho.invoiceNumber || 'synced'} — $${Number(j.zoho.total||0).toLocaleString(undefined,{minimumFractionDigits:2})}`);
   } catch(e){
     console.error('[zoho sync]', e);
     if(!j.zoho) j.zoho = {};
