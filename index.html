@@ -4743,7 +4743,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               ${synced ? (() => {
                 const u = zohoUnsyncedCounts(j);
                 const pending = u.deps + u.exps;
-                return `<button id="zohoMoneyBtn" onclick="syncZohoMoney('${j.id}')" ${pending?'':'disabled'} style="width:100%;margin-top:6px;padding:8px;border:1px solid rgba(52,211,153,0.4);border-radius:7px;background:rgba(52,211,153,0.08);color:#34D399;font-weight:700;font-size:12px;cursor:${pending?'pointer':'default'};opacity:${pending?'1':'0.5'};display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-cash" style="font-size:13px"></i>${pending ? `Push ${u.deps} payment${u.deps===1?'':'s'} + ${u.exps} expense${u.exps===1?'':'s'}` : 'Payments & expenses up to date'}</button>`;
+                const hasMoney = (j.deposits||[]).some(d=>parseFloat(d.amount)>0) || (j.expenses||[]).some(e=>e.cat!=='Returns'&&parseFloat(e.amount)>0&&e.paid!==false);
+                return `<button id="zohoMoneyBtn" onclick="syncZohoMoney('${j.id}')" ${hasMoney?'':'disabled'} style="width:100%;margin-top:6px;padding:8px;border:1px solid rgba(52,211,153,0.4);border-radius:7px;background:rgba(52,211,153,0.08);color:#34D399;font-weight:700;font-size:12px;cursor:${hasMoney?'pointer':'default'};opacity:${hasMoney?'1':'0.5'};display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-cash" style="font-size:13px"></i>${pending ? `Push ${u.deps} payment${u.deps===1?'':'s'} + ${u.exps} expense${u.exps===1?'':'s'}` : (hasMoney ? 'Re-check & sync money' : 'No payments or expenses yet')}</button>`;
               })() : ''}
             </div>`;
           })() : ''}
