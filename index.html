@@ -2155,7 +2155,22 @@ async function syncZohoMoney(jobId){
   // Payments — deposits applied against the Zoho invoice
   for(const d of (j.deposits || [])){
     if(skipPayments) break;
-    if(d.zohoId || !(parseFloat(d.amount) > 0)) continue;
+    if(!(parseFloat(d.amount) > 0)) continue;
+    if(d.zohoId && d.zohoId !== 'synced'){
+      // Trust-but-verify: confirm the Zoho payment still exists. If deleted or
+      // unverifiable, clear the stamp and re-create — the server reference
+      // search prevents duplicates either way.
+      let stillThere = false;
+      try {
+        const chk = await callZoho('paymentExists', { paymentId: d.zohoId, reference: d._pid });
+        stillThere = !!chk.exists;
+        if(chk.exists && chk.payment_id && chk.payment_id !== d.zohoId) d.zohoId = chk.payment_id;
+      } catch(e){ stillThere = false; }
+      if(stillThere) continue;
+      delete d.zohoId;
+    } else if(d.zohoId === 'synced'){
+      delete d.zohoId;   // legacy fallback — re-push under reference guard
+    }
     try {
       const r = await callZoho('recordPayment', {
         customerId: j.zoho.contactId,
