@@ -2204,14 +2204,14 @@ async function syncZohoMoney(jobId){
       // Trust-but-verify: a stamp can be orphaned if the Zoho expense was
       // deleted manually (e.g. duplicate cleanup). Confirm it still exists;
       // if not, clear the stamp and fall through to re-push it as new.
-      let stillThere = true;
+      let stillThere = false;
       try {
         const chk = await callZoho('expenseExists', { expenseId: ex.zohoId, reference: ex._eid });
         stillThere = !!chk.exists;
         if(chk.exists && chk.expense_id && chk.expense_id !== ex.zohoId) ex.zohoId = chk.expense_id;
-      } catch(e){ /* if the check fails, don't risk a duplicate — leave as-is */ }
+      } catch(e){ stillThere = false; }   // unverifiable → re-push (reference guard prevents dupes)
       if(stillThere){ skipReasons.push(`${label}: already synced (Zoho id ${ex.zohoId})`); continue; }
-      // Orphaned — reset so it re-creates cleanly below.
+      // Orphaned or unverifiable — reset so it re-creates cleanly below.
       delete ex.zohoId; delete ex.zohoAmt; delete ex.zohoV;
     }
     try {
