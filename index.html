@@ -740,7 +740,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
         <div class="cal-rd-lbl">Not Ready</div>
       </div>
     </div>
-      <div id="calWeekGrid" style="flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);overflow:auto"></div>
+      <div id="calWeekGrid" class="cal-week-grid" style="flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);overflow:auto"></div>
     </div>
   </div>
 </div>
@@ -1053,6 +1053,26 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-conf-btn:hover{border-color:var(--brand-light);background:rgba(77,157,224,0.12)}
 .cal-mchip-conf{display:inline-flex;align-items:center;font-size:11px;margin-left:2px}
 .cal-mchip-conf.cal-conf-clickable{cursor:pointer;padding:2px;border-radius:4px}
+.cal-tap-sched-hint{display:none;align-items:center;gap:4px;margin-top:6px;font-size:10px;font-weight:700;color:var(--brand-light);background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);border-radius:5px;padding:4px 7px;justify-content:center}
+@media (max-width:760px),(pointer:coarse){ .cal-tap-sched-hint{display:flex} }
+@media (max-width:760px){
+  /* Phone: stack the week into a single scrollable column, one day per row,
+     instead of 7 unusable side-by-side columns. */
+  .cal-week-grid{grid-template-columns:1fr !important;overflow-y:auto;overflow-x:hidden}
+  .cal-week-grid .cal-day{min-height:0}
+  .cal-week-grid .cal-day-header{position:sticky;top:0;z-index:2;background:#141927;padding:8px 14px}
+  .cal-week-grid .cal-day.cal-today .cal-day-header{background:#181F30}
+  .cal-week-grid .cal-day-name{font-size:13px}
+  .cal-week-grid .cal-day-date{font-size:16px}
+  /* Empty days collapse small so you scroll past them fast; days with jobs
+     size to their content. */
+  .cal-week-grid .cal-day-body{min-height:0;padding:8px 12px}
+  .cal-week-grid .cal-day-body:empty{min-height:0;padding:0}
+  .cal-week-grid .cal-day-body:empty::after{content:"No builds";display:block;padding:8px 12px;font-size:11px;color:var(--muted);opacity:0.6}
+  .cal-week-grid .cal-job-card{padding:10px 12px}
+  .cal-week-grid .cal-job-card .cjc-name{font-size:14px}
+  .cal-week-grid .cal-job-card .cjc-addr{font-size:12px}
+}
 .cal-mchip-conf.cal-conf-clickable:hover{background:rgba(255,255,255,0.12)}
 .cal-mchip-conf.cal-conf-no{color:#FBBF24}
 .cal-mchip-conf.cal-conf-yes{color:#34D399}
@@ -1776,10 +1796,11 @@ function logActivity(jobOrId, type, label, detail){
     at: new Date().toISOString(),
     by,
   });
-  // Fire the "contract signed" alert when a job moves INTO the Contract Signed stage.
+  // Fire alerts when a job moves INTO a notable stage.
   try {
-    if(type === 'stage' && /stage changed/i.test(label||'') && /(→|->)\s*contract signed/i.test(detail||'')){
-      onContractSigned(j);
+    if(type === 'stage' && /stage changed/i.test(label||'')){
+      if(/(→|->)\s*contract signed/i.test(detail||'')) onContractSigned(j);
+      if(/(→|->)\s*claim filed/i.test(detail||'')) onClaimFiled(j);
     }
   } catch(e){ /* never let notifications break the app */ }
 }
@@ -2260,7 +2281,9 @@ function onContractSigned(j){
   __contractSignedFired.add(j.id);
   const name = j.name || 'New customer';
   const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
-  const rep = (window.currentMember && window.currentMember.name) || '';
+  // The ASSIGNED salesman (j.user), not whoever moved the card. Admin/office
+  // often move jobs on the assigned rep's behalf, so currentMember is wrong here.
+  const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';
   const val = (typeof moneyValue==='function' && j.potVal) ? ` · ${moneyText(moneyValue(j.potVal))}` : '';
   // Board feed
   teamFeedAdd({ kind:'contract_signed', icon:'ti-writing-sign', color:'#A78BFA',
@@ -2275,6 +2298,32 @@ function onContractSigned(j){
   notifyDiscord(lines.join('\n'));
 }
 window.onContractSigned = onContractSigned;
+
+// De-dupe guard for claim-filed alerts.
+const __claimFiledFired = new Set();
+function onClaimFiled(j){
+  if(!j || __claimFiledFired.has(j.id)) return;
+  __claimFiledFired.add(j.id);
+  const name = j.name || 'New customer';
+  const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+  // Assigned salesman, not whoever moved the card.
+  const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';
+  const carrier = (j.carrier && j.carrier!=='—') ? j.carrier : '';
+  const claimNo = (j.claimNum && j.claimNum!=='—') ? j.claimNum : '';
+  // Board feed
+  teamFeedAdd({ kind:'claim_filed', icon:'ti-file-alert', color:'#F59E0B',
+    title:`Claim filed: ${name}`, sub:`${addr}${rep?' · '+rep:''}${carrier?' · '+carrier:''}` });
+  // Discord push
+  const lines = [
+    `📋 **Claim Filed** — ${name}`,
+    addr ? `🏠 ${addr}` : '',
+    rep ? `🧑‍💼 ${rep}` : '',
+    carrier ? `🏢 ${carrier}` : '',
+    claimNo ? `#️⃣ Claim ${claimNo}` : '',
+  ].filter(Boolean);
+  notifyDiscord(lines.join('\n'));
+}
+window.onClaimFiled = onClaimFiled;
 
 // Render the Team Activity feed rows for the summary board.
 function renderTeamFeedRows(){
@@ -4407,7 +4456,7 @@ function renderBoard(){
       const tc=cb.closest('.col').dataset.col;
       const cdef=columns.find(c=>c.id===tc);
       if(cdef&&cdef.locked){toast('This stage is locked');return}
-      if(draggingId){const j=jobs.find(x=>x.id===draggingId);if(j){if(j.col!==tc&&!canMoveToStage(j,tc)){draggingId=null;return}const fromStage=columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name||j.col;j.col=tc;logActivity(j,'stage','Stage changed',`${fromStage} → ${cdef.name}`);saveToStorage();toast(`Moved to ${cdef.name}`);renderBoard()}draggingId=null}
+      if(draggingId){const j=jobs.find(x=>x.id===draggingId);if(j){if(j.col!==tc&&!canMoveToStage(j,tc)){draggingId=null;return}if(j.col!==tc&&!canEnterContractStage(j,cdef)){draggingId=null;return}const fromStage=columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name||j.col;j.col=tc;logActivity(j,'stage','Stage changed',`${fromStage} → ${cdef.name}`);saveToStorage();toast(`Moved to ${cdef.name}`);renderBoard()}draggingId=null}
     });
   });
   document.querySelectorAll('.job-card').forEach(c=>{
@@ -4490,6 +4539,19 @@ function renderCard(j){
 // ---- Mobile: move a job between stages without drag-and-drop ----
 // HTML5 drag events don't fire on touch devices, so cards get a tap-to-move
 // button (shown via CSS on coarse pointers / small screens) that opens this picker.
+// Gate: block entry into "Contract Signed" without a contract price, so the
+// Discord alert and Zoho invoice never fire with $0. Returns true if allowed.
+function canEnterContractStage(j, cdef){
+  if(!cdef || !/contract signed/i.test(cdef.name || '')) return true;
+  const amt = moneyNum(j.potVal);
+  if(amt > 0) return true;
+  toast('Enter the Contract Price in the Contract Summary before marking this signed');
+  // Jump the user straight to the job so they can fill it in.
+  if(typeof openDetail === 'function' && openJobId !== j.id) openDetail(j.id);
+  return false;
+}
+window.canEnterContractStage = canEnterContractStage;
+
 function moveJobToStage(jobId, targetColId){
   const j=jobs.find(x=>x.id===jobId); if(!j) return;
   const jobCols=columnsForPipeline(pipelineForJob(j)?.id);
@@ -4498,6 +4560,7 @@ function moveJobToStage(jobId, targetColId){
   if(cdef.locked){toast('This stage is locked');return}
   if(j.col===targetColId) return;
   if(!canMoveToStage(j,targetColId)) return;
+  if(!canEnterContractStage(j,cdef)) return;
   const fromStage=jobCols.find(c=>c.id===j.col)?.name||j.col;
   j.col=targetColId;
   logActivity(j,'stage','Stage changed',`${fromStage} → ${cdef.name}`);
@@ -9664,6 +9727,65 @@ function renderCalendarSidebar(){
   }
   // Bind drag handlers on sidebar cards
   wireCalDragDrop();
+  // Touch devices can't drag — tap an unscheduled card to pick a date instead.
+  wireCalTapSchedule();
+}
+
+// Assign a build date to a job with the same guards as drag-drop (capacity,
+// weather warning, confirm reset, logging). Returns true if scheduled.
+function scheduleJobToDate(jobId, key){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return false;
+  if(!calCanScheduleOnDay(key)){
+    toast(`Day is full (${calCrewsPerDay} crews booked). Ask admin to override.`);
+    return false;
+  }
+  const prev = j.buildDate || null;
+  const isBad = isBadWeatherDay(key);
+  if(isBad){
+    const w = getWeatherForDate(key);
+    const reason = w ? `${w.shortDay || 'Forecast'} · ${w.precip != null ? Math.round(w.precip)+'% rain' : ''}${w.windMax ? ' · '+w.windMax+' mph wind' : ''}` : 'Heavy rain expected';
+    if(!confirm(`⚠ Weather warning for ${key}\n\n${reason}\n\nSchedule ${j.name} anyway?`)) return false;
+  }
+  j.buildDate = key;
+  if(prev !== key){
+    j.buildConfirmed = false;
+    const fromLabel = prev ? prev : 'unscheduled';
+    if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
+  }
+  saveToStorage();
+  toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
+  renderCalendarPage();
+  return true;
+}
+window.scheduleJobToDate = scheduleJobToDate;
+
+// Tap an unscheduled card (or its Schedule button) → native date picker.
+function wireCalTapSchedule(){
+  document.querySelectorAll('#calUnschedList [data-cal-job]').forEach(card => {
+    if(card.dataset.tapWired) return;
+    card.dataset.tapWired = '1';
+    card.addEventListener('click', e => {
+      if(e.target.closest('[data-cal-confirm]')) return;
+      const id = card.dataset.calJob;
+      // Hidden date input, opened on tap. Value change schedules the job.
+      let input = document.getElementById('calTapDateInput');
+      if(!input){
+        input = document.createElement('input');
+        input.type = 'date';
+        input.id = 'calTapDateInput';
+        input.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(input);
+      }
+      input.value = '';
+      input.onchange = () => {
+        if(input.value) scheduleJobToDate(id, input.value);
+        input.onchange = null;
+      };
+      // showPicker() is supported on iOS Safari; fall back to focus+click.
+      try { input.showPicker(); } catch(_) { input.focus(); input.click(); }
+    });
+  });
 }
 
 // Wire month-view click behavior: empty area opens day popup; chips open job detail.
@@ -9780,6 +9902,7 @@ function renderCalJobCard(j, onCalendar){
           <div class="cjc-addr">${escapeHtml(addr) || '—'}</div>
           <div class="cjc-foot">${confBadge}${carrier}</div>
           ${confBtn}
+          ${!onCalendar ? `<div class="cal-tap-sched-hint"><i class="ti ti-calendar-plus" style="font-size:12px"></i>Tap to schedule</div>` : ''}
         </div>
       </div>
     </div>
