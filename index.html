@@ -1974,15 +1974,17 @@ async function teamFeedAdd(evt){
 
 // Post a message to the team Discord channel via the secure Edge Function.
 // Fails silently (with a console note) so it never blocks CRM work.
-async function notifyDiscord(content){
+async function notifyDiscord(content, channel){
   try {
     const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? SUPABASE_URL : (window.sb?.supabaseUrl || '');
     const key  = (typeof SUPABASE_ANON !== 'undefined' && SUPABASE_ANON) ? SUPABASE_ANON : (window.sb?.supabaseKey || '');
     if(!base) return;
+    // channel routes to a different webhook server-side (e.g. 'payroll' → #payroll).
+    // Omitted → default channel, unchanged behavior.
     await fetch(`${base}/functions/v1/discord-notify`, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` },
-      body: JSON.stringify({ content, username:'StormShield CRM' }),
+      body: JSON.stringify({ content, username:'StormShield CRM', ...(channel?{channel}:{}) }),
     });
   } catch(e){ console.warn('[discord] notify failed', e); }
 }
@@ -2324,6 +2326,42 @@ function onClaimFiled(j){
   notifyDiscord(lines.join('\n'));
 }
 window.onClaimFiled = onClaimFiled;
+
+// ── PAYROLL ALERT: final check collected → time to break down commissions ──
+// Fires once when a job first reaches paid-in-full (auto), or on demand via the
+// manual button. Routed to Discord's #payroll (separate webhook) and the feed.
+function notifyFinalCheck(j, manual){
+  if(!j) return;
+  if(!manual){
+    // Auto path: only when collected >= contract, and only once.
+    const collected = moneyNum(j.paidVal);
+    const contract = moneyNum(j.potVal);
+    if(!(contract > 0 && collected >= contract - 0.01)) return;
+    if(j.finalCheckNotified) return;
+  }
+  j.finalCheckNotified = true;
+  const name = j.name || 'Job';
+  const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+  const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';
+  const collected = moneyNum(j.paidVal);
+  const contract = moneyNum(j.potVal);
+  const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  // Board feed
+  if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'final_check', icon:'ti-cash-banknote', color:'#34D399',
+    title:`Final check collected: ${name}`, sub:`${rep?rep+' · ':''}ready for commission breakdown` });
+  const lines = [
+    `💵 **Final Check Collected — ready for commission** `,
+    `📋 ${name}`,
+    addr ? `🏠 ${addr}` : '',
+    rep ? `🧑‍💼 ${rep}` : '',
+    `💰 Collected ${money(collected)}${contract>0?` of ${money(contract)}`:''}`,
+    `→ Break down and write commission check`,
+  ].filter(Boolean);
+  // Route to #payroll webhook if configured, else the default channel.
+  notifyDiscord(lines.join('\n'), 'payroll');
+  saveToStorage();
+}
+window.notifyFinalCheck = notifyFinalCheck;
 
 // Render the Team Activity feed rows for the summary board.
 function renderTeamFeedRows(){
@@ -3575,10 +3613,19 @@ async function importAbcInvoice(file){
       }
     } catch(e){ console.warn('[ABC import] file attach failed', e); }
     saveToStorage();
-    if(window.refreshExpenseUI) refreshExpenseUI();
+    close();
+    // Re-render the whole detail panel so the new expense shows immediately
+    // (refreshExpenseUI alone can miss it if the section wasn't mounted/open).
+    if(typeof renderDetailPanel === 'function') renderDetailPanel();
+    // Auto-expand the Expenses section and repaint its list.
+    setTimeout(() => {
+      const body = document.getElementById('expBody');
+      const chev = document.getElementById('expAccHeader')?.querySelector('svg');
+      if(body && body.style.display !== 'block'){ body.style.display = 'block'; if(chev) chev.classList.add('open'); }
+      if(window.refreshExpenseUI) window.refreshExpenseUI();
+    }, 30);
     if(typeof renderBoard==='function') renderBoard();
     if(typeof logActivity==='function') logActivity(j, 'expense', isReturn?'ABC Supply return recorded':'ABC Supply invoice imported', `${isReturn?'Return (credit)':'Materials'}: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:''}`);
-    close();
     toast(isReturn ? 'Return recorded as a credit · PDF attached' : 'Materials expense added · invoice attached');
   });
 }
@@ -4957,6 +5004,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <input id="cpDepreciation" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
+                <!-- Supplements (approved by insurance) -->
+                <div style="margin-bottom:8px">
+                  <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Supplements <span style="text-transform:none;letter-spacing:0;color:var(--brand-light)">(approved)</span></label>
+                  <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
+                    <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
+                    <input id="cpSupplement" type="number" step="0.01" min="0" placeholder="0.00" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                  </div>
+                </div>
                 <!-- Live total -->
                 <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(77,157,224,0.08);border:1px solid rgba(77,157,224,0.2);border-radius:7px;padding:8px 11px;margin-bottom:10px">
                   <span style="font-size:11px;font-weight:600;color:var(--muted)">Total Contract Price</span>
@@ -4974,6 +5029,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <span style="font-size:11px;color:var(--muted)">Deposits Collected</span>
                 <span style="font-size:13px;font-weight:700;color:var(--success)" id="summaryDeposits">$${(j.deposits||[]).reduce((s,d)=>s+parseFloat(d.amount||0),0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
               </div>
+              <button onclick="notifyFinalCheck(jobs.find(x=>x.id==='${j.id}'), true); this.textContent='✓ Sent to #payroll'; this.disabled=true;" title="Notify #payroll that the final check is in and commissions are ready to break down" style="width:100%;margin:2px 0 8px;padding:7px;border-radius:6px;border:1px solid rgba(52,211,153,0.4);background:rgba(52,211,153,0.08);color:#34D399;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
+                <i class="ti ti-cash-banknote" style="font-size:13px"></i>Final check collected — notify payroll
+              </button>
               <!-- Expandable deposit detail -->
               <div id="depBody" style="display:none;padding:2px 0 10px">
                 <div style="font-size:10px;color:var(--success);margin-bottom:8px" id="depSummaryLine">${(j.deposits&&j.deposits.length)?j.deposits.length+' deposit'+(j.deposits.length>1?'s':'')+' · Total: $'+(j.deposits.reduce((s,d)=>s+parseFloat(d.amount||0),0)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'No deposits yet'}</div>
@@ -5552,6 +5610,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       j2.paidVal=(j2.deposits.reduce((s,d)=>s+parseFloat(d.amount),0)).toFixed(2);
       logActivity(j2, 'deposit_add', 'Deposit added', `$${amt.toLocaleString()} · ${desc}`);
       saveToStorage();
+      notifyFinalCheck(j2);   // auto: fires once if this brings the job to paid-in-full
       $('depAddForm').style.display='none';
       $('depAddToggle').style.display='flex';
       $('depAmtInput').value='';
@@ -6074,22 +6133,25 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const n=parseFloat(($('cpNetClaim')||{}).value||0)||0;
       const d=parseFloat(($('cpDeductible')||{}).value||0)||0;
       const p=parseFloat(($('cpDepreciation')||{}).value||0)||0;
-      const t=n+d+p;
+      const sup=parseFloat(($('cpSupplement')||{}).value||0)||0;
+      const t=n+d+p+sup;
       const bt=$('cpBreakdownTotal'); if(bt) bt.textContent='$'+fmtMoney(t);
       return t;
     };
     function cpFillFields(){
       const j2=curJob();
       // Use stored breakdown if present; otherwise seed Net Claim with the full contract price
-      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null;
+      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null || j2.cpSupplement!=null;
       if(hasBreakdown){
         $('cpNetClaim').value     = j2.cpNetClaim!=null?j2.cpNetClaim:'';
         $('cpDeductible').value   = j2.cpDeductible!=null?j2.cpDeductible:'';
         $('cpDepreciation').value = j2.cpDepreciation!=null?j2.cpDepreciation:'';
+        if($('cpSupplement')) $('cpSupplement').value = j2.cpSupplement!=null?j2.cpSupplement:'';
       } else {
         $('cpNetClaim').value     = parseFloat(j2.potVal||0)?parseFloat(j2.potVal).toFixed(2):'';
         $('cpDeductible').value   = '';
         $('cpDepreciation').value = '';
+        if($('cpSupplement')) $('cpSupplement').value = '';
       }
       cpRecalc();
     }
@@ -6098,14 +6160,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const j2=curJob();
       const el=$('cpBreakdownSummary');
       if(!el) return;
-      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null;
+      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null || j2.cpSupplement!=null;
       const editorOpen = cpEditRowEl && cpEditRowEl.style.display==='block';
       if(!hasBreakdown || editorOpen){ el.style.display='none'; el.innerHTML=''; return; }
       const n=parseFloat(j2.cpNetClaim||0)||0;
       const d=parseFloat(j2.cpDeductible||0)||0;
       const p=parseFloat(j2.cpDepreciation||0)||0;
+      const sup=parseFloat(j2.cpSupplement||0)||0;
       const line=(label,val,col)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;line-height:1.6"><span style="font-size:10px;color:var(--muted)">${label}</span><span style="font-size:10px;font-weight:600;color:${col||'var(--brand-mid)'}">$${fmtMoney(val)}</span></div>`;
-      el.innerHTML=line('Net Claim',n)+line('Deductible',d)+line('Depreciation',p);
+      el.innerHTML=line('Net Claim',n)+line('Deductible',d)+line('Depreciation',p)+(sup>0?line('Supplements',sup,'#34D399'):'');
       el.style.display='block';
     }
     if(cpHeaderEl && cpEditRowEl){
@@ -6127,10 +6190,12 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const n=parseFloat($('cpNetClaim').value||0)||0;
       const d=parseFloat($('cpDeductible').value||0)||0;
       const p=parseFloat($('cpDepreciation').value||0)||0;
-      const total=n+d+p;
+      const sup=parseFloat(($('cpSupplement')||{}).value||0)||0;
+      const total=n+d+p+sup;
       j2.cpNetClaim=n.toFixed(2);
       j2.cpDeductible=d.toFixed(2);
       j2.cpDepreciation=p.toFixed(2);
+      j2.cpSupplement=sup.toFixed(2);
       j2.potVal=total.toFixed(2);
       $('cpDisplay').textContent='$'+fmtMoney(total);
       $('cpEditRow').style.display='none';

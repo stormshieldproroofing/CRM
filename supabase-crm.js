@@ -198,6 +198,10 @@ async function loadAllFromSupabase() {
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
         buildDate: r.build_date || null,
         buildConfirmed: !!(r.contract && typeof r.contract === 'object' && r.contract.__buildConfirmed),
+        cpNetClaim:     (r.contract && r.contract.__cpNetClaim     != null) ? r.contract.__cpNetClaim     : undefined,
+        cpDeductible:   (r.contract && r.contract.__cpDeductible   != null) ? r.contract.__cpDeductible   : undefined,
+        cpDepreciation: (r.contract && r.contract.__cpDepreciation != null) ? r.contract.__cpDepreciation : undefined,
+        cpSupplement:   (r.contract && r.contract.__cpSupplement   != null) ? r.contract.__cpSupplement   : undefined,
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
@@ -370,6 +374,13 @@ async function pushAllToSupabase() {
         contract: (() => {
           const base = (j.contract && typeof j.contract === 'object') ? { ...j.contract } : {};
           base.__buildConfirmed = !!j.buildConfirmed;
+          // Contract-price breakdown (Net Claim / Deductible / Depreciation /
+          // Supplements). These aren't their own columns, so persist them here
+          // in the contract JSON so they survive syncs.
+          base.__cpNetClaim    = (j.cpNetClaim != null) ? j.cpNetClaim : null;
+          base.__cpDeductible  = (j.cpDeductible != null) ? j.cpDeductible : null;
+          base.__cpDepreciation= (j.cpDepreciation != null) ? j.cpDepreciation : null;
+          base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           return base;
         })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
