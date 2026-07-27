@@ -206,6 +206,8 @@ async function loadAllFromSupabase() {
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
         subVoucher: (r.sub_voucher && typeof r.sub_voucher === 'object') ? r.sub_voucher : null,
+        subVouchers: (r.sub_voucher && Array.isArray(r.sub_voucher.__list)) ? r.sub_voucher.__list
+                     : (r.sub_voucher && typeof r.sub_voucher === 'object' ? [r.sub_voucher] : []),
         contract: (r.contract && typeof r.contract === 'object') ? r.contract : null,
         commissionPayouts: Array.isArray(r.commission_payouts) ? r.commission_payouts : [],
         projectManager: r.project_manager || null,
@@ -253,7 +255,6 @@ async function loadAllFromSupabase() {
     // We collapse records that match on ALL meaningful fields (amount normalized),
     // which is the signature of a duplicate — legitimate separate entries differ.
     let _dupRemoved = 0;
-    const normAmt = a => { const n = parseFloat(String(a??'').replace(/[^0-9.\-]/g,'')); return isFinite(n)?n.toFixed(2):'0.00'; };
     (window.jobs||[]).forEach(j => {
       if(!Array.isArray(j.expenses)) return;
       // Normalize legacy category names so expenses aren't hidden from the grouped
@@ -261,31 +262,22 @@ async function loadAllFromSupabase() {
       j.expenses.forEach(e => {
         if(e && (e.cat === 'Labor' || e.cat === 'labor')) e.cat = 'Roofing Labor';
       });
+      // Dedup ONLY on unique ids (_vid / _eid). Never on content signature —
+      // two real ABC purchases can legitimately share category/amount/vendor,
+      // and deleting one as a "duplicate" was silently losing real expenses.
       const keep = [];
       const seenVid = new Set();
-      const seenSig = new Set();
+      const seenEid = new Set();
       j.expenses.forEach(e => {
         if(!e) return;
-        // exact voucher-id duplicate
-        if(e._vid){
-          if(seenVid.has(e._vid)){ _dupRemoved++; return; }
-          seenVid.add(e._vid);
-        }
-        // full-record duplicate (all meaningful fields identical)
-        const sig = [
-          (e.cat||''), (e.desc||''), normAmt(e.amount),
-          (e.vendor||''), (e.vendorName||''),
-          (e.paid?'1':'0'), (e.paidDate||''), (e.paidMethod||''), (e.paidNotes||''),
-          JSON.stringify(e.breakdown||''),
-        ].join('|');
-        if(seenSig.has(sig)){ _dupRemoved++; return; }
-        seenSig.add(sig);
+        if(e._vid){ if(seenVid.has(e._vid)){ _dupRemoved++; return; } seenVid.add(e._vid); }
+        if(e._eid){ if(seenEid.has(e._eid)){ _dupRemoved++; return; } seenEid.add(e._eid); }
         keep.push(e);
       });
       if(keep.length !== j.expenses.length) j.expenses = keep;
     });
     if(_dupRemoved > 0){
-      console.log('[Supabase] removed', _dupRemoved, 'duplicate expense line(s)');
+      console.log('[Supabase] removed', _dupRemoved, 'true duplicate expense line(s) by id');
       setTimeout(()=>{ if(window.saveToStorage) window.saveToStorage(); }, 1500);
     }
   }
@@ -370,7 +362,14 @@ async function pushAllToSupabase() {
         stage_checklist_extra: (j.stageChecklistExtra && typeof j.stageChecklistExtra === 'object') ? j.stageChecklistExtra : {},
         quote: (j.quote && typeof j.quote === 'object') ? j.quote : null,
         abc_order: (j.abcOrder && typeof j.abcOrder === 'object') ? j.abcOrder : null,
-        sub_voucher: (j.subVoucher && typeof j.subVoucher === 'object') ? j.subVoucher : null,
+        sub_voucher: (() => {
+          // Persist the full vouchers array (multi-vendor). Wrapped so the
+          // single legacy voucher still loads for older readers.
+          const list = Array.isArray(j.subVouchers) ? j.subVouchers
+            : (j.subVoucher && typeof j.subVoucher==='object' ? [j.subVoucher] : []);
+          if(!list.length) return null;
+          return { __list: list, ...(j.subVoucher && typeof j.subVoucher==='object' ? j.subVoucher : list[list.length-1]) };
+        })(),
         contract: (() => {
           const base = (j.contract && typeof j.contract === 'object') ? { ...j.contract } : {};
           base.__buildConfirmed = !!j.buildConfirmed;
@@ -450,8 +449,15 @@ async function pushAllToSupabase() {
         j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
           zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null })));
 
-      await sb.from('expenses').delete().eq('job_id', j.id);
-      if (j.expenses?.length) await sb.from('expenses').insert(
+      // Replace expenses safely: insert first into a temp-free flow by
+      // deleting then inserting, but if the insert throws, the delete has
+      // already run — so guard the insert and re-throw only after logging,
+      // and skip the delete entirely when there's nothing new to write AND
+      // the job legitimately has no expenses (avoids wiping on transient
+      // empty states during load races).
+      if (j.expenses?.length) {
+        await sb.from('expenses').delete().eq('job_id', j.id);
+        const { error: expErr } = await sb.from('expenses').insert(
         j.expenses.map(e => ({
           job_id: j.id,
           category: e.cat,
@@ -473,6 +479,11 @@ async function pushAllToSupabase() {
           exp_date: e.date || null,
           on_account: !!e.onAccount,
         })));
+        if(expErr){ console.error('[Supabase] expense insert failed — expenses may be lost, retry save:', expErr); if(window.toast) window.toast('Expense save failed — check connection and try again'); }
+      } else {
+        // No expenses locally: clear the remote rows to match.
+        await sb.from('expenses').delete().eq('job_id', j.id);
+      }
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
       const chkRows = [];

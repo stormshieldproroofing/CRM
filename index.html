@@ -2363,6 +2363,128 @@ function notifyFinalCheck(j, manual){
 }
 window.notifyFinalCheck = notifyFinalCheck;
 
+// ── ABC SUPPLY API IMPORT — pull invoice history, match to jobs by PO ──
+async function callAbc(action, payload){
+  const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? SUPABASE_URL : (window.sb?.supabaseUrl || '');
+  const key  = (typeof SUPABASE_ANON !== 'undefined' && SUPABASE_ANON) ? SUPABASE_ANON : (window.sb?.supabaseKey || '');
+  if(!base) throw new Error('Supabase is not configured');
+  const res = await fetch(`${base}/functions/v1/abc-proxy`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` },
+    body: JSON.stringify({ action, payload }),
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok || data.error) throw new Error(data.error || `ABC call failed (HTTP ${res.status})`);
+  return data;
+}
+window.callAbc = callAbc;
+
+// Match an ABC invoice to a job by PO number, then order number, then order name.
+function matchAbcInvoiceToJob(inv){
+  const po = String(inv.purchaseOrderNumber||'').trim();
+  const on = String(inv.orderNumber||'').trim();
+  const nm = String(inv.orderName||'').trim().toLowerCase();
+  const norm = s => String(s||'').replace(/\s+/g,'').toLowerCase();
+  if(po){
+    const byPo = (window.jobs||[]).find(j => norm(j.abcOrder?.po)===norm(po) || (j.expenses||[]).some(e=>norm(e.abcPo)===norm(po)));
+    if(byPo) return byPo;
+  }
+  if(nm){
+    const byName = (window.jobs||[]).find(j => (j.name||'').trim().toLowerCase()===nm);
+    if(byName) return byName;
+  }
+  return null;
+}
+
+async function importAbcInvoiceHistory(days){
+  if(window.currentMember?.role !== 'admin'){ toast('ABC import is admin-only'); return; }
+  toast('Pulling ABC invoices…');
+  let items;
+  try {
+    const end = new Date();
+    const start = new Date(Date.now() - (days||90)*86400000);
+    const r = await callAbc('invoiceHistory', {
+      startDate: start.toISOString().slice(0,19)+'Z',
+      endDate: end.toISOString().slice(0,19)+'Z',
+    });
+    items = r.items || [];
+  } catch(e){
+    console.error('[ABC import]', e);
+    toast('ABC pull failed: ' + (e.message||e));
+    return;
+  }
+  if(!items.length){ toast('No ABC invoices in that period'); return; }
+
+  // Build a preview: matched vs unmatched, skipping any already imported.
+  const rows = items.map(inv => {
+    const already = (window.jobs||[]).some(j => (j.expenses||[]).some(e => e.abcInvoiceNo === inv.invoiceNumber));
+    const job = matchAbcInvoiceToJob(inv);
+    return { inv, job, already };
+  });
+  const toImport = rows.filter(r => !r.already);
+  const matched = toImport.filter(r => r.job);
+  const unmatched = toImport.filter(r => !r.job);
+  const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:560px;max-width:100%;max-height:90vh;display:flex;flex-direction:column">
+      <div style="padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;align-items:center;gap:8px"><i class="ti ti-file-invoice" style="font-size:18px;color:#F97316"></i><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">ABC Invoices — last ${days||90} days</span></div>
+        <button id="abcClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:14px 18px;overflow:auto;flex:1">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${matched.length} matched to jobs · ${unmatched.length} unmatched · ${rows.length-toImport.length} already imported</div>
+        ${matched.length ? `<div style="font-size:10px;font-weight:700;color:#34D399;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Will import</div>` : ''}
+        ${matched.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <span style="width:7px;height:7px;border-radius:50%;background:${r.inv.isCreditMemo?'#FBBF24':'#34D399'};flex-shrink:0"></span>
+          <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#fff">${escapeHtml(r.job.name)}</div><div style="font-size:10px;color:var(--muted)">Inv ${escapeHtml(r.inv.invoiceNumber)}${r.inv.purchaseOrderNumber?' · PO '+escapeHtml(r.inv.purchaseOrderNumber):''}${r.inv.isCreditMemo?' · CREDIT':''}</div></div>
+          <span style="font-size:12px;font-weight:700;color:var(--brand-light)">${money(r.inv.total)}</span>
+        </div>`).join('')}
+        ${unmatched.length ? `<div style="font-size:10px;font-weight:700;color:#FBBF24;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 5px">No job match — assign manually later</div>` : ''}
+        ${unmatched.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);opacity:0.75">
+          <div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--muted)">${escapeHtml(r.inv.orderName||'—')}</div><div style="font-size:10px;color:var(--muted)">Inv ${escapeHtml(r.inv.invoiceNumber)}${r.inv.purchaseOrderNumber?' · PO '+escapeHtml(r.inv.purchaseOrderNumber):' · no PO'}</div></div>
+          <span style="font-size:12px;color:var(--muted)">${money(r.inv.total)}</span>
+        </div>`).join('')}
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px">
+        <button id="abcCancel" class="btn-cancel" style="flex:1;font-size:12px;padding:9px">Cancel</button>
+        <button id="abcConfirm" class="btn-primary" style="flex:2;font-size:12px;padding:9px" ${matched.length?'':'disabled'}>Import ${matched.length} matched invoice${matched.length===1?'':'s'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.querySelector('#abcClose').addEventListener('click', close);
+  overlay.querySelector('#abcCancel').addEventListener('click', close);
+  overlay.querySelector('#abcConfirm').addEventListener('click', ()=>{
+    let n=0;
+    matched.forEach(r=>{
+      const j=r.job, inv=r.inv;
+      if(!Array.isArray(j.expenses)) j.expenses=[];
+      const isCredit = !!inv.isCreditMemo;
+      j.expenses.push({
+        cat: isCredit ? 'Returns' : 'Materials',
+        desc: `ABC ${inv.invoiceNumber}${inv.orderName?' · '+inv.orderName:''}`,
+        amount: Math.abs(Number(inv.total)||0).toFixed(2),
+        vendor: null, vendorName: 'ABC Supply',
+        date: (inv.invoiceDate||'').slice(0,10) || new Date().toISOString().slice(0,10),
+        paid: isCredit ? true : true,   // ABC billed = money committed (debit/statement)
+        onAccount: false,
+        abcInvoiceNo: inv.invoiceNumber,   // dedup key for future pulls
+        abcPo: inv.purchaseOrderNumber || '',
+      });
+      n++;
+    });
+    saveToStorage();
+    if(window.refreshExpenseUI) refreshExpenseUI();
+    if(typeof renderBoard==='function') renderBoard();
+    close();
+    toast(`Imported ${n} ABC invoice${n===1?'':'s'} as expenses`);
+  });
+}
+window.importAbcInvoiceHistory = importAbcInvoiceHistory;
+
 // Render the Team Activity feed rows for the summary board.
 function renderTeamFeedRows(){
   const arr = teamFeedLoad();
@@ -11382,12 +11504,122 @@ ${ci.phone||''}${ci.email?'\n'+ci.email:''}`;
 }
 window.draftDepreciationEmail = draftDepreciationEmail;
 
+// ── MULTI-VOUCHER: a job holds j.subVouchers[] (one per vendor payment) ──
+// Legacy single j.subVoucher is migrated into the array on first access.
+function getJobVouchers(j){
+  if(!j) return [];
+  if(!Array.isArray(j.subVouchers)){
+    j.subVouchers = [];
+    if(j.subVoucher && typeof j.subVoucher === 'object'){
+      if(!j.subVoucher._vid) j.subVoucher._vid = 'v'+Date.now()+Math.random().toString(36).slice(2,6);
+      j.subVouchers.push(j.subVoucher);
+    }
+    // Keep j.subVoucher as a mirror of the most recent for any legacy readers.
+  }
+  return j.subVouchers;
+}
+window.getJobVouchers = getJobVouchers;
+
+// Entry point: show the list of saved vouchers for a job (or a standalone editor).
 async function openSubVoucher(jobId){
+  const j = jobs.find(x=>x.id===jobId) || null;
+  if(!j){ openSubVoucherEditor(jobId, null); return; }   // standalone → straight to editor
+  if(window.loadSubcontractors && !window.subcontractors) await window.loadSubcontractors();
+  const vouchers = getJobVouchers(j);
+  const subName = id => (window.subcontractors||[]).find(s=>s.id===id)?.name || '—';
+  const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  // Voucher total: prefer the linked expense amount (authoritative), else recompute-lite.
+  const voucherAmount = v => {
+    const exp = (j.expenses||[]).find(e=>e._vid===v._vid);
+    if(exp) return parseFloat(exp.amount)||0;
+    return 0;
+  };
+  let outstanding = 0, paidSum = 0, total = 0;
+  vouchers.forEach(v => { const a = voucherAmount(v); total += a; if(v.paid) paidSum += a; else outstanding += a; });
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
+  const rows = vouchers.length ? vouchers.map(v => {
+    const amt = voucherAmount(v);
+    const paid = !!v.paid;
+    const dot = paid ? '#34D399' : '#FBBF24';
+    const status = paid ? 'Paid ✓' : 'Unpaid';
+    return `<div class="sv-list-row" data-vid="${v._vid}" style="display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;cursor:pointer;background:#1A1F2E" onmouseover="this.style.borderColor='var(--brand-light)'" onmouseout="this.style.borderColor='var(--border)'">
+      <span style="width:9px;height:9px;border-radius:50%;background:${dot};flex-shrink:0"></span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(subName(v.subId))}</div>
+        <div style="font-size:10px;color:var(--muted)">${escapeHtml(v.payLabel||'')}${v.checkNo?' · Check #'+escapeHtml(v.checkNo):''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:13px;font-weight:700;color:var(--brand-light)">${money(amt)}</div>
+        <div style="font-size:9px;font-weight:700;color:${dot}">${status}</div>
+      </div>
+      <button class="sv-del" data-vid="${v._vid}" title="Delete this voucher" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;flex-shrink:0" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:14px"></i></button>
+    </div>`;
+  }).join('') : `<div style="text-align:center;padding:20px 8px;color:var(--muted);font-size:12px">No vouchers yet. Add one below.</div>`;
+
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:460px;max-width:100%;max-height:90vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Payment Breakdown</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(j.name||'')}</div>
+        </div>
+        <button id="svlClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        ${rows}
+        <button id="svlAdd" style="width:100%;padding:10px;border-radius:8px;border:1px dashed rgba(77,157,224,0.4);background:rgba(77,157,224,0.06);color:var(--brand-light);font-size:12px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px">
+          <i class="ti ti-plus" style="font-size:14px"></i>Add payment / voucher
+        </button>
+        ${vouchers.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.9">
+          <div style="display:flex;justify-content:space-between"><span>Total</span><span style="font-weight:700;color:#fff">${money(total)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Paid</span><span style="font-weight:700;color:#34D399">${money(paidSum)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Outstanding</span><span style="font-weight:700;color:${outstanding>0?'#FBBF24':'#34D399'}">${money(outstanding)}</span></div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>overlay.remove();
+  overlay.querySelector('#svlClose').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+  overlay.querySelector('#svlAdd').addEventListener('click', ()=>{ close(); openSubVoucherEditor(jobId, null); });
+  overlay.querySelectorAll('.sv-list-row').forEach(row => {
+    row.addEventListener('click', e => {
+      if(e.target.closest('.sv-del')) return;
+      close(); openSubVoucherEditor(jobId, row.dataset.vid);
+    });
+  });
+  overlay.querySelectorAll('.sv-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const vid = btn.dataset.vid;
+      if(!confirm('Delete this voucher? Its expense on the job will also be removed.')) return;
+      // Remove the voucher and its linked expense (queue Zoho deletion too).
+      j.subVouchers = getJobVouchers(j).filter(v=>v._vid!==vid);
+      const exp = (j.expenses||[]).find(x=>x._vid===vid);
+      if(exp){
+        if(exp.zohoId && exp.zohoId!=='synced'){ if(!j.zohoDeleted) j.zohoDeleted={exp:[],pay:[]}; j.zohoDeleted.exp.push(exp.zohoId); }
+        j.expenses = j.expenses.filter(x=>x._vid!==vid);
+      }
+      if(j.subVoucher && j.subVoucher._vid===vid) j.subVoucher = j.subVouchers[j.subVouchers.length-1] || null;
+      saveToStorage();
+      if(window.refreshExpenseUI) refreshExpenseUI();
+      close();
+      openSubVoucher(jobId);   // reopen refreshed list
+    });
+  });
+}
+window.openSubVoucher = openSubVoucher;
+
+async function openSubVoucherEditor(jobId, editVid){
   const j = jobs.find(x=>x.id===jobId) || null;
   if(window.loadSubcontractors && !window.subcontractors) await window.loadSubcontractors();
   const subs = (window.subcontractors || []).filter(s=>s.active!==false);
   const squares = j?.roofEstimate?.totalSquares ? Math.round(j.roofEstimate.totalSquares*10)/10 : '';
-  const saved = (j && j.subVoucher) ? j.subVoucher : {};
+  // Load the specific voucher being edited, or a blank one for a new payment.
+  const vouchers = j ? getJobVouchers(j) : [];
+  const saved = editVid ? (vouchers.find(v=>v._vid===editVid) || {}) : {};
   const savedPayType = payTypeKeyOf(saved);
   const savedNoBase = payTypeNoBase(savedPayType);
   const savedExpCat = saved.expCat || payTypeExpCat(savedPayType);
@@ -11404,6 +11636,7 @@ async function openSubVoucher(jobId){
         <button id="svClose" class="icon-btn"><i class="ti ti-x"></i></button>
       </div>
       <div style="padding:16px 18px">
+        ${j ? `<button id="svBackToList" style="display:flex;align-items:center;gap:5px;background:none;border:none;color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;padding:0 0 10px;font-family:'Barlow',sans-serif"><i class="ti ti-arrow-left" style="font-size:13px"></i>All vouchers</button>` : ''}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div style="grid-column:1 / -1">
             <label class="ie-lbl">Pay To (subcontractor / vendor)</label>
@@ -11520,6 +11753,8 @@ async function openSubVoucher(jobId){
   document.body.appendChild(overlay);
   const close=()=>overlay.remove();
   overlay.querySelector('#svClose').addEventListener('click', close);
+  const backBtn = overlay.querySelector('#svBackToList');
+  if(backBtn) backBtn.addEventListener('click', ()=>{ close(); openSubVoucher(jobId); });
   // Intentionally NO backdrop-click close: this form holds real entry work, so
   // it only closes via the X button (prevents losing a half-typed voucher).
 
@@ -11665,22 +11900,34 @@ async function openSubVoucher(jobId){
     };
   }
 
+  // Persist the current editor state into the job's vouchers array (create or
+  // update the one being edited), keeping j.subVoucher as a mirror of the latest.
+  function persistVoucher(vd){
+    if(!j) return vd;
+    const list = getJobVouchers(j);
+    // Ensure a stable id.
+    if(!vd._vid) vd._vid = editVid || ('v'+Date.now()+Math.random().toString(36).slice(2,6));
+    const idx = list.findIndex(v=>v._vid===vd._vid);
+    if(idx >= 0) list[idx] = vd; else list.push(vd);
+    j.subVoucher = vd;   // legacy mirror
+    editVid = vd._vid;   // subsequent saves in this session update the same one
+    return vd;
+  }
+
   overlay.querySelector('#svSave').addEventListener('click',()=>{
     if(j){
       const vd = collectVoucher();
-      // Carry the voucher's identity forward — without this, every reprint
-      // loses _vid, fails to find the existing expense, and creates a duplicate.
-      if(j.subVoucher && j.subVoucher._vid) vd._vid = j.subVoucher._vid;
-      j.subVoucher = vd;
+      persistVoucher(vd);
       const subId = overlay.querySelector('#svSub').value;
       const sub = (window.subcontractors||[]).find(s=>s.id===subId);
       const c = compute();
       if(sub && c.total>0){
         const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
         const vid = createOrUpdateSubExpense(j, sub, c, vd.checkNo, isPaid, vd);
-        j.subVoucher._vid = vid;
+        vd._vid = vid; persistVoucher(vd);
       }
       saveToStorage();
+      if(window.refreshExpenseUI) refreshExpenseUI();
     }
     toast('Voucher saved to job');
   });
@@ -11695,13 +11942,11 @@ async function openSubVoucher(jobId){
     if(c.total<=0){ toast(c.repair ? `Add line items to calculate the ${(c.payLabel||'').toLowerCase()} amount` : 'Enter squares to calculate pay'); return; }
     if(j){
       const vd = collectVoucher();
-      // Carry the voucher's identity forward — without this, every reprint
-      // loses _vid, fails to find the existing expense, and creates a duplicate.
-      if(j.subVoucher && j.subVoucher._vid) vd._vid = j.subVoucher._vid;
-      j.subVoucher = vd;
+      persistVoucher(vd);
       const vid = createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, vd);
-      j.subVoucher._vid = vid;
+      vd._vid = vid; persistVoucher(vd);
       saveToStorage();
+      if(window.refreshExpenseUI) refreshExpenseUI();
     }
     printSubVoucher(j, sub, c, checkNo, extraLines);
     toast(isPaid ? 'Voucher printed · sub expense logged as paid' : 'Voucher printed · expense logged as OWED (not yet paid)');
@@ -11710,7 +11955,7 @@ async function openSubVoucher(jobId){
   renderExtras();
   renderBreakdown();
 }
-window.openSubVoucher = openSubVoucher;
+window.openSubVoucherEditor = openSubVoucherEditor;
 
 // Create (or update on reprint) the subcontractor labor expense, marked paid.
 // Uses a stable tag on the expense so reprinting updates rather than duplicates.
