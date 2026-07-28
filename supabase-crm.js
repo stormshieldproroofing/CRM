@@ -319,9 +319,29 @@ window.loadClosedJobs = loadClosedJobs;
 /* Debounced full upsert. Simple and robust for a small team. */
 
 let saveTimer = null;
+let savePending = false;
 function scheduleSave() {
+  savePending = true;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(pushAllToSupabase, 600);
+  saveTimer = setTimeout(() => { savePending = false; pushAllToSupabase(); }, 600);
+}
+
+// Mobile Safari suspends backgrounded tabs, which can kill a debounced save
+// before it fires — leaving a change on the phone that never reaches the cloud.
+// When the app is hidden or navigated away, flush any pending save immediately.
+function flushPendingSave() {
+  if (savePending) {
+    savePending = false;
+    clearTimeout(saveTimer);
+    pushAllToSupabase();
+  }
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingSave();
+  });
+  window.addEventListener('pagehide', flushPendingSave);
+  window.addEventListener('blur', flushPendingSave);
 }
 
 async function pushAllToSupabase() {
