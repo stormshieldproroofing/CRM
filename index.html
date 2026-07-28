@@ -2397,38 +2397,22 @@ function confirmNotifyPayroll(jobId, btn){
   if(!confirm(`Notify #payroll that the final check is collected for ${j.name||'this job'}?\n\nCollected: ${money(collected)}${contract>0?` of ${money(contract)}`:''}\n\nThis posts to Discord so commissions can be broken down.`)) return;
   // Send it.
   notifyFinalCheck(j, true);
-  // Swap the button into a 6-second UNDO state.
-  if(btn){
-    btn.disabled = false;
-    btn.style.borderColor = 'rgba(251,191,36,0.5)';
-    btn.style.background = 'rgba(251,191,36,0.1)';
-    btn.style.color = '#FBBF24';
-    btn.innerHTML = '<i class="ti ti-arrow-back-up" style="font-size:13px"></i>Sent ✓ — tap to undo';
-    let undone = false;
-    const undoHandler = (e)=>{ e.stopPropagation();
-      undone = true;
-      j.finalCheckNotified = false;   // allow re-send later
-      notifyDiscord(`↩️ **Payroll alert retracted** — ${j.name||'job'} · sent by mistake, disregard the previous final-check notice.`, 'payroll');
-      saveToStorage();
-      btn.onclick = ()=>confirmNotifyPayroll(jobId, btn);
-      btn.style.borderColor = 'rgba(52,211,153,0.4)';
-      btn.style.background = 'rgba(52,211,153,0.08)';
-      btn.style.color = '#34D399';
-      btn.innerHTML = '<i class="ti ti-cash-banknote" style="font-size:13px"></i>Final check collected — notify payroll';
-      toast('Payroll alert retracted');
-    };
-    btn.onclick = undoHandler;
-    // After 6s, lock it in (no more undo) unless already undone.
-    setTimeout(()=>{
-      if(undone) return;
-      btn.onclick = null;
-      btn.disabled = true;
-      btn.style.opacity = '0.6';
-      btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>Sent to #payroll';
-    }, 6000);
-  }
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
 }
 window.confirmNotifyPayroll = confirmNotifyPayroll;
+
+// Retract a payroll alert — available any time after sending, not just 6s.
+function retractPayroll(jobId, btn){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  if(!confirm(`Retract the payroll alert for ${j.name||'this job'}?\n\nA correction will post so payroll knows to disregard it.`)) return;
+  j.finalCheckNotified = false;
+  notifyDiscord(`↩️ **Payroll alert retracted** — ${j.name||'job'} · disregard the previous final-check notice.`, 'payroll');
+  saveToStorage();
+  toast('Payroll alert retracted');
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
+}
+window.retractPayroll = retractPayroll;
 
 // ── READY-TO-INVOICE ALERT — gated on supplement status ──
 // A job is invoice-ready only when supplements are settled. If a supplement is
@@ -2486,34 +2470,22 @@ function confirmNotifyInvoiceReady(jobId, btn){
     if(!confirm(`Notify that ${j.name||'this job'} is ready to invoice?\n\nInvoice total: ${money(contract+supp)}${supp>0?` (contract ${money(contract)} + supplement ${money(supp)})`:''}`)) return;
   }
   notifyInvoiceReady(j, true);
-  if(btn){
-    btn.disabled = false;
-    btn.style.borderColor = 'rgba(251,191,36,0.5)';
-    btn.style.background = 'rgba(251,191,36,0.1)';
-    btn.style.color = '#FBBF24';
-    btn.innerHTML = '<i class="ti ti-arrow-back-up" style="font-size:13px"></i>Sent ✓ — tap to undo';
-    let undone = false;
-    const undoHandler = (e)=>{ e.stopPropagation();
-      undone = true;
-      j.invoiceReadyNotified = false;
-      notifyDiscord(`↩️ **Invoice-ready alert retracted** — ${j.name||'job'} · sent by mistake, disregard.`, 'invoicing');
-      saveToStorage();
-      btn.onclick = ()=>confirmNotifyInvoiceReady(jobId, btn);
-      btn.style.borderColor = 'rgba(77,157,224,0.4)';
-      btn.style.background = 'rgba(77,157,224,0.08)';
-      btn.style.color = 'var(--brand-light)';
-      btn.innerHTML = '<i class="ti ti-file-invoice" style="font-size:13px"></i>Ready to invoice — notify';
-      toast('Invoice-ready alert retracted');
-    };
-    btn.onclick = undoHandler;
-    setTimeout(()=>{
-      if(undone) return;
-      btn.onclick = null; btn.disabled = true; btn.style.opacity = '0.6';
-      btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>Sent';
-    }, 6000);
-  }
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
 }
 window.confirmNotifyInvoiceReady = confirmNotifyInvoiceReady;
+
+// Retract an invoice-ready alert — available any time after sending.
+function retractInvoiceReady(jobId, btn){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  if(!confirm(`Retract the invoice-ready alert for ${j.name||'this job'}?\n\nA correction will post so it's disregarded.`)) return;
+  j.invoiceReadyNotified = false;
+  notifyDiscord(`↩️ **Invoice-ready alert retracted** — ${j.name||'job'} · disregard.`, 'invoicing');
+  saveToStorage();
+  toast('Invoice-ready alert retracted');
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
+}
+window.retractInvoiceReady = retractInvoiceReady;
 
 // ── ABC SUPPLY API IMPORT — pull invoice history, match to jobs by PO ──
 async function callAbc(action, payload){
@@ -5299,27 +5271,43 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
               </div>
             </div>
-            <!-- Supplements (approved) — standalone Contract Summary field -->
-            <div style="border-bottom:1px solid var(--border);padding:9px 0">
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
-                <span style="font-size:11px;color:var(--muted)">Supplement status</span>
-                <select id="cpSupplementStatus" onchange="(function(v){const jj=curJob();if(!jj)return;const wasP=(jj.supplementStatus==='Submitted'||jj.supplementStatus==='Partial');jj.supplementStatus=v;saveToStorage();if(wasP&&v==='Approved'&&/complet|invoic/i.test((columnsForPipeline(jj.pipeline).find(c=>c.id===jj.col)?.name)||'')){jj.invoiceReadyNotified=false;notifyInvoiceReady(jj);}if(typeof renderDetailPanel==='function')renderDetailPanel();})(this.value)" style="width:140px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
-                  ${['Not needed','Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}"${(j.supplementStatus||'Not needed')===o?' selected':''}>${o}</option>`).join('')}
-                </select>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                <span style="font-size:11px;color:var(--muted)">Supplements <span style="color:var(--brand-light)">(approved $)</span></span>
-                <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 8px;gap:3px;width:130px">
-                  <span style="font-size:11px;color:var(--muted);flex-shrink:0">$</span>
-                  <input id="cpSupplement" type="number" step="0.01" min="0" placeholder="0.00" value="${j.cpSupplement!=null?j.cpSupplement:''}" onchange="(function(v){const jj=curJob();if(!jj)return;jj.cpSupplement=(parseFloat(v)||0).toFixed(2);saveToStorage();})(this.value)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none;text-align:right">
+            <!-- Supplements — collapsible summary row -->
+            <div style="border-bottom:1px solid var(--border)">
+              <div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');const c=document.getElementById('suppChev');if(b){const open=b.style.display==='block';b.style.display=open?'none':'block';if(c)c.style.transform=open?'':'rotate(180deg)';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
+                <span style="font-size:11px;color:var(--muted)">Supplements</span>
+                <div style="display:flex;align-items:center;gap:7px">
+                  ${(() => {
+                    const st = j.supplementStatus || 'Not needed';
+                    const amt = parseFloat(j.cpSupplement||0)||0;
+                    const badge = { 'Not needed':['—','var(--muted)'], 'Submitted':['Pending','#FBBF24'], 'Approved':['Approved','#34D399'], 'Partial':['Partial','#FBBF24'], 'Denied':['Denied','#F87171'] }[st] || ['—','var(--muted)'];
+                    return `${st!=='Not needed'?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:${badge[1]}22;color:${badge[1]}">${badge[0]}</span>`:''}
+                      <span style="font-size:13px;font-weight:700;color:${amt>0?'#34D399':'var(--muted)'}">$${amt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                      <i class="ti ti-chevron-down" id="suppChev" style="font-size:13px;color:var(--muted);transition:transform 0.15s"></i>`;
+                  })()}
                 </div>
               </div>
-              ${(() => {
-                const st = j.supplementStatus || 'Not needed';
-                if(st==='Submitted') return `<div style="font-size:9px;color:#FBBF24;margin-top:5px"><i class="ti ti-clock" style="font-size:10px"></i> Supplement pending — hold invoice until it's approved or denied.</div>`;
-                if(st==='Partial') return `<div style="font-size:9px;color:#FBBF24;margin-top:5px"><i class="ti ti-clock" style="font-size:10px"></i> Partially approved — confirm nothing else is pending before invoicing.</div>`;
-                return `<div style="font-size:9px;color:var(--muted);margin-top:5px">Approved supplements are added to the insurance invoice amount.</div>`;
-              })()}
+              <div id="suppBody" style="display:none;padding:2px 0 12px">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+                  <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Status</span>
+                  <select id="cpSupplementStatus" onchange="(function(v){const jj=curJob();if(!jj)return;const wasP=(jj.supplementStatus==='Submitted'||jj.supplementStatus==='Partial');jj.supplementStatus=v;saveToStorage();if(wasP&&v==='Approved'&&/complet|invoic/i.test((columnsForPipeline(jj.pipeline).find(c=>c.id===jj.col)?.name)||'')){jj.invoiceReadyNotified=false;notifyInvoiceReady(jj);}if(typeof renderDetailPanel==='function')renderDetailPanel();})(this.value)" style="width:140px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+                    ${['Not needed','Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}"${(j.supplementStatus||'Not needed')===o?' selected':''}>${o}</option>`).join('')}
+                  </select>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                  <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Approved $</span>
+                  <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;gap:3px;width:130px">
+                    <span style="font-size:11px;color:var(--muted);flex-shrink:0">$</span>
+                    <input id="cpSupplement" type="number" step="0.01" min="0" placeholder="0.00" value="${j.cpSupplement!=null?j.cpSupplement:''}" onchange="(function(v){const jj=curJob();if(!jj)return;jj.cpSupplement=(parseFloat(v)||0).toFixed(2);saveToStorage();if(typeof renderDetailPanel==='function')renderDetailPanel();})(this.value)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none;text-align:right">
+                  </div>
+                </div>
+                ${(() => {
+                  const st = j.supplementStatus || 'Not needed';
+                  if(st==='Submitted') return `<div style="font-size:9px;color:#FBBF24;margin-top:7px"><i class="ti ti-clock" style="font-size:10px"></i> Pending — hold invoice until approved or denied.</div>`;
+                  if(st==='Partial') return `<div style="font-size:9px;color:#FBBF24;margin-top:7px"><i class="ti ti-clock" style="font-size:10px"></i> Partial — confirm nothing else is pending before invoicing.</div>`;
+                  if(st==='Approved') return `<div style="font-size:9px;color:var(--muted);margin-top:7px">Added to the insurance invoice amount.</div>`;
+                  return '';
+                })()}
+              </div>
             </div>
             <!-- Deposits Collected (expandable) -->
             <div style="border-bottom:1px solid var(--border)">
@@ -5370,12 +5358,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   </div>
                 </div>
                 <!-- Final check → payroll (inside dropdown, with confirm + undo) -->
-                <button id="payrollNotifyBtn" onclick="confirmNotifyPayroll('${j.id}', this)" title="Notify #payroll that the final check is in and commissions are ready to break down" style="width:100%;margin-top:10px;padding:8px;border-radius:6px;border:1px solid rgba(52,211,153,0.4);background:rgba(52,211,153,0.08);color:#34D399;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
-                  <i class="ti ti-cash-banknote" style="font-size:13px"></i>Final check collected — notify payroll
-                </button>
-                <button id="invoiceReadyBtn" onclick="confirmNotifyInvoiceReady('${j.id}', this)" title="Notify that this job is ready to invoice (held if a supplement is still pending)" style="width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid rgba(77,157,224,0.4);background:rgba(77,157,224,0.08);color:var(--brand-light);font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
-                  <i class="ti ti-file-invoice" style="font-size:13px"></i>Ready to invoice — notify
-                </button>
+                ${(() => {
+                  const sent = !!j.finalCheckNotified;
+                  return `<button id="payrollNotifyBtn" onclick="${sent?`retractPayroll('${j.id}', this)`:`confirmNotifyPayroll('${j.id}', this)`}" title="${sent?'Already sent to payroll — tap to retract':'Notify payroll that the final check is in and commissions are ready to break down'}" style="width:100%;margin-top:10px;padding:8px;border-radius:6px;border:1px solid ${sent?'rgba(251,191,36,0.5)':'rgba(52,211,153,0.4)'};background:${sent?'rgba(251,191,36,0.1)':'rgba(52,211,153,0.08)'};color:${sent?'#FBBF24':'#34D399'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
+                  <i class="ti ${sent?'ti-arrow-back-up':'ti-cash-banknote'}" style="font-size:13px"></i>${sent?'Sent to payroll ✓ — tap to retract':'Final check collected — notify payroll'}
+                </button>`;
+                })()}
+                ${(() => {
+                  const sent = !!j.invoiceReadyNotified;
+                  return `<button id="invoiceReadyBtn" onclick="${sent?`retractInvoiceReady('${j.id}', this)`:`confirmNotifyInvoiceReady('${j.id}', this)`}" title="${sent?'Already sent — tap to retract':'Notify that this job is ready to invoice (held if a supplement is still pending)'}" style="width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid ${sent?'rgba(251,191,36,0.5)':'rgba(77,157,224,0.4)'};background:${sent?'rgba(251,191,36,0.1)':'rgba(77,157,224,0.08)'};color:${sent?'#FBBF24':'var(--brand-light)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
+                  <i class="ti ${sent?'ti-arrow-back-up':'ti-file-invoice'}" style="font-size:13px"></i>${sent?'Invoice alert sent ✓ — tap to retract':'Ready to invoice — notify'}
+                </button>`;
+                })()}
               </div>
             </div>
             <!-- Balance Outstanding -->
