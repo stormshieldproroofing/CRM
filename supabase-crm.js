@@ -202,6 +202,7 @@ async function loadAllFromSupabase() {
         cpDeductible:   (r.contract && r.contract.__cpDeductible   != null) ? r.contract.__cpDeductible   : undefined,
         cpDepreciation: (r.contract && r.contract.__cpDepreciation != null) ? r.contract.__cpDepreciation : undefined,
         cpSupplement:   (r.contract && r.contract.__cpSupplement   != null) ? r.contract.__cpSupplement   : undefined,
+        supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
@@ -400,6 +401,7 @@ async function pushAllToSupabase() {
           base.__cpDeductible  = (j.cpDeductible != null) ? j.cpDeductible : null;
           base.__cpDepreciation= (j.cpDepreciation != null) ? j.cpDepreciation : null;
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
+          base.__supplementStatus = j.supplementStatus || null;
           return base;
         })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],

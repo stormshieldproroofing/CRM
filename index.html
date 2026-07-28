@@ -1801,6 +1801,13 @@ function logActivity(jobOrId, type, label, detail){
     if(type === 'stage' && /stage changed/i.test(label||'')){
       if(/(→|->)\s*contract signed/i.test(detail||'')) onContractSigned(j);
       if(/(→|->)\s*claim filed/i.test(detail||'')) onClaimFiled(j);
+      // Ready-to-invoice: when a job reaches a completion/invoicing stage AND
+      // no supplement is still pending. If a supplement is Submitted/Partial,
+      // this stays silent — the manual button (with warning) handles those.
+      if(/(→|->)\s*(completed|complete|invoic|ready to bill|build complete)/i.test(detail||'')){
+        const st = j.supplementStatus || 'Not needed';
+        if(st !== 'Submitted' && st !== 'Partial') notifyInvoiceReady(j);
+      }
     }
   } catch(e){ /* never let notifications break the app */ }
 }
@@ -1833,6 +1840,16 @@ function lastContact(j, party){
   return f.length ? f[f.length - 1] : null;
 }
 window.lastContact = lastContact;
+
+// Most recent contact with ANYONE on the job (client, insurance, carrier,
+// adjuster — whatever parties are logged). Returns the newest entry or null.
+function lastContactAny(j){
+  const log = Array.isArray(j.contactLog) ? j.contactLog : [];
+  if(!log.length) return null;
+  return log.reduce((newest, e) =>
+    (!newest || (e.at && e.at > newest.at)) ? e : newest, null);
+}
+window.lastContactAny = lastContactAny;
 
 function contactDaysSince(iso){
   if(!iso) return null;
@@ -2051,6 +2068,14 @@ function zohoInvoiceLines(j){
     name: 'Roof replacement per contract',
     description: `${j.address || ''}${j.carrier ? ' · ' + j.carrier : ''}${j.claimNum ? ' · Claim #' + j.claimNum : ''}`,
     rate: amount, quantity: 1,
+  });
+  // Approved supplements bill as their own line so the invoice reflects the
+  // full settled scope (only when there's an approved amount).
+  const supp = moneyNum(j.cpSupplement);
+  if(supp > 0) lines.push({
+    name: 'Approved supplement',
+    description: `Supplemental scope approved by carrier${j.claimNum ? ' · Claim #' + j.claimNum : ''}`,
+    rate: supp, quantity: 1,
   });
   return lines;
 }
@@ -2362,6 +2387,133 @@ function notifyFinalCheck(j, manual){
   saveToStorage();
 }
 window.notifyFinalCheck = notifyFinalCheck;
+
+// Confirm before sending the payroll alert, then offer a brief UNDO window.
+function confirmNotifyPayroll(jobId, btn){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const collected = moneyNum(j.paidVal), contract = moneyNum(j.potVal);
+  if(!confirm(`Notify #payroll that the final check is collected for ${j.name||'this job'}?\n\nCollected: ${money(collected)}${contract>0?` of ${money(contract)}`:''}\n\nThis posts to Discord so commissions can be broken down.`)) return;
+  // Send it.
+  notifyFinalCheck(j, true);
+  // Swap the button into a 6-second UNDO state.
+  if(btn){
+    btn.disabled = false;
+    btn.style.borderColor = 'rgba(251,191,36,0.5)';
+    btn.style.background = 'rgba(251,191,36,0.1)';
+    btn.style.color = '#FBBF24';
+    btn.innerHTML = '<i class="ti ti-arrow-back-up" style="font-size:13px"></i>Sent ✓ — tap to undo';
+    let undone = false;
+    const undoHandler = (e)=>{ e.stopPropagation();
+      undone = true;
+      j.finalCheckNotified = false;   // allow re-send later
+      notifyDiscord(`↩️ **Payroll alert retracted** — ${j.name||'job'} · sent by mistake, disregard the previous final-check notice.`, 'payroll');
+      saveToStorage();
+      btn.onclick = ()=>confirmNotifyPayroll(jobId, btn);
+      btn.style.borderColor = 'rgba(52,211,153,0.4)';
+      btn.style.background = 'rgba(52,211,153,0.08)';
+      btn.style.color = '#34D399';
+      btn.innerHTML = '<i class="ti ti-cash-banknote" style="font-size:13px"></i>Final check collected — notify payroll';
+      toast('Payroll alert retracted');
+    };
+    btn.onclick = undoHandler;
+    // After 6s, lock it in (no more undo) unless already undone.
+    setTimeout(()=>{
+      if(undone) return;
+      btn.onclick = null;
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>Sent to #payroll';
+    }, 6000);
+  }
+}
+window.confirmNotifyPayroll = confirmNotifyPayroll;
+
+// ── READY-TO-INVOICE ALERT — gated on supplement status ──
+// A job is invoice-ready only when supplements are settled. If a supplement is
+// still Submitted (or Partial), invoicing now would bill the wrong amount, so
+// the alert holds and warns instead.
+function invoiceReadyState(j){
+  const st = j.supplementStatus || 'Not needed';
+  const pending = (st === 'Submitted' || st === 'Partial');
+  return { pending, status: st };
+}
+const __invoiceReadyFired = new Set();
+function notifyInvoiceReady(j, manual){
+  if(!j) return;
+  const { pending, status } = invoiceReadyState(j);
+  if(pending && !manual){
+    // Auto path never fires while a supplement is pending.
+    return;
+  }
+  if(!manual){
+    if(j.invoiceReadyNotified) return;
+  }
+  j.invoiceReadyNotified = true;
+  const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const name = j.name || 'Job';
+  const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+  const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';
+  const contract = moneyNum(j.potVal), supp = moneyNum(j.cpSupplement);
+  const invTotal = contract + supp;
+  if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'invoice_ready', icon:'ti-file-invoice', color:'#4D9DE0',
+    title:`Ready to invoice: ${name}`, sub:`${money(invTotal)}${rep?' · '+rep:''}` });
+  const lines = [
+    `🧾 **Ready to Invoice** — ${name}`,
+    addr ? `🏠 ${addr}` : '',
+    rep ? `🧑‍💼 ${rep}` : '',
+    j.carrier ? `🏢 ${j.carrier}` : '',
+    `💵 Contract ${money(contract)}${supp>0?` + supplement ${money(supp)} = ${money(invTotal)}`:''}`,
+    supp>0 ? `✅ Supplement ${status}` : '',
+    `→ Sync/send the invoice in Zoho`,
+  ].filter(Boolean);
+  notifyDiscord(lines.join('\n'), 'invoicing');
+  saveToStorage();
+}
+window.notifyInvoiceReady = notifyInvoiceReady;
+
+function confirmNotifyInvoiceReady(jobId, btn){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  const { pending, status } = invoiceReadyState(j);
+  const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const contract = moneyNum(j.potVal), supp = moneyNum(j.cpSupplement);
+  // Hard warn if a supplement is still pending — this is the whole point.
+  if(pending){
+    if(!confirm(`⚠ Supplement is "${status}" for ${j.name||'this job'}.\n\nInvoicing now may bill the wrong amount — the supplement isn't settled yet.\n\nSend the "ready to invoice" alert anyway?`)) return;
+  } else {
+    if(!confirm(`Notify that ${j.name||'this job'} is ready to invoice?\n\nInvoice total: ${money(contract+supp)}${supp>0?` (contract ${money(contract)} + supplement ${money(supp)})`:''}`)) return;
+  }
+  notifyInvoiceReady(j, true);
+  if(btn){
+    btn.disabled = false;
+    btn.style.borderColor = 'rgba(251,191,36,0.5)';
+    btn.style.background = 'rgba(251,191,36,0.1)';
+    btn.style.color = '#FBBF24';
+    btn.innerHTML = '<i class="ti ti-arrow-back-up" style="font-size:13px"></i>Sent ✓ — tap to undo';
+    let undone = false;
+    const undoHandler = (e)=>{ e.stopPropagation();
+      undone = true;
+      j.invoiceReadyNotified = false;
+      notifyDiscord(`↩️ **Invoice-ready alert retracted** — ${j.name||'job'} · sent by mistake, disregard.`, 'invoicing');
+      saveToStorage();
+      btn.onclick = ()=>confirmNotifyInvoiceReady(jobId, btn);
+      btn.style.borderColor = 'rgba(77,157,224,0.4)';
+      btn.style.background = 'rgba(77,157,224,0.08)';
+      btn.style.color = 'var(--brand-light)';
+      btn.innerHTML = '<i class="ti ti-file-invoice" style="font-size:13px"></i>Ready to invoice — notify';
+      toast('Invoice-ready alert retracted');
+    };
+    btn.onclick = undoHandler;
+    setTimeout(()=>{
+      if(undone) return;
+      btn.onclick = null; btn.disabled = true; btn.style.opacity = '0.6';
+      btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>Sent';
+    }, 6000);
+  }
+}
+window.confirmNotifyInvoiceReady = confirmNotifyInvoiceReady;
 
 // ── ABC SUPPLY API IMPORT — pull invoice history, match to jobs by PO ──
 async function callAbc(action, payload){
@@ -4695,7 +4847,17 @@ function renderCard(j){
     <div class="card-footer">
       <div class="card-meta" title="Days since created"><i class="ti ti-clock" aria-hidden="true"></i>${ageDays}d</div>
       <div class="card-meta${stageDays>=STAGE_STALE_DAYS?' stage-stale':''}" title="Days in current stage${stageDays>=STAGE_STALE_DAYS?' — stalled':''}"><i class="ti ti-hourglass" aria-hidden="true"></i>${stageDays}d</div>
-      ${fuSt?`<div class="card-meta" style="color:${fuSt.worst.overdueBy>=7?'#F87171':'#FBBF24'}" title="${fuSt.worst.party==='date'?'Follow-up date has passed':(fuSt.worst.never?'No '+(fuSt.worst.party==='insurance'?'insurance':'client')+' contact logged yet':fuSt.worst.days+' days since '+(fuSt.worst.party==='insurance'?'insurance':'client')+' contact')} — follow up"><i class="ti ti-phone-x" aria-hidden="true" style="color:inherit"></i>${fuSt.worst.days}d</div>`:''}
+      ${fuSt?(()=>{
+        // Show days since the most recent contact with ANYONE on the job,
+        // while keeping the follow-up urgency color from the worst party.
+        const anyLast = lastContactAny(j);
+        const anyDays = anyLast ? contactDaysSince(anyLast.at) : daysSinceCreated(j);
+        const who = anyLast && anyLast.party ? (anyLast.party==='insurance'?'insurance':anyLast.party==='client'?'client':anyLast.party) : null;
+        const tip = anyLast
+          ? `${anyDays} day${anyDays===1?'':'s'} since last contact${who?' ('+who+')':''} — follow up`
+          : 'No contact logged yet — follow up';
+        return `<div class="card-meta" style="color:${fuSt.worst.overdueBy>=7?'#F87171':'#FBBF24'}" title="${tip}"><i class="ti ti-phone-x" aria-hidden="true" style="color:inherit"></i>${anyDays}d</div>`;
+      })():''}
       ${taskMeta?`<div class="card-meta ${(progress.total&&progress.done<progress.total)||(!progress.total&&j.tasksDone<j.tasks)?'warn':''}"><i class="ti ti-checkbox" aria-hidden="true"></i>${taskMeta}</div>`:''}
       ${buildDateLabel ? `<div class="card-meta${buildIsBad?' warn':''}" title="${buildIsBad?'⚠ High rain risk on this date · ':''}Scheduled build date"><i class="ti ti-calendar-event" aria-hidden="true"></i>${buildDateLabel}${buildIsBad?` <i class="ti ti-alert-triangle" style="font-size:10px;color:#EF4444;margin-left:2px"></i>`:''}</div>` : ''}
       <div style="flex:1"></div>
@@ -5126,14 +5288,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <input id="cpDepreciation" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
-                <!-- Supplements (approved by insurance) -->
-                <div style="margin-bottom:8px">
-                  <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Supplements <span style="text-transform:none;letter-spacing:0;color:var(--brand-light)">(approved)</span></label>
-                  <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
-                    <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpSupplement" type="number" step="0.01" min="0" placeholder="0.00" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
-                  </div>
-                </div>
                 <!-- Live total -->
                 <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(77,157,224,0.08);border:1px solid rgba(77,157,224,0.2);border-radius:7px;padding:8px 11px;margin-bottom:10px">
                   <span style="font-size:11px;font-weight:600;color:var(--muted)">Total Contract Price</span>
@@ -5145,15 +5299,34 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
               </div>
             </div>
+            <!-- Supplements (approved) — standalone Contract Summary field -->
+            <div style="border-bottom:1px solid var(--border);padding:9px 0">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+                <span style="font-size:11px;color:var(--muted)">Supplement status</span>
+                <select id="cpSupplementStatus" onchange="(function(v){const jj=curJob();if(!jj)return;const wasP=(jj.supplementStatus==='Submitted'||jj.supplementStatus==='Partial');jj.supplementStatus=v;saveToStorage();if(wasP&&v==='Approved'&&/complet|invoic/i.test((columnsForPipeline(jj.pipeline).find(c=>c.id===jj.col)?.name)||'')){jj.invoiceReadyNotified=false;notifyInvoiceReady(jj);}if(typeof renderDetailPanel==='function')renderDetailPanel();})(this.value)" style="width:140px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+                  ${['Not needed','Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}"${(j.supplementStatus||'Not needed')===o?' selected':''}>${o}</option>`).join('')}
+                </select>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <span style="font-size:11px;color:var(--muted)">Supplements <span style="color:var(--brand-light)">(approved $)</span></span>
+                <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 8px;gap:3px;width:130px">
+                  <span style="font-size:11px;color:var(--muted);flex-shrink:0">$</span>
+                  <input id="cpSupplement" type="number" step="0.01" min="0" placeholder="0.00" value="${j.cpSupplement!=null?j.cpSupplement:''}" onchange="(function(v){const jj=curJob();if(!jj)return;jj.cpSupplement=(parseFloat(v)||0).toFixed(2);saveToStorage();})(this.value)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none;text-align:right">
+                </div>
+              </div>
+              ${(() => {
+                const st = j.supplementStatus || 'Not needed';
+                if(st==='Submitted') return `<div style="font-size:9px;color:#FBBF24;margin-top:5px"><i class="ti ti-clock" style="font-size:10px"></i> Supplement pending — hold invoice until it's approved or denied.</div>`;
+                if(st==='Partial') return `<div style="font-size:9px;color:#FBBF24;margin-top:5px"><i class="ti ti-clock" style="font-size:10px"></i> Partially approved — confirm nothing else is pending before invoicing.</div>`;
+                return `<div style="font-size:9px;color:var(--muted);margin-top:5px">Approved supplements are added to the insurance invoice amount.</div>`;
+              })()}
+            </div>
             <!-- Deposits Collected (expandable) -->
             <div style="border-bottom:1px solid var(--border)">
               <div id="depAccHeader" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;cursor:pointer;user-select:none">
                 <span style="font-size:11px;color:var(--muted)">Deposits Collected</span>
                 <span style="font-size:13px;font-weight:700;color:var(--success)" id="summaryDeposits">$${(j.deposits||[]).reduce((s,d)=>s+parseFloat(d.amount||0),0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
               </div>
-              <button onclick="notifyFinalCheck(jobs.find(x=>x.id==='${j.id}'), true); this.textContent='✓ Sent to #payroll'; this.disabled=true;" title="Notify #payroll that the final check is in and commissions are ready to break down" style="width:100%;margin:2px 0 8px;padding:7px;border-radius:6px;border:1px solid rgba(52,211,153,0.4);background:rgba(52,211,153,0.08);color:#34D399;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
-                <i class="ti ti-cash-banknote" style="font-size:13px"></i>Final check collected — notify payroll
-              </button>
               <!-- Expandable deposit detail -->
               <div id="depBody" style="display:none;padding:2px 0 10px">
                 <div style="font-size:10px;color:var(--success);margin-bottom:8px" id="depSummaryLine">${(j.deposits&&j.deposits.length)?j.deposits.length+' deposit'+(j.deposits.length>1?'s':'')+' · Total: $'+(j.deposits.reduce((s,d)=>s+parseFloat(d.amount||0),0)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'No deposits yet'}</div>
@@ -5196,6 +5369,13 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     </div>
                   </div>
                 </div>
+                <!-- Final check → payroll (inside dropdown, with confirm + undo) -->
+                <button id="payrollNotifyBtn" onclick="confirmNotifyPayroll('${j.id}', this)" title="Notify #payroll that the final check is in and commissions are ready to break down" style="width:100%;margin-top:10px;padding:8px;border-radius:6px;border:1px solid rgba(52,211,153,0.4);background:rgba(52,211,153,0.08);color:#34D399;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
+                  <i class="ti ti-cash-banknote" style="font-size:13px"></i>Final check collected — notify payroll
+                </button>
+                <button id="invoiceReadyBtn" onclick="confirmNotifyInvoiceReady('${j.id}', this)" title="Notify that this job is ready to invoice (held if a supplement is still pending)" style="width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid rgba(77,157,224,0.4);background:rgba(77,157,224,0.08);color:var(--brand-light);font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px">
+                  <i class="ti ti-file-invoice" style="font-size:13px"></i>Ready to invoice — notify
+                </button>
               </div>
             </div>
             <!-- Balance Outstanding -->
@@ -6255,25 +6435,22 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const n=parseFloat(($('cpNetClaim')||{}).value||0)||0;
       const d=parseFloat(($('cpDeductible')||{}).value||0)||0;
       const p=parseFloat(($('cpDepreciation')||{}).value||0)||0;
-      const sup=parseFloat(($('cpSupplement')||{}).value||0)||0;
-      const t=n+d+p+sup;
+      const t=n+d+p;
       const bt=$('cpBreakdownTotal'); if(bt) bt.textContent='$'+fmtMoney(t);
       return t;
     };
     function cpFillFields(){
       const j2=curJob();
       // Use stored breakdown if present; otherwise seed Net Claim with the full contract price
-      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null || j2.cpSupplement!=null;
+      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null;
       if(hasBreakdown){
         $('cpNetClaim').value     = j2.cpNetClaim!=null?j2.cpNetClaim:'';
         $('cpDeductible').value   = j2.cpDeductible!=null?j2.cpDeductible:'';
         $('cpDepreciation').value = j2.cpDepreciation!=null?j2.cpDepreciation:'';
-        if($('cpSupplement')) $('cpSupplement').value = j2.cpSupplement!=null?j2.cpSupplement:'';
       } else {
         $('cpNetClaim').value     = parseFloat(j2.potVal||0)?parseFloat(j2.potVal).toFixed(2):'';
         $('cpDeductible').value   = '';
         $('cpDepreciation').value = '';
-        if($('cpSupplement')) $('cpSupplement').value = '';
       }
       cpRecalc();
     }
@@ -6282,15 +6459,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const j2=curJob();
       const el=$('cpBreakdownSummary');
       if(!el) return;
-      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null || j2.cpSupplement!=null;
+      const hasBreakdown = j2.cpNetClaim!=null || j2.cpDeductible!=null || j2.cpDepreciation!=null;
       const editorOpen = cpEditRowEl && cpEditRowEl.style.display==='block';
       if(!hasBreakdown || editorOpen){ el.style.display='none'; el.innerHTML=''; return; }
       const n=parseFloat(j2.cpNetClaim||0)||0;
       const d=parseFloat(j2.cpDeductible||0)||0;
       const p=parseFloat(j2.cpDepreciation||0)||0;
-      const sup=parseFloat(j2.cpSupplement||0)||0;
       const line=(label,val,col)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;line-height:1.6"><span style="font-size:10px;color:var(--muted)">${label}</span><span style="font-size:10px;font-weight:600;color:${col||'var(--brand-mid)'}">$${fmtMoney(val)}</span></div>`;
-      el.innerHTML=line('Net Claim',n)+line('Deductible',d)+line('Depreciation',p)+(sup>0?line('Supplements',sup,'#34D399'):'');
+      el.innerHTML=line('Net Claim',n)+line('Deductible',d)+line('Depreciation',p);
       el.style.display='block';
     }
     if(cpHeaderEl && cpEditRowEl){
@@ -6312,12 +6488,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const n=parseFloat($('cpNetClaim').value||0)||0;
       const d=parseFloat($('cpDeductible').value||0)||0;
       const p=parseFloat($('cpDepreciation').value||0)||0;
-      const sup=parseFloat(($('cpSupplement')||{}).value||0)||0;
-      const total=n+d+p+sup;
+      const total=n+d+p;
       j2.cpNetClaim=n.toFixed(2);
       j2.cpDeductible=d.toFixed(2);
       j2.cpDepreciation=p.toFixed(2);
-      j2.cpSupplement=sup.toFixed(2);
       j2.potVal=total.toFixed(2);
       $('cpDisplay').textContent='$'+fmtMoney(total);
       $('cpEditRow').style.display='none';
