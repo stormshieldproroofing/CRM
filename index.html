@@ -2418,6 +2418,78 @@ window.retractPayroll = retractPayroll;
 // A job is invoice-ready only when supplements are settled. If a supplement is
 // still Submitted (or Partial), invoicing now would bill the wrong amount, so
 // the alert holds and warns instead.
+// ── SUPPLEMENTS as a list (multiple releases) ──
+// Migrates the legacy single cpSupplement/supplementStatus into the array.
+function getSupplements(j){
+  if(!j) return [];
+  if(!Array.isArray(j.supplements)){
+    j.supplements = [];
+    if((j.cpSupplement!=null && parseFloat(j.cpSupplement)>0) || (j.supplementStatus && j.supplementStatus!=='Not needed')){
+      j.supplements.push({
+        _sid:'s'+Date.now()+Math.random().toString(36).slice(2,6),
+        amount:(parseFloat(j.cpSupplement||0)||0).toFixed(2),
+        status:j.supplementStatus||'Approved',
+        note:'',
+      });
+    }
+  }
+  return j.supplements;
+}
+// Total dollars from APPROVED (or partial) supplements — what bills.
+function supplementsApprovedTotal(j){
+  return getSupplements(j).filter(s=>s.status==='Approved'||s.status==='Partial')
+    .reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+}
+// Rollup status for gating: pending if ANY supplement is Submitted/Partial.
+function supplementsRollupStatus(j){
+  const list = getSupplements(j);
+  if(!list.length) return 'Not needed';
+  if(list.some(s=>s.status==='Submitted'||s.status==='Partial')) return 'Submitted';
+  if(list.some(s=>s.status==='Approved')) return 'Approved';
+  if(list.every(s=>s.status==='Denied')) return 'Denied';
+  return 'Not needed';
+}
+// Keep legacy mirrors in sync so invoice/alert code and sync persist correctly.
+function syncSupplementMirrors(j){
+  j.cpSupplement = supplementsApprovedTotal(j).toFixed(2);
+  j.supplementStatus = supplementsRollupStatus(j);
+}
+window.getSupplements = getSupplements;
+
+// Add a supplement to the list, keep mirrors + invoice/alert logic in sync.
+function suppAdd(jobId){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  const amt = parseFloat((document.getElementById('suppAddAmt')||{}).value||0)||0;
+  const status = (document.getElementById('suppAddStatus')||{}).value || 'Submitted';
+  const note = ((document.getElementById('suppAddNote')||{}).value||'').trim();
+  if(amt<=0 && status!=='Submitted' && status!=='Denied'){ toast('Enter a supplement amount'); return; }
+  const list = getSupplements(j);
+  const wasPending = supplementsRollupStatus(j)==='Submitted';
+  list.push({ _sid:'s'+Date.now()+Math.random().toString(36).slice(2,6), amount:amt.toFixed(2), status, note });
+  syncSupplementMirrors(j);
+  // If this addition resolves a completed job to fully-approved, fire invoice-ready.
+  const nowApproved = supplementsRollupStatus(j)==='Approved';
+  if(wasPending && nowApproved && /complet|invoic/i.test((columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name)||'')){
+    j.invoiceReadyNotified=false; notifyInvoiceReady(j);
+  }
+  if(typeof logActivity==='function') logActivity(j,'accounting','Supplement added',`$${amt.toLocaleString()} · ${status}${note?' · '+note:''}`);
+  saveToStorage();
+  if(typeof renderDetailPanel==='function') renderDetailPanel();
+}
+window.suppAdd = suppAdd;
+
+function suppDelete(jobId, sid){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  j.supplements = getSupplements(j).filter(s=>s._sid!==sid);
+  syncSupplementMirrors(j);
+  saveToStorage();
+  if(typeof renderDetailPanel==='function') renderDetailPanel();
+}
+window.suppDelete = suppDelete;
+
+// ── READY-TO-INVOICE ALERT — gated on supplement status ──
 function invoiceReadyState(j){
   const st = j.supplementStatus || 'Not needed';
   const pending = (st === 'Submitted' || st === 'Partial');
@@ -5271,43 +5343,48 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
               </div>
             </div>
-            <!-- Supplements — collapsible summary row -->
+            <!-- Supplements — collapsible list (multiple releases) -->
             <div style="border-bottom:1px solid var(--border)">
-              <div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');const c=document.getElementById('suppChev');if(b){const open=b.style.display==='block';b.style.display=open?'none':'block';if(c)c.style.transform=open?'':'rotate(180deg)';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
-                <span style="font-size:11px;color:var(--muted)">Supplements</span>
-                <div style="display:flex;align-items:center;gap:7px">
-                  ${(() => {
-                    const st = j.supplementStatus || 'Not needed';
-                    const amt = parseFloat(j.cpSupplement||0)||0;
-                    const badge = { 'Not needed':['—','var(--muted)'], 'Submitted':['Pending','#FBBF24'], 'Approved':['Approved','#34D399'], 'Partial':['Partial','#FBBF24'], 'Denied':['Denied','#F87171'] }[st] || ['—','var(--muted)'];
-                    return `${st!=='Not needed'?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:${badge[1]}22;color:${badge[1]}">${badge[0]}</span>`:''}
-                      <span style="font-size:13px;font-weight:700;color:${amt>0?'#34D399':'var(--muted)'}">$${amt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-                      <i class="ti ti-chevron-down" id="suppChev" style="font-size:13px;color:var(--muted);transition:transform 0.15s"></i>`;
-                  })()}
-                </div>
-              </div>
-              <div id="suppBody" style="display:none;padding:2px 0 12px">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
-                  <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Status</span>
-                  <select id="cpSupplementStatus" onchange="(function(v){const jj=curJob();if(!jj)return;const wasP=(jj.supplementStatus==='Submitted'||jj.supplementStatus==='Partial');jj.supplementStatus=v;saveToStorage();if(wasP&&v==='Approved'&&/complet|invoic/i.test((columnsForPipeline(jj.pipeline).find(c=>c.id===jj.col)?.name)||'')){jj.invoiceReadyNotified=false;notifyInvoiceReady(jj);}if(typeof renderDetailPanel==='function')renderDetailPanel();})(this.value)" style="width:140px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
-                    ${['Not needed','Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}"${(j.supplementStatus||'Not needed')===o?' selected':''}>${o}</option>`).join('')}
-                  </select>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                  <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Approved $</span>
-                  <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;gap:3px;width:130px">
-                    <span style="font-size:11px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpSupplement" type="number" step="0.01" min="0" placeholder="0.00" value="${j.cpSupplement!=null?j.cpSupplement:''}" onchange="(function(v){const jj=curJob();if(!jj)return;jj.cpSupplement=(parseFloat(v)||0).toFixed(2);saveToStorage();if(typeof renderDetailPanel==='function')renderDetailPanel();})(this.value)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none;text-align:right">
+              ${(() => {
+                const list = getSupplements(j);
+                const approved = supplementsApprovedTotal(j);
+                const pending = list.some(s=>s.status==='Submitted'||s.status==='Partial');
+                const badge = pending ? ['Pending','#FBBF24'] : (approved>0 ? ['Approved','#34D399'] : (list.length?['—','var(--muted)']:['','var(--muted)']));
+                return `<div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');const c=document.getElementById('suppChev');if(b){const open=b.style.display==='block';b.style.display=open?'none':'block';if(c)c.style.transform=open?'':'rotate(180deg)';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
+                  <span style="font-size:11px;color:var(--muted)">Supplements${list.length?` <span style="opacity:0.6">(${list.length})</span>`:''}</span>
+                  <div style="display:flex;align-items:center;gap:7px">
+                    ${badge[0]?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:${badge[1]}22;color:${badge[1]}">${badge[0]}</span>`:''}
+                    <span style="font-size:13px;font-weight:700;color:${approved>0?'#34D399':'var(--muted)'}">$${approved.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                    <i class="ti ti-chevron-down" id="suppChev" style="font-size:13px;color:var(--muted);transition:transform 0.15s"></i>
                   </div>
                 </div>
-                ${(() => {
-                  const st = j.supplementStatus || 'Not needed';
-                  if(st==='Submitted') return `<div style="font-size:9px;color:#FBBF24;margin-top:7px"><i class="ti ti-clock" style="font-size:10px"></i> Pending — hold invoice until approved or denied.</div>`;
-                  if(st==='Partial') return `<div style="font-size:9px;color:#FBBF24;margin-top:7px"><i class="ti ti-clock" style="font-size:10px"></i> Partial — confirm nothing else is pending before invoicing.</div>`;
-                  if(st==='Approved') return `<div style="font-size:9px;color:var(--muted);margin-top:7px">Added to the insurance invoice amount.</div>`;
-                  return '';
-                })()}
-              </div>
+                <div id="suppBody" style="display:none;padding:2px 0 12px">
+                  ${list.length ? list.map(s => {
+                    const stColor = { 'Submitted':'#FBBF24','Approved':'#34D399','Partial':'#FBBF24','Denied':'#F87171' }[s.status] || 'var(--muted)';
+                    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+                      <span style="width:7px;height:7px;border-radius:50%;background:${stColor};flex-shrink:0"></span>
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:12px;font-weight:600;color:#fff">$${(parseFloat(s.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:10px;font-weight:600;color:${stColor}">· ${s.status}</span></div>
+                        ${s.note?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(s.note)}</div>`:''}
+                      </div>
+                      <button onclick="suppDelete('${j.id}','${s._sid}')" title="Remove" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;flex-shrink:0" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:13px"></i></button>
+                    </div>`;
+                  }).join('') : `<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No supplements yet</div>`}
+                  <!-- Add form -->
+                  <div style="display:flex;gap:6px;margin-top:9px;align-items:center">
+                    <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;gap:3px;width:100px">
+                      <span style="font-size:11px;color:var(--muted)">$</span>
+                      <input id="suppAddAmt" type="number" step="0.01" min="0" placeholder="0.00" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none">
+                    </div>
+                    <select id="suppAddStatus" style="flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 6px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+                      ${['Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}">${o}</option>`).join('')}
+                    </select>
+                  </div>
+                  <input id="suppAddNote" type="text" placeholder="Description / note (e.g. gutters, code items)" style="width:100%;margin-top:6px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
+                  <button onclick="suppAdd('${j.id}')" style="width:100%;margin-top:6px;padding:7px;border-radius:6px;border:1px dashed rgba(52,211,153,0.4);background:rgba(52,211,153,0.06);color:#34D399;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px"><i class="ti ti-plus" style="font-size:13px"></i>Add supplement</button>
+                  ${pending?`<div style="font-size:9px;color:#FBBF24;margin-top:8px"><i class="ti ti-clock" style="font-size:10px"></i> A supplement is pending — hold invoice until all are approved or denied.</div>`:(approved>0?`<div style="font-size:9px;color:var(--muted);margin-top:8px">Approved supplements are added to the insurance invoice amount.</div>`:'')}
+                </div>`;
+              })()}
             </div>
             <!-- Deposits Collected (expandable) -->
             <div style="border-bottom:1px solid var(--border)">
