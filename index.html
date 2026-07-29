@@ -5350,12 +5350,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 const approved = supplementsApprovedTotal(j);
                 const pending = list.some(s=>s.status==='Submitted'||s.status==='Partial');
                 const badge = pending ? ['Pending','#FBBF24'] : (approved>0 ? ['Approved','#34D399'] : (list.length?['—','var(--muted)']:['','var(--muted)']));
-                return `<div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');const c=document.getElementById('suppChev');if(b){const open=b.style.display==='block';b.style.display=open?'none':'block';if(c)c.style.transform=open?'':'rotate(180deg)';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
+                return `<div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');if(b){b.style.display=b.style.display==='block'?'none':'block';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
                   <span style="font-size:11px;color:var(--muted)">Supplements${list.length?` <span style="opacity:0.6">(${list.length})</span>`:''}</span>
                   <div style="display:flex;align-items:center;gap:7px">
-                    ${badge[0]?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:${badge[1]}22;color:${badge[1]}">${badge[0]}</span>`:''}
-                    <span style="font-size:13px;font-weight:700;color:${approved>0?'#34D399':'var(--muted)'}">$${approved.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-                    <i class="ti ti-chevron-down" id="suppChev" style="font-size:13px;color:var(--muted);transition:transform 0.15s"></i>
+                    <span style="font-size:13px;font-weight:700;color:#fff">$${approved.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
                   </div>
                 </div>
                 <div id="suppBody" style="display:none;padding:2px 0 12px">
