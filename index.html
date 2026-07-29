@@ -2358,10 +2358,12 @@ window.onClaimFiled = onClaimFiled;
 function notifyFinalCheck(j, manual){
   if(!j) return;
   if(!manual){
-    // Auto path: only when collected >= contract, and only once.
+    // Auto path: only when collected >= contract + approved supplements, once.
     const collected = moneyNum(j.paidVal);
     const contract = moneyNum(j.potVal);
-    if(!(contract > 0 && collected >= contract - 0.01)) return;
+    const supp = (typeof supplementsApprovedTotal==='function') ? supplementsApprovedTotal(j) : moneyNum(j.cpSupplement);
+    const owed = contract + supp;
+    if(!(owed > 0 && collected >= owed - 0.01)) return;
     if(j.finalCheckNotified) return;
   }
   j.finalCheckNotified = true;
@@ -5773,7 +5775,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const deps=j2.deposits||[];
       const total=deps.reduce((s,d)=>s+parseFloat(d.amount||0),0);
       const contractPrice=parseFloat(j2.potVal||0);
-      const balance=contractPrice-total;
+      // Approved supplements add to what's owed, so include them in the balance.
+      const suppApproved = (typeof supplementsApprovedTotal==='function') ? supplementsApprovedTotal(j2) : (parseFloat(j2.cpSupplement||0)||0);
+      const balance=(contractPrice+suppApproved)-total;
 
       // Summary card totals
       const sd=$('summaryDeposits'); if(sd) sd.textContent='$'+fmtMoney(total);
