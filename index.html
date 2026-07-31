@@ -2513,8 +2513,14 @@ function notifyInvoiceReady(j, manual){
   const name = j.name || 'Job';
   const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
   const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';
-  const contract = moneyNum(j.potVal), supp = moneyNum(j.cpSupplement);
-  const invTotal = contract + supp;
+  const rcv = moneyNum(j.rcv);
+  const contract = moneyNum(j.potVal);
+  const supp = (typeof supplementsApprovedTotal==='function') ? supplementsApprovedTotal(j) : moneyNum(j.cpSupplement);
+  // Invoice amount is the RCV from insurance plus any approved supplements.
+  // Fall back to the contract price if no RCV is recorded.
+  const base = rcv > 0 ? rcv : contract;
+  const invTotal = base + supp;
+  const baseLabel = rcv > 0 ? 'RCV' : 'Contract';
   if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'invoice_ready', icon:'ti-file-invoice', color:'#4D9DE0',
     title:`Ready to invoice: ${name}`, sub:`${money(invTotal)}${rep?' · '+rep:''}` });
   const lines = [
@@ -2522,7 +2528,7 @@ function notifyInvoiceReady(j, manual){
     addr ? `🏠 ${addr}` : '',
     rep ? `🧑‍💼 ${rep}` : '',
     j.carrier ? `🏢 ${j.carrier}` : '',
-    `💵 Contract ${money(contract)}${supp>0?` + supplement ${money(supp)} = ${money(invTotal)}`:''}`,
+    `💵 ${baseLabel} ${money(base)}${supp>0?` + supplement ${money(supp)} = ${money(invTotal)}`:''}`,
     supp>0 ? `✅ Supplement ${status}` : '',
     `→ Sync/send the invoice in Zoho`,
   ].filter(Boolean);
@@ -2536,12 +2542,15 @@ function confirmNotifyInvoiceReady(jobId, btn){
   if(!j) return;
   const { pending, status } = invoiceReadyState(j);
   const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-  const contract = moneyNum(j.potVal), supp = moneyNum(j.cpSupplement);
+  const rcv = moneyNum(j.rcv), contract = moneyNum(j.potVal);
+  const supp = (typeof supplementsApprovedTotal==='function') ? supplementsApprovedTotal(j) : moneyNum(j.cpSupplement);
+  const base = rcv > 0 ? rcv : contract;
+  const baseLabel = rcv > 0 ? 'RCV' : 'contract';
   // Hard warn if a supplement is still pending — this is the whole point.
   if(pending){
     if(!confirm(`⚠ Supplement is "${status}" for ${j.name||'this job'}.\n\nInvoicing now may bill the wrong amount — the supplement isn't settled yet.\n\nSend the "ready to invoice" alert anyway?`)) return;
   } else {
-    if(!confirm(`Notify that ${j.name||'this job'} is ready to invoice?\n\nInvoice total: ${money(contract+supp)}${supp>0?` (contract ${money(contract)} + supplement ${money(supp)})`:''}`)) return;
+    if(!confirm(`Notify that ${j.name||'this job'} is ready to invoice?\n\nInvoice total: ${money(base+supp)}${supp>0?` (${baseLabel} ${money(base)} + supplement ${money(supp)})`:''}`)) return;
   }
   notifyInvoiceReady(j, true);
   if(typeof renderDetailPanel === 'function') renderDetailPanel();
@@ -11387,6 +11396,8 @@ function openFinalInvoice(jobId){
         <div style="display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;margin-bottom:4px">
           <label style="font-size:12px;color:var(--brand)">Total RCV (final invoice amount)</label>
           <input id="fiRcv" class="ie-inp" type="text" inputmode="decimal" value="${rcv||''}" style="text-align:right">
+          <label style="font-size:12px;color:#34D399">+ Approved supplement</label>
+          <input id="fiSupp" class="ie-inp" type="text" inputmode="decimal" value="${(typeof supplementsApprovedTotal==='function'?supplementsApprovedTotal(j):moneyNum(j.cpSupplement))||''}" style="text-align:right;color:#34D399">
           <label style="font-size:12px;color:var(--muted)">Net claim / ACV check collected</label>
           <input id="fiNetClaim" class="ie-inp" type="text" inputmode="decimal" value="${netClaim||''}" style="text-align:right">
           <label style="font-size:12px;color:var(--muted)">Deductible collected from insured</label>
@@ -11428,12 +11439,15 @@ function openFinalInvoice(jobId){
   overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
 
   const fival = id => moneyNum(overlay.querySelector('#'+id)?.value);
+  // Effective RCV = entered RCV + approved supplement, shown as ONE combined
+  // line on the printed invoice / email to insurance.
+  const effRcv = () => fival('fiRcv') + fival('fiSupp');
   function recompDep(){
-    const due = Math.max(0, fival('fiRcv') - fival('fiNetClaim') - fival('fiDed'));
+    const due = Math.max(0, effRcv() - fival('fiNetClaim') - fival('fiDed'));
     overlay.querySelector('#fiDepDue').textContent = fmt(due);
     return due;
   }
-  overlay.querySelectorAll('#fiRcv,#fiNetClaim,#fiDed').forEach(el=>el.addEventListener('input',recompDep));
+  overlay.querySelectorAll('#fiRcv,#fiSupp,#fiNetClaim,#fiDed').forEach(el=>el.addEventListener('input',recompDep));
   recompDep();
 
   function updatePhotoCount(){
@@ -11451,13 +11465,15 @@ function openFinalInvoice(jobId){
   }
 
   overlay.querySelector('#fiPrint').addEventListener('click',()=>{
-    const amounts = { rcv:fival('fiRcv'), netClaim:fival('fiNetClaim'), ded:fival('fiDed'), depDue:recompDep() };
+    // rcv passed to the PDF is the COMBINED total (RCV + supplement) so it
+    // prints as a single line to the carrier.
+    const amounts = { rcv:effRcv(), netClaim:fival('fiNetClaim'), ded:fival('fiDed'), depDue:recompDep() };
     printFinalInvoice(j, amounts, selectedPhotos());
   });
 
   overlay.querySelector('#fiEmail').addEventListener('click',()=>{
     const depDue = recompDep();
-    draftDepreciationEmail(j, { rcv:fival('fiRcv'), netClaim:fival('fiNetClaim'), ded:fival('fiDed'), depDue });
+    draftDepreciationEmail(j, { rcv:effRcv(), netClaim:fival('fiNetClaim'), ded:fival('fiDed'), depDue });
   });
 }
 window.openFinalInvoice = openFinalInvoice;
