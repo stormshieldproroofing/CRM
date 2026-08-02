@@ -13849,91 +13849,105 @@ window.CONTRACT_QTY_MAP = {
 };
 
 // Build the filled PDF bytes from a job's contract data. Returns Uint8Array.
+// Maps CRM contract keys -> the REAL fillable-PDF field names (AcroForm).
+// Filling by field name (not coordinate stamping) means checkboxes can never
+// land in the wrong spot -- the field name IS the target.
+window.PDF_CHECKBOX_MAP = {
+ 'shingles_certainteed_1':'CERTAINTEED','shingles_certainteed_2':'Landmark',
+ 'shingles_certainteed_3':'Landmark Pro','shingles_certainteed_4':'Landmark limate Fle',
+ 'shingles_certainteed_5':'Presidential Shake','shingles_certainteed_6':'Presidential Shake TL',
+ 'shingles_certainteed_7':'arriage House','shingles_certainteed_8':'elmont',
+ 'shingles_certainteed_9':'rand anor','shingles_certainteed_10':'Solaris',
+ 'shingles_tamko_1':'T','shingles_tamko_2':'Heritage','shingles_tamko_3':'Titan XT',
+ 'shingles_tamko_4':'StormFighter  FLEX','shingles_tamko_5':'Hailuard','shingles_tamko_6':'Other_2',
+ 'colors_1':'Burnt Sienna y 2usti  Hi kor','colors_2':'Georgetown y   ord Gray',
+ 'colors_3':'Cobblestone Gray  Antique Slate','colors_4':'Thunderstorm ra',
+ 'colors_5':'E presso y la k 7alnut','colors_6':'Heather Blend y atural Tim er',
+ 'colors_7':'oire la k y 2usti  la k','colors_8':'Sil er ir h y ld English Pe ter',
+ 'colors_9':'2ese n Shake  2usti  edar','colors_10':'Weathered Wood','colors_11':'Other_3',
+ 'start_strip_1':'Swift Start','start_strip_2':'Tamko Starter Strip',
+ 'underlayment_1':'Roof Runner','underlayment_2':'Synthetic','underlayment_3':'Radiant Barrier','underlayment_4':'Other',
+ 'ridge_1':'Shadow Ridge','ridge_2':'Cedar Crest','ridge_3':'Tamko Heritage',
+ 'ridge_4':'Tamko Heritage Designer','ridge_5':'Tamko Proline',
+ 'valley_1':'ICE WATERSHIELD','valley_2':'W Metal','valley_3':'Valley Metal','valley_4':'ther_2',
+ 'drip_edge_1':'Use Existing','drip_edge_2':'PreFinished Edge Material Size',
+ 'de_color_black':'Drip Edge Black','de_color_white':'Drip Edge White','de_color_brown':'Drip Edge Brown',
+ 'de_color_almond':'Drip Edge Almond','de_color_bronze':'Drip Edge Bronze','de_color_gray':'Drip Edge Gray','de_color_tan':'Drip Edge Tan',
+ 'vent_left_1':'Ridge Vent','vent_left_2':'Power Vents','vent_left_3':'Solar Vents',
+ 'vent_right_1':'Static','vent_right_2':'Turbine','vent_right_3':'Color',
+ 'plumbing_1':'3in1','plumbing_2':'112 Lead','plumbing_3':'2 Lead','plumbing_4':'3 Lead',
+ 'decking_1':'OSB','decking_2':'PLYWOOD','decking_3':'Radiant Barrier_2','decking_4':'Other_5',
+ 'warranty_standard':'Standard Warranty','warranty_3star':'3 star warranty','warranty_4star':'4 star warranty',
+ 'warranty_5star':'5 star warranty','warranty_lifetime':'Lifetime Workmanship Warranty','warranty_class3':'tamko warranty',
+};
+window.PDF_TEXT_MAP = {
+ 'customer':'Customer','street':'Street Address','citystatezip':'City / State / Zip',
+ 'email':'Email Address','cell':'Cell #','rep':'Representative',
+};
+window.PDF_QTY_MAP = {
+ 'vent_ridge_lf':'LF','vent_power_qty':'QTY','vent_solar_qty':'QTY_2',
+ 'vent_static_qty':'QTY_3','vent_turbine_qty':'QTY_4','vent_color_qty':'undefined_3',
+ 'plumbing_3in1_qty':'PLUMBING STACKS','plumbing_1_5_lead_qty':'1','plumbing_2_lead_qty':'2','plumbing_3_lead_qty':'3',
+ 'shingles_other':'undefined_2','color_other':'undefined_4','start_strip_other':'Other_4',
+ 'underlayment_other':'undefined','ridge_other':'ther','valley_other':'undefined_5',
+ 'drip_edge_size':'Drip Edge Size','decking_other':'undefined_6',
+};
+
 async function fillContractPDF(j){
   if(!window.PDFLib){ alert('PDF library not loaded yet. Please wait a moment and try again.'); return null; }
   const c = j.contract || {};
   const ck = c.checks || {}, qty = c.qty || {}, addl = c.addl || [];
-  // fetch template
   let bytes;
   try {
     const resp = await fetch(CONTRACT_TEMPLATE_URL);
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     bytes = await resp.arrayBuffer();
   } catch(e){
-    alert('Could not load the contract template ('+CONTRACT_TEMPLATE_URL+'). Make sure the fillable PDF is uploaded to the same folder as the CRM on GitHub.\n\n'+e.message);
+    alert('Could not load the contract template ('+CONTRACT_TEMPLATE_URL+'). Make sure the fillable PDF is uploaded to the same folder as the CRM on GitHub.');
     return null;
   }
-  const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+  const { PDFDocument, StandardFonts } = window.PDFLib;
   const pdf = await PDFDocument.load(bytes);
-  const helv = await pdf.embedFont(StandardFonts.Helvetica);
-  const page = pdf.getPages()[0];
-  const CO = window.CONTRACT_FIELD_COORDS || {};
-
-  // Draw text at a field's coordinate (left-aligned, vertically centered)
-  const drawText = (name, val)=>{
-    if(val==null || val==='') return;
-    const r = CO[name]; if(!r) return;
-    const [x,y,w,h] = r;
-    const size = Math.min(9, Math.max(7, h-1));
-    page.drawText(String(val), { x: x+2, y: y+(h-size)/2+1, size, font: helv, color: rgb(0.1,0.1,0.1) });
+  const form = pdf.getForm();
+  const CBMAP = window.PDF_CHECKBOX_MAP, TXMAP = window.PDF_TEXT_MAP, QMAP = window.PDF_QTY_MAP;
+  const setText = (pdfName, val)=>{
+    if(val==null || val==='' || !pdfName) return;
+    try { form.getTextField(pdfName).setText(String(val)); } catch(e){}
   };
-  // Draw an X centered in a checkbox field
-  const drawCheck = (name)=>{
-    const r = CO[name]; if(!r) return;
-    const [x,y,w,h] = r;
-    const size = Math.min(w,h)+1;
-    page.drawText('X', { x: x+w/2-size*0.30, y: y+h/2-size*0.36, size, font: helv, color: rgb(0.1,0.15,0.35) });
+  const setCheck = (pdfName)=>{
+    if(!pdfName) return;
+    try { form.getCheckBox(pdfName).check(); } catch(e){}
   };
-
-  // Text fields (customer + project)
-  drawText('customer', c.customer);
-  drawText('street_address', c.street);
-  drawText('city_state_zip', c.citystatezip);
-  drawText('email_address', c.email);
-  drawText('cell_number', c.cell);
-  drawText('representative', c.rep);
-  drawText('contract_date', formatContractDate(c.contractDate));
-  drawText('build_date', formatContractDate(c.buildDate));
-  // Payment
-  drawText('rcv_total_charge', c.rcv);
-  drawText('net_claim_amount_due', c.netClaim);
-  drawText('deductible_amount_due', c.deductible);
-  drawText('depreciation_amount_due', c.depreciation);
-  // Additional items 1-8
-  (addl||[]).forEach((v,i)=>{ if(v) drawText('additional_item_'+(i+1), v); });
-  // QTY / other text fields
-  for(const qk in window.CONTRACT_QTY_MAP){ if(qty[qk]) drawText(window.CONTRACT_QTY_MAP[qk], qty[qk]); }
-
-  // Checkboxes — CRM keys match field names 1:1
+  for(const k in TXMAP) setText(TXMAP[k], c[k]);
+  setText('Contract Date', formatContractDate(c.contractDate));
+  setText('Build Date', formatContractDate(c.buildDate));
+  setText('Replacement Cost Value', c.rcv);
+  setText('net claim', c.netClaim);
+  setText('deductible', c.deductible);
+  setText('depreciation', c.depreciation);
+  (addl||[]).forEach((v,i)=>{ if(v) setText('Additional Item '+(i+1), v); });
+  for(const qk in QMAP){ if(qty[qk]) setText(QMAP[qk], qty[qk]); }
   let checkedCount = 0;
   for(const key in ck){
-    if(ck[key]===true){ drawCheck(key); checkedCount++; }
+    if(ck[key]===true){ setCheck(CBMAP[key]); checkedCount++; }
   }
-
-  // Signatures — draw captured signature images at the signature field positions
   const sigs = c.signatures || {};
+  const page = pdf.getPages()[0];
   const fmtSigDate = (iso)=>{ try{ const d=new Date(iso); return ('0'+(d.getMonth()+1)).slice(-2)+'/'+('0'+d.getDate()).slice(-2)+'/'+d.getFullYear(); }catch(e){ return ''; } };
-  const drawSig = async (sigKey, fieldName, dateFieldName)=>{
+  const drawSigAt = async (sigKey, x, y, dateField)=>{
     const s = sigs[sigKey];
-    // Only proceed if there is a real signature image for THIS signer.
     if(!s || !s.img || typeof s.img !== 'string' || s.img.length < 200) return;
-    const r = CO[fieldName]; if(!r) return;
-    const [x,y,w,h] = r;
-    let drew = false;
     try {
       const png = await pdf.embedPng(s.img);
-      const maxW = w>10 ? w : 180, maxH = 40;
-      const dims = png.scale(Math.min(maxW/png.width, maxH/png.height));
-      page.drawImage(png, { x: x, y: y, width: dims.width, height: dims.height });
-      drew = true;
-    } catch(e){ drew = false; }
-    // Draw the date ONLY when the signature image actually drew.
-    if(drew && s.signedAt && dateFieldName) drawText(dateFieldName, fmtSigDate(s.signedAt));
+      const dims = png.scale(Math.min(180/png.width, 40/png.height));
+      page.drawImage(png, { x, y, width: dims.width, height: dims.height });
+      if(s.signedAt && dateField) setText(dateField, fmtSigDate(s.signedAt));
+    } catch(e){}
   };
-  await drawSig('homeowner', 'authorized_homeowner_signature', 'homeowner_signature_date');
-  await drawSig('rep', 'representative_signature', 'representative_signature_date');
-
-  console.log('[contract] drew', checkedCount, 'checks; customer=', c.customer||'(empty)');
+  await drawSigAt('homeowner', 30, 84, 'Date10_af_date');
+  await drawSigAt('rep', 30, 25, 'Date11_af_date');
+  try { form.flatten(); } catch(e){ console.warn('[contract] flatten failed', e); }
+  console.log('[contract] filled', checkedCount, 'checks by field name; customer=', c.customer||'(empty)');
   return await pdf.save();
 }
 
