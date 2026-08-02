@@ -468,10 +468,18 @@ async function pushAllToSupabase() {
     // children: simplest reliable strategy — replace per job
     for (const j of (window.jobs || [])) {
       if (!j.id) continue;
-      await sb.from('deposits').delete().eq('job_id', j.id);
-      if (j.deposits?.length) await sb.from('deposits').insert(
-        j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
-          zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null })));
+      // Deposits: only delete-then-insert when there ARE deposits to write,
+      // and surface insert errors so a mid-sync failure doesn't silently wipe
+      // them (same hardening as expenses).
+      if (j.deposits?.length) {
+        await sb.from('deposits').delete().eq('job_id', j.id);
+        const { error: depErr } = await sb.from('deposits').insert(
+          j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
+            zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null })));
+        if(depErr){ console.error('[Supabase] deposit insert failed — may be lost, retry save:', depErr); if(window.toast) window.toast('Deposit save failed — check connection & retry'); }
+      } else {
+        await sb.from('deposits').delete().eq('job_id', j.id);
+      }
 
       // Replace expenses safely: insert first into a temp-free flow by
       // deleting then inserting, but if the insert throws, the delete has
