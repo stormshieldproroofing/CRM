@@ -1992,18 +1992,23 @@ async function teamFeedAdd(evt){
 // Post a message to the team Discord channel via the secure Edge Function.
 // Fails silently (with a console note) so it never blocks CRM work.
 async function notifyDiscord(content, channel){
+  // Notifications now go to Cliq first; Discord stays as a fallback during the
+  // migration. Both take the same {content, channel} shape server-side.
+  const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? SUPABASE_URL : (window.sb?.supabaseUrl || '');
+  const key  = (typeof SUPABASE_ANON !== 'undefined' && SUPABASE_ANON) ? SUPABASE_ANON : (window.sb?.supabaseKey || '');
+  if(!base) return;
+  const body = JSON.stringify({ content, username:'StormShield CRM', ...(channel?{channel}:{}) });
+  const hdrs = { 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` };
+  // Try Cliq.
   try {
-    const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? SUPABASE_URL : (window.sb?.supabaseUrl || '');
-    const key  = (typeof SUPABASE_ANON !== 'undefined' && SUPABASE_ANON) ? SUPABASE_ANON : (window.sb?.supabaseKey || '');
-    if(!base) return;
-    // channel routes to a different webhook server-side (e.g. 'payroll' → #payroll).
-    // Omitted → default channel, unchanged behavior.
-    await fetch(`${base}/functions/v1/discord-notify`, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key}` },
-      body: JSON.stringify({ content, username:'StormShield CRM', ...(channel?{channel}:{}) }),
-    });
-  } catch(e){ console.warn('[discord] notify failed', e); }
+    const r = await fetch(`${base}/functions/v1/cliq-notify`, { method:'POST', headers:hdrs, body });
+    if(r.ok) return;
+    console.warn('[notify] Cliq returned', r.status, '— falling back to Discord');
+  } catch(e){ console.warn('[notify] Cliq failed, falling back to Discord', e); }
+  // Fallback: Discord (phased out once Cliq is confirmed working).
+  try {
+    await fetch(`${base}/functions/v1/discord-notify`, { method:'POST', headers:hdrs, body });
+  } catch(e){ console.warn('[notify] Discord fallback also failed', e); }
 }
 window.notifyDiscord = notifyDiscord;
 
