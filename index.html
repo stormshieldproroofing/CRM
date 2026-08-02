@@ -2322,7 +2322,8 @@ function onContractSigned(j){
     title:`Contract signed: ${name}`, sub:`${addr}${rep?' · '+rep:''}${val}` });
   // Discord push
   const lines = [
-    `📄 **Contract Signed** — ${name}`,
+    `**Contract Signed**`,
+    name,
     addr ? `🏠 ${addr}` : '',
     rep ? `🧑‍💼 ${rep}` : '',
     (typeof moneyValue==='function' && j.potVal) ? `💰 ${moneyText(moneyValue(j.potVal))}` : '',
@@ -2347,7 +2348,8 @@ function onClaimFiled(j){
     title:`Claim filed: ${name}`, sub:`${addr}${rep?' · '+rep:''}${carrier?' · '+carrier:''}` });
   // Discord push
   const lines = [
-    `📋 **Claim Filed** — ${name}`,
+    `**Claim Filed**`,
+    name,
     addr ? `🏠 ${addr}` : '',
     rep ? `🧑‍💼 ${rep}` : '',
     carrier ? `🏢 ${carrier}` : '',
@@ -2382,8 +2384,8 @@ function notifyFinalCheck(j, manual){
   if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'final_check', icon:'ti-cash-banknote', color:'#34D399',
     title:`Final check collected: ${name}`, sub:`${rep?rep+' · ':''}ready for commission breakdown` });
   const lines = [
-    `💵 **Final Check Collected — ready for commission** `,
-    `📋 ${name}`,
+    `**Final Check Collected — ready for commission**`,
+    name,
     addr ? `🏠 ${addr}` : '',
     rep ? `🧑‍💼 ${rep}` : '',
     `💰 Collected ${money(collected)}${contract>0?` of ${money(contract)}`:''}`,
@@ -2467,7 +2469,7 @@ window.getSupplements = getSupplements;
 function suppAdd(jobId){
   const j = jobs.find(x=>x.id===jobId);
   if(!j) return;
-  const amt = parseFloat((document.getElementById('suppAddAmt')||{}).value||0)||0;
+  const amt = moneyNum((document.getElementById('suppAddAmt')||{}).value);
   const status = (document.getElementById('suppAddStatus')||{}).value || 'Submitted';
   const note = ((document.getElementById('suppAddNote')||{}).value||'').trim();
   if(amt<=0 && status!=='Submitted' && status!=='Denied'){ toast('Enter a supplement amount'); return; }
@@ -2529,7 +2531,8 @@ function notifyInvoiceReady(j, manual){
   if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'invoice_ready', icon:'ti-file-invoice', color:'#4D9DE0',
     title:`Ready to invoice: ${name}`, sub:`${money(invTotal)}${rep?' · '+rep:''}` });
   const lines = [
-    `🧾 **Ready to Invoice** — ${name}`,
+    `**Ready to Invoice**`,
+    name,
     addr ? `🏠 ${addr}` : '',
     rep ? `🧑‍💼 ${rep}` : '',
     j.carrier ? `🏢 ${j.carrier}` : '',
@@ -5989,7 +5992,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     $('depSaveNew')&&$('depSaveNew').addEventListener('click',e=>{
       e.stopPropagation();
       const j2=curJob();
-      const amt=parseFloat($('depAmtInput').value||0);
+      const amt=parseFloat(String($('depAmtInput').value||'').replace(/[^0-9.\-]/g,''))||0;
       if(!amt){$('depAmtInput').style.borderColor='var(--danger)';setTimeout(()=>$('depAmtInput').style.borderColor='',800);return;}
       const desc=$('depDescSel').value;
       const now=new Date();
@@ -6328,7 +6331,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     $('expSaveNew')&&$('expSaveNew').addEventListener('click',e=>{
       e.stopPropagation();
       const j2=curJob();
-      const amt=parseFloat($('expAmtInput').value||0);
+      const amt=moneyNum($('expAmtInput').value);
       if(!amt||isNaN(amt)){$('expAmtInput').style.outline='1px solid var(--danger)';setTimeout(()=>$('expAmtInput').style.outline='',800);return;}
       const cat=$('expCatSel').value;
       const desc=$('expDescInput').value.trim()||cat;
