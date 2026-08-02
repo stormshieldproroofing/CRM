@@ -2323,9 +2323,9 @@ function onContractSigned(j){
   // Discord push
   const lines = [
     `**Contract Signed**`,
-    name,
-    addr ? `🏠 ${addr}` : '',
-    rep ? `🧑‍💼 ${rep}` : '',
+    `👤 ${name}`,
+    addr ? `📍 ${addr}` : '',
+    rep ? `👷 ${rep}` : '',
     (typeof moneyValue==='function' && j.potVal) ? `💰 ${moneyText(moneyValue(j.potVal))}` : '',
   ].filter(Boolean);
   notifyDiscord(lines.join('\n'));
@@ -2349,9 +2349,9 @@ function onClaimFiled(j){
   // Discord push
   const lines = [
     `**Claim Filed**`,
-    name,
-    addr ? `🏠 ${addr}` : '',
-    rep ? `🧑‍💼 ${rep}` : '',
+    `👤 ${name}`,
+    addr ? `📍 ${addr}` : '',
+    rep ? `👷 ${rep}` : '',
     carrier ? `🏢 ${carrier}` : '',
     claimNo ? `#️⃣ Claim ${claimNo}` : '',
   ].filter(Boolean);
@@ -2385,9 +2385,9 @@ function notifyFinalCheck(j, manual){
     title:`Final check collected: ${name}`, sub:`${rep?rep+' · ':''}ready for commission breakdown` });
   const lines = [
     `**Final Check Collected — ready for commission**`,
-    name,
-    addr ? `🏠 ${addr}` : '',
-    rep ? `🧑‍💼 ${rep}` : '',
+    `👤 ${name}`,
+    addr ? `📍 ${addr}` : '',
+    rep ? `👷 ${rep}` : '',
     `💰 Collected ${money(collected)}${contract>0?` of ${money(contract)}`:''}`,
     `→ Break down and write commission check`,
   ].filter(Boolean);
@@ -2532,9 +2532,9 @@ function notifyInvoiceReady(j, manual){
     title:`Ready to invoice: ${name}`, sub:`${money(invTotal)}${rep?' · '+rep:''}` });
   const lines = [
     `**Ready to Invoice**`,
-    name,
-    addr ? `🏠 ${addr}` : '',
-    rep ? `🧑‍💼 ${rep}` : '',
+    `👤 ${name}`,
+    addr ? `📍 ${addr}` : '',
+    rep ? `👷 ${rep}` : '',
     j.carrier ? `🏢 ${j.carrier}` : '',
     `💵 ${baseLabel} ${money(base)}${supp>0?` + supplement ${money(supp)} = ${money(invTotal)}`:''}`,
     supp>0 ? `✅ Supplement ${status}` : '',
