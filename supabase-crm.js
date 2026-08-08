@@ -206,6 +206,9 @@ async function loadAllFromSupabase() {
         supplements: (r.contract && Array.isArray(r.contract.__supplements)) ? r.contract.__supplements : undefined,
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
+        quotes: (r.quote && Array.isArray(r.quote.__list)) ? r.quote.__list
+                : (r.quote && typeof r.quote === 'object' ? [r.quote] : undefined),
+        activeQuote: (r.quote && typeof r.quote.__active === 'number') ? r.quote.__active : undefined,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
         subVoucher: (r.sub_voucher && typeof r.sub_voucher === 'object') ? r.sub_voucher : null,
         subVouchers: (r.sub_voucher && Array.isArray(r.sub_voucher.__list)) ? r.sub_voucher.__list
@@ -382,7 +385,15 @@ async function pushAllToSupabase() {
         timeline: Array.isArray(j.timeline) ? j.timeline : [],
         build_date: j.buildDate || null,
         stage_checklist_extra: (j.stageChecklistExtra && typeof j.stageChecklistExtra === 'object') ? j.stageChecklistExtra : {},
-        quote: (j.quote && typeof j.quote === 'object') ? j.quote : null,
+        quote: (() => {
+          // Persist the full quotes array + active index (multi-quote). Wrapped
+          // so a legacy single-quote reader still finds the active quote.
+          const list = Array.isArray(j.quotes) ? j.quotes
+            : (j.quote && typeof j.quote==='object' ? [j.quote] : []);
+          if(!list.length) return null;
+          const active = (typeof j.activeQuote==='number') ? j.activeQuote : 0;
+          return { __list: list, __active: active, ...(list[active] || list[0]) };
+        })(),
         abc_order: (j.abcOrder && typeof j.abcOrder === 'object') ? j.abcOrder : null,
         sub_voucher: (() => {
           // Persist the full vouchers array (multi-vendor). Wrapped so the

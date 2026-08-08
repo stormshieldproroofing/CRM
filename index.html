@@ -11166,19 +11166,20 @@ const EXPENSE_CATEGORY_COLORS = {
 };
 
 const SUB_PAY = {
-  base: 75,        // $/sq
-  storyAdder: 5,   // +$/sq per story above 1 (2-story = +$5, 3-story = +$10)
-  handNailAdder: 5,// +$/sq when the roof is hand nailed
-  doubleFeltAdder: 5, // +$/sq when double felt / double underlayment is installed
+  base: 75,        // fallback $/sq if no pitch tier selected
+  storyAdder: 5,   // +$/sq per story above 1 (still applies on top of pitch rate)
+  handNailAdder: 5,// +$/sq when hand nailed
+  doubleFeltAdder: 5, // +$/sq for double felt
   perSheet: 40,    // $/sheet of decking
-  // Steep pitch charge tiers — cumulative $5 steps. `charge` is $/sq added to base.
-  steepTiers: [
-    { key:'89',   label:'8/12–9/12',   charge:5 },
-    { key:'910',  label:'9/12–10/12',  charge:10 },
-    { key:'1112', label:'11/12–12/12', charge:15 },
+  // FLAT pitch-tier rates — the rate IS the full base $/sq for that pitch range.
+  pitchTiers: [
+    { key:'p56',   label:'5/12–6/12',   rate:75 },
+    { key:'p78',   label:'7/12–8/12',   rate:80 },
+    { key:'p910',  label:'9/12–10/12',  rate:85 },
+    { key:'p1112', label:'11/12–12/12', rate:90 },
   ],
 };
-function steepChargeFor(key){ const t=SUB_PAY.steepTiers.find(t=>t.key===key); return t?t.charge:0; }
+function steepChargeFor(key){ return 0; } // legacy — flat pitch rates now
 
 // Payment types for a sub voucher. Only 'roof' charges a per-square base rate;
 // the others are flat / line-item payments. The label drives what prints on the
@@ -11210,31 +11211,44 @@ function payTypeLabelOf(bd){
 function computeLaborFromBreakdown(bd){
   bd = bd || {};
   const story = parseInt(bd.story)||1;
-  const storyAdd = Math.max(0, story-1) * SUB_PAY.storyAdder;   // 2-story +$5/sq, 3-story +$10/sq
-  const handNailAdd = bd.handNail ? SUB_PAY.handNailAdder : 0;  // +$5/sq when hand nailed
-  const doubleFeltAdd = bd.doubleFelt ? SUB_PAY.doubleFeltAdder : 0; // +$5/sq for double felt
+  const storyAdd = Math.max(0, story-1) * SUB_PAY.storyAdder;
+  const handNailAdd = bd.handNail ? SUB_PAY.handNailAdder : 0;
+  const doubleFeltAdd = bd.doubleFelt ? SUB_PAY.doubleFeltAdder : 0;
+  const addOns = storyAdd + handNailAdd + doubleFeltAdd;   // apply on top of any pitch rate
   const payType = payTypeKeyOf(bd);
   const payLabel = payTypeLabelOf(bd);
-  const repair = payTypeNoBase(payType);   // no base/squares — line items only
+  const repair = payTypeNoBase(payType);
   const sheets = parseFloat(bd.sheets)||0;
-  let sq, laborBase, laborStory, laborSteep, laborHandNail, laborDoubleFelt, labor, tiers, ratePerSq=null;
+  // Resolve the base rate for a given pitch-tier key (or custom).
+  const tierRate = key => (SUB_PAY.pitchTiers.find(t=>t.key===key)||{}).rate || 0;
+  const customRate = parseFloat(bd.customRate)||0;
+
+  let sq, labor, tiers, ratePerSq=null, laborBase=0, laborStory=0, laborSteep=0, laborHandNail=0, laborDoubleFelt=0;
+
   if(repair){
-    sq = 0; laborBase = 0; laborStory = 0; laborSteep = 0; laborHandNail = 0; laborDoubleFelt = 0; labor = 0; tiers = [];
+    sq = 0; labor = 0; tiers = [];
   } else if(bd.mixedPitch){
-    const sqStd = parseFloat(bd.sqStd)||0;
-    const tierSquares = SUB_PAY.steepTiers.map(t=>({ ...t, sq:parseFloat(bd['sq_'+t.key])||0 }));
-    sq = sqStd + tierSquares.reduce((s,t)=>s+t.sq,0);
-    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborHandNail = sq*handNailAdd; laborDoubleFelt = sq*doubleFeltAdd;
-    laborSteep = tierSquares.reduce((s,t)=>s+t.sq*t.charge,0);
-    labor = laborBase+laborStory+laborSteep+laborHandNail+laborDoubleFelt;
-    tiers = [{label:'Standard ≤7/12',sq:sqStd,adder:0},...tierSquares.map(t=>({label:t.label,sq:t.sq,adder:t.charge}))].filter(t=>t.sq>0);
+    // Per-tier squares, each billed at its flat pitch rate + shared add-ons.
+    const rows = SUB_PAY.pitchTiers.map(t=>({ key:t.key, label:t.label, rate:t.rate, sq:parseFloat(bd['psq_'+t.key])||0 }));
+    // Optional custom mixed row.
+    const customSq = parseFloat(bd.customSq)||0;
+    if(customSq>0 && customRate>0) rows.push({ key:'custom', label:'Custom', rate:customRate, sq:customSq });
+    sq = rows.reduce((s,r)=>s+r.sq,0);
+    labor = rows.reduce((s,r)=>s + r.sq*(r.rate+addOns), 0);
+    laborStory = sq*storyAdd; laborHandNail = sq*handNailAdd; laborDoubleFelt = sq*doubleFeltAdd;
+    laborBase = rows.reduce((s,r)=>s+r.sq*r.rate,0);
+    tiers = rows.filter(r=>r.sq>0).map(r=>({ label:r.label+' @ $'+r.rate, sq:r.sq, rate:r.rate+addOns }));
   } else {
+    // Single pitch: pick a tier (or custom rate) for all squares.
     sq = parseFloat(bd.squares)||0;
-    const steepAdd = steepChargeFor(bd.pitch);
-    ratePerSq = SUB_PAY.base+storyAdd+steepAdd+handNailAdd+doubleFeltAdd;
-    laborBase = sq*SUB_PAY.base; laborStory = sq*storyAdd; laborSteep = sq*steepAdd; laborHandNail = sq*handNailAdd; laborDoubleFelt = sq*doubleFeltAdd;
+    const baseRate = (bd.pitchTier==='custom' && customRate>0) ? customRate
+                   : (bd.pitchTier ? tierRate(bd.pitchTier) : SUB_PAY.base);
+    ratePerSq = baseRate + addOns;
+    laborBase = sq*baseRate; laborStory = sq*storyAdd; laborHandNail = sq*handNailAdd; laborDoubleFelt = sq*doubleFeltAdd;
     labor = sq*ratePerSq;
-    tiers = [{label:'',sq,adder:steepAdd}];
+    const tLabel = (bd.pitchTier==='custom') ? 'Custom $'+customRate
+                 : (SUB_PAY.pitchTiers.find(t=>t.key===bd.pitchTier)||{}).label || '';
+    tiers = [{label:tLabel, sq, rate:ratePerSq}];
   }
   const decking = sheets*SUB_PAY.perSheet;
   const extras = (bd.extraLines||[]).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
@@ -11251,7 +11265,7 @@ function laborBreakdownSummary(bd){
   if(!c.repair && c.handNail) parts.push('hand nail');
   if(!c.repair && c.doubleFelt) parts.push('double felt');
   if(!c.repair && bd.mixedPitch) parts.push('mixed pitch');
-  else if(!c.repair && bd.pitch && bd.pitch!=='0'){ const t=SUB_PAY.steepTiers.find(t=>t.key===bd.pitch); if(t) parts.push(t.label); }
+  else if(!c.repair && bd.pitchTier && bd.pitchTier!=='custom'){ const t=SUB_PAY.pitchTiers.find(t=>t.key===bd.pitchTier); if(t) parts.push(t.label); } else if(!c.repair && bd.pitchTier==='custom'){ parts.push('custom rate'); }
   if(c.sheets) parts.push(`${c.sheets} decking`);
   if(c.extras) parts.push('+ extras');
   return parts.join(' · ') + ` = $${Math.round(c.total).toLocaleString()}`;
@@ -11282,13 +11296,16 @@ function openLaborBreakdownCalc(initial, onDone){
             <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--brand);cursor:pointer;margin-bottom:6px"><input id="lbMixed" type="checkbox" ${mixedPitch?'checked':''} style="cursor:pointer;accent-color:var(--brand-light)">Mixed pitch (squares per tier)</label>
             <div id="lbSingleWrap" style="${mixedPitch?'display:none':''}">
               <label class="ie-lbl">Pitch (whole roof)</label>
-              <select id="lbPitch" class="ie-inp" style="cursor:pointer"><option value="0" ${(!saved.pitch||saved.pitch==='0')?'selected':''}>Standard ≤7/12 (no charge)</option>${SUB_PAY.steepTiers.map(t=>`<option value="${t.key}" ${saved.pitch===t.key?'selected':''}>Steep ${t.label} (+$${t.charge}/sq)</option>`).join('')}</select>
+              <select id="lbPitch" class="ie-inp" style="cursor:pointer"><option value="" ${!saved.pitchTier?'selected':''}>Select pitch…</option>${SUB_PAY.pitchTiers.map(t=>`<option value="${t.key}" ${saved.pitchTier===t.key?'selected':''}>${t.label} — $${t.rate}/sq</option>`).join('')}<option value="custom" ${saved.pitchTier==='custom'?'selected':''}>Custom rate…</option></select>
+              <div id="lbCustomWrap" style="${saved.pitchTier==='custom'?'':'display:none'};margin-top:6px">
+                <label class="ie-lbl">Custom rate ($/sq)</label>
+                <input id="lbCustomRate" class="ie-inp" type="text" inputmode="decimal" value="${saved.customRate??''}" placeholder="e.g. 95">
+              </div>
             </div>
             <div id="lbMixedWrap" style="${mixedPitch?'':'display:none'};background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:9px 11px">
               <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center;font-size:11px">
-                <span style="color:var(--muted)">Standard ≤7/12 ($${SUB_PAY.base}/sq)</span>
-                <input id="lbSqStd" class="ie-inp" type="text" inputmode="decimal" value="${saved.sqStd??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
-                ${SUB_PAY.steepTiers.map(t=>`<span style="color:var(--muted)">Steep ${t.label} (+$${t.charge}/sq)</span><input id="lbSq_${t.key}" class="ie-inp" type="text" inputmode="decimal" value="${saved['sq_'+t.key]??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">`).join('')}
+                ${SUB_PAY.pitchTiers.map(t=>`<span style="color:var(--muted)">${t.label} ($${t.rate}/sq)</span><input id="lbPsq_${t.key}" class="ie-inp" type="text" inputmode="decimal" value="${saved['psq_'+t.key]??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">`).join('')}
+                <span style="color:var(--muted)">Custom @ <input id="lbMixCustomRate" type="text" inputmode="decimal" value="${saved.customRate??''}" placeholder="$/sq" style="width:52px;background:#141927;border:1px solid var(--border);border-radius:4px;color:var(--brand);padding:2px 5px;font-size:11px;text-align:right">/sq</span><input id="lbCustomSq" class="ie-inp" type="text" inputmode="decimal" value="${saved.customSq??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
               </div>
             </div>
           </div>
@@ -11316,12 +11333,13 @@ function openLaborBreakdownCalc(initial, onDone){
     return {
       mixedPitch,
       squares:num('lbSquares'),
-      sqStd:num('lbSqStd'),
-      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key,num('lbSq_'+t.key)])),
+      ...Object.fromEntries(SUB_PAY.pitchTiers.map(t=>['psq_'+t.key,num('lbPsq_'+t.key)])),
+      customSq:num('lbCustomSq'),
+      customRate:num('lbCustomRate')||num('lbMixCustomRate'),
       story:parseInt(overlay.querySelector('#lbStory').value)||1,
       handNail:!!overlay.querySelector('#lbHandNail')?.checked,
       doubleFelt:!!overlay.querySelector('#lbDoubleFelt')?.checked,
-      pitch:overlay.querySelector('#lbPitch')?.value||'0',
+      pitchTier:overlay.querySelector('#lbPitch')?.value||'',
       sheets:num('lbSheets'),
       extraLines,
     };
@@ -11336,12 +11354,14 @@ function openLaborBreakdownCalc(initial, onDone){
   function render(){
     const c=computeLaborFromBreakdown(collect());
     const row=(l,v,sub)=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+l+'</span>':'<span>'+l+'</span>'}<span>${v}</span></div>`;
-    let html=row(`Base — ${c.sq} sq × $${SUB_PAY.base}`,fmt(c.laborBase));
+    let html='';
+    // Pitch-based labor lines (flat rate per tier).
+    if(!c.repair){
+      c.tiers.forEach(t=>{ if(t.sq>0) html+=row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate)); });
+    }
     if(c.storyAdd) html+=row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`,fmt(c.laborStory),true);
-    if(c.laborHandNail) html+=row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`,fmt(c.laborHandNail),true);
-    if(c.laborDoubleFelt) html+=row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`,fmt(c.laborDoubleFelt),true);
-    c.tiers.filter(t=>t.adder>0).forEach(t=>{ if(c.mixedPitch) html+=row(`${t.label} charge — ${t.sq} sq × $${t.adder}`,fmt(t.sq*t.adder),true); });
-    if(!c.mixedPitch && c.laborSteep) html+=row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`,fmt(c.laborSteep),true);
+    if(c.laborHandNail) html+=row(`Hand nail — ${c.sq} sq × $${c.handNailAdd}`,fmt(c.laborHandNail),true);
+    if(c.laborDoubleFelt) html+=row(`Double felt — ${c.sq} sq × $${c.doubleFeltAdd}`,fmt(c.laborDoubleFelt),true);
     if(c.decking) html+=row(`Decking — ${c.sheets} × $${SUB_PAY.perSheet}`,fmt(c.decking));
     if(c.extras) html+=row('Additional work',fmt(c.extras));
     html+=`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#34D399;border-top:2px solid var(--border);padding-top:8px;margin-top:6px"><span>TOTAL</span><span>${fmt(c.total)}</span></div>`;
@@ -11354,7 +11374,11 @@ function openLaborBreakdownCalc(initial, onDone){
     const sqEl=overlay.querySelector('#lbSquares'); sqEl.disabled=mixedPitch; sqEl.style.opacity=mixedPitch?'0.5':'';
     render();
   });
-  overlay.querySelectorAll('#lbSquares,#lbStory,#lbHandNail,#lbDoubleFelt,#lbPitch,#lbSheets,#lbSqStd,'+SUB_PAY.steepTiers.map(t=>'#lbSq_'+t.key).join(',')).forEach(el=>{el.addEventListener('input',render);el.addEventListener('change',render);});
+  overlay.querySelectorAll('#lbSquares,#lbStory,#lbHandNail,#lbDoubleFelt,#lbPitch,#lbSheets,#lbCustomRate,#lbCustomSq,#lbMixCustomRate,'+SUB_PAY.pitchTiers.map(t=>'#lbPsq_'+t.key).join(',')).forEach(el=>{if(el){el.addEventListener('input',render);el.addEventListener('change',render);}});
+  // Show/hide the custom rate box when "Custom rate…" is picked.
+  overlay.querySelector('#lbPitch')?.addEventListener('change',e=>{
+    const cw=overlay.querySelector('#lbCustomWrap'); if(cw) cw.style.display = e.target.value==='custom' ? '' : 'none';
+  });
   overlay.querySelector('#lbAddLine').addEventListener('click',()=>{extraLines.push({desc:'',amount:''});renderExtras();});
   overlay.querySelector('#lbApply').addEventListener('click',()=>{
     const bd=collect(); const c=computeLaborFromBreakdown(bd);
@@ -11967,18 +11991,23 @@ async function openSubVoucherEditor(jobId, editVid){
             <div id="svSinglePitchWrap" style="${saved.mixedPitch?'display:none':''}">
               <label class="ie-lbl">Pitch (whole roof)</label>
               <select id="svPitch" class="ie-inp" style="cursor:pointer">
-                <option value="0" ${(!saved.pitch||saved.pitch==='0')?'selected':''}>Standard ≤7/12 (no charge)</option>
-                ${SUB_PAY.steepTiers.map(t=>`<option value="${t.key}" ${saved.pitch===t.key?'selected':''}>Steep ${t.label} (+$${t.charge}/sq)</option>`).join('')}
+                <option value="" ${!saved.pitchTier?'selected':''}>Select pitch…</option>
+                ${SUB_PAY.pitchTiers.map(t=>`<option value="${t.key}" ${saved.pitchTier===t.key?'selected':''}>${t.label} — $${t.rate}/sq</option>`).join('')}
+                <option value="custom" ${saved.pitchTier==='custom'?'selected':''}>Custom rate…</option>
               </select>
+              <div id="svCustomWrap" style="${saved.pitchTier==='custom'?'':'display:none'};margin-top:6px">
+                <label class="ie-lbl">Custom rate ($/sq)</label>
+                <input id="svCustomRate" class="ie-inp" type="text" inputmode="decimal" value="${saved.customRate??''}" placeholder="e.g. 95">
+              </div>
             </div>
             <!-- Mixed-pitch mode -->
             <div id="svMixedPitchWrap" style="${saved.mixedPitch?'':'display:none'};background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:9px 11px">
               <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center;font-size:11px">
-                <span style="color:var(--muted)">Standard ≤7/12 ($${SUB_PAY.base}/sq)</span>
-                <input id="svSqStd" class="ie-inp" type="text" inputmode="decimal" value="${saved.sqStd??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
-                ${SUB_PAY.steepTiers.map(t=>`
-                <span style="color:var(--muted)">Steep ${t.label} (+$${t.charge}/sq)</span>
-                <input id="svSq_${t.key}" class="ie-inp" type="text" inputmode="decimal" value="${saved['sq_'+t.key]??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">`).join('')}
+                ${SUB_PAY.pitchTiers.map(t=>`
+                <span style="color:var(--muted)">${t.label} ($${t.rate}/sq)</span>
+                <input id="svPsq_${t.key}" class="ie-inp" type="text" inputmode="decimal" value="${saved['psq_'+t.key]??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">`).join('')}
+                <span style="color:var(--muted)">Custom @ <input id="svMixCustomRate" type="text" inputmode="decimal" value="${saved.customRate??''}" placeholder="$/sq" style="width:52px;background:#141927;border:1px solid var(--border);border-radius:4px;color:var(--brand);padding:2px 5px;font-size:11px;text-align:right">/sq</span>
+                <input id="svCustomSq" class="ie-inp" type="text" inputmode="decimal" value="${saved.customSq??''}" placeholder="sq" style="padding:6px 8px;font-size:12px;text-align:right">
               </div>
               <div id="svMixedSum" style="font-size:9px;color:var(--muted);margin-top:6px;text-align:right"></div>
             </div>
@@ -12018,7 +12047,7 @@ async function openSubVoucherEditor(jobId, editVid){
           <div style="flex:1"></div>
           <button id="svPrint" class="btn-primary" style="font-size:12px;padding:9px 16px;display:flex;align-items:center;gap:6px"><i class="ti ti-printer"></i>Print Voucher</button>
         </div>
-        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Rates: $${SUB_PAY.base}/sq base · +$${SUB_PAY.storyAdder}/sq 2-story · +$${SUB_PAY.storyAdder*2}/sq 3-story · +$${SUB_PAY.handNailAdder}/sq hand nail · +$${SUB_PAY.doubleFeltAdder}/sq double felt · ${SUB_PAY.steepTiers.map(t=>`+$${t.charge} (${t.label})`).join(' · ')} · $${SUB_PAY.perSheet}/decking sheet.</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:10px;line-height:1.5">Pitch rates: ${SUB_PAY.pitchTiers.map(t=>`$${t.rate} (${t.label})`).join(' · ')} · custom available. Add-ons: +$${SUB_PAY.storyAdder}/sq per story · +$${SUB_PAY.handNailAdder}/sq hand nail · +$${SUB_PAY.doubleFeltAdder}/sq double felt · $${SUB_PAY.perSheet}/decking sheet.</div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -12056,7 +12085,8 @@ async function openSubVoucherEditor(jobId, editVid){
       mixedPitch,
       squares: num('svSquares'),
       sqStd: num('svSqStd'),
-      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, num('svSq_'+t.key)])),
+      ...Object.fromEntries(SUB_PAY.pitchTiers.map(t=>['psq_'+t.key, num('svPsq_'+t.key)])),
+      customSq:num('svCustomSq'), customRate:num('svCustomRate')||num('svMixCustomRate'),
       story: parseInt(overlay.querySelector('#svStory').value)||1,
       handNail: !!overlay.querySelector('#svHandNail')?.checked,
       doubleFelt: !!overlay.querySelector('#svDoubleFelt')?.checked,
@@ -12074,20 +12104,13 @@ async function openSubVoucherEditor(jobId, editVid){
     let laborRows = '';
     if(c.repair){
       laborRows = row(`${c.payLabel} — no base charge`, fmt(0));
-    } else if(c.mixedPitch){
-      laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
-      if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
-      if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
-      if(c.laborDoubleFelt) laborRows += row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
-      c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} charge — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
-      laborRows += row(`Labor subtotal`, fmt(c.labor));
     } else {
-      laborRows = `${row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase))}`;
+      // Flat pitch-rate lines (one per tier for mixed, one for single).
+      c.tiers.forEach(t=>{ if(t.sq>0) laborRows += row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate)); });
       if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
-      if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
-      if(c.laborDoubleFelt) laborRows += row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
-      if(c.laborSteep) laborRows += row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
-      laborRows += row(`Labor subtotal — ${c.sq} sq × $${c.ratePerSq}/sq`, fmt(c.labor));
+      if(c.laborHandNail) laborRows += row(`Hand nail — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
+      if(c.laborDoubleFelt) laborRows += row(`Double felt — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
+      laborRows += row(`Labor subtotal`, fmt(c.labor));
     }
     overlay.querySelector('#svBreakdown').innerHTML = `
       ${laborRows}
@@ -12133,7 +12156,8 @@ async function openSubVoucherEditor(jobId, editVid){
     renderBreakdown();
   });
 
-  overlay.querySelectorAll('#svSquares,#svStory,#svPitch,#svSheets,#svSqStd,'+SUB_PAY.steepTiers.map(t=>'#svSq_'+t.key).join(',')).forEach(el=>el.addEventListener('input',renderBreakdown));
+  overlay.querySelectorAll('#svSquares,#svStory,#svPitch,#svSheets,#svCustomRate,#svCustomSq,#svMixCustomRate,'+SUB_PAY.pitchTiers.map(t=>'#svPsq_'+t.key).join(',')).forEach(el=>{if(el)el.addEventListener('input',renderBreakdown);});
+  overlay.querySelector('#svPitch')?.addEventListener('change',e=>{const cw=overlay.querySelector('#svCustomWrap');if(cw)cw.style.display=e.target.value==='custom'?'':'none';});
   overlay.querySelectorAll('#svStory,#svPitch,#svHandNail,#svDoubleFelt').forEach(el=>el.addEventListener('change',renderBreakdown));
   overlay.querySelector('#svAddLine').addEventListener('click',()=>{ extraLines.push({desc:'',amount:''}); renderExtras(); });
 
@@ -12154,7 +12178,8 @@ async function openSubVoucherEditor(jobId, editVid){
       mixedPitch,
       squares: num('svSquares'),
       sqStd: num('svSqStd'),
-      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, num('svSq_'+t.key)])),
+      ...Object.fromEntries(SUB_PAY.pitchTiers.map(t=>['psq_'+t.key, num('svPsq_'+t.key)])),
+      customSq:num('svCustomSq'), customRate:num('svCustomRate')||num('svMixCustomRate'),
       story: parseInt(overlay.querySelector('#svStory').value)||1,
       handNail: !!overlay.querySelector('#svHandNail')?.checked,
       doubleFelt: !!overlay.querySelector('#svDoubleFelt')?.checked,
@@ -12265,7 +12290,8 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
       mixedPitch: voucherData.mixedPitch,
       squares: voucherData.squares,
       sqStd: voucherData.sqStd,
-      ...Object.fromEntries(SUB_PAY.steepTiers.map(t=>['sq_'+t.key, voucherData['sq_'+t.key]])),
+      ...Object.fromEntries(SUB_PAY.pitchTiers.map(t=>['psq_'+t.key, voucherData['psq_'+t.key]])),
+      customSq:voucherData.customSq, customRate:voucherData.customRate,
       story: voucherData.story,
       handNail: !!voucherData.handNail,
       doubleFelt: !!voucherData.doubleFelt,
@@ -12336,13 +12362,10 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
         <div class="v-label">${c.repair?`${escapeHtml(c.payLabel)} Breakdown`:'Labor Breakdown'}</div>
         <table>
           ${c.repair ? '' : `
-          ${line(`Base labor — ${c.sq} sq × $${SUB_PAY.base}/sq`, fmt(c.laborBase))}
+          ${!c.repair ? c.tiers.filter(t=>t.sq>0).map(t=>line(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate))).join('') : ''}
           ${c.storyAdd?line(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
           ${c.laborHandNail?line(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}/sq`, fmt(c.laborHandNail)):''}
-          ${c.laborDoubleFelt?line(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}/sq`, fmt(c.laborDoubleFelt)):''}
-          ${c.mixedPitch
-            ? c.tiers.filter(t=>t.adder>0).map(t=>line(`${t.label} charge — ${t.sq} sq × $${t.adder}/sq`, fmt(t.sq*t.adder))).join('')
-            : (c.laborSteep?line(`Steep pitch charge — ${c.sq} sq × $${c.tiers[0].adder}/sq`, fmt(c.laborSteep)):'')}`}
+          ${c.laborDoubleFelt?line(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}/sq`, fmt(c.laborDoubleFelt)):''}`}
           ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
           ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
           ${(c.repair && !extraLines.some(l=>(parseFloat(l.amount)||0)>0) && !c.decking)?line(`${escapeHtml(c.payLabel)} — see additional work`,'—'):''}
@@ -12946,30 +12969,109 @@ function defaultTermsText(mode){
   return mode === 'cash' ? defaultTermsCash() : defaultTermsInsurance();
 }
 
+// ── MULTI-QUOTE: a job holds j.quotes[] (labeled options). Shared fields
+// (scope, terms, mode, measurements) live on the active quote but are copied
+// across; per-quote fields are label, shingle, and all amounts. ──
+function quoteDefaults(j){
+  return {
+    _qid: 'q'+Date.now()+Math.random().toString(36).slice(2,6),
+    label: '',          // e.g. "Option A — Landmark"
+    mode: (j && j.pipeline === 'insurance') ? 'insurance' : 'cash',
+    scope: '',
+    scopeExclude: [],
+    shingleBrand: '', shingleModel: '', shingleColor: '',
+    contractAmount: '', depositAmount: '', deductible: '',
+    terms: '', repName: '', quoteDate: '',
+    sectionPrices: {}, lumpSumOnly: false,
+  };
+}
+function getJobQuotes(j){
+  if(!Array.isArray(j.quotes)){
+    j.quotes = [];
+    // Migrate a legacy single j.quote into the array as the first option.
+    if(j.quote && typeof j.quote === 'object'){
+      const q = j.quote;
+      if(!q._qid) q._qid = 'q'+Date.now()+Math.random().toString(36).slice(2,6);
+      if(!q.label) q.label = 'Option A';
+      j.quotes.push(q);
+    }
+  }
+  if(!j.quotes.length) j.quotes.push(Object.assign(quoteDefaults(j), {label:'Option A'}));
+  if(typeof j.activeQuote !== 'number' || j.activeQuote < 0 || j.activeQuote >= j.quotes.length){
+    j.activeQuote = 0;
+  }
+  return j.quotes;
+}
 function getJobQuote(j){
-  if(!j.quote || typeof j.quote !== 'object'){
-    j.quote = {
-      mode: '',           // 'insurance' or 'cash' — set on first render
-      scope: '',
-      scopeExclude: [],   // array of item text strings excluded from PDF (default: all included)
-      shingleBrand: '',
-      shingleModel: '',
-      shingleColor: '',
-      contractAmount: '',
-      depositAmount: '',
-      deductible: '',
-      terms: '',
-      repName: '',
-      quoteDate: '',
-    };
+  const list = getJobQuotes(j);
+  const q = list[j.activeQuote] || list[0];
+  // Normalize the active quote's expected shapes.
+  if(!q.mode) q.mode = (j.pipeline === 'insurance') ? 'insurance' : 'cash';
+  if(!Array.isArray(q.scopeExclude)) q.scopeExclude = [];
+  if(!q.sectionPrices || typeof q.sectionPrices !== 'object') q.sectionPrices = {};
+  if(typeof q.lumpSumOnly !== 'boolean') q.lumpSumOnly = false;
+  // Keep legacy j.quote mirror pointing at the active one.
+  j.quote = q;
+  return q;
+}
+window.getJobQuotes = getJobQuotes;
+
+// Add a new quote (optionally duplicating the active one), make it active.
+function quoteAdd(jobId, duplicate){
+  const j = jobs.find(x=>x.id===jobId); if(!j) return;
+  const list = getJobQuotes(j);
+  let nq;
+  if(duplicate){
+    const src = list[j.activeQuote] || list[0];
+    nq = JSON.parse(JSON.stringify(src));
+    nq._qid = 'q'+Date.now()+Math.random().toString(36).slice(2,6);
+    nq.label = (src.label||'Option') + ' (copy)';
+  } else {
+    // New blank quote inherits shared fields (scope, terms, mode) from active.
+    const src = list[j.activeQuote] || {};
+    nq = quoteDefaults(j);
+    nq.scope = src.scope || ''; nq.terms = src.terms || ''; nq.mode = src.mode || nq.mode;
+    nq.repName = src.repName || '';
   }
-  if(!j.quote.mode){
-    j.quote.mode = (j.pipeline === 'insurance') ? 'insurance' : 'cash';
-  }
-  if(!Array.isArray(j.quote.scopeExclude)) j.quote.scopeExclude = [];
-  if(!j.quote.sectionPrices || typeof j.quote.sectionPrices !== 'object') j.quote.sectionPrices = {};
-  if(typeof j.quote.lumpSumOnly !== 'boolean') j.quote.lumpSumOnly = false;
-  return j.quote;
+  const letter = String.fromCharCode(65 + list.length); // A, B, C...
+  if(!duplicate) nq.label = 'Option ' + letter;
+  list.push(nq);
+  j.activeQuote = list.length - 1;
+  saveToStorage();
+  if(typeof renderDetailPanel==='function') renderDetailPanel();
+}
+window.quoteAdd = quoteAdd;
+
+function quoteSelect(jobId, idx){
+  const j = jobs.find(x=>x.id===jobId); if(!j) return;
+  const list = getJobQuotes(j);
+  if(idx>=0 && idx<list.length){ j.activeQuote = idx; saveToStorage(); if(typeof renderDetailPanel==='function') renderDetailPanel(); }
+}
+window.quoteSelect = quoteSelect;
+
+function quoteDelete(jobId, qid){
+  const j = jobs.find(x=>x.id===jobId); if(!j) return;
+  const list = getJobQuotes(j);
+  if(list.length<=1){ toast('A job needs at least one quote'); return; }
+  if(!confirm('Delete this quote option?')) return;
+  const idx = list.findIndex(q=>q._qid===qid);
+  if(idx<0) return;
+  list.splice(idx,1);
+  if(j.activeQuote>=list.length) j.activeQuote = list.length-1;
+  saveToStorage();
+  if(typeof renderDetailPanel==='function') renderDetailPanel();
+}
+window.quoteDelete = quoteDelete;
+
+function quoteRelabel(jobId, qid, label){
+  const j = jobs.find(x=>x.id===jobId); if(!j) return;
+  const q = getJobQuotes(j).find(x=>x._qid===qid);
+  if(q){ q.label = label; saveToStorage(); }
+}
+window.quoteRelabel = quoteRelabel;
+
+function _legacyGetJobQuote(j){
+  return getJobQuote(j);
 }
 
 // Sum of all section prices that belong to sections currently in the scope (cash quotes).
@@ -13030,6 +13132,29 @@ function defaultTermsCash(){
   ].join('\n\n');
 }
 
+function buildQuoteSelector(j, q){
+  const list = getJobQuotes(j);
+  const money = n => { const v=moneyNum(n); return v>0 ? '$'+v.toLocaleString(undefined,{maximumFractionDigits:0}) : ''; };
+  let tabs = '';
+  list.forEach((qq,i)=>{
+    const active = i===j.activeQuote;
+    const lbl = qq.label || ('Option '+String.fromCharCode(65+i));
+    const amt = money(qq.contractAmount);
+    const amtSpan = amt ? '<span style="opacity:0.7;font-weight:600">'+amt+'</span>' : '';
+    tabs += '<button onclick="quoteSelect(\''+j.id+'\','+i+')" style="flex-shrink:0;background:'+(active?'rgba(77,157,224,0.18)':'#1E253A')+';border:1px solid '+(active?'var(--brand-light)':'var(--border)')+';color:'+(active?'var(--brand-light)':'var(--muted)')+';font-size:11px;font-weight:700;padding:6px 11px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:6px;white-space:nowrap">'+escapeHtml(lbl)+amtSpan+'</button>';
+  });
+  const delBtn = list.length>1 ? '<button onclick="quoteDelete(\''+j.id+'\',\''+q._qid+'\')" title="Delete this quote" style="background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;padding:7px 9px;border-radius:6px" onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--muted)\'"><i class="ti ti-trash" style="font-size:14px"></i></button>' : '';
+  return '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;align-items:center">'
+    + tabs
+    + '<button onclick="quoteAdd(\''+j.id+'\',false)" title="New blank quote" style="flex-shrink:0;background:rgba(52,211,153,0.1);border:1px dashed rgba(52,211,153,0.4);color:#34D399;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-plus" style="font-size:12px"></i>New</button>'
+    + '<button onclick="quoteAdd(\''+j.id+'\',true)" title="Duplicate this quote" style="flex-shrink:0;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-copy" style="font-size:12px"></i>Duplicate</button>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + '<input value="'+escapeHtml(q.label||'')+'" onchange="quoteRelabel(\''+j.id+'\',\''+q._qid+'\',this.value)" placeholder="Quote label (e.g. Option A — Landmark)" style="flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:\'Barlow\',sans-serif;outline:none">'
+    + delBtn
+    + '</div>';
+}
+
 function renderQuoteTab(j){
   const q = getJobQuote(j);
   const ci = getCompanyInfo();
@@ -13059,6 +13184,7 @@ function renderQuoteTab(j){
   body.innerHTML = `
     <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
       <button onclick="activeTab='overview';renderDetailPanel()" style="align-self:flex-start;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--brand);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-arrow-left" style="font-size:13px"></i>Back to Overview</button>
+      ${buildQuoteSelector(j, q)}
       <!-- Mode toggle -->
       <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:10px">
         <i class="ti ti-${isInsurance?'shield':'cash'}" style="color:${isInsurance?'#4D9DE0':'#34D399'};font-size:16px"></i>
@@ -15604,15 +15730,10 @@ function openSubExpenseSummary(jobId, expenseIdx){
     if(c.repair){
       laborRows = row(`${c.payLabel} — no base charge`, fmt(0));
     } else {
-      laborRows = row(`Base labor — ${c.sq} sq × $${SUB_PAY.base}`, fmt(c.laborBase));
+      c.tiers.forEach(t=>{ if(t.sq>0) laborRows += row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate)); });
       if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
-      if(c.laborHandNail) laborRows += row(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
-      if(c.laborDoubleFelt) laborRows += row(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
-      if(c.mixedPitch){
-        c.tiers.filter(t=>t.adder>0).forEach(t=>{ laborRows += row(`${t.label} charge — ${t.sq} sq × $${t.adder}`, fmt(t.sq*t.adder), true); });
-      } else if(c.laborSteep){
-        laborRows += row(`Steep charge — ${c.sq} sq × $${c.tiers[0].adder}`, fmt(c.laborSteep), true);
-      }
+      if(c.laborHandNail) laborRows += row(`Hand nail — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
+      if(c.laborDoubleFelt) laborRows += row(`Double felt — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
       laborRows += row('Labor subtotal', fmt(c.labor));
     }
     if(c.decking) laborRows += row(`Decking — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking));
