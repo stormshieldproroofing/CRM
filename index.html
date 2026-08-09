@@ -5386,7 +5386,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <button onclick="activeTab='contract';renderDetailPanel()" style="width:100%;margin-top:6px;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.35);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-certificate" style="font-size:13px"></i>Contract</button>
                 <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>
                 <button onclick="openSubVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt" style="font-size:13px"></i>Payment Breakdown / Receipt</button>
-                <button onclick="openFinalInvoice(openJobId)" style="width:100%;margin-top:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>Final Invoice / Depreciation Request</button>`
+                <button onclick="openFinalInvoice(openJobId)" style="width:100%;margin-top:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>${(()=>{const q=(typeof getJobQuote==='function')?getJobQuote(j):(j.quote||{});return (q.mode==='cash'||j.pipeline==='retail'||j.col==='retail')?'Homeowner Invoice':'Final Invoice / Depreciation Request';})()}</button>`
             }
           </div>
         </div>
@@ -11594,9 +11594,102 @@ window.laborBreakdownSummary = laborBreakdownSummary;
 // PDF (invoice + photos), and drafts a mailto email to the insurance carrier.
 function moneyNum(v){ const n = parseFloat(String(v??'').replace(/[^0-9.\-]/g,'')); return isFinite(n)?n:0; }
 
+// ── RETAIL / CASH INVOICE — simple homeowner bill ──
+// Work performed, total, deposit(s) paid, balance due. No insurance/RCV/
+// depreciation language. Triggered automatically for cash-mode quotes.
+function openRetailInvoice(j){
+  if(!j){ toast('Open a job first'); return; }
+  const ci = (typeof getCompanyInfo==='function') ? getCompanyInfo() : {};
+  const q = (typeof getJobQuote==='function') ? getJobQuote(j) : (j.quote||{});
+  const money = n => '$'+(Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const accent = '#0B4F6C';
+  const addr = (j.address && j.address!=='—') ? j.address : '';
+  const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const invNo = 'INV-'+(j.id||'').replace(/[^0-9]/g,'').slice(-6);
+
+  // Amounts
+  const total = moneyNum(j.potVal) || moneyNum(q.contractAmount);
+  const paid = moneyNum(j.paidVal);
+  const balance = Math.max(0, total - paid);
+
+  // Line items: use priced quote sections if they sum to the total, else one line.
+  let lineRows = '';
+  const secs = (typeof parseScopeSections==='function') ? parseScopeSections(q.scope||'') : [];
+  const priced = [];
+  secs.forEach(s => { const p = parseFloat((q.sectionPrices||{})[s.title||'']||''); if(p>0) priced.push({title:s.title||'Roofing work', amt:p}); });
+  const pricedSum = priced.reduce((t,l)=>t+l.amt,0);
+  if(priced.length && total>0 && Math.abs(pricedSum-total)<0.5){
+    priced.forEach(l => { lineRows += '<tr><td>'+escapeHtml(l.title)+'</td><td class="num">'+money(l.amt)+'</td></tr>'; });
+  } else {
+    const scopeDesc = (q.scope||'').trim();
+    lineRows = '<tr><td>Roofing work per contract'+(addr?'<br><span style="font-size:9pt;color:#666">'+escapeHtml(addr)+'</span>':'')+'</td><td class="num">'+money(total)+'</td></tr>';
+  }
+
+  const win = window.open('','_blank');
+  if(!win){ toast('Allow pop-ups to print'); return; }
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice'+(j.name?' - '+escapeHtml(j.name):'')+'</title>'
+  +'<style>'
+  +'@page{size:letter;margin:0}*{box-sizing:border-box}'
+  +'body{font-family:\'Helvetica Neue\',Arial,sans-serif;color:#000;margin:0;font-size:11pt}'
+  +'.iv{padding:0.6in;min-height:11in}'
+  +'.iv-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid '+accent+';padding-bottom:14px;margin-bottom:8px}'
+  +'.iv-co{font-size:15pt;font-weight:800;color:'+accent+'}'
+  +'.iv-cod{font-size:8.5pt;line-height:1.5;color:#444}'
+  +'.iv-title{font-size:26pt;font-weight:900;color:'+accent+';letter-spacing:.04em;text-align:right}'
+  +'.iv-meta{font-size:9.5pt;text-align:right;line-height:1.7;margin-top:6px;color:#444}'
+  +'.iv-billto{margin:22px 0 18px;font-size:10.5pt;line-height:1.6}'
+  +'.iv-billto .lbl{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:'+accent+';display:block;margin-bottom:3px}'
+  +'table{width:100%;border-collapse:collapse;margin-top:6px}'
+  +'th{text-align:left;font-size:8.5pt;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:'+accent+';padding:8px}'
+  +'th.num,td.num{text-align:right}'
+  +'td{padding:9px 8px;font-size:10.5pt;border-bottom:1px solid #eee;font-variant-numeric:tabular-nums}'
+  +'.iv-tot{margin-top:14px;margin-left:auto;width:52%}'
+  +'.iv-tot tr td{border:none;padding:5px 8px;font-size:10.5pt}'
+  +'.iv-tot .g td{font-weight:700;font-size:13pt;color:'+accent+';border-top:2px solid '+accent+';padding-top:9px}'
+  +'.iv-tot .bal td{font-weight:900;font-size:15pt;color:#c0392b}'
+  +'.iv-pay{margin-top:30px;font-size:9.5pt;line-height:1.6;color:#333;background:#f7f9fa;border-left:4px solid '+accent+';padding:12px 16px}'
+  +'.iv-pay b{color:'+accent+'}'
+  +'.iv-foot{margin-top:26px;font-size:8pt;color:#999;text-align:center;border-top:1px solid #eee;padding-top:10px}'
+  +'.iv-btn{position:fixed;top:12px;right:12px;background:'+accent+';color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}'
+  +'@media print{.iv-btn{display:none}}'
+  +'</style></head><body>'
+  +'<button class="iv-btn" onclick="window.print()">Print</button>'
+  +'<div class="iv">'
+  +'<div class="iv-head"><div>'
+  +'<div class="iv-co">'+escapeHtml(ci.name||'StormShield Pro Roofing')+'</div>'
+  +'<div class="iv-cod">'+escapeHtml(ci.address||'')+'<br>'+escapeHtml(ci.phone||'')+(ci.email?' \u00b7 '+escapeHtml(ci.email):'')+'</div>'
+  +'</div><div>'
+  +'<div class="iv-title">INVOICE</div>'
+  +'<div class="iv-meta"><b>Invoice #:</b> '+invNo+'<br><b>Date:</b> '+today+'</div>'
+  +'</div></div>'
+  +'<div class="iv-billto"><span class="lbl">Bill To</span>'
+  +escapeHtml(j.name||'Homeowner')+(addr?'<br>'+escapeHtml(addr):'')
+  +(j.phone?'<br>'+escapeHtml(j.phone):'')+'</div>'
+  +'<table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>'
+  +lineRows
+  +'</tbody></table>'
+  +'<table class="iv-tot">'
+  +'<tr class="g"><td>Total</td><td class="num">'+money(total)+'</td></tr>'
+  +(paid>0?'<tr><td>Deposit / Payments received</td><td class="num">\u2212'+money(paid)+'</td></tr>':'')
+  +'<tr class="bal"><td>Balance Due</td><td class="num">'+money(balance)+'</td></tr>'
+  +'</table>'
+  +'<div class="iv-pay"><b>Payment:</b> Please make checks payable to <b>'+escapeHtml(ci.name||'StormShield Pro Roofing')+'</b>.'
+  +(ci.phone?' Questions about this invoice? Call '+escapeHtml(ci.phone)+'.':'')
+  +' Thank you for your business.</div>'
+  +'<div class="iv-foot">'+escapeHtml(ci.name||'StormShield Pro Roofing')+' \u00b7 Invoice generated '+today+'</div>'
+  +'</div></body></html>');
+  win.document.close();
+}
+window.openRetailInvoice = openRetailInvoice;
+
 function openFinalInvoice(jobId){
   const j = jobs.find(x=>x.id===jobId);
   if(!j){ toast('Open a job first'); return; }
+  // Cash / retail jobs get a simple homeowner invoice instead of the
+  // insurance depreciation-request format.
+  const q = (typeof getJobQuote==='function') ? getJobQuote(j) : (j.quote||{});
+  const isCash = (q.mode === 'cash') || (j.pipeline === 'retail') || (j.col === 'retail');
+  if(isCash && typeof openRetailInvoice==='function'){ return openRetailInvoice(j); }
   const afterPhotos = (j.photos?.after || []).filter(p=>p && p.url);
   const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 
