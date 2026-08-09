@@ -3680,6 +3680,7 @@ function downsizeImageFile(file, maxDim=1400, quality=0.70){
 // Every step is isolated so one failure can't break the whole upload.
 async function intakeJobFile(file, kind, section){
   console.log('[intake] start', { name:file?.name, kind, section, type:file?.type });
+  const _fileId = 'f'+Date.now()+Math.random().toString(36).slice(2,7);
 
   // Step 1: rename (never fatal)
   let working = file;
@@ -3704,7 +3705,7 @@ async function intakeJobFile(file, kind, section){
         console.log('[intake] upload result', rec);
         if(rec && rec.url){
           return {
-            name: rec.name, path: rec.path, url: rec.url, _id: rec._id,
+            id: _fileId, name: rec.name, path: rec.path, url: rec.url, _id: rec._id,
             date: fileDateText(), size: sized.size,
             type: sized.type, isPdf: sized.type==='application/pdf'||/\.pdf$/i.test(sized.name||''),
           };
@@ -3718,7 +3719,9 @@ async function intakeJobFile(file, kind, section){
     console.warn('[intake] uploadJobFile or openJobId missing — using local storage');
   }
   // Fallback: base64 local record
-  return storedFileFromUpload(sized);
+  const rec = await storedFileFromUpload(sized);
+  rec.id = _fileId;
+  return rec;
 }
 window.intakeJobFile = intakeJobFile;
 
@@ -3744,6 +3747,9 @@ function renameJobFile(file, kind, section){
   };
   let typeLabel = 'Document';
   if(kind==='photo') typeLabel = (typeMap.photo[section] || 'Photo');
+  // For 'other' uploads, a caller can pass a descriptive label via `section`
+  // (e.g. "Home Depot Invoice") so the file name is meaningful.
+  else if(kind==='other' && section) typeLabel = clean(section) || 'Document';
   else typeLabel = typeMap[kind] || 'Document';
 
   // Date (today)
@@ -4001,7 +4007,9 @@ async function importAbcInvoice(file){
     let invoiceRec = null;
     try {
       if(window.intakeJobFile){
-        invoiceRec = await intakeJobFile(file, 'other', null);
+        // Descriptive label → clean file name like "Job - Addr - Home Depot Invoice - date".
+        const docLabel = vName + (isReturn ? ' Return' : ' Invoice');
+        invoiceRec = await intakeJobFile(file, 'other', docLabel);
         if(!Array.isArray(j.otherFiles)) j.otherFiles=[];
         j.otherFiles.push(invoiceRec);
       }
@@ -6294,7 +6302,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const j=curJob(); if(!j) return;
       const e=(j.expenses||[])[i]; if(!e || !e.invoiceFile) return;
       // Find the attached file record by id (stored in otherFiles).
-      const rec=(j.otherFiles||[]).find(f=>f && f.id===e.invoiceFile.id);
+      const want=e.invoiceFile.id;
+      const rec=(j.otherFiles||[]).find(f=>f && f.id && f.id===want)
+             || (j.otherFiles||[]).find(f=>f && (f.name===e.invoiceFile.name));
       const url=rec ? (rec.url||rec.dataUrl) : null;
       if(!url){ toast('Invoice file not found — it may not have synced yet'); return; }
       // Open in a lightbox overlay (PDF or image).
@@ -7660,7 +7670,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.roofAddFiles=async function(files){
       const pending=Array.from(files);
       if(!pending.length) return;
-      const records=await Promise.all(pending.map(storedFileFromUpload));
+      const records=await Promise.all(pending.map(f=>intakeJobFile(f,'roof',null)));
       j.roofFiles.push(...records);
       saveToStorage();
       body.innerHTML=roofHTML();
@@ -7733,7 +7743,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.otherAddFiles=async function(files){
       const pending=Array.from(files);
       if(!pending.length) return;
-      const records=await Promise.all(pending.map(storedFileFromUpload));
+      const records=await Promise.all(pending.map(f=>intakeJobFile(f,'other',null)));
       j.otherFiles.push(...records);
       saveToStorage();
       body.innerHTML=otherHTML();
@@ -11310,6 +11320,13 @@ function computeLaborFromBreakdown(bd){
   const tierRate = key => (SUB_PAY.pitchTiers.find(t=>t.key===key)||{}).rate || 0;
   const customRate = parseFloat(bd.customRate)||0;
 
+  // Build a human description of how the per-square rate is composed, e.g.
+  // "$75 base + $5 2-story + $5 hand nail". Add-ons are shared across tiers.
+  const addOnParts = [];
+  if(storyAdd) addOnParts.push('$'+storyAdd+' '+story+'-story');
+  if(handNailAdd) addOnParts.push('$'+handNailAdd+' hand nail');
+  if(doubleFeltAdd) addOnParts.push('$'+doubleFeltAdd+' double felt');
+
   let sq, labor, tiers, ratePerSq=null, laborBase=0, laborStory=0, laborSteep=0, laborHandNail=0, laborDoubleFelt=0;
 
   if(repair){
@@ -11324,7 +11341,7 @@ function computeLaborFromBreakdown(bd){
     labor = rows.reduce((s,r)=>s + r.sq*(r.rate+addOns), 0);
     laborStory = sq*storyAdd; laborHandNail = sq*handNailAdd; laborDoubleFelt = sq*doubleFeltAdd;
     laborBase = rows.reduce((s,r)=>s+r.sq*r.rate,0);
-    tiers = rows.filter(r=>r.sq>0).map(r=>({ label:r.label+' @ $'+r.rate, sq:r.sq, rate:r.rate+addOns }));
+    tiers = rows.filter(r=>r.sq>0).map(r=>({ label:r.label+' @ $'+r.rate, sq:r.sq, rate:r.rate, rateAll:r.rate+addOns, rateParts:['$'+r.rate+' ('+r.label+')', ...addOnParts] }));
   } else {
     // Single pitch: pick a tier (or custom rate) for all squares.
     sq = parseFloat(bd.squares)||0;
@@ -11335,7 +11352,10 @@ function computeLaborFromBreakdown(bd){
     labor = sq*ratePerSq;
     const tLabel = (bd.pitchTier==='custom') ? 'Custom $'+customRate
                  : (SUB_PAY.pitchTiers.find(t=>t.key===bd.pitchTier)||{}).label || '';
-    tiers = [{label:tLabel, sq, rate:ratePerSq}];
+    // Tier shows the ALL-IN rate with a composition note; add-ons are folded in
+    // so there's one dollar amount, but the rate breakdown is visible.
+    const rateParts = ['$'+baseRate+(tLabel?' ('+tLabel+')':' base'), ...addOnParts];
+    tiers = [{label:tLabel, sq, rate:baseRate, rateAll:ratePerSq, rateParts}];
   }
   const decking = sheets*SUB_PAY.perSheet;
   const extras = (bd.extraLines||[]).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
@@ -11442,13 +11462,14 @@ function openLaborBreakdownCalc(initial, onDone){
     const c=computeLaborFromBreakdown(collect());
     const row=(l,v,sub)=>`<div style="display:flex;justify-content:space-between;font-size:12px;color:${sub?'var(--muted)':'var(--brand)'};padding:3px 0">${sub?'<span style="padding-left:12px">'+l+'</span>':'<span>'+l+'</span>'}<span>${v}</span></div>`;
     let html='';
-    // Pitch-based labor lines (flat rate per tier).
+    // One labor line per pitch tier: squares × all-in rate, with the rate
+    // composition shown underneath (e.g. "$75 base + $5 2-story").
     if(!c.repair){
-      c.tiers.forEach(t=>{ if(t.sq>0) html+=row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate)); });
+      c.tiers.forEach(t=>{ if(t.sq>0){
+        html+=row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rateAll||t.rate}/sq`, fmt(t.sq*(t.rateAll||t.rate)));
+        if(t.rateParts && t.rateParts.length>1) html+=`<div style="font-size:10px;color:var(--muted);padding-left:12px;padding-bottom:3px">${t.rateParts.join(' + ')}</div>`;
+      }});
     }
-    if(c.storyAdd) html+=row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`,fmt(c.laborStory),true);
-    if(c.laborHandNail) html+=row(`Hand nail — ${c.sq} sq × $${c.handNailAdd}`,fmt(c.laborHandNail),true);
-    if(c.laborDoubleFelt) html+=row(`Double felt — ${c.sq} sq × $${c.doubleFeltAdd}`,fmt(c.laborDoubleFelt),true);
     if(c.decking) html+=row(`Decking — ${c.sheets} × $${SUB_PAY.perSheet}`,fmt(c.decking));
     if(c.extras) html+=row('Additional work',fmt(c.extras));
     html+=`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#34D399;border-top:2px solid var(--border);padding-top:8px;margin-top:6px"><span>TOTAL</span><span>${fmt(c.total)}</span></div>`;
@@ -12193,10 +12214,11 @@ async function openSubVoucherEditor(jobId, editVid){
       laborRows = row(`${c.payLabel} — no base charge`, fmt(0));
     } else {
       // Flat pitch-rate lines (one per tier for mixed, one for single).
-      c.tiers.forEach(t=>{ if(t.sq>0) laborRows += row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate)); });
-      if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
-      if(c.laborHandNail) laborRows += row(`Hand nail — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
-      if(c.laborDoubleFelt) laborRows += row(`Double felt — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
+      // One line per tier: squares × all-in rate, with rate composition below.
+      c.tiers.forEach(t=>{ if(t.sq>0){
+        laborRows += row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rateAll||t.rate}/sq`, fmt(t.sq*(t.rateAll||t.rate)));
+        if(t.rateParts && t.rateParts.length>1) laborRows += `<div style="font-size:10px;color:var(--muted);padding-left:12px;padding-bottom:2px">${t.rateParts.join(' + ')}</div>`;
+      }});
       laborRows += row(`Labor subtotal`, fmt(c.labor));
     }
     overlay.querySelector('#svBreakdown').innerHTML = `
@@ -12449,10 +12471,7 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
         <div class="v-label">${c.repair?`${escapeHtml(c.payLabel)} Breakdown`:'Labor Breakdown'}</div>
         <table>
           ${c.repair ? '' : `
-          ${!c.repair ? c.tiers.filter(t=>t.sq>0).map(t=>line(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate))).join('') : ''}
-          ${c.storyAdd?line(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}/sq`, fmt(c.laborStory)):''}
-          ${c.laborHandNail?line(`Hand nail charge — ${c.sq} sq × $${c.handNailAdd}/sq`, fmt(c.laborHandNail)):''}
-          ${c.laborDoubleFelt?line(`Double felt charge — ${c.sq} sq × $${c.doubleFeltAdd}/sq`, fmt(c.laborDoubleFelt)):''}`}
+          ${!c.repair ? c.tiers.filter(t=>t.sq>0).map(t=>line(`${t.label||'Labor'} — ${t.sq} sq × $${t.rateAll||t.rate}/sq${t.rateParts&&t.rateParts.length>1?' ('+t.rateParts.join(' + ')+')':''}`, fmt(t.sq*(t.rateAll||t.rate)))).join('') : ''}`}
           ${c.decking?line(`Decking replacement — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking)):''}
           ${extraLines.filter(l=>(parseFloat(l.amount)||0)>0).map(l=>line(escapeHtml(l.desc||'Additional work'), fmt(parseFloat(l.amount)||0))).join('')}
           ${(c.repair && !extraLines.some(l=>(parseFloat(l.amount)||0)>0) && !c.decking)?line(`${escapeHtml(c.payLabel)} — see additional work`,'—'):''}
@@ -15817,10 +15836,10 @@ function openSubExpenseSummary(jobId, expenseIdx){
     if(c.repair){
       laborRows = row(`${c.payLabel} — no base charge`, fmt(0));
     } else {
-      c.tiers.forEach(t=>{ if(t.sq>0) laborRows += row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rate}/sq`, fmt(t.sq*t.rate)); });
-      if(c.storyAdd) laborRows += row(`${c.story}-story charge — ${c.sq} sq × $${c.storyAdd}`, fmt(c.laborStory), true);
-      if(c.laborHandNail) laborRows += row(`Hand nail — ${c.sq} sq × $${c.handNailAdd}`, fmt(c.laborHandNail), true);
-      if(c.laborDoubleFelt) laborRows += row(`Double felt — ${c.sq} sq × $${c.doubleFeltAdd}`, fmt(c.laborDoubleFelt), true);
+      c.tiers.forEach(t=>{ if(t.sq>0){
+        laborRows += row(`${t.label||'Labor'} — ${t.sq} sq × $${t.rateAll||t.rate}/sq`, fmt(t.sq*(t.rateAll||t.rate)));
+        if(t.rateParts && t.rateParts.length>1) laborRows += `<div style="font-size:10px;color:var(--muted);padding-left:12px">${t.rateParts.join(' + ')}</div>`;
+      }});
       laborRows += row('Labor subtotal', fmt(c.labor));
     }
     if(c.decking) laborRows += row(`Decking — ${c.sheets} sheets × $${SUB_PAY.perSheet}`, fmt(c.decking));
