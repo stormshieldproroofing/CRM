@@ -3808,8 +3808,36 @@ function parseAbcInvoice(text){
 
   // ── Vendor auto-detection ──
   const isAso = /ASO\s*ROOFING\s*SUPPLY/i.test(text);
-  if(isAso) out.vendor = 'ASO Roofing Supply';
+  const isHomeDepot = /HOME\s*DEPOT|PRO\s*XTRA|homedepot\.com/i.test(text) || /\bTHE\s*HOME\s*DEPOT\b/i.test(text);
+  if(isHomeDepot) out.vendor = 'Home Depot';
+  else if(isAso) out.vendor = 'ASO Roofing Supply';
   else if(/ABC\s*SUPPLY/i.test(text)) out.vendor = 'ABC Supply';
+
+  if(isHomeDepot){
+    // ── Home Depot store receipt ──
+    // Returns are explicit: "REFUND", "RETURN" (not policy), or negative totals.
+    out.isReturn = /REFUND/i.test(text) || /RETURN\s*-?\s*CUSTOMER/i.test(text);
+    // Money can be written "-$127.60" (minus before $) or "$-127.60" — match both.
+    const hdMoney = re => { const m = text.match(re); if(!m) return null; return money((m[1]||'').replace(/[^0-9.\-]/g,'')); };
+    // Take the LAST subtotal/tax (a receipt may list per-item taxes first).
+    const lastMatch = re => { const all=[...text.matchAll(re)]; return all.length ? all[all.length-1] : null; };
+    const subM = lastMatch(/SUBTOTAL\s*(-?\$?-?[\d,]+\.\d{2})/gi);
+    const txM  = lastMatch(/SALES\s*TAX\s*(-?\$?-?[\d,]+\.\d{2})/gi);
+    const totM = lastMatch(/(?:^|\s)TOTAL\s*(-?\$?-?[\d,]+\.\d{2})/gi);
+    const parseSigned = raw => { if(!raw) return null; let v=money(raw); if(v!=null && /-/.test(raw)) v=-Math.abs(v); return v; };
+    if(subM) out.subTotal = parseSigned(subM[1]);
+    if(txM)  out.tax = parseSigned(txM[1]);
+    if(totM) out.total = parseSigned(totM[1]);
+    if(out.total != null && out.total < 0) out.isReturn = true;
+    if(out.isReturn && out.total!=null) out.total = -Math.abs(out.total);
+    const jobNm = text.match(/PO\/JOB\s*NAME:\s*([^\n$]+?)(?:\s{2,}|\n|20\d\d|$)/i);
+    if(jobNm) out.orderName = jobNm[1].trim();
+    const inv = text.match(/INVOICE\s*(\d+)/i);
+    if(inv) out.orderNum = inv[1];
+    const dt = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if(dt){ let yr=parseInt(dt[3],10); if(yr<100) yr+=2000; out.date=`${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`; }
+    return out;
+  }
 
   if(isAso){
     // ── ASO Roofing Supply format ──
@@ -3965,6 +3993,15 @@ async function importAbcInvoice(file){
     const descBits = [isReturn ? vName+' Return' : vName];
     if(parsed.orderNum) descBits.push('Order #'+parsed.orderNum);
     if(parsed.po) descBits.push('PO #'+parsed.po);
+    // Attach the PDF first so we can link its reference onto the expense.
+    let invoiceRec = null;
+    try {
+      if(window.intakeJobFile){
+        invoiceRec = await intakeJobFile(file, 'other', null);
+        if(!Array.isArray(j.otherFiles)) j.otherFiles=[];
+        j.otherFiles.push(invoiceRec);
+      }
+    } catch(e){ console.warn('[import] file attach failed', e); }
     j.expenses.push({
       cat: isReturn ? 'Returns' : 'Materials',
       desc: descBits.join(' · '),
@@ -3974,15 +4011,9 @@ async function importAbcInvoice(file){
       date: parsed.date || new Date().toISOString().slice(0,10),
       paid: isReturn ? true : abcPaidNow,
       onAccount: isReturn ? false : !abcPaidNow,
+      invoiceFile: invoiceRec ? { id: invoiceRec.id, name: invoiceRec.name || (file && file.name) || 'Invoice.pdf' } : null,
     });
-    // 2) Attach the PDF to the job (under Other files)
-    try {
-      if(window.intakeJobFile){
-        const rec = await intakeJobFile(file, 'other', null);
-        if(!Array.isArray(j.otherFiles)) j.otherFiles=[];
-        j.otherFiles.push(rec);
-      }
-    } catch(e){ console.warn('[ABC import] file attach failed', e); }
+    // (PDF already attached above and linked to the expense.)
     saveToStorage();
     close();
     // Re-render the whole detail panel so the new expense shows immediately
@@ -6209,6 +6240,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               <div id="exp-view-${e.origIdx}" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;gap:6px">
                 <span onclick="expEditOpen(${e.origIdx})" style="font-size:11px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit · ${e.desc||cat}">${e.desc||cat}</span>
                 <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                  ${e.invoiceFile ? `<button onclick="openExpenseInvoice(${e.origIdx})" title="View invoice: ${escapeHtml(e.invoiceFile.name||'invoice')}" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(77,157,224,0.3);background:rgba(77,157,224,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--brand-light);padding:0"><i class="ti ti-file-invoice" style="font-size:13px"></i></button>` : ''}
                   <span style="font-size:11px;font-weight:600;color:${isReturn?'var(--success)':'var(--brand)'}">${isReturn?'−':''}$${fmtExp(e.amount)}</span>
                   ${!isReturn ? `<span onclick="expTogglePaid(${e.origIdx})" title="${e.paid===false?'Marked UNPAID — held from Zoho. Tap to mark paid.':'Paid — syncs to Zoho. Tap to mark unpaid.'}" style="font-size:8px;font-weight:800;letter-spacing:0.3px;padding:2px 6px;border-radius:999px;cursor:pointer;border:1px solid ${e.paid===false?'rgba(251,191,36,0.5)':'rgba(52,211,153,0.5)'};background:${e.paid===false?'rgba(251,191,36,0.12)':'rgba(52,211,153,0.12)'};color:${e.paid===false?'#FBBF24':'#34D399'}">${e.paid===false?'UNPAID':'PAID'}</span>` : ''}
                   <button onclick="expDelete(${e.origIdx})" title="Remove" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(248,113,113,0.25);background:rgba(248,113,113,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--danger);padding:0;transition:background 0.1s" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">${svgTrashE}</button>
@@ -6253,6 +6285,23 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const chev=document.getElementById('exp-chev-'+slug);
       if(body) body.style.display=window._expCatOpen[slug]?'block':'none';
       if(chev) chev.style.transform=window._expCatOpen[slug]?'rotate(0deg)':'rotate(-90deg)';
+    };
+    window.openExpenseInvoice=function(i){
+      const j=curJob(); if(!j) return;
+      const e=(j.expenses||[])[i]; if(!e || !e.invoiceFile) return;
+      // Find the attached file record by id (stored in otherFiles).
+      const rec=(j.otherFiles||[]).find(f=>f && f.id===e.invoiceFile.id);
+      const url=rec ? (rec.url||rec.dataUrl) : null;
+      if(!url){ toast('Invoice file not found — it may not have synced yet'); return; }
+      // Open in a lightbox overlay (PDF or image).
+      const isPdf=/\.pdf(\?|$)/i.test(rec.name||'')||/pdf/i.test(rec.type||'');
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px;flex-direction:column;gap:10px';
+      ov.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;width:88vw;max-width:900px"><span style="color:#fff;font-size:13px;font-weight:600">${escapeHtml(rec.name||'Invoice')}</span><button id="invClose" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px">✕</button></div>${isPdf?`<iframe src="${url}#toolbar=1" style="width:88vw;max-width:900px;height:80vh;border:none;border-radius:8px;background:#fff"></iframe>`:`<img src="${url}" style="max-width:88vw;max-height:80vh;border-radius:8px;object-fit:contain">`}`;
+      document.body.appendChild(ov);
+      const close=()=>ov.remove();
+      ov.querySelector('#invClose').addEventListener('click',close);
+      ov.addEventListener('click',ev=>{ if(ev.target===ov) close(); });
     };
     window.expTogglePaid=function(i){
       const j2=curJob();

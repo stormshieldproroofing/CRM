@@ -230,7 +230,7 @@ async function loadAllFromSupabase() {
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
           .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
+          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         signedContractFiles:byKind('signed_contract'),
@@ -512,7 +512,13 @@ async function pushAllToSupabase() {
           paid_date: e.paidDate || null,
           paid_method: e.paidMethod || null,
           paid_notes: e.paidNotes || null,
-          breakdown: (e.breakdown && typeof e.breakdown === 'object') ? e.breakdown : null,
+          breakdown: (() => {
+            // Merge the expense's breakdown with a linked invoiceFile ref so the
+            // attached invoice survives syncs (no dedicated column needed).
+            const base = (e.breakdown && typeof e.breakdown === 'object') ? { ...e.breakdown } : {};
+            if(e.invoiceFile) base.__invoiceFile = e.invoiceFile;
+            return Object.keys(base).length ? base : null;
+          })(),
           src: e._src || null,
           vid: e._vid || null,
           zoho_id: e.zohoId || null,
