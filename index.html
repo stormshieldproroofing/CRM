@@ -3803,14 +3803,44 @@ async function extractPdfText(file){
 }
 
 function parseAbcInvoice(text){
-  const out = { total:null, subTotal:null, tax:null, orderNum:'', po:'', orderName:'', account:'', isReturn:false, docType:'' };
+  const out = { total:null, subTotal:null, tax:null, orderNum:'', po:'', orderName:'', account:'', isReturn:false, docType:'', vendor:'ABC Supply', address:'' };
   const money = s => { const m = (s||'').replace(/[^0-9.]/g,''); return m ? parseFloat(m) : null; };
-  // Document type — "Credit Memo" / "Return" means the amounts are a credit back to us.
+
+  // ── Vendor auto-detection ──
+  const isAso = /ASO\s*ROOFING\s*SUPPLY/i.test(text);
+  if(isAso) out.vendor = 'ASO Roofing Supply';
+  else if(/ABC\s*SUPPLY/i.test(text)) out.vendor = 'ABC Supply';
+
+  if(isAso){
+    // ── ASO Roofing Supply format ──
+    // Totals: SUBTOTAL / TAX / TOTAL / BALANCE DUE (labels on their own, value follows).
+    out.isReturn = /credit\s*memo|return/i.test(text);
+    // BALANCE DUE is the authoritative amount (may be styled with $).
+    let bd = text.match(/BALANCE\s*DUE\s*\$?\s*(-?[\d,]+\.\d{2})/i);
+    let tot = text.match(/(?:^|\s)TOTAL\s*\$?\s*(-?[\d,]+\.\d{2})/i);
+    let sub = text.match(/SUBTOTAL\s*\$?\s*(-?[\d,]+\.\d{2})/i);
+    let tx  = text.match(/(?:^|\s)TAX\s*\$?\s*(-?[\d,]+\.\d{2})/i);
+    if(bd) out.total = money(bd[1]);
+    else if(tot) out.total = money(tot[1]);
+    if(sub) out.subTotal = money(sub[1]);
+    if(tx)  out.tax = money(tx[1]);
+    if(out.isReturn && out.total!=null) out.total = -Math.abs(out.total);
+    // Invoice number.
+    const inv = text.match(/INVOICE\s*#\s*(\d+)/i);
+    if(inv) out.orderNum = inv[1];
+    // Job address (appears near the totals block on ASO invoices) — used for matching.
+    const addr = text.match(/(\d{2,6}\s+[A-Za-z0-9.\s]+(?:Dr|Drive|St|Street|Ln|Lane|Rd|Road|Ave|Avenue|Ct|Court|Way|Blvd|Cir|Circle|Trl|Trail|Pl|Place)\b[^,\n]*,?\s*[A-Za-z\s]*,?\s*TX\s*\d{5})/i);
+    if(addr) out.address = addr[1].replace(/\s+/g,' ').trim();
+    // Date: DATE 08/07/2026
+    const dt = text.match(/DATE\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i);
+    if(dt){ let yr=parseInt(dt[3],10); if(yr<100) yr+=2000; out.date = `${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`; }
+    return out;
+  }
+
+  // ── ABC Supply format (original) ──
   const typeM = text.match(/Type:\s*([^\n]+)/i);
   if(typeM) out.docType = typeM[1].trim();
   out.isReturn = /credit\s*memo|return/i.test(out.docType) || /credit\s*memo/i.test(text) || /Quantity\s*Returned/i.test(text);
-  // Totals — capture an optional leading minus so credit memos read as negative.
-  // Take the LAST "Total:" so Sub-Total doesn't win.
   const totals = [...text.matchAll(/(?:^|\s)Total:\s*(-?\$?-?[\d,]+\.\d{2})/gi)];
   if(totals.length){
     const raw = totals[totals.length-1][1];
@@ -3822,7 +3852,6 @@ function parseAbcInvoice(text){
   if(sub){ let v=money(sub[1]); if(v!=null && /-/.test(sub[1])) v=-Math.abs(v); out.subTotal = v; }
   const tax = text.match(/Tax:\s*(-?\$?-?[\d,]+\.\d{2})/i);
   if(tax){ let v=money(tax[1]); if(v!=null && /-/.test(tax[1])) v=-Math.abs(v); out.tax = v; }
-  // If it's a return, force the total negative even if the sign wasn't captured.
   if(out.isReturn && out.total!=null) out.total = -Math.abs(out.total);
   const ord = text.match(/Order\s*#:\s*(\d+)/i);
   if(ord) out.orderNum = ord[1];
@@ -3832,7 +3861,6 @@ function parseAbcInvoice(text){
   if(nm) out.orderName = nm[1].trim();
   const acct = text.match(/Account\s*#:\s*([\d\-]+)/i);
   if(acct) out.account = acct[1];
-  // Invoice date — printed on ABC invoices; becomes the expense date in Zoho.
   const dt = text.match(/(?:Invoice\s*)?Date:?\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i);
   if(dt){
     let yr = parseInt(dt[3],10); if(yr < 100) yr += 2000;
@@ -3860,7 +3888,7 @@ async function importAbcInvoice(file){
     return;
   }
   // Run the matcher against all jobs to show how confident the PO/address link is
-  const order = { po: parsed.po, address: '', orderName: parsed.orderName };
+  const order = { po: parsed.po, address: parsed.address || '', orderName: parsed.orderName };
   const mr = bestJobMatch(order);
   const matchedThisJob = mr.match && mr.match.job.id === j.id;
   const matchNote = mr.match
@@ -3877,7 +3905,7 @@ async function importAbcInvoice(file){
     <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:420px;max-width:100%;overflow:hidden">
       <div style="padding:15px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <i class="ti ${isReturn?'ti-arrow-back-up':'ti-package'}" style="color:${accent};font-size:18px"></i>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">ABC Supply ${isReturn?'Return / Credit':'Invoice'}</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">${escapeHtml(parsed.vendor||'Materials')} ${isReturn?'Return / Credit':'Invoice'}</div>
       </div>
       <div style="padding:16px 18px">
         ${isReturn?`<div style="font-size:10px;font-weight:700;color:#34D399;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);border-radius:6px;padding:6px 9px;margin-bottom:12px;display:flex;align-items:center;gap:6px"><i class="ti ti-info-circle" style="font-size:12px"></i>Credit Memo — records as a return (reduces material cost)</div>`:''}
@@ -3895,7 +3923,7 @@ async function importAbcInvoice(file){
           <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px">How was this paid?</div>
           <div style="display:flex;gap:6px">
             <button type="button" id="abcPayNow" style="flex:1;padding:7px 4px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--brand-light);background:rgba(77,157,224,0.15);color:var(--brand-light);font-family:'Barlow',sans-serif">Debit — paid now</button>
-            <button type="button" id="abcOnAcct" style="flex:1;padding:7px 4px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:#1E253A;color:var(--muted);font-family:'Barlow',sans-serif">On ABC account</button>
+            <button type="button" id="abcOnAcct" style="flex:1;padding:7px 4px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:#1E253A;color:var(--muted);font-family:'Barlow',sans-serif">On account</button>
           </div>
           <div id="abcPayHint" style="font-size:9px;color:var(--muted);margin-top:4px">Syncs to Zoho right away, dated ${escapeHtml(parsed.date||'today')}.</div>
         </div>` : ''}
@@ -3915,7 +3943,7 @@ async function importAbcInvoice(file){
       b.style.borderColor = on?'var(--brand-light)':'var(--border)';
       b.style.background = on?'rgba(77,157,224,0.15)':'#1E253A';
       b.style.color = on?'var(--brand-light)':'var(--muted)'; }); }
-    if(hint) hint.textContent = now ? `Syncs to Zoho right away, dated ${parsed.date||'today'}.` : 'Held as owed to ABC — syncs to Zoho when marked paid.'; };
+    if(hint) hint.textContent = now ? `Syncs to Zoho right away, dated ${parsed.date||'today'}.` : 'Held as owed to the vendor — syncs to Zoho when marked paid.'; };
   pn&&pn.addEventListener('click',()=>setPay(true));
   oa&&oa.addEventListener('click',()=>setPay(false));
   const close=()=>overlay.remove();
@@ -3928,7 +3956,8 @@ async function importAbcInvoice(file){
     // The Returns category is stored as a POSITIVE amount that the profit math
     // subtracts (netTotal = costs − returns), so use the absolute value here.
     if(!Array.isArray(j.expenses)) j.expenses=[];
-    const descBits = [isReturn ? 'ABC Supply Return' : 'ABC Supply'];
+    const vName = parsed.vendor || 'ABC Supply';
+    const descBits = [isReturn ? vName+' Return' : vName];
     if(parsed.orderNum) descBits.push('Order #'+parsed.orderNum);
     if(parsed.po) descBits.push('PO #'+parsed.po);
     j.expenses.push({
@@ -3936,7 +3965,7 @@ async function importAbcInvoice(file){
       desc: descBits.join(' · '),
       amount: (isReturn ? Math.abs(parsed.total) : parsed.total).toFixed(2),
       vendor: null,
-      vendorName: 'ABC Supply',
+      vendorName: vName,
       date: parsed.date || new Date().toISOString().slice(0,10),
       paid: isReturn ? true : abcPaidNow,
       onAccount: isReturn ? false : !abcPaidNow,
@@ -3962,7 +3991,7 @@ async function importAbcInvoice(file){
       if(window.refreshExpenseUI) window.refreshExpenseUI();
     }, 30);
     if(typeof renderBoard==='function') renderBoard();
-    if(typeof logActivity==='function') logActivity(j, 'expense', isReturn?'ABC Supply return recorded':'ABC Supply invoice imported', `${isReturn?'Return (credit)':'Materials'}: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:''}`);
+    if(typeof logActivity==='function') logActivity(j, 'expense', isReturn?(vName+' return recorded'):(vName+' invoice imported'), `${isReturn?'Return (credit)':'Materials'}: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:(parsed.orderNum?' · Inv '+parsed.orderNum:'')}`);
     toast(isReturn ? 'Return recorded as a credit · PDF attached' : 'Materials expense added · invoice attached');
   });
 }
