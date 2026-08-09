@@ -3814,7 +3814,10 @@ function parseAbcInvoice(text){
   if(isAso){
     // ── ASO Roofing Supply format ──
     // Totals: SUBTOTAL / TAX / TOTAL / BALANCE DUE (labels on their own, value follows).
-    out.isReturn = /credit\s*memo|return/i.test(text);
+    // Only a genuine credit memo/return counts — NOT the "Restock/Return
+    // Policy" boilerplate that appears on every ASO invoice. Require an explicit
+    // credit-memo document type (a negative total is handled after parsing).
+    out.isReturn = /credit\s*memo/i.test(text) || /\bCREDIT\s*(?:INVOICE|NOTE)\b/i.test(text);
     // BALANCE DUE is the authoritative amount (may be styled with $).
     let bd = text.match(/BALANCE\s*DUE\s*\$?\s*(-?[\d,]+\.\d{2})/i);
     let tot = text.match(/(?:^|\s)TOTAL\s*\$?\s*(-?[\d,]+\.\d{2})/i);
@@ -3824,6 +3827,8 @@ function parseAbcInvoice(text){
     else if(tot) out.total = money(tot[1]);
     if(sub) out.subTotal = money(sub[1]);
     if(tx)  out.tax = money(tx[1]);
+    // A genuinely negative total is a real credit, regardless of wording.
+    if(out.total != null && out.total < 0) out.isReturn = true;
     if(out.isReturn && out.total!=null) out.total = -Math.abs(out.total);
     // Invoice number.
     const inv = text.match(/INVOICE\s*#\s*(\d+)/i);
