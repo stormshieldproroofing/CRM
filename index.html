@@ -3815,8 +3815,12 @@ function parseAbcInvoice(text){
 
   if(isHomeDepot){
     // ── Home Depot store receipt ──
-    // Returns are explicit: "REFUND", "RETURN" (not policy), or negative totals.
-    out.isReturn = /REFUND/i.test(text) || /RETURN\s*-?\s*CUSTOMER/i.test(text);
+    // Returns are explicit: a "REFUND-CUSTOMER COPY" / "RETURN-CUSTOMER" header,
+    // or a negative total. Ignore "MAX REFUND VALUE" (normal purchase boilerplate)
+    // and "RETURN POLICY". A receipt marked "SALE" is never a return.
+    const isSale = /\bSALE\b\s+CASHIER|\bSALE\b\s+SELF\s*CHECKOUT|(?:^|\s)SALE(?:\s|$)/i.test(text);
+    const explicitRefund = /REFUND\s*-?\s*CUSTOMER/i.test(text) || /RETURN\s*-?\s*CUSTOMER/i.test(text);
+    out.isReturn = explicitRefund && !isSale;
     // Money can be written "-$127.60" (minus before $) or "$-127.60" — match both.
     const hdMoney = re => { const m = text.match(re); if(!m) return null; return money((m[1]||'').replace(/[^0-9.\-]/g,'')); };
     // Take the LAST subtotal/tax (a receipt may list per-item taxes first).
