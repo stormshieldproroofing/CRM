@@ -12198,7 +12198,7 @@ async function openSubVoucherEditor(jobId, editVid){
       story: parseInt(overlay.querySelector('#svStory').value)||1,
       handNail: !!overlay.querySelector('#svHandNail')?.checked,
       doubleFelt: !!overlay.querySelector('#svDoubleFelt')?.checked,
-      pitch: overlay.querySelector('#svPitch')?.value || '0',
+      pitchTier: overlay.querySelector('#svPitch')?.value || '',
       sheets: num('svSheets'),
       extraLines,
     });
@@ -12296,7 +12296,7 @@ async function openSubVoucherEditor(jobId, editVid){
       payLabel: overlay.querySelector('#svPayLabel')?.value || '',
       expCat: overlay.querySelector('#svExpCat')?.value || payTypeExpCat(payType),
       repair: repairMode,   // kept for older readers of this record
-      pitch: overlay.querySelector('#svPitch')?.value || '0',
+      pitchTier: overlay.querySelector('#svPitch')?.value || '',
       sheets: num('svSheets'),
       checkNo: overlay.querySelector('#svCheckNo').value||'',
       paid: overlay.querySelector('#svPaid')?.checked !== false,
