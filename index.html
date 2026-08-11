@@ -2106,6 +2106,13 @@ async function syncJobToZoho(jobId){
         phone: (j.phone && j.phone !== '—') ? j.phone : '',
         address: (j.address && j.address !== '—') ? j.address : '',
       });
+      // TEMP diagnostic: surface what Zoho did with the email so we can debug.
+      if(c && c.emailUpdate){
+        console.log('[zoho emailUpdate]', c.emailUpdate);
+        try { toast('Email sync: ' + JSON.stringify(c.emailUpdate).slice(0,120)); } catch(e){}
+      } else if(c && c.existing){
+        toast('Contact existed — no emailUpdate returned (redeploy zoho-proxy?)');
+      }
       const contact = c.contact || {};
       if(!contact.contact_id) throw new Error('Zoho did not return a contact id');
       j.zoho.contactId = contact.contact_id;
