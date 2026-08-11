@@ -2098,24 +2098,23 @@ async function syncJobToZoho(jobId){
   if(btn){ btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Syncing…'; }
   try {
     if(!j.zoho) j.zoho = {};
-    // 1) Customer (find-or-create by name)
-    if(!j.zoho.contactId){
+    // 1) Customer — run EVERY sync so the email/phone stay current in Zoho
+    // (previously this only ran on first sync, so email edits never pushed).
+    {
       const c = await callZoho('upsertCustomer', {
         name: j.name || 'Unknown customer',
         email: (j.email && j.email !== '—') ? j.email : '',
         phone: (j.phone && j.phone !== '—') ? j.phone : '',
         address: (j.address && j.address !== '—') ? j.address : '',
       });
-      // TEMP diagnostic: surface what Zoho did with the email so we can debug.
+      // TEMP diagnostic: surface what Zoho did with the email.
       if(c && c.emailUpdate){
         console.log('[zoho emailUpdate]', c.emailUpdate);
-        try { toast('Email sync: ' + JSON.stringify(c.emailUpdate).slice(0,120)); } catch(e){}
-      } else if(c && c.existing){
-        toast('Contact existed — no emailUpdate returned (redeploy zoho-proxy?)');
+        try { toast('Email sync: ' + JSON.stringify(c.emailUpdate).slice(0,140)); } catch(e){}
       }
       const contact = c.contact || {};
-      if(!contact.contact_id) throw new Error('Zoho did not return a contact id');
-      j.zoho.contactId = contact.contact_id;
+      if(contact.contact_id) j.zoho.contactId = contact.contact_id;
+      if(!j.zoho.contactId) throw new Error('Zoho did not return a contact id');
     }
     // 2) Invoice (create, or update the one we made before)
     const inv = await callZoho('pushInvoice', {
