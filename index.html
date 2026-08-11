@@ -2085,6 +2085,24 @@ function zohoInvoiceLines(j){
   return lines;
 }
 
+// TEMP: sticky on-screen diagnostic for the Zoho email sync.
+function showZohoDiag(title, obj, emailSent){
+  try {
+    const old = document.getElementById('zohoDiagBox'); if(old) old.remove();
+    const box = document.createElement('div');
+    box.id = 'zohoDiagBox';
+    box.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);z-index:9999;max-width:92vw;width:440px;background:#0f1420;border:2px solid #4D9DE0;border-radius:10px;padding:14px 16px;box-shadow:0 10px 40px rgba(0,0,0,0.5);font-family:monospace;font-size:12px;color:#cfe3f5;line-height:1.5';
+    const pretty = (()=>{ try { return JSON.stringify(obj, null, 2); } catch(e){ return String(obj); } })();
+    box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span style="font-weight:700;color:#4D9DE0;font-family:sans-serif">'+title+'</span>'
+      +'<button onclick="document.getElementById(\'zohoDiagBox\').remove()" style="background:#1E253A;border:none;color:#fff;width:26px;height:26px;border-radius:6px;cursor:pointer">X</button></div>'
+      +'<div style="font-family:sans-serif;color:#9fb3c8;margin-bottom:6px">Email sent from CRM: <b style="color:#fff">'+(emailSent||'(none)')+'</b></div>'
+      +'<pre style="white-space:pre-wrap;word-break:break-word;margin:0;max-height:40vh;overflow:auto;background:#0a0e16;padding:8px;border-radius:6px">'+pretty.replace(/</g,'&lt;')+'</pre>';
+    document.body.appendChild(box);
+  } catch(e){ try{ toast('diag error'); }catch(_){} }
+}
+window.showZohoDiag = showZohoDiag;
+
 async function syncJobToZoho(jobId){
   const j = jobs.find(x => x.id === jobId);
   if(!j){ toast('Open a job first'); return; }
@@ -2098,19 +2116,20 @@ async function syncJobToZoho(jobId){
   if(btn){ btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Syncing…'; }
   try {
     if(!j.zoho) j.zoho = {};
-    // 1) Customer — run EVERY sync so the email/phone stay current in Zoho
-    // (previously this only ran on first sync, so email edits never pushed).
+    // 1) Customer — run EVERY sync so the email/phone stay current in Zoho.
     {
+      const emailToSend = (j.email && j.email !== '—') ? j.email : '';
       const c = await callZoho('upsertCustomer', {
         name: j.name || 'Unknown customer',
-        email: (j.email && j.email !== '—') ? j.email : '',
+        email: emailToSend,
         phone: (j.phone && j.phone !== '—') ? j.phone : '',
         address: (j.address && j.address !== '—') ? j.address : '',
       });
-      // TEMP diagnostic: surface what Zoho did with the email.
       if(c && c.emailUpdate){
         console.log('[zoho emailUpdate]', c.emailUpdate);
-        try { toast('Email sync: ' + JSON.stringify(c.emailUpdate).slice(0,140)); } catch(e){}
+        showZohoDiag('Email sync result', c.emailUpdate, emailToSend);
+      } else {
+        showZohoDiag('No emailUpdate field returned', {note:'zoho-proxy function may be the OLD version — redeploy it in Supabase'}, emailToSend);
       }
       const contact = c.contact || {};
       if(contact.contact_id) j.zoho.contactId = contact.contact_id;
