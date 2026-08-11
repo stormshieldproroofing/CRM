@@ -11655,10 +11655,10 @@ function openRetailInvoice(j){
   +'</style></head><body>'
   +'<button class="iv-btn" onclick="window.print()">Print</button>'
   +'<div class="iv">'
-  +'<div class="iv-head"><div>'
-  +(ci.logoDataUrl?'<img src="'+ci.logoDataUrl+'" style="max-height:64px;max-width:220px;margin-bottom:8px;display:block">':'')
-  +'<div class="iv-co">'+escapeHtml(ci.name||'StormShield Pro Roofing')+'</div>'
-  +'<div class="iv-cod">'+escapeHtml(ci.address||'')+'<br>'+escapeHtml(ci.phone||'')+(ci.email?' \u00b7 '+escapeHtml(ci.email):'')+'</div>'
+  +'<div class="iv-head"><div style="display:flex;align-items:center;gap:14px">'
+  +(ci.logoDataUrl?'<img src="'+ci.logoDataUrl+'" style="max-height:70px;max-width:130px;display:block;flex-shrink:0">':'')
+  +'<div><div class="iv-co">'+escapeHtml(ci.name||'StormShield Pro Roofing')+'</div>'
+  +'<div class="iv-cod">'+escapeHtml(ci.address||'')+'<br>'+escapeHtml(ci.phone||'')+(ci.email?' \u00b7 '+escapeHtml(ci.email):'')+'</div></div>'
   +'</div><div>'
   +'<div class="iv-title">INVOICE</div>'
   +'<div class="iv-meta"><b>Invoice #:</b> '+invNo+'<br><b>Date:</b> '+today+'</div>'
@@ -12818,9 +12818,10 @@ async function saveAbcPriceList(){
 async function openAbcMaterialCalc(jobId){
   const j = jobs.find(x=>x.id===jobId) || null;
   await loadAbcPriceList();
-  const squares = j?.roofEstimate?.totalSquares || 0;
-  // Per-job material state (qty overrides) stored on the job
   const saved = (j && j.abcOrder) ? j.abcOrder : {};
+  // Prefer a squares value the user saved in the materials calc; fall back to
+  // the roof estimate. (Previously squares wasn't saved, so edits reverted.)
+  const squares = (saved.squares != null && saved.squares !== '') ? saved.squares : (j?.roofEstimate?.totalSquares || 0);
   const overlay = document.createElement('div');
   overlay.id = 'abcOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
@@ -13000,7 +13001,7 @@ async function openAbcMaterialCalc(jobId){
     if(j){
       const m = measurements();
       j.abcOrder = {
-        waste:m.waste, penetrations:m.penetrations, eaves:m.eaves, rakes:m.rakes,
+        squares:m.squares, waste:m.waste, penetrations:m.penetrations, eaves:m.eaves, rakes:m.rakes,
         ridges:m.ridges, hips:m.hips, valleys:m.valleys,
         qtyOverrides, customLines,
       };
