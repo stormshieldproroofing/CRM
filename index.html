@@ -11622,7 +11622,7 @@ function openRetailInvoice(j){
     priced.forEach(l => { lineRows += '<tr><td>'+escapeHtml(l.title)+'</td><td class="num">'+money(l.amt)+'</td></tr>'; });
   } else {
     const scopeDesc = (q.scope||'').trim();
-    lineRows = '<tr><td>Roofing work per contract'+(addr?'<br><span style="font-size:9pt;color:#666">'+escapeHtml(addr)+'</span>':'')+'</td><td class="num">'+money(total)+'</td></tr>';
+    lineRows = '<tr><td>Roof Replacement'+(addr?'<br><span style="font-size:9pt;color:#666">'+escapeHtml(addr)+'</span>':'')+'</td><td class="num">'+money(total)+'</td></tr>';
   }
 
   const win = window.open('','_blank');
@@ -11656,6 +11656,7 @@ function openRetailInvoice(j){
   +'<button class="iv-btn" onclick="window.print()">Print</button>'
   +'<div class="iv">'
   +'<div class="iv-head"><div>'
+  +(ci.logoDataUrl?'<img src="'+ci.logoDataUrl+'" style="max-height:64px;max-width:220px;margin-bottom:8px;display:block">':'')
   +'<div class="iv-co">'+escapeHtml(ci.name||'StormShield Pro Roofing')+'</div>'
   +'<div class="iv-cod">'+escapeHtml(ci.address||'')+'<br>'+escapeHtml(ci.phone||'')+(ci.email?' \u00b7 '+escapeHtml(ci.email):'')+'</div>'
   +'</div><div>'
