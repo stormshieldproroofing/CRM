@@ -350,6 +350,7 @@ if (typeof document !== 'undefined') {
 }
 
 async function pushAllToSupabase() {
+  window.__lastLocalPushAt = Date.now();
   try {
     // Build base rows without id, then categorize
     const newJobs = [];        // no real UUID yet — needs insert without id
@@ -739,6 +740,88 @@ async function bootSupabase() {
   if (typeof window.rerenderActivePage === 'function') {
     window.rerenderActivePage();
   }
+  // Start live cross-user updates.
+  try { startRealtime(); } catch(e){ console.warn('[Realtime] start failed', e); }
   return true;
 }
 window.bootSupabase = bootSupabase;
+
+/* ---------- REALTIME (Option 1): live updates across users ----------
+ * Subscribes to changes on jobs/expenses/deposits/stages/team. When another
+ * user changes something, we re-pull in the background so every client stays
+ * current WITHOUT a manual refresh.
+ *
+ * Safety rules (learned from prior data-loss issues):
+ *  - Suppress echoes of our OWN just-pushed writes (5s window) so we don't
+ *    fight our own debounced save.
+ *  - NEVER refresh while the user is actively editing a job detail panel or
+ *    has a modal open — queue it and apply when they're done, so an incoming
+ *    change can't clobber what they're typing.
+ *  - Debounce bursts of changes into a single re-pull.
+ */
+let __rtChannel = null;
+let __rtPullTimer = null;
+let __rtPendingPull = false;
+window.__lastLocalPushAt = 0;   // set by pushAllToSupabase on every write
+
+function __userIsBusyEditing(){
+  // Don't yank data out from under an active edit.
+  if (document.querySelector('.modal.open, #addJobModal.open')) return true;
+  // A job detail panel is open AND focused input/textarea is inside it.
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return true;
+  return false;
+}
+
+async function __rtDoPull(){
+  // If the user is mid-edit, defer — try again shortly.
+  if (__userIsBusyEditing()) { __rtPendingPull = true; scheduleRtPull(1500); return; }
+  __rtPendingPull = false;
+  try {
+    // Remember what's open so we can restore the view after re-pull.
+    const openId = window.openJobId || null;
+    await loadAllFromSupabase();
+    if (typeof window.rerenderActivePage === 'function') window.rerenderActivePage();
+    // If a job detail was open, refresh it in place (it's still in window.jobs).
+    if (openId && window.openJobId === openId && typeof window.renderDetailPanel === 'function') {
+      window.renderDetailPanel();
+    }
+    console.log('[Realtime] pulled latest changes');
+  } catch(e){ console.warn('[Realtime] pull failed', e); }
+}
+
+function scheduleRtPull(delay){
+  clearTimeout(__rtPullTimer);
+  __rtPullTimer = setTimeout(__rtDoPull, delay != null ? delay : 800);
+}
+
+function onRealtimeChange(payload){
+  // Ignore changes we just made ourselves (echo of our own push).
+  if (Date.now() - window.__lastLocalPushAt < 5000) {
+    console.log('[Realtime] ignoring self-echo');
+    return;
+  }
+  console.log('[Realtime] change on', payload?.table, payload?.eventType);
+  scheduleRtPull();
+}
+
+function startRealtime(){
+  if (!sb || !sb.channel) { console.warn('[Realtime] client has no channel()'); return; }
+  if (__rtChannel) { try { sb.removeChannel(__rtChannel); } catch(e){} }
+  __rtChannel = sb.channel('crm-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, onRealtimeChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, onRealtimeChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deposits' }, onRealtimeChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'stages' }, onRealtimeChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pipelines' }, onRealtimeChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'job_files' }, onRealtimeChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, onRealtimeChange)
+    .subscribe((status) => { console.log('[Realtime] channel status:', status); });
+
+  // Belt-and-suspenders: also pull when the tab regains focus, in case a
+  // realtime event was missed while backgrounded.
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') scheduleRtPull(300);
+  });
+}
+window.startRealtime = startRealtime;
