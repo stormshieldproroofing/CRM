@@ -198,6 +198,7 @@ async function loadAllFromSupabase() {
         timeline: Array.isArray(r.timeline) ? r.timeline : [],
         buildDate: r.build_date || null,
         buildConfirmed: !!(r.contract && typeof r.contract === 'object' && r.contract.__buildConfirmed),
+        zohoCalEventId: (r.contract && typeof r.contract === 'object' && r.contract.__zohoCalEventId) ? r.contract.__zohoCalEventId : undefined,
         cpNetClaim:     (r.contract && r.contract.__cpNetClaim     != null) ? r.contract.__cpNetClaim     : undefined,
         cpDeductible:   (r.contract && r.contract.__cpDeductible   != null) ? r.contract.__cpDeductible   : undefined,
         cpDepreciation: (r.contract && r.contract.__cpDepreciation != null) ? r.contract.__cpDepreciation : undefined,
@@ -407,6 +408,7 @@ async function pushAllToSupabase() {
         contract: (() => {
           const base = (j.contract && typeof j.contract === 'object') ? { ...j.contract } : {};
           base.__buildConfirmed = !!j.buildConfirmed;
+          if(j.zohoCalEventId) base.__zohoCalEventId = j.zohoCalEventId;
           // Contract-price breakdown (Net Claim / Deductible / Depreciation /
           // Supplements). These aren't their own columns, so persist them here
           // in the contract JSON so they survive syncs.

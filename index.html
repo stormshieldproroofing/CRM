@@ -2086,23 +2086,6 @@ function zohoInvoiceLines(j){
 }
 
 // TEMP: sticky on-screen diagnostic for the Zoho email sync.
-function showZohoDiag(title, obj, emailSent){
-  try {
-    const old = document.getElementById('zohoDiagBox'); if(old) old.remove();
-    const box = document.createElement('div');
-    box.id = 'zohoDiagBox';
-    box.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);z-index:9999;max-width:92vw;width:440px;background:#0f1420;border:2px solid #4D9DE0;border-radius:10px;padding:14px 16px;box-shadow:0 10px 40px rgba(0,0,0,0.5);font-family:monospace;font-size:12px;color:#cfe3f5;line-height:1.5';
-    const pretty = (()=>{ try { return JSON.stringify(obj, null, 2); } catch(e){ return String(obj); } })();
-    box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-      +'<span style="font-weight:700;color:#4D9DE0;font-family:sans-serif">'+title+'</span>'
-      +'<button onclick="document.getElementById(\'zohoDiagBox\').remove()" style="background:#1E253A;border:none;color:#fff;width:26px;height:26px;border-radius:6px;cursor:pointer">X</button></div>'
-      +'<div style="font-family:sans-serif;color:#9fb3c8;margin-bottom:6px">Email sent from CRM: <b style="color:#fff">'+(emailSent||'(none)')+'</b></div>'
-      +'<pre style="white-space:pre-wrap;word-break:break-word;margin:0;max-height:40vh;overflow:auto;background:#0a0e16;padding:8px;border-radius:6px">'+pretty.replace(/</g,'&lt;')+'</pre>';
-    document.body.appendChild(box);
-  } catch(e){ try{ toast('diag error'); }catch(_){} }
-}
-window.showZohoDiag = showZohoDiag;
-
 async function syncJobToZoho(jobId){
   const j = jobs.find(x => x.id === jobId);
   if(!j){ toast('Open a job first'); return; }
@@ -2125,12 +2108,7 @@ async function syncJobToZoho(jobId){
         phone: (j.phone && j.phone !== '—') ? j.phone : '',
         address: (j.address && j.address !== '—') ? j.address : '',
       });
-      if(c && c.emailUpdate){
-        console.log('[zoho emailUpdate]', c.emailUpdate);
-        showZohoDiag('Email sync result', c.emailUpdate, emailToSend);
-      } else {
-        showZohoDiag('No emailUpdate field returned', {note:'zoho-proxy function may be the OLD version — redeploy it in Supabase'}, emailToSend);
-      }
+      if(c && c.emailUpdate) console.log('[zoho emailUpdate]', c.emailUpdate);
       const contact = c.contact || {};
       if(contact.contact_id) j.zoho.contactId = contact.contact_id;
       if(!j.zoho.contactId) throw new Error('Zoho did not return a contact id');
@@ -10326,6 +10304,8 @@ function scheduleJobToDate(jobId, key){
     j.buildConfirmed = false;
     const fromLabel = prev ? prev : 'unscheduled';
     if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
+    // Push to Zoho Calendar (create or update the same event).
+    pushBuildToZohoCalendar(j);
   }
   saveToStorage();
   toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
@@ -10333,6 +10313,41 @@ function scheduleJobToDate(jobId, key){
   return true;
 }
 window.scheduleJobToDate = scheduleJobToDate;
+
+// Push a job's build date to Zoho Calendar as an all-day event. Stores the
+// returned event UID on the job so re-scheduling UPDATES the same event.
+async function pushBuildToZohoCalendar(j){
+  if(!j || !j.buildDate) return;
+  try {
+    const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) ? SUPABASE_URL : (window.sb?.supabaseUrl || '');
+    const keyk = (typeof SUPABASE_ANON !== 'undefined' && SUPABASE_ANON) ? SUPABASE_ANON : (window.sb?.supabaseKey || '');
+    if(!base) return;
+    const addr = (j.address && j.address !== '—') ? j.address : '';
+    const title = `🏗️ Build: ${j.name || 'Job'}${addr ? ' — ' + addr.split(',')[0] : ''}`;
+    const notes = [
+      j.name ? 'Customer: ' + j.name : '',
+      addr ? 'Address: ' + addr : '',
+      j.rep ? 'Rep: ' + j.rep : '',
+      j.phone && j.phone !== '—' ? 'Phone: ' + j.phone : '',
+    ].filter(Boolean).join('\n');
+    const r = await fetch(`${base}/functions/v1/zoho-calendar`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${keyk}` },
+      body: JSON.stringify({
+        action:'upsertEvent',
+        payload:{ eventId: j.zohoCalEventId || null, title, dateKey: j.buildDate, notes, location: addr },
+      }),
+    });
+    const data = await r.json();
+    if(data && data.uid){
+      j.zohoCalEventId = data.uid;   // remember so next reschedule updates it
+      if(window.saveToStorage) saveToStorage();
+    } else if(data && data.error){
+      console.warn('[zoho-cal] event push error', data);
+    }
+  } catch(e){ console.warn('[zoho-cal] push failed', e); }
+}
+window.pushBuildToZohoCalendar = pushBuildToZohoCalendar;
 
 // Tap an unscheduled card (or its Schedule button) → native date picker.
 function wireCalTapSchedule(){
@@ -10562,6 +10577,7 @@ function wireCalDragDrop(){
       if(prev !== key){
         const fromLabel = prev ? prev : 'unscheduled';
         if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date set', `${fromLabel} → ${key}${isBad?' (despite weather warning)':''}`);
+        if(typeof pushBuildToZohoCalendar === 'function') pushBuildToZohoCalendar(j);
       }
       saveToStorage();
       toast(`Scheduled ${j.name} for ${key}${isBad?' · ⚠ rain risk':''}`);
