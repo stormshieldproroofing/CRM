@@ -693,6 +693,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calViewWeek"  class="cal-view-btn" data-view="week"  style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">Week</button>
     </div>
     <div style="flex:1"></div>
+    <button onclick="syncAllBuildsToZoho()" title="Push all scheduled build dates to Zoho Calendar" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted);cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-calendar-up" style="font-size:13px;color:var(--brand-light)"></i>Sync to Zoho</button>
     <div id="calWeatherBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted);cursor:pointer" title="Weather forecast (click to refresh / change location)">
       <i id="calWeatherIcon" class="ti ti-cloud" style="font-size:13px;color:var(--brand-light)"></i>
       <span id="calWeatherLabel">Loading weather…</span>
@@ -10345,9 +10346,47 @@ async function pushBuildToZohoCalendar(j){
     } else if(data && data.error){
       console.warn('[zoho-cal] event push error', data);
     }
+    return data;
   } catch(e){ console.warn('[zoho-cal] push failed', e); }
 }
 window.pushBuildToZohoCalendar = pushBuildToZohoCalendar;
+
+// Push every scheduled job's build date to Zoho Calendar. Catches jobs that
+// were scheduled BEFORE the calendar integration existed (they have a
+// buildDate but no zohoCalEventId yet). Safe to run repeatedly — jobs that
+// already have an event just get updated in place.
+async function syncAllBuildsToZoho(){
+  const scheduled = (jobs||[]).filter(j => j.buildDate);
+  if(!scheduled.length){ toast('No scheduled builds to sync'); return; }
+  // Only sync jobs that don't already have a Zoho event (skip ones already done),
+  // so re-running doesn't re-hit every job and trip Zoho's rate limit.
+  const todo = scheduled.filter(j => !j.zohoCalEventId);
+  if(!todo.length){ toast('All builds already synced to Zoho'); return; }
+  toast(`Syncing ${todo.length} build(s) to Zoho — please wait…`);
+  let ok = 0, fail = 0, rateLimited = false;
+  for(const j of todo){
+    try {
+      const data = await pushBuildToZohoCalendar(j);
+      if(data && (data.uid || data.ok)) { ok++; }
+      else {
+        fail++;
+        // If Zoho rate-limits, STOP — hammering makes it worse. Resume later.
+        const dTxt = JSON.stringify(data||{}).toLowerCase();
+        if(dTxt.includes('too many requests') || dTxt.includes('access denied') || dTxt.includes('rate')){
+          rateLimited = true; break;
+        }
+      }
+    } catch(e){ fail++; }
+    // Spread requests out — Zoho throttles rapid token/API calls.
+    await new Promise(res => setTimeout(res, 1500));
+  }
+  if(rateLimited){
+    toast(`Zoho rate-limited after ${ok} synced. Wait a few minutes, then tap Sync again to continue.`);
+  } else {
+    toast(`Zoho calendar sync: ${ok} synced${fail?`, ${fail} failed`:''}`);
+  }
+}
+window.syncAllBuildsToZoho = syncAllBuildsToZoho;
 
 // Tap an unscheduled card (or its Schedule button) → native date picker.
 function wireCalTapSchedule(){
