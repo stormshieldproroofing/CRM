@@ -100,6 +100,11 @@ async function loadAllFromSupabase() {
       window.TEAM.forEach(m => window.USERS.push({ id:m.id, name:m.name, color:m.color }));
     }
     console.log('[Supabase] loaded', window.TEAM.length, 'team members; you are:', window.currentMember?.role || 'unknown');
+    // Warm the Send Card images for this rep (front + shared back) so the
+    // first tap is instant and later taps work without a signal.
+    if (typeof window.prefetchRepCard === 'function') {
+      window.prefetchRepCard();
+    }
     // Show/hide admin-only nav links now that we know the role
     if (typeof window.updateProfitsNavVisibility === 'function') {
       window.updateProfitsNavVisibility();
