@@ -681,7 +681,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- CALENDAR / PRODUCTION SCHEDULE PAGE -->
 <div id="calendarPage" style="display:none">
-  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+  <div class="cal-toolbar" style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Production Schedule</div>
     <button id="calPrev" class="icon-btn" title="Previous"><i class="ti ti-chevron-left"></i></button>
     <div id="calWeekLabel" style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;color:#fff;min-width:200px;text-align:center"></div>
@@ -704,9 +704,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
   </div>
-  <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
+  <div class="cal-layout" style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
-    <div style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
+    <div class="cal-unsched-pane" style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
       <div style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
         <div id="calUnschedCount" style="font-size:10px;color:var(--muted);margin-top:2px">0 jobs awaiting build date</div>
@@ -718,7 +718,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <div id="calUnschedList" style="padding:8px 10px"></div>
     </div>
     <!-- Right side: readiness cards + calendar grid -->
-    <div style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
+    <div class="cal-main-pane" style="flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden">
     <div id="calReadinessBar" style="padding:14px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;border-bottom:1px solid var(--border);flex-shrink:0">
       <div class="cal-rd-card" style="--rd:#38BDF8;--rdbg:rgba(56,189,248,0.10)">
         <i class="ti ti-calendar-event cal-rd-ic"></i>
@@ -1084,6 +1084,22 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .cal-mday .cal-mchip{padding:1px 3px !important;font-size:8px !important;line-height:1.2 !important;border-radius:3px !important;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:100%}
   .cal-mday .cal-mchip .cal-mchip-addr{display:none}
   .cal-mday .cal-mchip-conf{font-size:8px}
+
+  /* Phone LAYOUT: the desktop shell is a fixed 260px sidebar beside the
+     calendar, which leaves the calendar pushed off the right edge on a
+     ~390px screen. Stack them instead and let the page scroll normally. */
+  .cal-layout{flex-direction:column;height:auto !important;overflow:visible !important}
+  .cal-unsched-pane{width:100% !important;border-right:none !important;border-bottom:1px solid var(--border);max-height:40vh}
+  .cal-main-pane{overflow:visible !important}
+  #calWeekGrid{flex:none !important;overflow:visible !important}
+  /* Four readiness cards across is unreadable this narrow; go 2x2. */
+  #calReadinessBar{grid-template-columns:repeat(2,1fr) !important;gap:10px !important;padding:12px !important}
+  .cal-rd-card{padding:10px 8px}
+  .cal-rd-card .cal-rd-n{font-size:22px}
+  .cal-rd-card .cal-rd-ic{font-size:14px}
+  /* Tighten the toolbar so it stops eating half the screen. */
+  .cal-toolbar{padding:10px 14px !important;gap:8px !important}
+  .cal-toolbar #calWeekLabel{min-width:0 !important;flex:1}
 }
 .cal-mchip-conf.cal-conf-clickable:hover{background:rgba(255,255,255,0.12)}
 .cal-mchip-conf.cal-conf-no{color:#FBBF24}
