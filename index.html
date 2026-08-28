@@ -8785,7 +8785,20 @@ $('saveJob').onclick=async ()=>{
   const existingJob = editingJobId ? jobs.find(x => x.id === editingJobId) : null;
   const addressChanged = existingJob ? (existingJob.address !== address) : true;
   const havePicked = (lat != null && lng != null);
-  const needsGeocode = !havePicked && addressChanged && address !== '—';
+  // Re-geocode if the address changed OR we have no coords. Picking coords from
+  // a suggestion sets lat/lng, but if the user then edited the address text
+  // without re-picking, those coords are stale and point at the wrong place —
+  // so a changed address always forces a fresh geocode.
+  // Was the picked coordinate set for THIS street? Compare the street+zip core,
+  // robust to apt/formatting differences between pick and save.
+  const streetCore = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const curStreet = streetCore($('f-street').value + ($('f-zip').value||''));
+  const pickStreet = picked && picked.address ? streetCore(picked.address.replace(/,/g,' ')) : '';
+  const pickedThisEdit = !!(havePicked && pickStreet && pickStreet.includes(streetCore($('f-street').value)) );
+  const needsGeocode = address !== '—' && (
+    (!havePicked && addressChanged) ||          // no coords + new address
+    (addressChanged && !pickedThisEdit)          // address changed and coords not freshly picked for THIS street
+  );
 
   if(needsGeocode){
     const btn = $('saveJob');
@@ -9027,9 +9040,12 @@ $('globalSearch').addEventListener('input',function(){
           document.getElementById('f-city').value  = p.city;
           document.getElementById('f-state').value = p.state;
           document.getElementById('f-zip').value   = p.zip;
-          // capture coordinates for the map view
+          // capture coordinates for the map view, stamped with the address they
+          // belong to — so a later address edit without re-picking is detected
+          // as stale and re-geocoded (prevents wrong map location).
           const coords = feats[i].center || [];
-          window.__pickedLngLat = { lng: coords[0], lat: coords[1] };
+          const pickedAddr = [p.street, p.city, p.state, p.zip].filter(Boolean).join(', ');
+          window.__pickedLngLat = { lng: coords[0], lat: coords[1], address: pickedAddr };
           setFieldGreen();
           closeSuggestions();
           // rotate session token after a selection (Mapbox billing best practice)
