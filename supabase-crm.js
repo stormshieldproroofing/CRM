@@ -533,8 +533,12 @@ async function pushAllToSupabase() {
         })));
         if(expErr){ console.error('[Supabase] expense insert failed — expenses may be lost, retry save:', expErr); if(window.toast) window.toast('Expense save failed — check connection and try again'); }
       } else {
-        // No expenses locally: clear the remote rows to match.
-        await sb.from('expenses').delete().eq('job_id', j.id);
+        // No expenses in local memory. This is almost always a transient load
+        // race or a realtime re-pull in progress — NOT a real intent to delete
+        // every expense. We do NOT delete remote rows here, because doing so
+        // wiped real data. Deletions happen explicitly via removeExpense, not by
+        // inferring "delete everything" from an empty local array.
+        // (If you truly need to clear a job's expenses, that's an explicit action.)
       }
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
