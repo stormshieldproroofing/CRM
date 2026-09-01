@@ -614,7 +614,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     </select>
     <div style="flex:1"></div>
     <button id="mapStyleBtn" class="btn-ghost" onclick="toggleMapStyle()" style="font-size:11px;padding:5px 11px;border:1px solid var(--border);border-radius:6px;background:#1E253A;color:var(--brand);cursor:pointer">🛰️ Satellite</button>
-    <button class="icon-btn" onclick="renderMapPage()" title="Refresh"><i class="ti ti-refresh"></i></button>
+    <button class="icon-btn" onclick="window.__mapDidInitialFit=false; renderMapPage()" title="Refresh &amp; fit to pins"><i class="ti ti-refresh"></i></button>
     <div id="map-count" style="font-size:11px;color:var(--muted);padding:0 6px"></div>
   </div>
   <div style="padding:8px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);background:#11151f">
@@ -626,9 +626,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <span id="roofAgeLabel" style="font-size:12px;font-weight:700;color:#F97316;white-space:nowrap">10–20 yr roofs</span>
       <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:180px">
         <span style="font-size:10px;color:var(--muted)">7</span>
-        <input type="range" id="roofAgeMin" min="7" max="30" value="10" oninput="updateRoofAge()" style="flex:1;accent-color:#F97316">
-        <input type="range" id="roofAgeMax" min="7" max="30" value="20" oninput="updateRoofAge()" style="flex:1;accent-color:#F97316">
-        <span style="font-size:10px;color:var(--muted)">30</span>
+        <input type="range" id="roofAgeMin" min="7" max="40" value="10" oninput="updateRoofAge()" style="flex:1;accent-color:#F97316">
+        <input type="range" id="roofAgeMax" min="7" max="40" value="20" oninput="updateRoofAge()" style="flex:1;accent-color:#F97316">
+        <span style="font-size:10px;color:var(--muted)">40</span>
       </div>
       <span id="roofLayerNote" style="font-size:11px;color:var(--muted);white-space:nowrap;min-width:90px"></span>
       <input id="roofNameSearch" type="text" placeholder="Search owner name…" oninput="updateRoofName()" style="font-size:11px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:#1E253A;color:var(--brand);outline:none;width:160px;font-family:'Barlow',sans-serif">
@@ -17321,8 +17321,12 @@ async function renderMapPage(){
     __mapMarkers.push(marker);
     bounds.extend([j.longitude, j.latitude]);
   });
-  if(filtered.length){
+  // Auto-fit only the first time markers are drawn. renderMapPage() also runs
+  // on filter changes and after a style toggle, and refitting every time would
+  // yank the user back out whenever they zoomed into a street.
+  if(filtered.length && !window.__mapDidInitialFit){
     map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 500 });
+    window.__mapDidInitialFit = true;
   }
 }
 
@@ -17525,6 +17529,7 @@ window.updateStormRange = function(){
 
 function roofAgeColor(age){
   // older roof = hotter color
+  if(age >= 30) return '#450A0A';      // near-black red - well beyond any warranty
   if(age >= 25) return '#7F1D1D';      // dark red - almost certainly past due
   if(age >= 20) return '#DC2626';      // deep red - well past typical life
   if(age >= 16) return '#EF4444';      // red - very likely original/old
