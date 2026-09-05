@@ -211,7 +211,14 @@ async function loadAllFromSupabase() {
                 : (r.quote && typeof r.quote === 'object' ? [r.quote] : undefined),
         activeQuote: (r.quote && typeof r.quote.__active === 'number') ? r.quote.__active : undefined,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
-        subVoucher: (r.sub_voucher && typeof r.sub_voucher === 'object') ? r.sub_voucher : null,
+        subVoucher: (() => {
+          // Legacy single-voucher mirror. Strip __list so this object never
+          // carries a stale copy of the array back into the next save.
+          if(!(r.sub_voucher && typeof r.sub_voucher === 'object')) return null;
+          const m = { ...r.sub_voucher };
+          delete m.__list;
+          return Object.keys(m).length ? m : null;
+        })(),
         subVouchers: (r.sub_voucher && Array.isArray(r.sub_voucher.__list)) ? r.sub_voucher.__list
                      : (r.sub_voucher && typeof r.sub_voucher === 'object' ? [r.sub_voucher] : []),
         contract: (r.contract && typeof r.contract === 'object') ? r.contract : null,
@@ -408,7 +415,15 @@ async function pushAllToSupabase() {
           const list = Array.isArray(j.subVouchers) ? j.subVouchers
             : (j.subVoucher && typeof j.subVoucher==='object' ? [j.subVoucher] : []);
           if(!list.length) return null;
-          return { __list: list, ...(j.subVoucher && typeof j.subVoucher==='object' ? j.subVoucher : list[list.length-1]) };
+          // The legacy mirror is spread on top for old readers, but it must NOT
+          // carry its own __list: on load j.subVoucher is set to the whole stored
+          // object (including __list), so spreading it unchanged would put a
+          // stale snapshot back over the fresh array and silently revert edits.
+          const mirrorSrc = (j.subVoucher && typeof j.subVoucher==='object')
+            ? j.subVoucher : list[list.length-1];
+          const mirror = { ...(mirrorSrc || {}) };
+          delete mirror.__list;
+          return { ...mirror, __list: list };
         })(),
         contract: (() => {
           const base = (j.contract && typeof j.contract === 'object') ? { ...j.contract } : {};
