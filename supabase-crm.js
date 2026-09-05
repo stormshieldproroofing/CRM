@@ -268,20 +268,17 @@ async function loadAllFromSupabase() {
       j.expenses.forEach(e => {
         if(e && (e.cat === 'Labor' || e.cat === 'labor')) e.cat = 'Roofing Labor';
       });
-      // Dedup ONLY on the database primary key (_id). Never on _vid or _eid:
-      // a single subvoucher legitimately produces SEVERAL expense lines that
-      // all share one voucher id, and treating those as duplicates collapsed
-      // them to one and then permanently deleted the rest on the next save.
-      // Never dedup on content signature either — two real ABC purchases can
-      // legitimately share category, amount and vendor.
+      // Dedup ONLY on unique ids (_vid / _eid). Never on content signature —
+      // two real ABC purchases can legitimately share category/amount/vendor,
+      // and deleting one as a "duplicate" was silently losing real expenses.
+      // Dedup ONLY on the database primary key. A single subvoucher
+      // legitimately produces SEVERAL expense lines sharing one voucher id,
+      // and collapsing those deleted real expenses on the next save.
       const keep = [];
       const seenId = new Set();
       j.expenses.forEach(e => {
         if(!e) return;
-        if(e._id){
-          if(seenId.has(e._id)){ _dupRemoved++; return; }
-          seenId.add(e._id);
-        }
+        if(e._id){ if(seenId.has(e._id)){ _dupRemoved++; return; } seenId.add(e._id); }
         keep.push(e);
       });
       if(keep.length !== j.expenses.length) j.expenses = keep;
@@ -332,6 +329,10 @@ let saveTimer = null;
 let savePending = false;
 function scheduleSave() {
   savePending = true;
+  // Tell realtime a local write is coming. Without this, the 600ms debounce is
+  // a window in which a realtime pull can replace window.jobs and destroy the
+  // unsaved change before it is ever sent.
+  window.__localDirtyAt = Date.now();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => { savePending = false; pushAllToSupabase(); }, 600);
 }
@@ -775,8 +776,15 @@ let __rtPendingPull = false;
 window.__lastLocalPushAt = 0;   // set by pushAllToSupabase on every write
 
 function __userIsBusyEditing(){
+  // A local change is written but not yet pushed. Pulling now would replace
+  // window.jobs and silently discard it. This was losing voucher expenses.
+  if (savePending) return true;
+  if (window.__localDirtyAt && (Date.now() - window.__localDirtyAt) < 4000) return true;
   // Don't yank data out from under an active edit.
   if (document.querySelector('.modal.open, #addJobModal.open')) return true;
+  // Any full-screen overlay counts as an edit surface — the subvoucher and
+  // ABC order editors build their own overlays and are not `.modal.open`.
+  if (document.querySelector('.sv-overlay, .overlay, [data-editor-overlay]')) return true;
   // A job detail panel is open AND focused input/textarea is inside it.
   const ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return true;
