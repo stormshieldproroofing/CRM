@@ -6510,6 +6510,13 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
     refreshExpenseUI();
 
+    // Expose it. The subvoucher editor and other out-of-scope callers guard on
+    // `window.refreshExpenseUI`, which was never assigned anywhere — so those
+    // refreshes silently no-oped and a saved voucher's expense did not appear
+    // until a full reload. Re-assigned on each job open so it always points at
+    // the currently mounted panel.
+    window.refreshExpenseUI = refreshExpenseUI;
+
     // ── Commission system ─────────────────────────────────────────────
     if(!curJob().commissions) curJob().commissions=[];
     // Store assigned agent name for collapsed summary
@@ -12719,9 +12726,11 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
   const vid = (voucherData && voucherData._vid) ? voucherData._vid : null;
   let exp = vid ? j.expenses.find(e=>e._vid===vid)
                 : j.expenses.find(e=>e._src===tag && !e._vid);
-  // Legacy fallback: no vid match, but this sub already has a voucher expense
-  // on the job — update it rather than creating a sibling.
-  if(!exp && !vid) exp = j.expenses.find(e=>e._src===tag && e.vendor===sub.id);
+  // Legacy fallback: match an older voucher expense for this sub that predates
+  // vids. Only safe when this voucher has no id of its own AND the candidate
+  // has none either — otherwise a second voucher for the same sub on the same
+  // job would overwrite the first instead of adding a new line.
+  if(!exp && !vid) exp = j.expenses.find(e=>e._src===tag && !e._vid && e.vendor===sub.id);
   if(!exp){
     exp = { _src:tag, _vid: vid || ('v'+Date.now()+Math.random().toString(36).slice(2,6)), date: today };
     j.expenses.push(exp);
