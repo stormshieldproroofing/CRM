@@ -272,9 +272,32 @@ async function loadAllFromSupabase() {
       const merged = newJobs.map(nj => {
         const existing = byId.get(nj.id);
         if (!existing) return nj;
+
+        // Carry over child records that exist locally but have no database id
+        // yet — they are mid-save. The incoming arrays are built from the
+        // database, so assigning them straight over would discard an expense
+        // that was added seconds ago and whose insert is still in flight. This
+        // is why consecutive invoice imports vanished one after another.
+        const pendingExpenses = Array.isArray(existing.expenses)
+          ? existing.expenses.filter(e => e && !e._id)
+          : [];
+
         // Overwrite own properties in place, drop keys no longer present.
         Object.keys(existing).forEach(k => { if (!(k in nj)) delete existing[k]; });
         Object.assign(existing, nj);
+
+        if (pendingExpenses.length) {
+          if (!Array.isArray(existing.expenses)) existing.expenses = [];
+          // Avoid re-adding one whose insert completed between build and merge.
+          pendingExpenses.forEach(p => {
+            const already = existing.expenses.some(e =>
+              e && e.desc === p.desc && String(e.amount) === String(p.amount) &&
+              (e._vid || null) === (p._vid || null));
+            if (!already) existing.expenses.push(p);
+          });
+          console.log('[Realtime] preserved', pendingExpenses.length,
+                      'unsaved expense(s) through reload');
+        }
         return existing;
       });
       window.jobs.length = 0;
@@ -898,6 +921,9 @@ if (typeof document !== 'undefined') {
 }
 
 function __userIsBusyEditing(){
+  // A push is actually running. Its inserts have not all landed yet, so the
+  // database is mid-write and pulling now would read a partial picture.
+  if (__pushInFlight) return true;
   // A local change is written but not yet pushed. Pulling now would replace
   // window.jobs and silently discard it. This was losing voucher expenses.
   if (savePending) return true;
