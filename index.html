@@ -6379,6 +6379,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         j2.zohoDeleted.exp.push(removed.zohoId);
       }
       j2.expenses.splice(i,1);
+      // Delete the row directly. The bulk sync no longer removes anything —
+      // inferring deletions from the local array shape was destroying data —
+      // so an explicit removal has to do its own delete, by primary key.
+      if(removed && removed._id && window.sb){
+        window.sb.from('expenses').delete().eq('id', removed._id)
+          .then(({ error }) => {
+            if(error){
+              console.error('[Supabase] expense delete failed:', error);
+              if(window.toast) window.toast('Could not delete that expense — refresh and retry');
+            }
+          });
+      }
       saveToStorage();
       refreshExpenseUI();
       renderBoard();

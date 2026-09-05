@@ -569,9 +569,8 @@ async function __pushAllToSupabaseInner() {
       // vanish permanently. A realtime pull landing in the same gap reads an
       // empty table and wipes the in-memory copy too.
       //
-      // Instead: rows that already exist are UPDATED by primary key, genuinely
-      // new rows are INSERTED, and only rows the user actually removed are
-      // DELETED. At no point does the job have zero expenses in the database.
+      // Instead: rows that already exist are UPDATED by primary key and new
+      // rows are INSERTED. Nothing is ever deleted here — see step 3.
       if (Array.isArray(j.expenses)) {
         const toRow = e => ({
           job_id: j.id,
@@ -614,29 +613,33 @@ async function __pushAllToSupabaseInner() {
           }
         }
 
-        // 2. Insert genuinely new rows and write their ids back into memory, so
-        //    the next save updates them instead of creating duplicates.
-        if (fresh.length) {
-          const { data: inserted, error: insErr } = await sb.from('expenses')
-            .insert(fresh.map(toRow)).select('id');
+        // 2. Insert genuinely new rows. Inserted one at a time so each returned
+        //    id maps to the correct local object — a bulk insert gives no
+        //    guarantee that the returned rows come back in input order, and
+        //    mismatched ids would corrupt every later update.
+        for (const e of fresh) {
+          const { data: row, error: insErr } = await sb.from('expenses')
+            .insert(toRow(e)).select('id').single();
           if (insErr) {
             console.error('[Supabase] expense insert failed — retry save:', insErr);
             if (window.toast) window.toast('Expense save failed — check connection and try again');
-          } else if (Array.isArray(inserted)) {
-            inserted.forEach((row, i) => { if (fresh[i] && row && row.id) fresh[i]._id = row.id; });
+            break;
           }
+          if (row && row.id) e._id = row.id;
         }
 
-        // 3. Delete ONLY rows the user actually removed. Never a blanket wipe.
-        //    Skipped entirely when the local list is empty, since that is far
-        //    more often a load race than a real intent to clear everything.
-        if (j.expenses.length) {
-          const keepIds = j.expenses.map(e => e && e._id).filter(Boolean);
-          let del = sb.from('expenses').delete().eq('job_id', j.id);
-          if (keepIds.length) del = del.not('id', 'in', `(${keepIds.join(',')})`);
-          const { error: delErr } = await del;
-          if (delErr) console.warn('[Supabase] stale expense cleanup skipped:', delErr);
-        }
+        // 3. NO deletion here. Deliberately.
+        //
+        // A bulk sync must never infer "the user removed this" from the shape of
+        // the local array. Any moment where local state is incomplete — a load
+        // race, a failed insert, an orphaned job reference, ids not yet written
+        // back — would turn that inference into permanent data loss, and it
+        // repeatedly did.
+        //
+        // Removing an expense is an explicit user action and is handled by
+        // removeExpense(), which deletes that one row by id. Worst case here is
+        // a stale row lingering, which is visible and fixable. The worst case
+        // for a blanket delete is silent, permanent, and was happening.
       }
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
