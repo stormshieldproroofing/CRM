@@ -100,11 +100,6 @@ async function loadAllFromSupabase() {
       window.TEAM.forEach(m => window.USERS.push({ id:m.id, name:m.name, color:m.color }));
     }
     console.log('[Supabase] loaded', window.TEAM.length, 'team members; you are:', window.currentMember?.role || 'unknown');
-    // Warm the Send Card images for this rep (front + shared back) so the
-    // first tap is instant and later taps work without a signal.
-    if (typeof window.prefetchRepCard === 'function') {
-      window.prefetchRepCard();
-    }
     // Show/hide admin-only nav links now that we know the role
     if (typeof window.updateProfitsNavVisibility === 'function') {
       window.updateProfitsNavVisibility();
@@ -236,7 +231,7 @@ async function loadAllFromSupabase() {
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
           .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
+          .map(e=>({_id:e.id,cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         signedContractFiles:byKind('signed_contract'),
@@ -273,16 +268,20 @@ async function loadAllFromSupabase() {
       j.expenses.forEach(e => {
         if(e && (e.cat === 'Labor' || e.cat === 'labor')) e.cat = 'Roofing Labor';
       });
-      // Dedup ONLY on unique ids (_vid / _eid). Never on content signature —
-      // two real ABC purchases can legitimately share category/amount/vendor,
-      // and deleting one as a "duplicate" was silently losing real expenses.
+      // Dedup ONLY on the database primary key (_id). Never on _vid or _eid:
+      // a single subvoucher legitimately produces SEVERAL expense lines that
+      // all share one voucher id, and treating those as duplicates collapsed
+      // them to one and then permanently deleted the rest on the next save.
+      // Never dedup on content signature either — two real ABC purchases can
+      // legitimately share category, amount and vendor.
       const keep = [];
-      const seenVid = new Set();
-      const seenEid = new Set();
+      const seenId = new Set();
       j.expenses.forEach(e => {
         if(!e) return;
-        if(e._vid){ if(seenVid.has(e._vid)){ _dupRemoved++; return; } seenVid.add(e._vid); }
-        if(e._eid){ if(seenEid.has(e._eid)){ _dupRemoved++; return; } seenEid.add(e._eid); }
+        if(e._id){
+          if(seenId.has(e._id)){ _dupRemoved++; return; }
+          seenId.add(e._id);
+        }
         keep.push(e);
       });
       if(keep.length !== j.expenses.length) j.expenses = keep;
