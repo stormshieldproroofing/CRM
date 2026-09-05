@@ -12330,6 +12330,8 @@ async function openSubVoucherEditor(jobId, editVid){
   const savedExpCat = saved.expCat || payTypeExpCat(savedPayType);
 
   const overlay = document.createElement('div');
+  // Marked so the realtime pull guard treats this as an active edit surface.
+  overlay.setAttribute('data-editor-overlay','subvoucher');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
   overlay.innerHTML = `
     <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:560px;max-width:100%;max-height:94vh;overflow:auto">
@@ -12473,19 +12475,25 @@ async function openSubVoucherEditor(jobId, editVid){
 
   // Save without closing — shared by the Save button and the exit prompt.
   function svPerformSave(){
-    if(j){
+    // Re-resolve the job from the live array. `j` was captured when this editor
+    // opened, and a realtime pull replaces every object in window.jobs — which
+    // would leave `j` orphaned and send the new expense into a detached object
+    // that never gets saved. Always write to the object that is actually in
+    // window.jobs right now.
+    const live = (window.jobs || []).find(x => x.id === jobId) || j;
+    if(live){
       const vd = collectVoucher();
-      persistVoucher(vd);
+      persistVoucher(vd, live);
       const subId = overlay.querySelector('#svSub').value;
       const sub = (window.subcontractors||[]).find(s=>s.id===subId);
       const c = compute();
       if(sub && c.total>0){
         const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
-        const vid = createOrUpdateSubExpense(j, sub, c, vd.checkNo, isPaid, vd);
-        vd._vid = vid; persistVoucher(vd);
+        const vid = createOrUpdateSubExpense(live, sub, c, vd.checkNo, isPaid, vd);
+        vd._vid = vid; persistVoucher(vd, live);
       }
       saveToStorage();
-      if(window.refreshExpenseUI) refreshExpenseUI();
+      if(window.refreshExpenseUI) window.refreshExpenseUI();
     }
     svDirty = false;
   }
@@ -12652,14 +12660,15 @@ async function openSubVoucherEditor(jobId, editVid){
 
   // Persist the current editor state into the job's vouchers array (create or
   // update the one being edited), keeping j.subVoucher as a mirror of the latest.
-  function persistVoucher(vd){
-    if(!j) return vd;
-    const list = getJobVouchers(j);
+  function persistVoucher(vd, target){
+    const job = target || (window.jobs||[]).find(x=>x.id===jobId) || j;
+    if(!job) return vd;
+    const list = getJobVouchers(job);
     // Ensure a stable id.
     if(!vd._vid) vd._vid = editVid || ('v'+Date.now()+Math.random().toString(36).slice(2,6));
     const idx = list.findIndex(v=>v._vid===vd._vid);
     if(idx >= 0) list[idx] = vd; else list.push(vd);
-    j.subVoucher = vd;   // legacy mirror
+    job.subVoucher = vd;   // legacy mirror
     editVid = vd._vid;   // subsequent saves in this session update the same one
     return vd;
   }
@@ -12692,13 +12701,14 @@ async function openSubVoucherEditor(jobId, editVid){
     const isPaid = overlay.querySelector('#svPaid')?.checked !== false;
     if(!sub){ toast('Select who this is paid to first'); return; }
     if(c.total<=0){ toast(c.repair ? `Add line items to calculate the ${(c.payLabel||'').toLowerCase()} amount` : 'Enter squares to calculate pay'); return; }
-    if(j){
+    const livePrint = (window.jobs || []).find(x => x.id === jobId) || j;
+    if(livePrint){
       const vd = collectVoucher();
-      persistVoucher(vd);
-      const vid = createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, vd);
-      vd._vid = vid; persistVoucher(vd);
+      persistVoucher(vd, livePrint);
+      const vid = createOrUpdateSubExpense(livePrint, sub, c, checkNo, isPaid, vd);
+      vd._vid = vid; persistVoucher(vd, livePrint);
       saveToStorage();
-      if(window.refreshExpenseUI) refreshExpenseUI();
+      if(window.refreshExpenseUI) window.refreshExpenseUI();
       svDirty = false;   // print also persists, so nothing is left unsaved
     }
     printSubVoucher(j, sub, c, checkNo, extraLines);
