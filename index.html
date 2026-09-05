@@ -5870,7 +5870,22 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     {
       const acc=$('expAcc'),chev=$('expChev'),bdy=$('expBody');
       const accHeader = acc ? acc.querySelector('.acc-header') : null;
-      if(accHeader && bdy) accHeader.addEventListener('click',()=>{const open=bdy.style.display==='block';bdy.style.display=open?'none':'block';if(chev)chev.classList.toggle('open',!open);if(window.refreshExpenseUI)window.refreshExpenseUI();});
+      // Remember open/closed on window. It used to live only in this element's
+      // inline style, so any panel rebuild — and realtime pulls rebuild it
+      // constantly — silently collapsed the section a second or two after the
+      // user opened it.
+      if(bdy){
+        if(window.__expAccOpen === undefined) window.__expAccOpen = (bdy.style.display === 'block');
+        bdy.style.display = window.__expAccOpen ? 'block' : 'none';
+        if(chev) chev.classList.toggle('open', !!window.__expAccOpen);
+      }
+      if(accHeader && bdy) accHeader.addEventListener('click',()=>{
+        const open = bdy.style.display==='block';
+        window.__expAccOpen = !open;
+        bdy.style.display = open?'none':'block';
+        if(chev) chev.classList.toggle('open',!open);
+        if(window.refreshExpenseUI) window.refreshExpenseUI();
+      });
     }
 
     // ── Deposits system ──────────────────────────────────────────────

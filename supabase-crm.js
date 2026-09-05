@@ -362,7 +362,53 @@ if (typeof document !== 'undefined') {
   window.addEventListener('blur', flushPendingSave);
 }
 
+// Only one push may run at a time. Two overlapping pushes interleave their
+// writes, which is how adding several expenses in a row lost rows. If a save is
+// requested while one is running, it is queued and runs once immediately after.
+let __pushInFlight = null;
+let __pushQueued = false;
+
 async function pushAllToSupabase() {
+  if (__pushInFlight) { __pushQueued = true; return __pushInFlight; }
+  __pushInFlight = (async () => {
+    try {
+      await __pushAllToSupabaseInner();
+    } finally {
+      __pushInFlight = null;
+      if (__pushQueued) { __pushQueued = false; pushAllToSupabase(); }
+    }
+  })();
+  return __pushInFlight;
+}
+
+// Rolling local snapshot taken before every write. Purely a safety net: if a
+// sync ever drops data again, the previous good state is recoverable from the
+// browser with window.__restoreSnapshot().
+function __snapshotJobs() {
+  try {
+    const snap = JSON.stringify({ at: Date.now(), jobs: window.jobs || [] });
+    // Keep two generations so a bad save doesn't immediately overwrite the
+    // last known-good copy.
+    const prev = localStorage.getItem('ssp_jobs_snapshot_v1');
+    if (prev) localStorage.setItem('ssp_jobs_snapshot_prev_v1', prev);
+    localStorage.setItem('ssp_jobs_snapshot_v1', snap);
+  } catch (e) { /* quota or serialization issue — never block the save */ }
+}
+
+window.__restoreSnapshot = function(which){
+  const key = which === 'prev' ? 'ssp_jobs_snapshot_prev_v1' : 'ssp_jobs_snapshot_v1';
+  const raw = localStorage.getItem(key);
+  if (!raw) { console.warn('No snapshot stored under', key); return null; }
+  const snap = JSON.parse(raw);
+  console.log('Snapshot from', new Date(snap.at).toLocaleString(),
+              '·', snap.jobs.length, 'jobs',
+              '·', snap.jobs.reduce((n,j)=>n+((j.expenses||[]).length),0), 'expenses');
+  console.log('To restore: window.jobs = window.__restoreSnapshot().jobs; saveToStorage();');
+  return snap;
+};
+
+async function __pushAllToSupabaseInner() {
+  __snapshotJobs();
   window.__lastLocalPushAt = Date.now();
   try {
     // Build base rows without id, then categorize
@@ -515,16 +561,19 @@ async function pushAllToSupabase() {
         await sb.from('deposits').delete().eq('job_id', j.id);
       }
 
-      // Replace expenses safely: insert first into a temp-free flow by
-      // deleting then inserting, but if the insert throws, the delete has
-      // already run — so guard the insert and re-throw only after logging,
-      // and skip the delete entirely when there's nothing new to write AND
-      // the job legitimately has no expenses (avoids wiping on transient
-      // empty states during load races).
-      if (j.expenses?.length) {
-        await sb.from('expenses').delete().eq('job_id', j.id);
-        const { error: expErr } = await sb.from('expenses').insert(
-        j.expenses.map(e => ({
+      // Expenses are synced NON-DESTRUCTIVELY.
+      //
+      // The old approach deleted every row for the job and reinserted them.
+      // That is unsafe: adding invoices one after another overlaps two saves,
+      // so one save's DELETE lands in the middle of another's INSERT and rows
+      // vanish permanently. A realtime pull landing in the same gap reads an
+      // empty table and wipes the in-memory copy too.
+      //
+      // Instead: rows that already exist are UPDATED by primary key, genuinely
+      // new rows are INSERTED, and only rows the user actually removed are
+      // DELETED. At no point does the job have zero expenses in the database.
+      if (Array.isArray(j.expenses)) {
+        const toRow = e => ({
           job_id: j.id,
           category: e.cat,
           description: e.desc,
@@ -550,15 +599,44 @@ async function pushAllToSupabase() {
           eid: e._eid || null,
           exp_date: e.date || null,
           on_account: !!e.onAccount,
-        })));
-        if(expErr){ console.error('[Supabase] expense insert failed — expenses may be lost, retry save:', expErr); if(window.toast) window.toast('Expense save failed — check connection and try again'); }
-      } else {
-        // No expenses in local memory. This is almost always a transient load
-        // race or a realtime re-pull in progress — NOT a real intent to delete
-        // every expense. We do NOT delete remote rows here, because doing so
-        // wiped real data. Deletions happen explicitly via removeExpense, not by
-        // inferring "delete everything" from an empty local array.
-        // (If you truly need to clear a job's expenses, that's an explicit action.)
+        });
+
+        const existing = j.expenses.filter(e => e && e._id);
+        const fresh    = j.expenses.filter(e => e && !e._id);
+
+        // 1. Update rows we already have ids for.
+        if (existing.length) {
+          const { error: upErr } = await sb.from('expenses')
+            .upsert(existing.map(e => ({ id: e._id, ...toRow(e) })), { onConflict: 'id' });
+          if (upErr) {
+            console.error('[Supabase] expense update failed:', upErr);
+            if (window.toast) window.toast('Expense update failed — check connection and retry');
+          }
+        }
+
+        // 2. Insert genuinely new rows and write their ids back into memory, so
+        //    the next save updates them instead of creating duplicates.
+        if (fresh.length) {
+          const { data: inserted, error: insErr } = await sb.from('expenses')
+            .insert(fresh.map(toRow)).select('id');
+          if (insErr) {
+            console.error('[Supabase] expense insert failed — retry save:', insErr);
+            if (window.toast) window.toast('Expense save failed — check connection and try again');
+          } else if (Array.isArray(inserted)) {
+            inserted.forEach((row, i) => { if (fresh[i] && row && row.id) fresh[i]._id = row.id; });
+          }
+        }
+
+        // 3. Delete ONLY rows the user actually removed. Never a blanket wipe.
+        //    Skipped entirely when the local list is empty, since that is far
+        //    more often a load race than a real intent to clear everything.
+        if (j.expenses.length) {
+          const keepIds = j.expenses.map(e => e && e._id).filter(Boolean);
+          let del = sb.from('expenses').delete().eq('job_id', j.id);
+          if (keepIds.length) del = del.not('id', 'in', `(${keepIds.join(',')})`);
+          const { error: delErr } = await del;
+          if (delErr) console.warn('[Supabase] stale expense cleanup skipped:', delErr);
+        }
       }
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
@@ -790,6 +868,13 @@ let __rtPullTimer = null;
 let __rtPendingPull = false;
 window.__lastLocalPushAt = 0;   // set by pushAllToSupabase on every write
 
+// Track clicks anywhere in the app so a realtime pull can tell the difference
+// between an idle panel (safe to rebuild) and one the user is working in.
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', () => { window.__lastPanelInteractAt = Date.now(); }, true);
+  document.addEventListener('input', () => { window.__lastPanelInteractAt = Date.now(); }, true);
+}
+
 function __userIsBusyEditing(){
   // A local change is written but not yet pushed. Pulling now would replace
   // window.jobs and silently discard it. This was losing voucher expenses.
@@ -816,8 +901,19 @@ async function __rtDoPull(){
     await loadAllFromSupabase();
     if (typeof window.rerenderActivePage === 'function') window.rerenderActivePage();
     // If a job detail was open, refresh it in place (it's still in window.jobs).
+    // Skipped while the user is actively working in the panel — rebuilding it
+    // mid-interaction collapses expanded sections and loses scroll position for
+    // no benefit, since the data was just pulled and nothing local is pending.
     if (openId && window.openJobId === openId && typeof window.renderDetailPanel === 'function') {
-      window.renderDetailPanel();
+      const ae = document.activeElement;
+      const inPanel = ae && ae.closest && ae.closest('#detailPanel, .detail-panel, #jobDetail');
+      const recentlyInteracted = window.__lastPanelInteractAt &&
+                                 (Date.now() - window.__lastPanelInteractAt) < 8000;
+      if (!inPanel && !recentlyInteracted) {
+        window.renderDetailPanel();
+      } else {
+        console.log('[Realtime] detail panel in use — skipped rebuild');
+      }
     }
     console.log('[Realtime] pulled latest changes');
   } catch(e){ console.warn('[Realtime] pull failed', e); }
