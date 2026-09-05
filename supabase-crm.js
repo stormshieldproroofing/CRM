@@ -258,8 +258,27 @@ async function loadAllFromSupabase() {
   else {
     const newJobs = await buildJobsFromRows(jobRows);
     if (Array.isArray(window.jobs)) {
+      // Merge INTO the existing job objects rather than replacing them.
+      //
+      // Several async handlers capture `const j = jobs.find(...)`, then await a
+      // PDF parse or a storage upload, then push onto j.expenses. If a realtime
+      // pull swapped the objects during that await, the handler ended up writing
+      // into a detached object that nothing would ever save — silently losing
+      // imported invoices, voucher expenses and attachments.
+      //
+      // Keeping object identity stable means a captured reference is still the
+      // live object when the handler resumes.
+      const byId = new Map(window.jobs.map(j => [j && j.id, j]));
+      const merged = newJobs.map(nj => {
+        const existing = byId.get(nj.id);
+        if (!existing) return nj;
+        // Overwrite own properties in place, drop keys no longer present.
+        Object.keys(existing).forEach(k => { if (!(k in nj)) delete existing[k]; });
+        Object.assign(existing, nj);
+        return existing;
+      });
       window.jobs.length = 0;
-      newJobs.forEach(j => window.jobs.push(j));
+      merged.forEach(j => window.jobs.push(j));
     } else {
       window.jobs = newJobs;
     }

@@ -4029,7 +4029,22 @@ async function importAbcInvoice(file){
         j.otherFiles.push(invoiceRec);
       }
     } catch(e){ console.warn('[import] file attach failed', e); }
-    j.expenses.push({
+
+    // Re-resolve the job from the live array. `j` was captured before the PDF
+    // parse and the storage upload above — both awaits — and a realtime pull
+    // replaces every object in window.jobs. Pushing onto the captured `j` after
+    // a swap writes into a detached object that is never saved, which is why a
+    // second imported invoice vanished.
+    const live = (window.jobs||[]).find(x=>x.id===jid) || j;
+    if(!Array.isArray(live.expenses)) live.expenses=[];
+    if(invoiceRec){
+      if(!Array.isArray(live.otherFiles)) live.otherFiles=[];
+      // Only add if the re-resolved job doesn't already have it.
+      if(!live.otherFiles.some(f=>f && invoiceRec.id && f.id===invoiceRec.id)){
+        live.otherFiles.push(invoiceRec);
+      }
+    }
+    live.expenses.push({
       cat: isReturn ? 'Returns' : 'Materials',
       desc: descBits.join(' · '),
       amount: (isReturn ? Math.abs(parsed.total) : parsed.total).toFixed(2),
@@ -4054,7 +4069,7 @@ async function importAbcInvoice(file){
       if(window.refreshExpenseUI) window.refreshExpenseUI();
     }, 30);
     if(typeof renderBoard==='function') renderBoard();
-    if(typeof logActivity==='function') logActivity(j, 'expense', isReturn?(vName+' return recorded'):(vName+' invoice imported'), `${isReturn?'Return (credit)':'Materials'}: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:(parsed.orderNum?' · Inv '+parsed.orderNum:'')}`);
+    if(typeof logActivity==='function') logActivity(live, 'expense', isReturn?(vName+' return recorded'):(vName+' invoice imported'), `${isReturn?'Return (credit)':'Materials'}: ${fmt(parsed.total)}${parsed.po?' · PO '+parsed.po:(parsed.orderNum?' · Inv '+parsed.orderNum:'')}`);
     toast(isReturn ? 'Return recorded as a credit · PDF attached' : 'Materials expense added · invoice attached');
   });
 }
