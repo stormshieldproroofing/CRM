@@ -3022,6 +3022,16 @@ function repCardVersions(force){
       const map = {};
       (root.data   || []).forEach(f => { if(f.name) map[f.name] = repCardStamp(f); });
       (fronts.data || []).forEach(f => { if(f.name) map['fronts/' + f.name] = repCardStamp(f); });
+      // Listing needs a SELECT policy on storage.objects; downloading from a
+      // public bucket does not. Without that policy list() returns zero rows
+      // and no error, which is indistinguishable from an empty bucket — so
+      // treat "nothing listed" as "version unknown" and let the fetch decide.
+      // Returning {} here would make every path look deleted.
+      if(!Object.keys(map).length){
+        console.warn('[rep-cards] storage listing returned no rows; ' +
+                     'version checks disabled (add a SELECT policy on storage.objects to enable them)');
+        return null;
+      }
       return map;
     } catch(e){
       console.warn('[rep-cards] version check failed', e);
@@ -3061,8 +3071,13 @@ async function getRepCardImage(path, versions){
 
   const url = repCardPublicUrl(path);
   if(!url) return (stored && stored.uri) || null;
+  // Supabase serves public objects through a CDN with its own cache lifetime,
+  // so overwriting a file can keep returning the old bytes for a while. Tagging
+  // the URL with the object's stamp sidesteps that (and the browser cache too).
+  const bust = url + (url.indexOf('?') === -1 ? '?' : '&')
+             + 'v=' + encodeURIComponent(want || Date.now());
   try {
-    const res = await fetch(url, { cache: 'no-cache' });
+    const res = await fetch(bust, { cache: 'no-cache' });
     if(!res.ok) return null; // 400/404 = no card uploaded for this rep
     const uri = await blobToDataUri(await res.blob());
     const entry = { v: want || '', uri };
