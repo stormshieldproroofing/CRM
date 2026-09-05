@@ -376,6 +376,17 @@ window.loadClosedJobs = loadClosedJobs;
 
 let saveTimer = null;
 let savePending = false;
+// Immediate, awaitable save for actions that must be durable before the user
+// can start another one — importing an invoice, for example. scheduleSave's
+// 600ms debounce is reset by each new call, so firing several imports quickly
+// meant nothing was written until the user stopped, leaving a long window in
+// which a reload or an error could lose all of them.
+window.flushSaveNow = async function(){
+  savePending = false;
+  clearTimeout(saveTimer);
+  return pushAllToSupabase();
+};
+
 function scheduleSave() {
   savePending = true;
   // Tell realtime a local write is coming. Without this, the 600ms debounce is

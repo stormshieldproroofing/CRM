@@ -3928,6 +3928,14 @@ function parseAbcInvoice(text){
 }
 
 async function importAbcInvoice(file){
+  // One import at a time. Firing several in quick succession overlapped their
+  // uploads and saves, which is how consecutively added invoices went missing.
+  // The flag is set by the confirm handler below, which is where the upload and
+  // save actually happen — this function returns as soon as the preview opens.
+  if (window.__abcImportBusy){
+    toast('Still saving the previous invoice — one moment');
+    return;
+  }
   const jid = window.openJobId || openJobId;
   const j = (window.jobs||[]).find(x=>x.id===jid);
   if(!j){ toast('Open a job first'); return; }
@@ -4008,6 +4016,8 @@ async function importAbcInvoice(file){
   overlay.querySelector('#abcCancel').addEventListener('click',close);
   overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
   overlay.querySelector('#abcConfirm').addEventListener('click', async ()=>{
+    if(window.__abcImportBusy) return;      // guard against a double-click
+    window.__abcImportBusy = true;
     overlay.querySelector('#abcConfirm').textContent='Adding…';
     overlay.querySelector('#abcConfirm').disabled=true;
     // 1) Create the expense — a Credit Memo becomes a "Returns" entry.
@@ -4056,7 +4066,20 @@ async function importAbcInvoice(file){
       invoiceFile: invoiceRec ? { id: invoiceRec.id, name: invoiceRec.name || (file && file.name) || 'Invoice.pdf' } : null,
     });
     // (PDF already attached above and linked to the expense.)
-    saveToStorage();
+    // Save IMMEDIATELY and wait for it. saveToStorage() debounces 600ms and each
+    // new call resets that timer, so importing several invoices quickly meant
+    // none of them were written until the user stopped — and anything going
+    // wrong in that window lost the lot. Each import is now durable before the
+    // next one can begin.
+    try {
+      if (window.flushSaveNow) await window.flushSaveNow();
+      else saveToStorage();
+    } catch(e){
+      console.error('[import] save failed', e);
+      toast('Invoice added but the save failed — check connection and retry');
+    } finally {
+      window.__abcImportBusy = false;   // next import may now begin
+    }
     close();
     // Re-render the whole detail panel so the new expense shows immediately
     // (refreshExpenseUI alone can miss it if the section wasn't mounted/open).
