@@ -3402,6 +3402,38 @@ function jobMatchesSearch(j, q){
   return text.includes(q) || !!(queryDigits && digits.includes(queryDigits));
 }
 
+// ── Adjuster phone helpers ────────────────────────────────────────────
+// Adjusters are usually reached at a main line plus an extension, entered in
+// all sorts of ways: "281-555-0134 x2205", "(281) 555-0134 ext. 2205",
+// "2815550134,,2205". Split the two apart so the number stays tappable and the
+// extension is preserved rather than mangled into the dial string.
+function splitAdjusterPhone(raw){
+  const s = String(raw||'').trim();
+  if(!s) return { number:'', ext:'' };
+  // Extension marker: x, ext, ext., extension, or a hash/comma run.
+  const m = s.match(/^(.*?)(?:\s*(?:x|ext\.?|extension|#)\s*|,+\s*)(\d{1,7})\s*$/i);
+  if(m) return { number: m[1].trim(), ext: m[2] };
+  return { number: s, ext:'' };
+}
+
+// Display form: pretty-print the main number, keep the extension readable.
+function formatAdjusterPhone(raw){
+  const { number, ext } = splitAdjusterPhone(raw);
+  const pretty = (typeof formatPhone === 'function' && formatPhone(number)) || number;
+  return ext ? `${pretty} ×${ext}` : pretty;
+}
+window.formatAdjusterPhone = formatAdjusterPhone;
+
+// tel: link. Commas are pause characters on both iOS and Android, so the
+// extension is dialled automatically after the call connects.
+function adjusterTelHref(raw){
+  const { number, ext } = splitAdjusterPhone(raw);
+  const digits = String(number||'').replace(/[^\d+]/g,'');
+  if(!digits) return '#';
+  return ext ? `tel:${digits},,${ext}` : `tel:${digits}`;
+}
+window.adjusterTelHref = adjusterTelHref;
+
 function daysSinceCreated(j){
   const raw = j.createdAt || j.created;
   const date = typeof raw === 'number' ? new Date(raw) : new Date(String(raw||'').replace(' at ', ' '));
@@ -3443,6 +3475,12 @@ function daysInStage(j){
 }
 // Number of days in a stage before the indicator turns red (stalled).
 const STAGE_STALE_DAYS = 7;
+
+// ── Pipeline card badge toggles ───────────────────────────────────────
+// Temporarily hidden. Flip either back to true to restore that badge on the
+// job cards; nothing else needs changing, the underlying data is still tracked.
+const SHOW_CARD_CONTACT_BADGE   = false;  // "Nd since last contact" (phone-x)
+const SHOW_CARD_CHECKLIST_BADGE = false;  // checklist progress (checkbox)
 
 // Is a closed (completed/lost) job "recent"? Uses the last stage-change date,
 // falling back to created date. Used to keep the board uncluttered.
@@ -5040,7 +5078,7 @@ function renderCard(j){
     <div class="card-footer">
       <div class="card-meta" title="Days since created"><i class="ti ti-clock" aria-hidden="true"></i>${ageDays}d</div>
       <div class="card-meta${stageDays>=STAGE_STALE_DAYS?' stage-stale':''}" title="Days in current stage${stageDays>=STAGE_STALE_DAYS?' — stalled':''}"><i class="ti ti-hourglass" aria-hidden="true"></i>${stageDays}d</div>
-      ${fuSt?(()=>{
+      ${SHOW_CARD_CONTACT_BADGE && fuSt?(()=>{
         // Show days since the most recent contact with ANYONE on the job,
         // while keeping the follow-up urgency color from the worst party.
         const anyLast = lastContactAny(j);
@@ -5051,7 +5089,7 @@ function renderCard(j){
           : 'No contact logged yet — follow up';
         return `<div class="card-meta" style="color:${fuSt.worst.overdueBy>=7?'#F87171':'#FBBF24'}" title="${tip}"><i class="ti ti-phone-x" aria-hidden="true" style="color:inherit"></i>${anyDays}d</div>`;
       })():''}
-      ${taskMeta?`<div class="card-meta ${(progress.total&&progress.done<progress.total)||(!progress.total&&j.tasksDone<j.tasks)?'warn':''}"><i class="ti ti-checkbox" aria-hidden="true"></i>${taskMeta}</div>`:''}
+      ${SHOW_CARD_CHECKLIST_BADGE && taskMeta?`<div class="card-meta ${(progress.total&&progress.done<progress.total)||(!progress.total&&j.tasksDone<j.tasks)?'warn':''}"><i class="ti ti-checkbox" aria-hidden="true"></i>${taskMeta}</div>`:''}
       ${buildDateLabel ? `<div class="card-meta${buildIsBad?' warn':''}" title="${buildIsBad?'⚠ High rain risk on this date · ':''}Scheduled build date"><i class="ti ti-calendar-event" aria-hidden="true"></i>${buildDateLabel}${buildIsBad?` <i class="ti ti-alert-triangle" style="font-size:10px;color:#EF4444;margin-left:2px"></i>`:''}</div>` : ''}
       <div style="flex:1"></div>
       <div class="card-move-btn" data-move-jid="${j.id}" title="Move to stage"><i class="ti ti-arrows-move" style="font-size:14px" aria-hidden="true"></i></div>
@@ -5296,6 +5334,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>${j.email && j.email!=='—' ? `<a href="mailto:${escapeHtml(j.email)}" style="font-size:11px;color:var(--brand-mid);text-decoration:none" title="Send email">${escapeHtml(j.email)}</a>` : `<span style="font-size:11px;color:var(--muted)">—</span>`}<i class="ti ti-copy copy-ic" title="Copy email" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(j.email||'').replace(/"/g,'&quot;')}, 'Email')"></i></div>
             <div class="info-row" style="margin-bottom:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.16 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16z"/></svg>${j.phone && j.phone!=='—' ? `<a href="tel:${escapeHtml(j.phone)}" style="font-size:12px;color:var(--brand);text-decoration:none" title="Call">${escapeHtml(formatPhone(j.phone)||j.phone)}</a>` : `<span style="font-size:12px;color:var(--muted)">—</span>`}<i class="ti ti-copy copy-ic" title="Copy phone" aria-hidden="true" onclick="copyToClipboard(${JSON.stringify(formatPhone(j.phone)||j.phone||'').replace(/"/g,'&quot;')}, 'Phone')"></i></div>
             <div class="info-row" style="margin-bottom:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum)?`<span style="font-size:11px;color:var(--brand);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${escapeHtml(j.carrier||'')}</strong>${j.carrier&&j.claimNum?' · ':''}${j.claimNum?'Claim #'+escapeHtml(j.claimNum):''}</span><div style="display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0">${j.claimNum?`<i class="ti ti-copy copy-ic" title="Copy claim #" aria-hidden="true" style="margin-left:0" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"></i>`:''}${(typeof carrierCallButtonFor==='function')?carrierCallButtonFor(j.carrier):''}</div>`:`<span style="font-size:11px;color:var(--brand-light)">Add insurance info</span>`}</div>
+            ${(j.adjName||j.adjPhone)?`<div class="info-row" style="margin-bottom:0;margin-top:8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--muted)"><circle cx="10" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6"/><circle cx="18" cy="17" r="3"/><path d="m21.5 20.5-1.4-1.4"/></svg><span style="font-size:11px;color:var(--brand);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${j.adjName?`<strong>${escapeHtml(j.adjName)}</strong>`:'<span style="color:var(--muted)">Adjuster</span>'}${j.adjName&&j.adjPhone?' · ':''}${j.adjPhone?`<a href="${adjusterTelHref(j.adjPhone)}" style="color:var(--brand-light);text-decoration:none">${escapeHtml(formatAdjusterPhone(j.adjPhone))}</a>`:''}</span><div style="display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0">${j.adjPhone?`<i class="ti ti-copy copy-ic" title="Copy adjuster phone" aria-hidden="true" style="margin-left:0" onclick="copyToClipboard(${JSON.stringify(j.adjPhone||'').replace(/"/g,'&quot;')}, 'Adjuster phone')"></i>`:''}</div></div>`:''}
           </div>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
             <button onclick="textLeadWithCard('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(77,157,224,0.14);border:1px solid rgba(77,157,224,0.4);color:var(--brand-light);font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-message-2" style="font-size:15px"></i>Text Lead</button>
