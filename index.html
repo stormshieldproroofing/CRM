@@ -622,6 +622,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <input type="checkbox" id="roofLayerToggle" onchange="toggleRoofLayer(this.checked)" style="width:15px;height:15px;accent-color:#F97316;cursor:pointer">
       <i class="ti ti-home-search" style="color:#F97316"></i> Roof-Age Prospecting
     </label>
+    <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--brand);cursor:pointer;font-weight:600">
+      <input type="checkbox" id="hailLayerToggle" onchange="toggleHailSwath(this.checked)" style="width:15px;height:15px;accent-color:#7C3AED;cursor:pointer">
+      <i class="ti ti-cloud-storm" style="color:#A78BFA"></i> Hail Swath
+    </label>
+    <select id="hailSwathDate" onchange="toggleHailSwath(document.getElementById('hailLayerToggle').checked)" style="display:none;font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#1E253A;color:var(--brand);cursor:pointer"></select>
+    <div id="hailLegend" style="display:none;align-items:center;gap:9px;flex-wrap:wrap"></div>
     <div id="roofSliderPanel" style="display:none;flex:1;min-width:260px;display:none;align-items:center;gap:12px">
       <span id="roofAgeLabel" style="font-size:12px;font-weight:700;color:#F97316;white-space:nowrap">10–20 yr roofs</span>
       <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:180px">
@@ -17517,6 +17523,71 @@ async function renderMapPage(){
 // ═════════════════════════════════════════════════════════════
 // ROOF-AGE PROSPECTING LAYER (HCAD homes, viewport-loaded)
 // ═════════════════════════════════════════════════════════════
+// ── Hail swath data ───────────────────────────────────────────────────
+// Keyed by storm date. Add another storm by dropping an entry in here — the
+// date picker builds itself from these keys, nothing else needs changing.
+window.HAIL_SWATHS = window.HAIL_SWATHS || {};
+window.HAIL_SWATHS['2026-05-01'] = {"type":"FeatureCollection","name":"hail_swath_2026_05_01","properties":{"storm_date":"2026-05-01","source":"Traced from Predictive Sales AI swath screenshots","accuracy":"APPROXIMATE \u2014 georeferenced by eye against roads and landmarks. Suitable for routing crews to neighborhoods. NOT suitable for quoting a hail size to a homeowner or for anything that ends up in a claim file. Replace with NOAA SWDI MESH data for that.","bands_note":"Innermost band 1.75in, each successive band 0.25in smaller"},"features":[{"type":"Feature","properties":{"size_in":0.75,"band":5,"label":"0.75\"","color":"#C4B5FD"},"geometry":{"type":"Polygon","coordinates":[[[-95.665,29.638],[-95.56,29.652],[-95.47,29.645],[-95.38,29.655],[-95.29,29.648],[-95.2,29.64],[-95.12,29.628],[-95.055,29.612],[-95.02,29.588],[-95.03,29.56],[-95.075,29.545],[-95.15,29.54],[-95.24,29.535],[-95.33,29.528],[-95.42,29.522],[-95.51,29.518],[-95.6,29.525],[-95.665,29.545],[-95.7,29.575],[-95.695,29.61],[-95.665,29.638]]]}},{"type":"Feature","properties":{"size_in":1.0,"band":4,"label":"1.00\"","color":"#A78BFA"},"geometry":{"type":"Polygon","coordinates":[[[-95.64,29.625],[-95.545,29.636],[-95.455,29.63],[-95.365,29.64],[-95.28,29.634],[-95.195,29.626],[-95.125,29.614],[-95.07,29.598],[-95.048,29.578],[-95.062,29.556],[-95.11,29.545],[-95.185,29.542],[-95.27,29.538],[-95.355,29.533],[-95.44,29.53],[-95.525,29.532],[-95.6,29.542],[-95.645,29.565],[-95.66,29.595],[-95.64,29.625]]]}},{"type":"Feature","properties":{"size_in":1.25,"band":3,"label":"1.25\"","color":"#8B5CF6"},"geometry":{"type":"MultiPolygon","coordinates":[[[[-95.3,29.615],[-95.245,29.618],[-95.195,29.61],[-95.155,29.596],[-95.14,29.575],[-95.155,29.556],[-95.195,29.545],[-95.248,29.541],[-95.3,29.548],[-95.335,29.565],[-95.34,29.588],[-95.325,29.605],[-95.3,29.615]]],[[[-95.545,29.61],[-95.495,29.614],[-95.45,29.606],[-95.42,29.59],[-95.418,29.57],[-95.442,29.554],[-95.49,29.546],[-95.54,29.55],[-95.572,29.566],[-95.578,29.588],[-95.565,29.602],[-95.545,29.61]]],[[[-95.76,29.6],[-95.715,29.605],[-95.672,29.596],[-95.648,29.578],[-95.652,29.556],[-95.685,29.542],[-95.735,29.538],[-95.78,29.546],[-95.802,29.566],[-95.795,29.588],[-95.76,29.6]]]]}},{"type":"Feature","properties":{"size_in":1.5,"band":2,"label":"1.50\"","color":"#7C3AED"},"geometry":{"type":"MultiPolygon","coordinates":[[[[-95.285,29.6],[-95.245,29.604],[-95.208,29.596],[-95.185,29.58],[-95.19,29.563],[-95.22,29.552],[-95.262,29.549],[-95.298,29.557],[-95.315,29.574],[-95.308,29.591],[-95.285,29.6]]],[[[-95.53,29.598],[-95.495,29.601],[-95.462,29.594],[-95.444,29.578],[-95.45,29.562],[-95.478,29.552],[-95.516,29.55],[-95.548,29.559],[-95.56,29.576],[-95.55,29.59],[-95.53,29.598]]],[[[-95.745,29.59],[-95.712,29.594],[-95.682,29.586],[-95.666,29.57],[-95.674,29.554],[-95.704,29.546],[-95.74,29.548],[-95.768,29.56],[-95.774,29.578],[-95.762,29.586],[-95.745,29.59]]]]}},{"type":"Feature","properties":{"size_in":1.75,"band":1,"label":"1.75\"","color":"#5B21B6"},"geometry":{"type":"MultiPolygon","coordinates":[[[[-95.268,29.588],[-95.243,29.591],[-95.22,29.585],[-95.208,29.574],[-95.214,29.564],[-95.236,29.558],[-95.262,29.56],[-95.28,29.57],[-95.278,29.582],[-95.268,29.588]]],[[[-95.512,29.586],[-95.49,29.589],[-95.47,29.583],[-95.46,29.572],[-95.468,29.562],[-95.49,29.557],[-95.514,29.56],[-95.528,29.571],[-95.524,29.581],[-95.512,29.586]]],[[[-95.73,29.582],[-95.708,29.585],[-95.69,29.578],[-95.682,29.568],[-95.692,29.558],[-95.714,29.554],[-95.736,29.558],[-95.748,29.568],[-95.744,29.578],[-95.73,29.582]]]]}}]};
+window.__hailSwathDate = null;
+
+function buildHailDateOptions(){
+  const sel = document.getElementById('hailSwathDate');
+  if(!sel) return;
+  const dates = Object.keys(window.HAIL_SWATHS).sort().reverse();
+  sel.innerHTML = dates.map(d=>{
+    const [y,m,dd] = d.split('-');
+    return `<option value="${d}">${m}/${dd}/${y}</option>`;
+  }).join('');
+}
+
+function renderHailLegend(fc){
+  const box = document.getElementById('hailLegend');
+  if(!box) return;
+  box.innerHTML = (fc.features||[])
+    .map(f=>f.properties)
+    .sort((a,b)=>Number(b.size_in)-Number(a.size_in))
+    .map(p=>`<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);white-space:nowrap"><span style="width:11px;height:11px;border-radius:2px;background:${p.color};opacity:0.85"></span>${p.label}</span>`)
+    .join('');
+}
+
+window.toggleHailSwath = function(on){
+  const sel    = document.getElementById('hailSwathDate');
+  const legend = document.getElementById('hailLegend');
+  if(sel)    sel.style.display    = on ? 'block' : 'none';
+  if(legend) legend.style.display = on ? 'flex'  : 'none';
+
+  if(!__map) return;
+  if(!__map.getSource('hailswath')) ensureStormPolyLayer();
+  const src = __map.getSource('hailswath');
+  if(!src) return;
+
+  if(!on){ src.setData({type:'FeatureCollection',features:[]}); return; }
+
+  buildHailDateOptions();
+  const date = (sel && sel.value) || Object.keys(window.HAIL_SWATHS).sort().reverse()[0];
+  window.__hailSwathDate = date;
+  const fc = window.HAIL_SWATHS[date];
+  if(!fc){ toast('No hail swath loaded for that date'); return; }
+
+  // Draw bigger hail last so it sits on top of the nested smaller bands.
+  const sorted = { type:'FeatureCollection',
+    features:[...(fc.features||[])].sort((a,b)=>Number(a.properties.size_in)-Number(b.properties.size_in)) };
+  src.setData(sorted);
+  renderHailLegend(fc);
+
+  if(!window.__hailFitDone){
+    try{
+      const b = new mapboxgl.LngLatBounds();
+      sorted.features.forEach(f=>{
+        const walk = c => Array.isArray(c[0]) ? c.forEach(walk) : b.extend(c);
+        walk(f.geometry.coordinates);
+      });
+      __map.fitBounds(b, { padding:60, duration:600 });
+      window.__hailFitDone = true;
+    }catch(e){}
+  }
+};
+
 window.__roofLayer = { on:false, minAge:10, maxAge:20, loading:false, count:0, _t:null, nameQuery:'', onlyVietnamese:false, minVietnameseScore:80 };
 
 // ═══ STORM OVERLAY (NOAA hail + wind) ═══
@@ -17551,6 +17622,38 @@ function ensureStormPolyLayer(){
   __map.addLayer({ id:'sp-line', type:'line', source:'stormpoly',
     paint:{ 'line-color':['match',['get','phenomena'],'TO','#DC2626','#F97316'],
       'line-width':1.5, 'line-opacity':0.7 } });
+  // ── Hail swath overlay ─────────────────────────────────────────────
+  // Contoured hail-size bands for a specific storm date. Data lives in
+  // window.HAIL_SWATHS keyed by date so more storms can be added without
+  // touching this code.
+  if(!__map.getSource('hailswath')){
+    __map.addSource('hailswath',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    // Larger hail drawn on top: bands are nested, so the small ones would
+    // otherwise bury the cores that actually matter for prospecting.
+    __map.addLayer({ id:'hail-fill', type:'fill', source:'hailswath',
+      paint:{ 'fill-color':['get','color'], 'fill-opacity':0.30 } });
+    __map.addLayer({ id:'hail-line', type:'line', source:'hailswath',
+      paint:{ 'line-color':['get','color'], 'line-width':1.4, 'line-opacity':0.85 } });
+    __map.on('click','hail-fill', e=>{
+      // Every band under the cursor, so the popup can report the largest.
+      const feats = __map.queryRenderedFeatures(e.point,{layers:['hail-fill']});
+      const biggest = feats.reduce((a,f)=>
+        (!a || Number(f.properties.size_in) > Number(a.properties.size_in)) ? f : a, null);
+      if(!biggest) return;
+      const p = biggest.properties;
+      new mapboxgl.Popup({offset:8})
+        .setLngLat(e.lngLat)
+        .setHTML(`<div class="map-popup">
+          <div class="mp-row" style="font-weight:700;color:#7C3AED">Estimated ${p.label} hail</div>
+          <div class="mp-row"><strong>${window.__hailSwathDate||''}</strong></div>
+          <div class="mp-row" style="font-size:9px;color:#94a3b8;font-style:italic">Approximate swath. Verify size before quoting it to a homeowner.</div>
+        </div>`)
+        .addTo(__map);
+    });
+    __map.on('mouseenter','hail-fill',()=>{ __map.getCanvas().style.cursor='pointer'; });
+    __map.on('mouseleave','hail-fill',()=>{ __map.getCanvas().style.cursor=''; });
+  }
+
   __map.on('click','sp-fill', e=>{
     const p=e.features[0].properties;
     new mapboxgl.Popup({offset:8})
