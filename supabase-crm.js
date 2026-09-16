@@ -825,7 +825,16 @@ function __userIsBusyEditing(){
   if (document.querySelector('.modal.open, #addJobModal.open')) return true;
   // A job detail panel is open AND focused input/textarea is inside it.
   const ae = document.activeElement;
-  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return true;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return true;
+  // An inline add form (expense / deposit) is open — a re-render would close
+  // it and throw away what's been entered, even if focus is on a button/dropdown.
+  const openForm = ['expAddForm', 'depAddForm'].some(id => {
+    const el = document.getElementById(id);
+    return el && el.style.display !== 'none' && el.offsetParent !== null;
+  });
+  if (openForm) return true;
+  // Invoice import preview is showing.
+  if (document.getElementById('abcConfirm')) return true;
   return false;
 }
 
@@ -854,7 +863,9 @@ function scheduleRtPull(delay){
 
 function onRealtimeChange(payload){
   // Ignore changes we just made ourselves (echo of our own push).
-  if (window.isSaveRunning && window.isSaveRunning()) { scheduleRtPull(2000); return; }
+  // While our own save is running, these events are its echoes — ignore them
+  // (re-pulling here re-rendered the job panel and closed open forms).
+  if (window.isSaveRunning && window.isSaveRunning()) return;
   if (Date.now() - window.__lastLocalPushAt < 5000) {
     console.log('[Realtime] ignoring self-echo');
     return;
