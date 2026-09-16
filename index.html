@@ -3870,6 +3870,30 @@ function parseAbcInvoice(text){
     return out;
   }
 
+  // ── ASO Roofing Supply CREDIT NOTE (returns) ──
+  // Different layout from ASO invoices: amounts in parentheses "($512.02)",
+  // "Total Credit" instead of TOTAL/BALANCE DUE, and "Credit Note No" / "CN-###".
+  if(isAso && /Credit\s*Note/i.test(text) && /Total\s*Credit/i.test(text)){
+    out.isReturn = true;
+    out.docType = 'Credit Note';
+    const amt = re => { const m = text.match(re); return m ? money(m[1]) : null; };
+    out.total = amt(/Total\s*Credit\s*\(?\s*-?\$?\s*([\d,]+\.\d{2})/i);
+    out.subTotal = amt(/Total\s*Amount\s*\(?\s*-?\$?\s*([\d,]+\.\d{2})/i);
+    out.tax = amt(/Sales\s*Tax\s*(?:[\d.]+\s*%)?\s*\(\s*-?\$?\s*([\d,]+\.\d{2})\s*\)/i);
+    // PDF text order can separate the tax label from its value — derive it.
+    if(out.tax == null && out.total != null && out.subTotal != null) out.tax = Math.round((out.total - out.subTotal)*100)/100;
+    if(out.total != null) out.total = -Math.abs(out.total);
+    const cn = text.match(/\bCN-(\d+)/i) || text.match(/Credit\s*Note\s*No\.?\s*(\d+)/i);
+    if(cn) out.orderNum = 'CN-' + cn[1];
+    const ref = text.match(/Your\s*Ref\s+(\d{2,6}\s+[A-Za-z][A-Za-z0-9 .]*?)(?=\s+(?:Taken\s*By|Our\s*Ref|\d{2,6}\s)|\n|$)/i);
+    if(ref) out.orderName = ref[1].trim();
+    const ret = text.match(/Returns?\s*from\s*(\d{2,6}\s+[\s\S]{3,80}?\b\d{5})\b/i) || text.match(/Delivery\s*Address:\s*(\d{2,6}\s+[\s\S]{3,80}?\b\d{5})\b/i);
+    if(ret) out.address = ret[1].replace(/\s+/g,' ').replace(/,?\s*Texas\b/i, ', TX').trim();
+    const dt = text.match(/Credit\s*Date\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i) || text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(dt){ let yr=parseInt(dt[3],10); if(yr<100) yr+=2000; out.date = `${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`; }
+    return out;
+  }
+
   if(isAso){
     // ── ASO Roofing Supply format ──
     // Totals: SUBTOTAL / TAX / TOTAL / BALANCE DUE (labels on their own, value follows).
@@ -4032,7 +4056,7 @@ async function importAbcInvoice(file){
     if(!Array.isArray(j.expenses)) j.expenses=[];
     const vName = parsed.vendor || 'ABC Supply';
     const descBits = [isReturn ? vName+' Return' : vName];
-    if(parsed.orderNum) descBits.push('Order #'+parsed.orderNum);
+    if(parsed.orderNum) descBits.push(/^CN-/.test(parsed.orderNum) ? 'Credit Note '+parsed.orderNum : 'Order #'+parsed.orderNum);
     if(parsed.po) descBits.push('PO #'+parsed.po);
     // Attach the PDF first so we can link its reference onto the expense.
     let invoiceRec = null;
