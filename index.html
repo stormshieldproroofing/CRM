@@ -12208,9 +12208,17 @@ function openCertificateOptions(jobId, mode){
   document.body.appendChild(overlay);
   const q = id => overlay.querySelector('#'+id);
   const close = () => overlay.remove();
-  q('ccClose').onclick = close;
-  q('ccCancel').onclick = close;
-  overlay.addEventListener('click', e => { if(e.target===overlay) close(); });
+  // Clicking outside the panel no longer closes it. X / Cancel ask before
+  // discarding anything that was typed but not saved.
+  const snapshot = () => Array.from(overlay.querySelectorAll('input,textarea'))
+    .map(el => el.type==='checkbox' ? el.checked : el.value).join('\u0001');
+  const initial = snapshot();
+  const tryClose = () => {
+    if(snapshot() !== initial && !confirm('Discard the changes you made to this certificate?')) return;
+    close();
+  };
+  q('ccClose').onclick = tryClose;
+  q('ccCancel').onclick = tryClose;
   if(mode==='email') q('ccEmail').style.boxShadow = '0 0 0 2px rgba(37,99,235,.45)';
   else q('ccPrint').style.boxShadow = '0 0 0 2px rgba(5,150,105,.45)';
 
