@@ -205,20 +205,14 @@ async function loadAllFromSupabase() {
         cpSupplement:   (r.contract && r.contract.__cpSupplement   != null) ? r.contract.__cpSupplement   : undefined,
         supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         supplements: (r.contract && Array.isArray(r.contract.__supplements)) ? r.contract.__supplements : undefined,
+        cert: (r.contract && r.contract.__cert && typeof r.contract.__cert === 'object') ? r.contract.__cert : undefined,
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         quotes: (r.quote && Array.isArray(r.quote.__list)) ? r.quote.__list
                 : (r.quote && typeof r.quote === 'object' ? [r.quote] : undefined),
         activeQuote: (r.quote && typeof r.quote.__active === 'number') ? r.quote.__active : undefined,
         abcOrder: (r.abc_order && typeof r.abc_order === 'object') ? r.abc_order : null,
-        subVoucher: (() => {
-          // Legacy single-voucher mirror. Strip __list so this object never
-          // carries a stale copy of the array back into the next save.
-          if(!(r.sub_voucher && typeof r.sub_voucher === 'object')) return null;
-          const m = { ...r.sub_voucher };
-          delete m.__list;
-          return Object.keys(m).length ? m : null;
-        })(),
+        subVoucher: (r.sub_voucher && typeof r.sub_voucher === 'object') ? r.sub_voucher : null,
         subVouchers: (r.sub_voucher && Array.isArray(r.sub_voucher.__list)) ? r.sub_voucher.__list
                      : (r.sub_voucher && typeof r.sub_voucher === 'object' ? [r.sub_voucher] : []),
         contract: (r.contract && typeof r.contract === 'object') ? r.contract : null,
@@ -238,7 +232,7 @@ async function loadAllFromSupabase() {
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
           .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({_id:e.id,cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
+          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         signedContractFiles:byKind('signed_contract'),
@@ -258,50 +252,8 @@ async function loadAllFromSupabase() {
   else {
     const newJobs = await buildJobsFromRows(jobRows);
     if (Array.isArray(window.jobs)) {
-      // Merge INTO the existing job objects rather than replacing them.
-      //
-      // Several async handlers capture `const j = jobs.find(...)`, then await a
-      // PDF parse or a storage upload, then push onto j.expenses. If a realtime
-      // pull swapped the objects during that await, the handler ended up writing
-      // into a detached object that nothing would ever save — silently losing
-      // imported invoices, voucher expenses and attachments.
-      //
-      // Keeping object identity stable means a captured reference is still the
-      // live object when the handler resumes.
-      const byId = new Map(window.jobs.map(j => [j && j.id, j]));
-      const merged = newJobs.map(nj => {
-        const existing = byId.get(nj.id);
-        if (!existing) return nj;
-
-        // Carry over child records that exist locally but have no database id
-        // yet — they are mid-save. The incoming arrays are built from the
-        // database, so assigning them straight over would discard an expense
-        // that was added seconds ago and whose insert is still in flight. This
-        // is why consecutive invoice imports vanished one after another.
-        const pendingExpenses = Array.isArray(existing.expenses)
-          ? existing.expenses.filter(e => e && !e._id)
-          : [];
-
-        // Overwrite own properties in place, drop keys no longer present.
-        Object.keys(existing).forEach(k => { if (!(k in nj)) delete existing[k]; });
-        Object.assign(existing, nj);
-
-        if (pendingExpenses.length) {
-          if (!Array.isArray(existing.expenses)) existing.expenses = [];
-          // Avoid re-adding one whose insert completed between build and merge.
-          pendingExpenses.forEach(p => {
-            const already = existing.expenses.some(e =>
-              e && e.desc === p.desc && String(e.amount) === String(p.amount) &&
-              (e._vid || null) === (p._vid || null));
-            if (!already) existing.expenses.push(p);
-          });
-          console.log('[Realtime] preserved', pendingExpenses.length,
-                      'unsaved expense(s) through reload');
-        }
-        return existing;
-      });
       window.jobs.length = 0;
-      merged.forEach(j => window.jobs.push(j));
+      newJobs.forEach(j => window.jobs.push(j));
     } else {
       window.jobs = newJobs;
     }
@@ -320,14 +272,13 @@ async function loadAllFromSupabase() {
       // Dedup ONLY on unique ids (_vid / _eid). Never on content signature —
       // two real ABC purchases can legitimately share category/amount/vendor,
       // and deleting one as a "duplicate" was silently losing real expenses.
-      // Dedup ONLY on the database primary key. A single subvoucher
-      // legitimately produces SEVERAL expense lines sharing one voucher id,
-      // and collapsing those deleted real expenses on the next save.
       const keep = [];
-      const seenId = new Set();
+      const seenVid = new Set();
+      const seenEid = new Set();
       j.expenses.forEach(e => {
         if(!e) return;
-        if(e._id){ if(seenId.has(e._id)){ _dupRemoved++; return; } seenId.add(e._id); }
+        if(e._vid){ if(seenVid.has(e._vid)){ _dupRemoved++; return; } seenVid.add(e._vid); }
+        if(e._eid){ if(seenEid.has(e._eid)){ _dupRemoved++; return; } seenEid.add(e._eid); }
         keep.push(e);
       });
       if(keep.length !== j.expenses.length) j.expenses = keep;
@@ -376,23 +327,8 @@ window.loadClosedJobs = loadClosedJobs;
 
 let saveTimer = null;
 let savePending = false;
-// Immediate, awaitable save for actions that must be durable before the user
-// can start another one — importing an invoice, for example. scheduleSave's
-// 600ms debounce is reset by each new call, so firing several imports quickly
-// meant nothing was written until the user stopped, leaving a long window in
-// which a reload or an error could lose all of them.
-window.flushSaveNow = async function(){
-  savePending = false;
-  clearTimeout(saveTimer);
-  return pushAllToSupabase();
-};
-
 function scheduleSave() {
   savePending = true;
-  // Tell realtime a local write is coming. Without this, the 600ms debounce is
-  // a window in which a realtime pull can replace window.jobs and destroy the
-  // unsaved change before it is ever sent.
-  window.__localDirtyAt = Date.now();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => { savePending = false; pushAllToSupabase(); }, 600);
 }
@@ -415,53 +351,7 @@ if (typeof document !== 'undefined') {
   window.addEventListener('blur', flushPendingSave);
 }
 
-// Only one push may run at a time. Two overlapping pushes interleave their
-// writes, which is how adding several expenses in a row lost rows. If a save is
-// requested while one is running, it is queued and runs once immediately after.
-let __pushInFlight = null;
-let __pushQueued = false;
-
 async function pushAllToSupabase() {
-  if (__pushInFlight) { __pushQueued = true; return __pushInFlight; }
-  __pushInFlight = (async () => {
-    try {
-      await __pushAllToSupabaseInner();
-    } finally {
-      __pushInFlight = null;
-      if (__pushQueued) { __pushQueued = false; pushAllToSupabase(); }
-    }
-  })();
-  return __pushInFlight;
-}
-
-// Rolling local snapshot taken before every write. Purely a safety net: if a
-// sync ever drops data again, the previous good state is recoverable from the
-// browser with window.__restoreSnapshot().
-function __snapshotJobs() {
-  try {
-    const snap = JSON.stringify({ at: Date.now(), jobs: window.jobs || [] });
-    // Keep two generations so a bad save doesn't immediately overwrite the
-    // last known-good copy.
-    const prev = localStorage.getItem('ssp_jobs_snapshot_v1');
-    if (prev) localStorage.setItem('ssp_jobs_snapshot_prev_v1', prev);
-    localStorage.setItem('ssp_jobs_snapshot_v1', snap);
-  } catch (e) { /* quota or serialization issue — never block the save */ }
-}
-
-window.__restoreSnapshot = function(which){
-  const key = which === 'prev' ? 'ssp_jobs_snapshot_prev_v1' : 'ssp_jobs_snapshot_v1';
-  const raw = localStorage.getItem(key);
-  if (!raw) { console.warn('No snapshot stored under', key); return null; }
-  const snap = JSON.parse(raw);
-  console.log('Snapshot from', new Date(snap.at).toLocaleString(),
-              '·', snap.jobs.length, 'jobs',
-              '·', snap.jobs.reduce((n,j)=>n+((j.expenses||[]).length),0), 'expenses');
-  console.log('To restore: window.jobs = window.__restoreSnapshot().jobs; saveToStorage();');
-  return snap;
-};
-
-async function __pushAllToSupabaseInner() {
-  __snapshotJobs();
   window.__lastLocalPushAt = Date.now();
   try {
     // Build base rows without id, then categorize
@@ -514,15 +404,7 @@ async function __pushAllToSupabaseInner() {
           const list = Array.isArray(j.subVouchers) ? j.subVouchers
             : (j.subVoucher && typeof j.subVoucher==='object' ? [j.subVoucher] : []);
           if(!list.length) return null;
-          // The legacy mirror is spread on top for old readers, but it must NOT
-          // carry its own __list: on load j.subVoucher is set to the whole stored
-          // object (including __list), so spreading it unchanged would put a
-          // stale snapshot back over the fresh array and silently revert edits.
-          const mirrorSrc = (j.subVoucher && typeof j.subVoucher==='object')
-            ? j.subVoucher : list[list.length-1];
-          const mirror = { ...(mirrorSrc || {}) };
-          delete mirror.__list;
-          return { ...mirror, __list: list };
+          return { __list: list, ...(j.subVoucher && typeof j.subVoucher==='object' ? j.subVoucher : list[list.length-1]) };
         })(),
         contract: (() => {
           const base = (j.contract && typeof j.contract === 'object') ? { ...j.contract } : {};
@@ -537,6 +419,8 @@ async function __pushAllToSupabaseInner() {
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           base.__supplementStatus = j.supplementStatus || null;
           base.__supplements = Array.isArray(j.supplements) ? j.supplements : null;
+          // Certificate of Completion options (dates, cert #, warranty, scope, etc.)
+          base.__cert = (j.cert && typeof j.cert === 'object') ? j.cert : null;
           return base;
         })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
@@ -614,18 +498,16 @@ async function __pushAllToSupabaseInner() {
         await sb.from('deposits').delete().eq('job_id', j.id);
       }
 
-      // Expenses are synced NON-DESTRUCTIVELY.
-      //
-      // The old approach deleted every row for the job and reinserted them.
-      // That is unsafe: adding invoices one after another overlaps two saves,
-      // so one save's DELETE lands in the middle of another's INSERT and rows
-      // vanish permanently. A realtime pull landing in the same gap reads an
-      // empty table and wipes the in-memory copy too.
-      //
-      // Instead: rows that already exist are UPDATED by primary key and new
-      // rows are INSERTED. Nothing is ever deleted here — see step 3.
-      if (Array.isArray(j.expenses)) {
-        const toRow = e => ({
+      // Replace expenses safely: insert first into a temp-free flow by
+      // deleting then inserting, but if the insert throws, the delete has
+      // already run — so guard the insert and re-throw only after logging,
+      // and skip the delete entirely when there's nothing new to write AND
+      // the job legitimately has no expenses (avoids wiping on transient
+      // empty states during load races).
+      if (j.expenses?.length) {
+        await sb.from('expenses').delete().eq('job_id', j.id);
+        const { error: expErr } = await sb.from('expenses').insert(
+        j.expenses.map(e => ({
           job_id: j.id,
           category: e.cat,
           description: e.desc,
@@ -651,48 +533,15 @@ async function __pushAllToSupabaseInner() {
           eid: e._eid || null,
           exp_date: e.date || null,
           on_account: !!e.onAccount,
-        });
-
-        const existing = j.expenses.filter(e => e && e._id);
-        const fresh    = j.expenses.filter(e => e && !e._id);
-
-        // 1. Update rows we already have ids for.
-        if (existing.length) {
-          const { error: upErr } = await sb.from('expenses')
-            .upsert(existing.map(e => ({ id: e._id, ...toRow(e) })), { onConflict: 'id' });
-          if (upErr) {
-            console.error('[Supabase] expense update failed:', upErr);
-            if (window.toast) window.toast('Expense update failed — check connection and retry');
-          }
-        }
-
-        // 2. Insert genuinely new rows. Inserted one at a time so each returned
-        //    id maps to the correct local object — a bulk insert gives no
-        //    guarantee that the returned rows come back in input order, and
-        //    mismatched ids would corrupt every later update.
-        for (const e of fresh) {
-          const { data: row, error: insErr } = await sb.from('expenses')
-            .insert(toRow(e)).select('id').single();
-          if (insErr) {
-            console.error('[Supabase] expense insert failed — retry save:', insErr);
-            if (window.toast) window.toast('Expense save failed — check connection and try again');
-            break;
-          }
-          if (row && row.id) e._id = row.id;
-        }
-
-        // 3. NO deletion here. Deliberately.
-        //
-        // A bulk sync must never infer "the user removed this" from the shape of
-        // the local array. Any moment where local state is incomplete — a load
-        // race, a failed insert, an orphaned job reference, ids not yet written
-        // back — would turn that inference into permanent data loss, and it
-        // repeatedly did.
-        //
-        // Removing an expense is an explicit user action and is handled by
-        // removeExpense(), which deletes that one row by id. Worst case here is
-        // a stale row lingering, which is visible and fixable. The worst case
-        // for a blanket delete is silent, permanent, and was happening.
+        })));
+        if(expErr){ console.error('[Supabase] expense insert failed — expenses may be lost, retry save:', expErr); if(window.toast) window.toast('Expense save failed — check connection and try again'); }
+      } else {
+        // No expenses in local memory. This is almost always a transient load
+        // race or a realtime re-pull in progress — NOT a real intent to delete
+        // every expense. We do NOT delete remote rows here, because doing so
+        // wiped real data. Deletions happen explicitly via removeExpense, not by
+        // inferring "delete everything" from an empty local array.
+        // (If you truly need to clear a job's expenses, that's an explicit action.)
       }
 
       await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
@@ -924,26 +773,9 @@ let __rtPullTimer = null;
 let __rtPendingPull = false;
 window.__lastLocalPushAt = 0;   // set by pushAllToSupabase on every write
 
-// Track clicks anywhere in the app so a realtime pull can tell the difference
-// between an idle panel (safe to rebuild) and one the user is working in.
-if (typeof document !== 'undefined') {
-  document.addEventListener('click', () => { window.__lastPanelInteractAt = Date.now(); }, true);
-  document.addEventListener('input', () => { window.__lastPanelInteractAt = Date.now(); }, true);
-}
-
 function __userIsBusyEditing(){
-  // A push is actually running. Its inserts have not all landed yet, so the
-  // database is mid-write and pulling now would read a partial picture.
-  if (__pushInFlight) return true;
-  // A local change is written but not yet pushed. Pulling now would replace
-  // window.jobs and silently discard it. This was losing voucher expenses.
-  if (savePending) return true;
-  if (window.__localDirtyAt && (Date.now() - window.__localDirtyAt) < 4000) return true;
   // Don't yank data out from under an active edit.
   if (document.querySelector('.modal.open, #addJobModal.open')) return true;
-  // Any full-screen overlay counts as an edit surface — the subvoucher and
-  // ABC order editors build their own overlays and are not `.modal.open`.
-  if (document.querySelector('.sv-overlay, .overlay, [data-editor-overlay]')) return true;
   // A job detail panel is open AND focused input/textarea is inside it.
   const ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return true;
@@ -960,19 +792,8 @@ async function __rtDoPull(){
     await loadAllFromSupabase();
     if (typeof window.rerenderActivePage === 'function') window.rerenderActivePage();
     // If a job detail was open, refresh it in place (it's still in window.jobs).
-    // Skipped while the user is actively working in the panel — rebuilding it
-    // mid-interaction collapses expanded sections and loses scroll position for
-    // no benefit, since the data was just pulled and nothing local is pending.
     if (openId && window.openJobId === openId && typeof window.renderDetailPanel === 'function') {
-      const ae = document.activeElement;
-      const inPanel = ae && ae.closest && ae.closest('#detailPanel, .detail-panel, #jobDetail');
-      const recentlyInteracted = window.__lastPanelInteractAt &&
-                                 (Date.now() - window.__lastPanelInteractAt) < 8000;
-      if (!inPanel && !recentlyInteracted) {
-        window.renderDetailPanel();
-      } else {
-        console.log('[Realtime] detail panel in use — skipped rebuild');
-      }
+      window.renderDetailPanel();
     }
     console.log('[Realtime] pulled latest changes');
   } catch(e){ console.warn('[Realtime] pull failed', e); }

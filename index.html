@@ -12215,7 +12215,12 @@ function openCertificateOptions(jobId, mode){
   else q('ccPrint').style.boxShadow = '0 0 0 2px rgba(5,150,105,.45)';
 
   const collect = () => {
-    j.cert = {
+    // Re-find the job at save time: a realtime pull may have replaced the job
+    // objects while this panel was open, which would orphan the reference.
+    const live = (window.jobs||[]).find(x=>String(x.id)===String(j.id))
+              || (window.jobs||[]).find(x=>String(x.id)===String(jobId))
+              || j;
+    live.cert = {
       compDate: q('ccDate').value || certTodayISO(),
       certNo: q('ccNo').value.trim(),
       claimNum: q('ccClaim').value.trim(),
@@ -12230,11 +12235,15 @@ function openCertificateOptions(jobId, mode){
       signed: q('ccSigned').checked,
       updatedAt: new Date().toISOString()
     };
-    if(j.cert.claimNum && !j.claimNum) j.claimNum = j.cert.claimNum;
-    try { (window.saveToStorage||saveToStorage)(); } catch(e){ console.warn('cert save failed', e); }
+    if(live.cert.claimNum && !live.claimNum) live.claimNum = live.cert.claimNum;
+    let ok = true;
+    try { (window.saveToStorage||saveToStorage)(); }
+    catch(e){ ok = false; console.warn('cert save failed', e); }
+    toast(ok ? 'Certificate details saved' : 'Could not save certificate details');
+    return live.id;
   };
-  q('ccPrint').onclick = () => { collect(); close(); renderCertificateOfCompletion(jobId); };
-  q('ccEmail').onclick = () => { collect(); close(); sendCertificateEmail(jobId); };
+  q('ccPrint').onclick = () => { const id = collect(); close(); renderCertificateOfCompletion(id); };
+  q('ccEmail').onclick = () => { const id = collect(); close(); sendCertificateEmail(id); };
 }
 
 function renderCertificateOfCompletion(jobId){
@@ -12364,7 +12373,7 @@ function renderCertificateOfCompletion(jobId){
           <div class="t2">of Completion</div>
         </div>
         <div class="cno">Certificate No. <b style="color:${navy}">${esc(d.certNo)}</b></div>
-        <div class="lead">${esc(coName)} hereby certifies that the roofing repairs and related work performed at the property listed below <b>have been completed</b> in accordance with the contracted scope of work${(d.carrier||d.claimNum)?`, the applicable insurance-approved scope`:''}, and the manufacturer's installation requirements.</div>
+        <div class="lead">This certificate confirms <b>completion</b> of the roofing work described below at the property listed.</div>
 
         <div class="h">Project Details</div>
         <div class="grid">${fields}</div>
@@ -12376,10 +12385,10 @@ function renderCertificateOfCompletion(jobId){
 
         <div class="h">Warranty</div>
         <p class="p"><b>Workmanship.</b> ${esc(coName)} warrants its installation workmanship for <b>${d.warrYears} year${d.warrYears==1?'':'s'}</b> from the date of completion. If a leak or defect results from an installation error during this period, we will repair it at no charge.</p>
-        <p class="p"><b>Materials.</b> Roofing materials are covered by the manufacturer's limited warranty under the manufacturer's published terms${d.mfrWarranty?` (${esc(d.mfrWarranty)})`:''}. Warranty and registration documents, where applicable, are provided to the homeowner.</p>
+        <p class="p"><b>Materials.</b> Roofing materials are covered by the manufacturer's limited warranty under the manufacturer's published terms${d.mfrWarranty?` (${esc(d.mfrWarranty)})`:''}.</p>
 
         <div class="h">Acknowledgments</div>
-        <p class="p">${esc(coName)} hereby certifies that all work described in this certificate was completed in accordance with applicable building codes and industry standards.</p>
+        <p class="p">${esc(coName)} hereby certifies that the roofing repairs and related work performed at the property listed above have been completed in accordance with the contracted scope of work${(d.carrier||d.claimNum)?`, the applicable insurance-approved scope`:''}, the manufacturer's installation requirements, and applicable building codes and industry standards.</p>
 
         <div class="sigwrap">
           <div class="sigs">
