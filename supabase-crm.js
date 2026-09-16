@@ -205,7 +205,6 @@ async function loadAllFromSupabase() {
         cpSupplement:   (r.contract && r.contract.__cpSupplement   != null) ? r.contract.__cpSupplement   : undefined,
         supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         supplements: (r.contract && Array.isArray(r.contract.__supplements)) ? r.contract.__supplements : undefined,
-        cert: (r.contract && r.contract.__cert && typeof r.contract.__cert === 'object') ? r.contract.__cert : undefined,
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         quotes: (r.quote && Array.isArray(r.quote.__list)) ? r.quote.__list
@@ -327,11 +326,41 @@ window.loadClosedJobs = loadClosedJobs;
 
 let saveTimer = null;
 let savePending = false;
+// SAVE LOCK: pushAllToSupabase does delete-then-insert on every job's expenses.
+// Two pushes overlapping (debounce + blur flush + realtime-triggered save) each
+// delete, then each insert — so every overlap DOUBLED the expense rows
+// (1→2→4→8…→hundreds). Only one push may run; extra requests collapse into a
+// single follow-up run after the current one finishes.
+let __pushRunning = null;
+let __pushQueued = false;
+function runPushSerialized() {
+  if (__pushRunning) { __pushQueued = true; return __pushRunning; }
+  __pushRunning = (async () => {
+    try {
+      do {
+        __pushQueued = false;
+        await pushAllToSupabase();
+      } while (__pushQueued);
+    } finally {
+      __pushRunning = null;
+      window.__lastLocalPushAt = Date.now();   // our own echoes land after the push ends
+    }
+  })();
+  return __pushRunning;
+}
 function scheduleSave() {
   savePending = true;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { savePending = false; pushAllToSupabase(); }, 600);
+  saveTimer = setTimeout(() => { savePending = false; runPushSerialized(); }, 600);
 }
+// Save right now and wait for it (used by invoice import).
+window.flushSaveNow = async function () {
+  savePending = false;
+  clearTimeout(saveTimer);
+  await runPushSerialized();
+  if (__pushRunning) await __pushRunning;
+};
+window.isSaveRunning = () => !!__pushRunning;
 
 // Mobile Safari suspends backgrounded tabs, which can kill a debounced save
 // before it fires — leaving a change on the phone that never reaches the cloud.
@@ -340,7 +369,7 @@ function flushPendingSave() {
   if (savePending) {
     savePending = false;
     clearTimeout(saveTimer);
-    pushAllToSupabase();
+    runPushSerialized();
   }
 }
 if (typeof document !== 'undefined') {
@@ -419,8 +448,6 @@ async function pushAllToSupabase() {
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           base.__supplementStatus = j.supplementStatus || null;
           base.__supplements = Array.isArray(j.supplements) ? j.supplements : null;
-          // Certificate of Completion options (dates, cert #, warranty, scope, etc.)
-          base.__cert = (j.cert && typeof j.cert === 'object') ? j.cert : null;
           return base;
         })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
@@ -505,6 +532,8 @@ async function pushAllToSupabase() {
       // the job legitimately has no expenses (avoids wiping on transient
       // empty states during load races).
       if (j.expenses?.length) {
+        // Every expense gets a stable id so load-time dedup can catch copies.
+        j.expenses.forEach(e => { if (e && !e._eid) e._eid = 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); });
         await sb.from('expenses').delete().eq('job_id', j.id);
         const { error: expErr } = await sb.from('expenses').insert(
         j.expenses.map(e => ({
@@ -785,6 +814,7 @@ function __userIsBusyEditing(){
 async function __rtDoPull(){
   // If the user is mid-edit, defer — try again shortly.
   if (__userIsBusyEditing()) { __rtPendingPull = true; scheduleRtPull(1500); return; }
+  if (window.isSaveRunning && window.isSaveRunning()) { scheduleRtPull(1500); return; }
   __rtPendingPull = false;
   try {
     // Remember what's open so we can restore the view after re-pull.
@@ -806,6 +836,7 @@ function scheduleRtPull(delay){
 
 function onRealtimeChange(payload){
   // Ignore changes we just made ourselves (echo of our own push).
+  if (window.isSaveRunning && window.isSaveRunning()) { scheduleRtPull(2000); return; }
   if (Date.now() - window.__lastLocalPushAt < 5000) {
     console.log('[Realtime] ignoring self-echo');
     return;
