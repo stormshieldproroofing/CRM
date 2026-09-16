@@ -6555,7 +6555,11 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         if(!proceed){ $('expVendorSel')?.focus(); return; }
       }
 
-      const exp = { cat, desc, amount: amt.toFixed(2), paid: true, date: new Date().toISOString().slice(0,10) };
+      // Returns are stored as a POSITIVE credit (the totals subtract them).
+      // Typing "-473" used to store a negative return, which ADDED to costs.
+      const storeAmt = cat === 'Returns' ? Math.abs(amt) : amt;
+      const exp = { cat, desc, amount: storeAmt.toFixed(2), paid: true, date: new Date().toISOString().slice(0,10),
+        _eid: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) };
       if(vendorId){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';

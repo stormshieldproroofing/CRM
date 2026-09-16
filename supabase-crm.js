@@ -339,7 +339,11 @@ function runPushSerialized() {
     try {
       do {
         __pushQueued = false;
-        await pushAllToSupabase();
+        // A stalled network request must never block every future save.
+        await Promise.race([
+          pushAllToSupabase(),
+          new Promise(res => setTimeout(() => { console.warn('[Supabase] save took >45s — releasing save lock'); res(); }, 45000)),
+        ]);
       } while (__pushQueued);
     } finally {
       __pushRunning = null;
@@ -535,8 +539,7 @@ async function pushAllToSupabase() {
         // Every expense gets a stable id so load-time dedup can catch copies.
         j.expenses.forEach(e => { if (e && !e._eid) e._eid = 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); });
         await sb.from('expenses').delete().eq('job_id', j.id);
-        const { error: expErr } = await sb.from('expenses').insert(
-        j.expenses.map(e => ({
+        const expRows = j.expenses.filter(Boolean).map(e => ({
           job_id: j.id,
           category: e.cat,
           description: e.desc,
@@ -562,8 +565,23 @@ async function pushAllToSupabase() {
           eid: e._eid || null,
           exp_date: e.date || null,
           on_account: !!e.onAccount,
-        })));
-        if(expErr){ console.error('[Supabase] expense insert failed — expenses may be lost, retry save:', expErr); if(window.toast) window.toast('Expense save failed — check connection and try again'); }
+        }));
+        const { error: expErr } = await sb.from('expenses').insert(expRows);
+        if(expErr){
+          // One bad row fails the whole batch — and the delete above already ran,
+          // which wiped every expense on the job. Retry one row at a time so the
+          // good rows always land, and report exactly which one was rejected.
+          console.error('[Supabase] expense batch insert failed, retrying row by row:', expErr);
+          const bad = [];
+          for (const row of expRows) {
+            const { error } = await sb.from('expenses').insert(row);
+            if (error) { bad.push(row); console.error('[Supabase] expense rejected:', row, error); }
+          }
+          if (bad.length && window.toast) {
+            const b = bad[0];
+            window.toast(`Couldn't save ${b.category} $${b.amount} on ${j.name || 'job'}: ${expErr.message || 'database error'}`);
+          }
+        }
       } else {
         // No expenses in local memory. This is almost always a transient load
         // race or a realtime re-pull in progress — NOT a real intent to delete
