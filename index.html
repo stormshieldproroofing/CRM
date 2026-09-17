@@ -13584,9 +13584,7 @@ function openCommVoucherEditor(jobId, userId, fromList){
         <div class="cv-lbl">Breakdown</div>
         <div style="background:#1A1F2E;border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:12px">
           ${ln('Contract price', _cvMoney(d.contract))}
-          ${ln('Less job costs', '−'+_cvMoney(d.costs).replace('−',''), {color:'#F87171'})}
-          ${catText?`<div style="font-size:10px;color:var(--muted);margin:-2px 0 3px 10px">${catText}</div>`:''}
-          ${d.returns>0?ln('Plus returns / credits', '+'+_cvMoney(d.returns), {color:'#34D399'}):''}
+          ${ln('Less job costs', '−'+_cvMoney(Math.abs(d.costs - d.returns)), {color:'#F87171'})}
           ${ln(`Less overhead (${d.ovFlat!=null?'flat':d.ovPct+'%'})`, '−'+_cvMoney(d.overhead).replace('−',''), {color:'#F87171'})}
           ${ln('Net profit', _cvMoney(d.netAfterOH), {strong:true, top:true})}
           ${ln(`Commission rate <span style="font-size:10px">(${escapeHtml(rateText)})</span>`, d.rate+'%')}
@@ -13777,7 +13775,7 @@ async function printCommVoucher(j, user, pay, isDraft){
       <div class="v-label">Commission Breakdown</div>
       <table>
         ${row('Contract price', fmt(d.contract))}
-        ${row(`Less job costs${d.returns>0?` (net of ${fmt(d.returns)} returns)`:''}${catText?` <span class="v-sub">${catText}</span>`:''}`, neg(d.costs - d.returns))}
+        ${row('Less job costs', neg(d.costs - d.returns))}
         ${row(`Less overhead (${d.ovFlat!=null?'flat amount':d.ovPct+'%'})`, neg(d.overhead))}
         ${row('Net profit', fmt(d.netAfterOH), 'v-subtot')}
         ${row(`Commission earned — ${d.rate}%${d.parts.length>1?` <span class="v-sub">${escapeHtml(rateText)}</span>`:''}`, fmt(d.earned), 'v-subtot')}
