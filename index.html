@@ -4418,12 +4418,48 @@ function openJobStoredFile(collection,index){
   openStoredFile(job?.[collection]?.[index]);
 }
 
-function jobNetAfterOverhead(j){
+// ── Job financial permissions & settings ───────────────────────────
+// Only admins and managers may change overhead or commission settings.
+function canEditJobFinancials(){
+  const r = window.currentMember?.role;
+  return r === 'admin' || r === 'manager';
+}
+const DEFAULT_OVERHEAD_PCT = 10;
+const DEFAULT_COMM_PCT_PRIMARY = 50;
+function _isBlank(v){ return v === undefined || v === null || v === ''; }
+// Overhead % for a job (defaults to 10). A value of 0 is respected.
+function jobOverheadPct(j){
+  if(_isBlank(j?.overheadPct)) return DEFAULT_OVERHEAD_PCT;
+  const n = parseFloat(j.overheadPct);
+  return Number.isFinite(n) ? n : DEFAULT_OVERHEAD_PCT;
+}
+// Flat overhead $ override (null when using the %).
+function jobOverheadFlat(j){
+  if(_isBlank(j?.overheadFlat)) return null;
+  const n = parseFloat(j.overheadFlat);
+  return Number.isFinite(n) ? n : null;
+}
+// Primary agent commission % (defaults to 50). A value of 0 is respected.
+function jobCommPctPrimary(j){
+  if(_isBlank(j?.commPctPrimary)) return DEFAULT_COMM_PCT_PRIMARY;
+  const n = parseFloat(j.commPctPrimary);
+  return Number.isFinite(n) ? n : DEFAULT_COMM_PCT_PRIMARY;
+}
+function jobNetProfit(j){
   const exps=j.expenses||[];
   const costs=exps.filter(e=>e.cat!=='Returns').reduce((s,e)=>s+moneyValue(e.amount),0);
   const returns=exps.filter(e=>e.cat==='Returns').reduce((s,e)=>s+moneyValue(e.amount),0);
-  const netProfit=moneyValue(j.potVal)-(costs-returns);
-  return netProfit-(netProfit*0.10);
+  return moneyValue(j.potVal)-(costs-returns);
+}
+function jobOverheadAmount(j, netProfit){
+  const np = (netProfit==null) ? jobNetProfit(j) : netProfit;
+  const flat = jobOverheadFlat(j);
+  if(flat != null) return flat;
+  return np*(jobOverheadPct(j)/100);
+}
+function jobNetAfterOverhead(j){
+  const netProfit=jobNetProfit(j);
+  return netProfit-jobOverheadAmount(j, netProfit);
 }
 
 // Is this job fully paid? (sum of deposits >= contract)
@@ -4475,7 +4511,7 @@ function estimatedCommissionForUser(j,user){
   if(!user) return 0;
   const netAfterOverhead=jobNetAfterOverhead(j);
   let total=0;
-  if(j.user===user.id) total+=netAfterOverhead*(moneyValue(j.commPctPrimary||50)/100);
+  if(j.user===user.id) total+=netAfterOverhead*(jobCommPctPrimary(j)/100);
   (j.commissions||[]).forEach(split=>{
     if(split.name===user.name) total+=netAfterOverhead*(moneyValue(split.pct)/100);
   });
@@ -4518,7 +4554,7 @@ function summaryForJobs(summaryJobs,user=null){
 
 function estimatedTotalCommission(j){
   const netAfterOverhead=jobNetAfterOverhead(j);
-  const primary=netAfterOverhead*(moneyValue(j.commPctPrimary||50)/100);
+  const primary=netAfterOverhead*(jobCommPctPrimary(j)/100);
   const splits=(j.commissions||[]).reduce((s,split)=>s+netAfterOverhead*(moneyValue(split.pct)/100),0);
   return Math.max(0,primary+splits);
 }
@@ -5712,10 +5748,25 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           <div class="dp-card" id="overheadCard" style="margin-top:4px;margin-bottom:8px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
               <div style="display:flex;align-items:center;gap:5px">
-                <span style="font-size:12px;font-weight:700;color:var(--brand)">Overhead (10%)</span>
+                <span style="font-size:12px;font-weight:700;color:var(--brand)">Overhead (<span id="overheadPctLabel">${jobOverheadFlat(j)!=null?'Flat':(jobOverheadPct(j)+'%')}</span>)</span>
+                ${canEditJobFinancials()?'':`<i class="ti ti-lock" title="Only admins and managers can change overhead" style="font-size:12px;color:var(--muted)" aria-hidden="true"></i>`}
               </div>
               <span style="font-size:13px;font-weight:700;color:#FFFFFF" id="overheadAmt">$0.00</span>
             </div>
+            ${canEditJobFinancials()?`
+            <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+              <div id="ovPctBox" style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 9px;gap:3px;flex:1;min-width:0">
+                <input id="ovPctInput" type="number" min="0" max="100" step="0.1" value="${jobOverheadPct(j)}" oninput="ovSetPct(this.value)" aria-label="Overhead percent" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
+                <span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>
+              </div>
+              <span style="font-size:11px;color:var(--muted)">or</span>
+              <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 9px;gap:3px;flex:1;min-width:0">
+                <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
+                <input id="ovFlatInput" type="number" min="0" step="0.01" placeholder="Flat amount" value="${jobOverheadFlat(j)!=null?jobOverheadFlat(j):''}" oninput="ovSetFlat(this.value)" aria-label="Flat overhead amount" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
+              </div>
+              <button type="button" onclick="ovReset()" title="Reset to ${DEFAULT_OVERHEAD_PCT}%" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--brand-light);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0"><i class="ti ti-refresh" style="font-size:13px" aria-hidden="true"></i></button>
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:5px">% of net profit · a flat $ amount overrides the %</div>`:''}
           </div>
 
           <!-- Commissions -->
@@ -5723,6 +5774,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div class="acc-header" id="commAccHeader" style="cursor:pointer">
               <div style="display:flex;align-items:center;gap:5px;flex:1">
                 <span style="font-size:12px;font-weight:700;color:var(--brand)">Commissions</span>
+                ${canEditJobFinancials()?'':`<i class="ti ti-lock" title="Only admins and managers can change commissions" style="font-size:12px;color:var(--muted)" aria-hidden="true"></i>`}
               </div>
               <span style="font-size:13px;font-weight:700;color:#60C4FF" id="commAccTotal">$0.00</span>
             </div>
@@ -5738,7 +5790,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
                 <div style="display:flex;align-items:center;gap:6px">
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 9px;gap:3px;flex:1">
-                    <input id="commPctPrimary" type="number" min="0" max="100" step="0.1" value="50" oninput="refreshCommUI()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
+                    <input id="commPctPrimary" type="number" min="0" max="100" step="0.1" value="${jobCommPctPrimary(j)}" oninput="commSetPrimary(this.value)" ${canEditJobFinancials()?'':'disabled title="Only admins and managers can change commissions"'} style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>
                   </div>
                   <span style="font-size:12px;color:var(--muted)">of Net After Overhead =</span>
@@ -5750,7 +5802,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               <div id="commSplitsList" style="margin-bottom:8px"></div>
 
               <!-- Add split button -->
-              <button id="commAddSplit" style="width:100%;padding:8px;border-radius:7px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif;transition:border-color 0.12s,background 0.12s" onmouseover="this.style.borderColor='var(--brand-light)';this.style.background='rgba(77,157,224,0.06)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='none'">
+              ${canEditJobFinancials()?'':`<div style="font-size:10px;color:var(--muted);text-align:center;margin:2px 0 4px"><i class="ti ti-lock" style="font-size:11px" aria-hidden="true"></i> View only — admins and managers can edit commissions</div>`}
+              <button id="commAddSplit" style="display:${canEditJobFinancials()?'flex':'none'};width:100%;padding:8px;border-radius:7px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif;transition:border-color 0.12s,background 0.12s" onmouseover="this.style.borderColor='var(--brand-light)';this.style.background='rgba(77,157,224,0.06)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='none'">
                 <i class="ti ti-plus" style="font-size:12px" aria-hidden="true"></i>Add Commission Split
               </button>
 
@@ -6624,34 +6677,43 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     curJob()._assignedName = u.name;
 
     function getNetProfit(){
-      const j2=curJob();
-      const exps=j2.expenses||[];
-      const totalCosts=exps.filter(e=>e.cat!=='Returns').reduce((s,e)=>s+parseFloat(e.amount||0),0);
-      const totalReturns=exps.filter(e=>e.cat==='Returns').reduce((s,e)=>s+parseFloat(e.amount||0),0);
-      return parseFloat(j2.potVal||0)-(totalCosts-totalReturns);
+      return jobNetProfit(curJob());
     }
 
-    window.refreshCommUI=function(){
+    window.refreshCommUI=function(opts){
+      const skipList=!!(opts&&opts.skipList);
       const j2=curJob();
       const netProfit=getNetProfit();
       const svgTrashC=`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 
       // Overhead calculation
-      const ovPct=10;
-      const ovAmt=netProfit*(ovPct/100);
+      const ovFlat=jobOverheadFlat(j2);
+      const ovPct=jobOverheadPct(j2);
+      const ovAmt=jobOverheadAmount(j2, netProfit);
       const netAfterOv=netProfit-ovAmt;
       const oa=$('overheadAmt');
       if(oa) oa.textContent='$'+(ovAmt<=0?'0.00':ovAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+      const opl=$('overheadPctLabel');
+      if(opl) opl.textContent = ovFlat!=null ? 'Flat' : (ovPct+'%');
+      const opb=$('ovPctBox');
+      if(opb) opb.style.opacity = ovFlat!=null ? '0.45' : '1';
 
-
-      const pPct=parseFloat(($('commPctPrimary')||{}).value||0)||0;
+      const canEditFin=canEditJobFinancials();
+      const pPct=jobCommPctPrimary(j2);
       const pAmt=netAfterOv*(pPct/100);
       const pa=$('commAmtPrimary');
       if(pa){pa.textContent='$'+(pAmt<=0?'0.00':pAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));}
 
       const splits=j2.commissions||[];
       const splitsList=$('commSplitsList');
-      if(splitsList){
+      if(splitsList && skipList){
+        // Update amounts in place so the % field being typed in keeps focus
+        splits.forEach((s,i)=>{
+          const el=$('commSplitAmt'+i);
+          const sAmt=netAfterOv*(parseFloat(s.pct||0)/100);
+          if(el) el.textContent='$'+(sAmt<=0?'0.00':sAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+        });
+      } else if(splitsList){
         if(!splits.length){
           splitsList.innerHTML='';
         } else {
@@ -6661,28 +6723,25 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             return `<div style="border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:7px;background:#1A2030">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
                 <i class="ti ti-user-share" style="font-size:13px;color:var(--brand-mid)" aria-hidden="true"></i>
-<select onchange="commSplitField(${i},'name',this.value)" style="flex:1;border:none;outline:none;background:none;font-size:11px;font-weight:600;color:var(--brand);font-family:'Barlow',sans-serif;min-width:0;cursor:pointer;appearance:none;-webkit-appearance:none">
+<select onchange="commSplitField(${i},'name',this.value)" ${canEditFin?'':'disabled'} style="flex:1;border:none;outline:none;background:none;font-size:11px;font-weight:600;color:var(--brand);font-family:'Barlow',sans-serif;min-width:0;cursor:pointer;appearance:none;-webkit-appearance:none">
                   <option value="" style="background:#1A2030" ${!s.name?'selected':''}>Select agent…</option>
                   ${USERS.map(u2=>`<option value="${u2.name}" style="background:#1A2030" ${s.name===u2.name?'selected':''}>${u2.name}</option>`).join('')}
                 </select>
-                <button onclick="commDeleteSplit(${i})" title="Remove" style="width:22px;height:22px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--danger);padding:0;flex-shrink:0" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.07)'">${svgTrashC}</button>
+                <button onclick="commDeleteSplit(${i})" title="Remove" style="width:22px;height:22px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.07);display:${canEditFin?'flex':'none'};align-items:center;justify-content:center;cursor:pointer;color:var(--danger);padding:0;flex-shrink:0" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.07)'">${svgTrashC}</button>
               </div>
               <div style="display:flex;align-items:center;gap:6px">
                 <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 9px;gap:3px;flex:1">
-                  <input type="number" min="0" max="100" step="0.1" value="${s.pct||0}" oninput="commSplitField(${i},'pct',this.value)" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
+                  <input type="number" min="0" max="100" step="0.1" value="${s.pct||0}" oninput="commSplitField(${i},'pct',this.value)" ${canEditFin?'':'disabled'} style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
                   <span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>
                 </div>
                 <span style="font-size:12px;color:var(--muted)">of Net After Overhead =</span>
-                <span style="font-size:13px;font-weight:700;color:#60C4FF;min-width:64px;text-align:right">$${saFmt}</span>
+                <span id="commSplitAmt${i}" style="font-size:13px;font-weight:700;color:#60C4FF;min-width:64px;text-align:right">$${saFmt}</span>
               </div>
             </div>`;
           }).join('');
         }
       }
 
-      // Save primary pct to job
-      j2.commPctPrimary=pPct;
-      if(window.saveToStorage) saveToStorage();
 
       const splitTotal=splits.reduce((s,sp)=>s+netAfterOv*(parseFloat(sp.pct||0)/100),0);
       const grandTotal=pAmt+splitTotal;
@@ -6720,21 +6779,66 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       refreshSalesSummaryUI();
     };
 
-    window.commSplitField=function(i,field,val){
-      const j2=curJob();
-      if(j2.commissions&&j2.commissions[i]!=null) j2.commissions[i][field]=val;
+    function finGuard(){
+      if(canEditJobFinancials()) return true;
+      toast('Only admins and managers can change overhead or commissions');
       refreshCommUI();
+      return false;
+    }
+    function finSave(){
+      if(window.saveToStorage) saveToStorage();
+      refreshCommUI();
+    }
+    window.commSetPrimary=function(val){
+      if(!finGuard()) return;
+      curJob().commPctPrimary = (val===''?0:(parseFloat(val)||0));
+      finSave();
+    };
+    window.commSplitField=function(i,field,val){
+      if(!finGuard()) return;
+      const j2=curJob();
+      if(j2.commissions&&j2.commissions[i]!=null){
+        j2.commissions[i][field]=val;
+        if(field==='name') refreshCommUI();
+      }
+      if(field==='pct'){ if(window.saveToStorage) saveToStorage(); refreshCommUI({skipList:true}); }
+      else if(window.saveToStorage) saveToStorage();
     };
     window.commDeleteSplit=function(i){
+      if(!finGuard()) return;
       const j2=curJob();
-      if(j2.commissions) j2.commissions.splice(i,1);
-      refreshCommUI();
+      if(!j2.commissions||j2.commissions[i]==null) return;
+      if(!confirm('Remove this commission split?')) return;
+      j2.commissions.splice(i,1);
+      finSave();
+    };
+    window.ovSetPct=function(val){
+      if(!finGuard()) return;
+      const j2=curJob();
+      j2.overheadPct = (val===''?0:(parseFloat(val)||0));
+      j2.overheadFlat = null;             // typing a % switches back to % mode
+      const f=$('ovFlatInput'); if(f) f.value='';
+      finSave();
+    };
+    window.ovSetFlat=function(val){
+      if(!finGuard()) return;
+      curJob().overheadFlat = (val==='' ? null : (parseFloat(val)||0));
+      finSave();
+    };
+    window.ovReset=function(){
+      if(!finGuard()) return;
+      const j2=curJob();
+      j2.overheadPct = null; j2.overheadFlat = null;
+      const p=$('ovPctInput'); if(p) p.value=DEFAULT_OVERHEAD_PCT;
+      const f=$('ovFlatInput'); if(f) f.value='';
+      finSave();
     };
 
     $('commAddSplit')&&$('commAddSplit').addEventListener('click',e=>{
       e.stopPropagation();
+      if(!finGuard()) return;
       curJob().commissions.push({name:'',pct:10});
-      refreshCommUI();
+      finSave();
     });
 
     refreshCommUI();

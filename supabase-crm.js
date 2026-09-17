@@ -205,6 +205,11 @@ async function loadAllFromSupabase() {
         cpSupplement:   (r.contract && r.contract.__cpSupplement   != null) ? r.contract.__cpSupplement   : undefined,
         supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         supplements: (r.contract && Array.isArray(r.contract.__supplements)) ? r.contract.__supplements : undefined,
+        // Overhead & commission settings (admin/manager-editable), stored in contract JSON
+        overheadPct:    (r.contract && r.contract.__overheadPct    != null) ? r.contract.__overheadPct    : undefined,
+        overheadFlat:   (r.contract && r.contract.__overheadFlat   != null) ? r.contract.__overheadFlat   : undefined,
+        commPctPrimary: (r.contract && r.contract.__commPctPrimary != null) ? r.contract.__commPctPrimary : undefined,
+        commissions:    (r.contract && Array.isArray(r.contract.__commissions)) ? r.contract.__commissions : [],
         stageChecklistExtra: (r.stage_checklist_extra && typeof r.stage_checklist_extra === 'object') ? r.stage_checklist_extra : {},
         quote: (r.quote && typeof r.quote === 'object') ? r.quote : null,
         quotes: (r.quote && Array.isArray(r.quote.__list)) ? r.quote.__list
@@ -452,6 +457,13 @@ async function pushAllToSupabase() {
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           base.__supplementStatus = j.supplementStatus || null;
           base.__supplements = Array.isArray(j.supplements) ? j.supplements : null;
+          // Overhead & commission settings (no dedicated columns — persisted here)
+          base.__overheadPct    = (j.overheadPct    != null && j.overheadPct    !== '') ? parseFloat(j.overheadPct)    : null;
+          base.__overheadFlat   = (j.overheadFlat   != null && j.overheadFlat   !== '') ? parseFloat(j.overheadFlat)   : null;
+          base.__commPctPrimary = (j.commPctPrimary != null && j.commPctPrimary !== '') ? parseFloat(j.commPctPrimary) : null;
+          base.__commissions    = Array.isArray(j.commissions)
+            ? j.commissions.map(c => ({ name: c.name || '', pct: parseFloat(c.pct || 0) || 0 }))
+            : [];
           return base;
         })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
