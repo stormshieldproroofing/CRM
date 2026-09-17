@@ -5767,7 +5767,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               </div>
               <button type="button" onclick="ovReset()" title="Reset to ${DEFAULT_OVERHEAD_PCT}%" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--brand-light);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0"><i class="ti ti-refresh" style="font-size:13px" aria-hidden="true"></i></button>
             </div>
-            <div style="font-size:10px;color:var(--muted);margin-top:5px">% of net profit · a flat $ amount overrides the %</div>`:''}
+            <div style="font-size:10px;color:var(--muted);margin-top:5px">% of contract less job costs · a flat $ amount overrides the %</div>`:''}
           </div>
 
           <!-- Commissions -->
@@ -5794,7 +5794,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <input id="commPctPrimary" type="number" min="0" max="100" step="0.1" value="${jobCommPctPrimary(j)}" oninput="commSetPrimary(this.value)" ${canEditJobFinancials()?'':'disabled title="Only admins and managers can change commissions"'} style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>
                   </div>
-                  <span style="font-size:12px;color:var(--muted)">of Net After Overhead =</span>
+                  <span style="font-size:12px;color:var(--muted)">of Net Profit =</span>
                   <span style="font-size:13px;font-weight:700;color:#60C4FF;min-width:64px;text-align:right" id="commAmtPrimary">$0.00</span>
                 </div>
               </div>
@@ -6736,7 +6736,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <input type="number" min="0" max="100" step="0.1" value="${s.pct||0}" oninput="commSplitField(${i},'pct',this.value)" ${canEditFin?'':'disabled'} style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
                   <span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>
                 </div>
-                <span style="font-size:12px;color:var(--muted)">of Net After Overhead =</span>
+                <span style="font-size:12px;color:var(--muted)">of Net Profit =</span>
                 <span id="commSplitAmt${i}" style="font-size:13px;font-weight:700;color:#60C4FF;min-width:64px;text-align:right">$${saFmt}</span>
               </div>
             </div>`;
@@ -13499,7 +13499,7 @@ function openCommVoucher(jobId){
       <span style="width:9px;height:9px;border-radius:50%;background:${dot};flex-shrink:0"></span>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(m.name||'—')}</div>
-        <div style="font-size:10px;color:var(--muted)">${d.rate}% of net after overhead · ${d.payouts.length} payment${d.payouts.length===1?'':'s'}</div>
+        <div style="font-size:10px;color:var(--muted)">${d.rate}% of net profit · ${d.payouts.length} payment${d.payouts.length===1?'':'s'}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:13px;font-weight:700;color:var(--brand-light)">${_cvMoney(d.earned)}</div>
@@ -13587,9 +13587,8 @@ function openCommVoucherEditor(jobId, userId, fromList){
           ${ln('Less job costs', '−'+_cvMoney(d.costs).replace('−',''), {color:'#F87171'})}
           ${catText?`<div style="font-size:10px;color:var(--muted);margin:-2px 0 3px 10px">${catText}</div>`:''}
           ${d.returns>0?ln('Plus returns / credits', '+'+_cvMoney(d.returns), {color:'#34D399'}):''}
-          ${ln('Net profit', _cvMoney(d.netProfit), {strong:true, top:true})}
           ${ln(`Less overhead (${d.ovFlat!=null?'flat':d.ovPct+'%'})`, '−'+_cvMoney(d.overhead).replace('−',''), {color:'#F87171'})}
-          ${ln('Net profit after overhead', _cvMoney(d.netAfterOH), {strong:true, top:true})}
+          ${ln('Net profit', _cvMoney(d.netAfterOH), {strong:true, top:true})}
           ${ln(`Commission rate <span style="font-size:10px">(${escapeHtml(rateText)})</span>`, d.rate+'%')}
           ${ln('Commission earned', _cvMoney(d.earned), {strong:true, top:true, color:'#60C4FF'})}
           ${d.paidAll>0?ln('Already paid', '−'+_cvMoney(d.paidAll).replace('−',''), {color:'#34D399'}):''}
@@ -13779,9 +13778,8 @@ async function printCommVoucher(j, user, pay, isDraft){
       <table>
         ${row('Contract price', fmt(d.contract))}
         ${row(`Less job costs${d.returns>0?` (net of ${fmt(d.returns)} returns)`:''}${catText?` <span class="v-sub">${catText}</span>`:''}`, neg(d.costs - d.returns))}
-        ${row('Net profit', fmt(d.netProfit), 'v-subtot')}
-        ${row(`Less overhead (${d.ovFlat!=null?'flat amount':d.ovPct+'% of net profit'})`, neg(d.overhead))}
-        ${row('Net profit after overhead', fmt(d.netAfterOH), 'v-subtot')}
+        ${row(`Less overhead (${d.ovFlat!=null?'flat amount':d.ovPct+'%'})`, neg(d.overhead))}
+        ${row('Net profit', fmt(d.netAfterOH), 'v-subtot')}
         ${row(`Commission earned — ${d.rate}%${d.parts.length>1?` <span class="v-sub">${escapeHtml(rateText)}</span>`:''}`, fmt(d.earned), 'v-subtot')}
         ${d.prior>0?row('Less prior commission payments', neg(d.prior)):''}
         <tr class="v-total"><td>THIS PAYMENT</td><td class="n">${fmt(amount)}</td></tr>
@@ -16745,7 +16743,7 @@ function renderPayrollSales(){
           <th>Job</th>
           ${isAdminUser?'<th>Salesman</th>':''}
           <th class="num">Contract</th>
-          <th class="num">Profit (after OH)</th>
+          <th class="num">Net Profit</th>
           <th class="num">Earned</th>
           <th class="num">Paid</th>
           <th class="num">Owed</th>
@@ -17397,7 +17395,7 @@ function commExportCsv(){
     return downloadCsv(rows, 'subs');
   }
   // Default: sales commission
-  const rows = [['Job','Salesman','Pipeline','Contract','Profit after OH','Earned','Paid','Owed','Status','Payouts']];
+  const rows = [['Job','Salesman','Pipeline','Contract','Net Profit','Earned','Paid','Owed','Status','Payouts']];
   commGatherData().forEach(r => {
     const payoutSummary = r.payouts.map(p => `${p.date}:${fmtMoney(moneyValue(p.amount))}:${p.method}`).join(' | ');
     rows.push([
