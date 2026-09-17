@@ -752,6 +752,8 @@ async function signCompanyDocFile(path){
   } catch(e){ return null; }
 }
 window.signCompanyDocFile = signCompanyDocFile;
+// Same bucket — used to re-sign job files (e.g. commission check copies) on demand
+window.signJobFilePath = signCompanyDocFile;
 
 // Load + save the company_docs sections array (notes + file refs) via app_settings.
 async function loadCompanyDocs(){

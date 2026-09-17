@@ -5507,6 +5507,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <button onclick="activeTab='contract';renderDetailPanel()" style="width:100%;margin-top:6px;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.35);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-certificate" style="font-size:13px"></i>Contract</button>
                 <button onclick="openAbcMaterialCalc(openJobId)" style="width:100%;margin-top:6px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);color:#F97316;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-package" style="font-size:13px"></i>ABC Supply Material Order</button>
                 <button onclick="openSubVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt" style="font-size:13px"></i>Payment Breakdown / Receipt</button>
+                ${canEditJobFinancials()?`<button onclick="openCommVoucher(openJobId)" style="width:100%;margin-top:6px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt-2" style="font-size:13px"></i>Commission Breakdown / Receipt</button>`:''}
                 <button onclick="openFinalInvoice(openJobId)" style="width:100%;margin-top:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#A78BFA;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-file-invoice" style="font-size:13px"></i>${(()=>{const q=(typeof getJobQuote==='function')?getJobQuote(j):(j.quote||{});return (q.mode==='cash'||j.pipeline==='retail'||j.col==='retail')?'Homeowner Invoice':'Final Invoice / Depreciation Request';})()}</button>`
             }
           </div>
@@ -5780,7 +5781,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             </div>
             <!-- Per-agent summary shown when collapsed -->
             <div id="commCollapsedSummary" style="display:none;padding:0 0 7px"></div>
-            <div class="acc-body" id="commBody">
+            <div class="acc-body" id="jobCommBody">
               <!-- Primary agent commission -->
               <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
                 <div style="display:flex;align-items:center;gap:5px;margin-bottom:7px">
@@ -5812,6 +5813,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <span style="font-size:11px;font-weight:600;color:var(--muted)">Total Commissions</span>
                 <span style="font-size:13px;font-weight:700;color:#60C4FF" id="commTotalAmt">$0.00</span>
               </div>
+              ${canEditJobFinancials()?`<button type="button" onclick="event.stopPropagation();openCommVoucher(openJobId)" style="width:100%;margin-top:8px;background:rgba(96,196,255,0.1);border:1px solid rgba(96,196,255,0.3);color:#60C4FF;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-receipt-2" style="font-size:13px"></i>Commission Breakdown / Receipt</button>`:''}
             </div>
           </div>
 
@@ -5834,7 +5836,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
     // Commissions accordion toggle
     {
-      const accH=$('commAccHeader'),bdy=$('commBody');
+      const accH=$('commAccHeader'),bdy=$('jobCommBody');
       if(accH) accH.addEventListener('click',()=>{
         const open=bdy.style.display==='block';
         bdy.style.display=open?'none':'block';
@@ -6758,7 +6760,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       // Collapsed per-agent summary (like contract price breakdown)
       const ccs=$('commCollapsedSummary');
       if(ccs){
-        const bodyOpen=$('commBody')&&$('commBody').style.display==='block';
+        const bodyOpen=$('jobCommBody')&&$('jobCommBody').style.display==='block';
         if(bodyOpen){
           ccs.style.display='none';
           ccs.innerHTML='';
@@ -13337,9 +13339,9 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     @page { size: letter; margin: 0; }
     *{box-sizing:border-box}
     body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10.5pt}
-    .v-page{position:relative;page-break-after:always}
+    .v-page{position:relative;height:11in;overflow:hidden;page-break-after:always;break-after:page}
     .v-page-last{page-break-after:auto}
-    .v-panel{height:3.667in;padding:0.3in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-panel{height:3.6666in;padding:0.3in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
     .v-page .v-panel:last-child{border-bottom:none}
     .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
     .v-page .v-panel:last-child::after{content:none}
@@ -13387,6 +13389,502 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
   win.document.close();
 }
 window.printSubVoucher = printSubVoucher;
+
+// ── COMMISSION BREAKDOWN / RECEIPT ─────────────────────────────────────
+// Mirrors the subcontractor Payment Breakdown: pick a rep on the job, see the
+// full commission math, record a payment (check #, date, check copy) and print
+// a 3-copy statement with an "Attach Check Here" zone. Admins/managers only.
+function _cvMoney(n){ const v=Number(n)||0; return (v<0?'−':'')+'$'+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _cvMembers(){ return (window.TEAM && window.TEAM.length) ? window.TEAM : (window.USERS || []); }
+function _cvFindMember(id, name){
+  const pool = _cvMembers();
+  return (id && (pool.find(m=>m.id===id) || (window.USERS||[]).find(m=>m.id===id)))
+      || (name && (pool.find(m=>m.name===name) || (window.USERS||[]).find(m=>m.name===name)))
+      || null;
+}
+function _cvNewId(){ return 'cp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function commAgentsForJob(j){
+  const out = [], seen = new Set();
+  const add = m => { if(m && !seen.has(m.id)){ seen.add(m.id); out.push(m); } };
+  add(_cvFindMember(j.user));
+  (j.commissions||[]).forEach(sp => { if(sp.name) add(_cvFindMember(null, sp.name)); });
+  // Anyone already paid on this job stays listed even if removed from the splits
+  jobCommissionPayouts(j).forEach(p => add(_cvFindMember(p.paidTo)));
+  return out;
+}
+
+function commRateForUser(j, user){
+  const parts = [];
+  if(j.user === user.id) parts.push({ label:'Assigned agent', pct: jobCommPctPrimary(j) });
+  (j.commissions||[]).forEach(sp => { if(sp.name === user.name) parts.push({ label:'Split', pct: parseFloat(sp.pct)||0 }); });
+  return { rate: parts.reduce((s,p)=>s+p.pct,0), parts };
+}
+
+// excludePid: when reprinting a recorded payout, "prior payments" = those before it
+function commBreakdownData(j, user, excludePid){
+  const exps = j.expenses || [];
+  const byCat = {}; let costs = 0, returns = 0;
+  exps.forEach(e => {
+    const a = moneyValue(e.amount);
+    if(e.cat === 'Returns') returns += a;
+    else { costs += a; const k = e.cat || 'Other'; byCat[k] = (byCat[k]||0) + a; }
+  });
+  const contract = moneyValue(j.potVal);
+  const netProfit = contract - (costs - returns);
+  const ovFlat = jobOverheadFlat(j), ovPct = jobOverheadPct(j);
+  const overhead = jobOverheadAmount(j, netProfit);
+  const netAfterOH = netProfit - overhead;
+  const { rate, parts } = commRateForUser(j, user);
+  const earned = estimatedCommissionForUser(j, user);
+  const payouts = jobCommissionPayouts(j).filter(p => p.paidTo === user.id);
+  let prior = 0;
+  if(excludePid){
+    for(const p of payouts){ if(p._pid === excludePid) break; prior += moneyValue(p.amount); }
+  } else prior = payouts.reduce((s,p)=>s+moneyValue(p.amount),0);
+  const paidAll = payouts.reduce((s,p)=>s+moneyValue(p.amount),0);
+  return { contract, costs, returns, byCat, netProfit, ovFlat, ovPct, overhead, netAfterOH,
+           rate, parts, earned, payouts, prior, paidAll,
+           balance: Math.max(0, earned - paidAll),
+           collected: jobDepositTotal(j), fullyPaid: jobFullyPaid(j) };
+}
+
+async function commAttachCheckFile(j, file){
+  let f = file;
+  try { if(typeof downsizeImageFile === 'function') f = (await downsizeImageFile(file, 2000, 0.82)) || file; } catch(e){ f = file; }
+  if(window.uploadJobFile && j._sb){
+    try {
+      const rec = await window.uploadJobFile(j.id, 'commcheck', 'commission', f);
+      if(rec && rec.path) return { name: rec.name, path: rec.path, _id: rec._id, isPdf: !!rec.isPdf, type: f.type || '', date: fileDateText() };
+    } catch(e){ console.warn('[commcheck] upload failed, storing locally', e); }
+  }
+  return await storedFileFromUpload(f);
+}
+async function commCheckFileUrl(cf){
+  if(!cf) return null;
+  if(cf.path && window.signJobFilePath){ try { const u = await window.signJobFilePath(cf.path); if(u) return u; } catch(e){} }
+  return cf.url || null;
+}
+async function commViewCheckFile(cf){
+  const win = window.open('', '_blank');
+  if(!win){ toast('Allow pop-ups to view the check'); return; }
+  win.document.write('<p style="font-family:sans-serif;padding:20px">Loading check…</p>');
+  const url = await commCheckFileUrl(cf);
+  if(!url){ win.close(); toast('Check file is unavailable'); return; }
+  win.location.href = url;
+}
+
+function _cvAfterChange(j){
+  saveToStorage();
+  if(window.__activePage === 'payroll' && typeof renderPayrollPage === 'function') renderPayrollPage();
+  if(window.openJobId === j.id && typeof window.refreshCommUI === 'function') { try { window.refreshCommUI(); } catch(e){} }
+}
+
+// Step 1: pick a rep on this job
+function openCommVoucher(jobId){
+  if(!canEditJobFinancials()){ toast('Only admins and managers can open commission receipts'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  const agents = commAgentsForJob(j);
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
+  let tEarned=0, tPaid=0, tBal=0;
+  const rows = agents.length ? agents.map(m => {
+    const d = commBreakdownData(j, m);
+    tEarned += d.earned; tPaid += d.paidAll; tBal += d.balance;
+    const done = d.earned > 0 && d.balance <= 0.5;
+    const dot = done ? '#34D399' : (d.paidAll > 0 ? '#F59E0B' : (d.fullyPaid ? '#EF4444' : '#94A3B8'));
+    const status = done ? 'Paid ✓' : (d.paidAll > 0 ? 'Partial' : (d.fullyPaid ? 'Owed' : 'Pending'));
+    return `<div class="cv-row" data-uid="${escapeHtml(m.id)}" style="display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;cursor:pointer;background:#1A1F2E" onmouseover="this.style.borderColor='var(--brand-light)'" onmouseout="this.style.borderColor='var(--border)'">
+      <span style="width:9px;height:9px;border-radius:50%;background:${dot};flex-shrink:0"></span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(m.name||'—')}</div>
+        <div style="font-size:10px;color:var(--muted)">${d.rate}% of net after overhead · ${d.payouts.length} payment${d.payouts.length===1?'':'s'}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:13px;font-weight:700;color:var(--brand-light)">${_cvMoney(d.earned)}</div>
+        <div style="font-size:9px;font-weight:700;color:${dot}">${status}${d.balance>0.5&&d.paidAll>0?' · '+_cvMoney(d.balance)+' left':''}</div>
+      </div>
+      <i class="ti ti-chevron-right" style="color:var(--muted);font-size:14px"></i>
+    </div>`;
+  }).join('') : `<div style="text-align:center;padding:20px 8px;color:var(--muted);font-size:12px">No reps have commission on this job yet. Set the agent % or add a split in Commissions.</div>`;
+
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:460px;max-width:100%;max-height:90vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Commission Breakdown</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(j.name||'')}</div>
+        </div>
+        <button class="icon-btn cv-close"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px">
+        ${!jobFullyPaid(j) ? `<div style="font-size:11px;color:#F59E0B;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:7px;padding:7px 10px;margin-bottom:10px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(jobDepositTotal(j))} of ${_cvMoney(moneyValue(j.potVal))}). Any payment now is an advance.</div>` : ''}
+        ${rows}
+        ${agents.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.9">
+          <div style="display:flex;justify-content:space-between"><span>Total commission</span><span style="font-weight:700;color:#fff">${_cvMoney(tEarned)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Paid</span><span style="font-weight:700;color:#34D399">${_cvMoney(tPaid)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Remaining</span><span style="font-weight:700;color:${tBal>0.5?'#FBBF24':'#34D399'}">${_cvMoney(tBal)}</span></div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.cv-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+  overlay.querySelectorAll('.cv-row').forEach(r => r.addEventListener('click', () => { close(); openCommVoucherEditor(jobId, r.dataset.uid, true); }));
+}
+window.openCommVoucher = openCommVoucher;
+
+// Step 2: breakdown + record payment + attach check + print
+function openCommVoucherEditor(jobId, userId, fromList){
+  if(!canEditJobFinancials()){ toast('Only admins and managers can open commission receipts'); return; }
+  const j = jobs.find(x => x.id === jobId);
+  const user = _cvFindMember(userId);
+  if(!j || !user){ toast('Job or rep not found'); return; }
+  const d = commBreakdownData(j, user);
+  let draftCheck = null;   // check file picked before recording
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
+  const ln = (label, val, opts={}) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;${opts.top?'border-top:1px solid var(--border);margin-top:3px;padding-top:6px;':''}font-size:12px">
+      <span style="color:${opts.strong?'#fff':'var(--muted)'};font-weight:${opts.strong?700:400}">${label}</span>
+      <span style="font-weight:${opts.strong?700:600};color:${opts.color||'#fff'};font-variant-numeric:tabular-nums;white-space:nowrap">${val}</span></div>`;
+  const catText = Object.entries(d.byCat).map(([k,v])=>`${escapeHtml(k)} ${_cvMoney(v)}`).join(' · ');
+  const rateText = d.parts.map(p=>`${p.label} ${p.pct}%`).join(' + ') || '0%';
+
+  let backfilled = false;
+  const payoutRows = d.payouts.length ? d.payouts.map((p, i) => {
+    if(!p._pid){ p._pid = _cvNewId(); backfilled = true; }   // back-fill ids on older payouts
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#1A1F2E">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700;color:#fff">${_cvMoney(moneyValue(p.amount))} <span style="font-weight:400;color:var(--muted);font-size:10px">· ${escapeHtml(p.date||'')} · ${escapeHtml(p.method||'')}${p.checkNo?' #'+escapeHtml(p.checkNo):''}</span></div>
+        <div style="font-size:10px;color:${p.checkFile?'#34D399':'var(--muted)'}">${p.checkFile?'<i class="ti ti-paperclip"></i> Check copy attached':'No check copy'}</div>
+      </div>
+      ${p.checkFile?`<button class="cv-mini" data-act="view" data-pid="${p._pid}" title="View check"><i class="ti ti-eye"></i></button>`:''}
+      <button class="cv-mini" data-act="attach" data-pid="${p._pid}" title="${p.checkFile?'Replace':'Attach'} check copy"><i class="ti ti-paperclip"></i></button>
+      <button class="cv-mini" data-act="print" data-pid="${p._pid}" title="Print receipt"><i class="ti ti-printer"></i></button>
+    </div>`;
+  }).join('') : `<div style="font-size:11px;color:var(--muted);padding:4px 0 2px">No payments recorded yet.</div>`;
+
+  overlay.innerHTML = `
+    <style>.cv-mini{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--brand-light);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;font-size:14px}.cv-mini:hover{border-color:var(--brand-light)}.cv-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}</style>
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:500px;max-width:100%;max-height:92vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div style="display:flex;align-items:center;gap:8px">
+          ${fromList?`<button class="icon-btn cv-back" title="Back"><i class="ti ti-arrow-left"></i></button>`:''}
+          <div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Commission Receipt · ${escapeHtml(user.name||'')}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(j.name||'')}${j.address&&j.address!=='—'?' · '+escapeHtml(j.address):''}</div>
+          </div>
+        </div>
+        <button class="icon-btn cv-close"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:14px 18px">
+        <div class="cv-lbl">Breakdown</div>
+        <div style="background:#1A1F2E;border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:12px">
+          ${ln('Contract price', _cvMoney(d.contract))}
+          ${ln('Less job costs', '−'+_cvMoney(d.costs).replace('−',''), {color:'#F87171'})}
+          ${catText?`<div style="font-size:10px;color:var(--muted);margin:-2px 0 3px 10px">${catText}</div>`:''}
+          ${d.returns>0?ln('Plus returns / credits', '+'+_cvMoney(d.returns), {color:'#34D399'}):''}
+          ${ln('Net profit', _cvMoney(d.netProfit), {strong:true, top:true})}
+          ${ln(`Less overhead (${d.ovFlat!=null?'flat':d.ovPct+'%'})`, '−'+_cvMoney(d.overhead).replace('−',''), {color:'#F87171'})}
+          ${ln('Net profit after overhead', _cvMoney(d.netAfterOH), {strong:true, top:true})}
+          ${ln(`Commission rate <span style="font-size:10px">(${escapeHtml(rateText)})</span>`, d.rate+'%')}
+          ${ln('Commission earned', _cvMoney(d.earned), {strong:true, top:true, color:'#60C4FF'})}
+          ${d.paidAll>0?ln('Already paid', '−'+_cvMoney(d.paidAll).replace('−',''), {color:'#34D399'}):''}
+          ${ln('Balance due', _cvMoney(d.balance), {strong:true, top:true, color:d.balance>0.5?'#FBBF24':'#34D399'})}
+        </div>
+        ${!d.fullyPaid?`<div style="font-size:11px;color:#F59E0B;margin:-4px 0 12px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(d.collected)} of ${_cvMoney(d.contract)}) — this would be an advance.</div>`:''}
+
+        <div class="cv-lbl">New payment</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Amount</div><input id="cvAmt" class="ie-inp" type="number" step="0.01" min="0" value="${d.balance.toFixed(2)}"></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Date</div><input id="cvDate" class="ie-inp" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Method</div>
+            <select id="cvMethod" class="ie-inp">${['Check','ACH','Zelle','Cash','Other'].map(m=>`<option ${m==='Check'?'selected':''}>${m}</option>`).join('')}</select></div>
+          <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Check #</div><input id="cvCheckNo" class="ie-inp" type="text" placeholder="optional"></div>
+        </div>
+        <div style="margin-bottom:8px"><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Notes</div><input id="cvNotes" class="ie-inp" type="text" placeholder="optional"></div>
+
+        <div style="border:1px dashed rgba(96,196,255,0.4);border-radius:8px;padding:10px;margin-bottom:12px;background:rgba(96,196,255,0.04)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div style="font-size:11px;color:var(--brand-light);font-weight:700"><i class="ti ti-paperclip"></i> Check copy <span id="cvCheckName" style="font-weight:400;color:var(--muted)">— none attached</span></div>
+            <div style="display:flex;gap:6px">
+              <button type="button" class="cv-mini cv-snap" title="Take photo"><i class="ti ti-camera"></i></button>
+              <button type="button" class="cv-mini cv-pick" title="Upload image or PDF"><i class="ti ti-upload"></i></button>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Photo or scan of the check. It's saved with the payment and prints as a 4th page.</div>
+          <input type="file" id="cvSnapInput" accept="image/*" capture="environment" style="display:none">
+          <input type="file" id="cvPickInput" accept="image/*,application/pdf" style="display:none">
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button type="button" class="btn-cancel cv-preview" style="flex:1;font-size:12px;padding:9px"><i class="ti ti-printer"></i> Print preview</button>
+          <button type="button" class="btn-primary cv-record" style="flex:1.4;font-size:12px;padding:9px"><i class="ti ti-check"></i> Record payment &amp; print</button>
+        </div>
+
+        <div class="cv-lbl">Payment history</div>
+        ${payoutRows}
+        <input type="file" id="cvAttachInput" accept="image/*,application/pdf" style="display:none">
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const q = sel => overlay.querySelector(sel);
+  const close = () => overlay.remove();
+  q('.cv-close').addEventListener('click', close);
+  q('.cv-back')?.addEventListener('click', () => { close(); openCommVoucher(jobId); });
+  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+
+  const readForm = () => ({
+    amount: parseFloat(q('#cvAmt').value),
+    date: q('#cvDate').value,
+    method: q('#cvMethod').value,
+    checkNo: q('#cvCheckNo').value.trim(),
+    notes: q('#cvNotes').value.trim(),
+  });
+
+  const onDraftFile = async (input) => {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if(!file) return;
+    q('#cvCheckName').textContent = '— uploading…';
+    try {
+      draftCheck = await commAttachCheckFile(j, file);
+      q('#cvCheckName').textContent = '— ' + (draftCheck?.name || file.name);
+    } catch(e){
+      draftCheck = null;
+      q('#cvCheckName').textContent = '— upload failed';
+      toast('Could not attach check');
+    }
+  };
+  q('.cv-snap').addEventListener('click', () => q('#cvSnapInput').click());
+  q('.cv-pick').addEventListener('click', () => q('#cvPickInput').click());
+  q('#cvSnapInput').addEventListener('change', e => onDraftFile(e.target));
+  q('#cvPickInput').addEventListener('change', e => onDraftFile(e.target));
+
+  q('.cv-preview').addEventListener('click', () => {
+    const f = readForm();
+    printCommVoucher(j, user, { ...f, amount: isFinite(f.amount) ? f.amount : 0, checkFile: draftCheck }, true);
+  });
+
+  q('.cv-record').addEventListener('click', () => {
+    if(!canEditJobFinancials()){ toast('Only admins and managers can record commission payments'); return; }
+    const f = readForm();
+    if(!isFinite(f.amount) || f.amount <= 0){ toast('Enter a valid amount'); return; }
+    if(!f.date){ toast('Enter a payment date'); return; }
+    if(f.amount > d.balance + 0.5 && !confirm(`${_cvMoney(f.amount)} is more than the ${_cvMoney(d.balance)} balance due. Record it anyway?`)) return;
+    if(!d.fullyPaid && !confirm('The contract is not fully collected yet. Record this as an advance?')) return;
+    const payout = {
+      _pid: _cvNewId(),
+      amount: f.amount.toFixed(2),
+      date: f.date, method: f.method, notes: f.notes,
+      checkNo: f.checkNo || '',
+      checkFile: draftCheck || null,
+      paidTo: user.id,
+      paidAt: new Date().toISOString(),
+      paidBy: window.currentMember?.id || '',
+    };
+    jobCommissionPayouts(j).push(payout);
+    if(typeof logActivity === 'function'){
+      logActivity(j, 'commission', 'Commission paid', `${user.name}: ${_cvMoney(f.amount)} · ${f.method}${f.checkNo?' #'+f.checkNo:''}`);
+    }
+    _cvAfterChange(j);
+    toast(`Recorded ${_cvMoney(f.amount)} commission payment`);
+    printCommVoucher(j, user, payout, false);
+    close();
+    openCommVoucherEditor(jobId, userId, fromList);
+  });
+
+  // Existing payouts: view / attach / reprint
+  let attachPid = null;
+  q('#cvAttachInput').addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    const p = jobCommissionPayouts(j).find(x => x._pid === attachPid);
+    if(!file || !p) return;
+    toast('Uploading check…');
+    try {
+      p.checkFile = await commAttachCheckFile(j, file);
+      _cvAfterChange(j);
+      toast('Check copy attached');
+      close();
+      openCommVoucherEditor(jobId, userId, fromList);
+    } catch(err){ toast('Could not attach check'); }
+  });
+  overlay.querySelectorAll('.cv-mini[data-pid]').forEach(b => b.addEventListener('click', () => {
+    const p = jobCommissionPayouts(j).find(x => x._pid === b.dataset.pid);
+    if(!p) return;
+    if(b.dataset.act === 'view') commViewCheckFile(p.checkFile);
+    if(b.dataset.act === 'attach'){ attachPid = p._pid; q('#cvAttachInput').click(); }
+    if(b.dataset.act === 'print') printCommVoucher(j, user, p, false);
+  }));
+  // Persist any back-filled payout ids so reprints/attachments stay linked
+  if(backfilled) saveToStorage();
+}
+window.openCommVoucherEditor = openCommVoucherEditor;
+
+async function printCommVoucher(j, user, pay, isDraft){
+  // Open the window first (synchronously) so pop-up blockers allow it
+  const win = window.open('', '_blank');
+  if(!win){ toast('Allow pop-ups to print'); return; }
+  win.document.write('<p style="font-family:sans-serif;padding:20px">Preparing commission receipt…</p>');
+
+  const d = commBreakdownData(j, user, isDraft ? null : pay._pid);
+  const amount = moneyValue(pay.amount);
+  const remainingAfter = Math.max(0, d.earned - d.prior - amount);
+  const ci = getCompanyInfo();
+  const accent = '#1a3a6a';
+  const fmt = n => _cvMoney(n);
+  const payDate = pay.date ? new Date(pay.date + 'T12:00:00') : new Date();
+  const dateText = payDate.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const addr = (j?.address && j.address !== '—') ? j.address : '';
+  const checkNo = pay.checkNo || '';
+  const checkUrl = pay.checkFile ? await commCheckFileUrl(pay.checkFile) : null;
+  const checkIsPdf = !!(pay.checkFile && (pay.checkFile.isPdf || /pdf/i.test(pay.checkFile.type||'')));
+  const catText = Object.entries(d.byCat).map(([k,v])=>`${escapeHtml(k)} ${fmt(v)}`).join(' · ');
+  const rateText = d.parts.map(p=>`${p.label} ${p.pct}%`).join(' + ');
+  const row = (label, val, cls='') => `<tr class="${cls}"><td>${label}</td><td class="n">${val}</td></tr>`;
+  const neg = n => '−' + fmt(Math.abs(n));
+
+  const headBlock = (tag) => `
+      <div class="v-copytag">${tag}</div>
+      <div class="v-head">
+        <div class="v-co">
+          ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="v-logo">`:''}
+          <div>
+            <div class="v-co-name">${escapeHtml(ci.name||'')}</div>
+            <div class="v-co-detail">${ci.address?escapeHtml(ci.address)+'<br>':''}${ci.cityStateZip?escapeHtml(ci.cityStateZip)+'<br>':''}${ci.phone?escapeHtml(ci.phone):''}</div>
+          </div>
+        </div>
+        <div>
+          <div class="v-title">Commission Statement${isDraft?' <span style="color:#c0392b">(Draft)</span>':''}</div>
+          <div class="v-meta"><strong>Date:</strong> ${dateText}${checkNo?`<br><strong>Check #:</strong> ${escapeHtml(checkNo)}`:''}${pay.method&&pay.method!=='Check'?`<br><strong>Method:</strong> ${escapeHtml(pay.method)}`:''}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+        <div>
+          <div class="v-label">Pay To</div>
+          <div class="v-box"><strong>${escapeHtml(user.name||'_______________________')}</strong>${user.phone?'<br>'+escapeHtml(user.phone):''}${user.role?'<br>'+escapeHtml(String(user.role).replace(/^./,c=>c.toUpperCase())):''}</div>
+        </div>
+        <div>
+          <div class="v-label">Job</div>
+          <div class="v-box">${escapeHtml(j?.name||'')}${addr?'<br>'+escapeHtml(addr):''}${j.claimNum?'<br>Claim #'+escapeHtml(j.claimNum):''}</div>
+        </div>
+      </div>`;
+
+  const breakdownBlock = `
+      <div class="v-label">Commission Breakdown</div>
+      <table>
+        ${row('Contract price', fmt(d.contract))}
+        ${row(`Less job costs${d.returns>0?` (net of ${fmt(d.returns)} returns)`:''}${catText?` <span class="v-sub">${catText}</span>`:''}`, neg(d.costs - d.returns))}
+        ${row('Net profit', fmt(d.netProfit), 'v-subtot')}
+        ${row(`Less overhead (${d.ovFlat!=null?'flat amount':d.ovPct+'% of net profit'})`, neg(d.overhead))}
+        ${row('Net profit after overhead', fmt(d.netAfterOH), 'v-subtot')}
+        ${row(`Commission earned — ${d.rate}%${d.parts.length>1?` <span class="v-sub">${escapeHtml(rateText)}</span>`:''}`, fmt(d.earned), 'v-subtot')}
+        ${d.prior>0?row('Less prior commission payments', neg(d.prior)):''}
+        <tr class="v-total"><td>THIS PAYMENT</td><td class="n">${fmt(amount)}</td></tr>
+      </table>
+      <div class="v-after">${remainingAfter>0.5?`Remaining commission after this payment: <strong>${fmt(remainingAfter)}</strong>`:'Commission paid in full on this job with this payment.'}${!d.fullyPaid?` · <span style="color:#c0392b">Advance — contract ${fmt(d.collected)} of ${fmt(d.contract)} collected</span>`:''}</div>`;
+
+  const signRow = `
+      <div class="v-sign">
+        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Sales rep signature / date</div></div>
+        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Approved by / date — ${escapeHtml(ci.name||'')}</div></div>
+      </div>`;
+
+  const checkZone = `
+      <div class="v-check-zone">
+        <span class="v-corner tl"></span><span class="v-corner tr"></span><span class="v-corner bl"></span><span class="v-corner br"></span>
+        <span class="v-tape">▾ tape check top edge here ▾</span>
+        <div>
+          <div class="v-check-title">Attach Check Here</div>
+          <div class="v-check-sub">Business check 8.25″ × 3″ · tape the TOP edge</div>
+          <div class="v-check-amt">Amount: ${fmt(amount)}${checkNo?` · Check #${escapeHtml(checkNo)}`:''} · Pay to ${escapeHtml(user.name||'')}</div>
+        </div>
+      </div>`;
+
+  const issued = `<div class="v-issued">${pay.method==='Check'||!pay.method?`Check #${checkNo?escapeHtml(checkNo):'____________'}`:escapeHtml(pay.method)} issued ${dateText} · Amount ${fmt(amount)} · To ${escapeHtml(user.name||'')}${pay.notes?`<br>Notes: ${escapeHtml(pay.notes)}`:''}${pay.checkFile?'<br>Check copy on file'+(checkUrl?' (attached page)':''):''}</div>`;
+
+  const page = (tag, third, last) => `
+    <div class="v-page${last?' v-page-last':''}">
+      <div class="v-panel">${headBlock(tag)}</div>
+      <div class="v-panel">${breakdownBlock}${third===null?signRow:''}</div>
+      <div class="v-panel${third===null?' v-panel-check':''}">${third===null?checkZone:third}</div>
+    </div>`;
+
+  const hasCheckPage = !!checkUrl;
+  const page1 = page("Sales Rep's Copy — keep with your check", null, false);
+  const page2 = page('Office Copy — retained by '+escapeHtml(ci.name||'company'), `${issued}${signRow}<div class="v-filenote">Retain this signed original for company records.</div>`, false);
+  const page3 = page('Accounting Copy — file with payroll', `${issued}${signRow}<div class="v-filenote">Forward this copy to accounting for payroll and reconciliation.</div>`, !hasCheckPage);
+  const page4 = hasCheckPage ? `
+    <div class="v-page v-page-last v-checkcopy">
+      <div class="v-copytag">Check Copy on File</div>
+      <div class="v-box" style="margin-bottom:12px"><strong>${escapeHtml(user.name||'')}</strong> · ${escapeHtml(j.name||'')} · ${fmt(amount)} · ${dateText}${checkNo?' · Check #'+escapeHtml(checkNo):''}</div>
+      ${checkIsPdf
+        ? `<div class="v-issued">Check copy is a PDF: <a href="${checkUrl}" target="_blank">${escapeHtml(pay.checkFile.name||'open file')}</a> — print it separately.</div>`
+        : `<img src="${checkUrl}" class="v-checkimg" alt="Check copy">`}
+    </div>` : '';
+
+  win.document.open();
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commission Statement - ${escapeHtml(user.name||'')}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
+  <style>
+    @page { size: letter; margin: 0; }
+    *{box-sizing:border-box}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10pt}
+    .v-page{position:relative;height:11in;overflow:hidden;page-break-after:always;break-after:page}
+    .v-page-last{page-break-after:auto}
+    .v-panel{height:3.6666in;padding:0.26in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-page .v-panel:last-child{border-bottom:none}
+    .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
+    .v-page .v-panel:last-child::after{content:none}
+    .v-panel-check{padding:0;display:flex;align-items:center;justify-content:center}
+    .v-copytag{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:${accent};display:inline-block;padding:3px 10px;border-radius:3px;margin-bottom:9px}
+    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:8px;margin-bottom:10px}
+    .v-co{display:flex;align-items:center;gap:11px}
+    .v-logo{height:48px;width:auto;max-width:78px;object-fit:contain}
+    .v-co-name{font-size:13pt;font-weight:800;color:${accent}}
+    .v-co-detail{font-size:8pt;line-height:1.45}
+    .v-title{font-size:13pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
+    .v-meta{font-size:9pt;text-align:right;line-height:1.5;margin-top:3px}
+    .v-meta strong{color:${accent}}
+    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:3px}
+    .v-box{font-size:10pt;line-height:1.4}
+    table{width:100%;border-collapse:collapse}
+    table td{border-bottom:1px solid #eee;padding:2.5px 8px;font-size:9pt;vertical-align:top}
+    td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;width:1.3in}
+    .v-sub{font-size:7.5pt;color:#777;margin-left:6px}
+    .v-subtot td{font-weight:700;background:#f5f7fa}
+    .v-total td{font-size:12pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:5px;background:none}
+    .v-after{font-size:8pt;color:#444;margin-top:3px}
+    .v-sign{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+    .v-sign-line{border-bottom:1px solid #000;height:24px;margin-bottom:3px}
+    .v-sign-lbl{font-size:8pt;color:#555}
+    .v-issued{font-size:9pt;color:#333;border:1px solid #ddd;border-radius:5px;padding:7px 10px;background:#fafafa;line-height:1.5}
+    .v-filenote{margin-top:12px;font-size:7.5pt;color:#999;font-style:italic}
+    .v-check-zone{border:1.5px dashed #777;border-radius:4px;width:8.25in;height:3in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
+    .v-corner{position:absolute;width:16px;height:16px;border:2px solid #555}
+    .v-corner.tl{top:-2px;left:-2px;border-right:none;border-bottom:none}
+    .v-corner.tr{top:-2px;right:-2px;border-left:none;border-bottom:none}
+    .v-corner.bl{bottom:-2px;left:-2px;border-right:none;border-top:none}
+    .v-corner.br{bottom:-2px;right:-2px;border-left:none;border-top:none}
+    .v-check-title{font-size:13pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bbb}
+    .v-check-sub{font-size:9pt;color:#bbb;margin-top:6px;line-height:1.5}
+    .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
+    .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
+    .v-checkcopy{padding:0.5in;height:auto;overflow:visible}
+    .v-checkimg{display:block;max-width:100%;max-height:8.8in;margin:0 auto;border:1px solid #ccc}
+    .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
+    @media print{.v-print-btn{display:none}}
+  </style></head><body>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
+    ${page1}${page2}${page3}${page4}
+  </body></html>`);
+  win.document.close();
+}
+window.printCommVoucher = printCommVoucher;
+
 
 // ── ABC SUPPLY MATERIAL ORDER CALCULATOR ──
 // Computes a roofing material takeoff from squares + linear measurements + waste,
@@ -16273,7 +16771,7 @@ function renderPayrollSales(){
               <td class="num" style="color:#34D399">${fmtMoney(r.paid)}</td>
               <td class="num" style="color:${r.owed>0?'#EF4444':'var(--muted)'}">${fmtMoney(r.owed)}</td>
               <td><span class="comm-status-pill ${statusCls}">${statusLabel}</span></td>
-              <td>${showPayBtn ? `<button class="comm-pay-btn" data-comm-pay="${r.job.id}|${r.user.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}${(isAdminUser && r.paid>0) ? `<button class="comm-unpay-btn" data-comm-unpay="${r.job.id}|${r.user.id}" title="Revert last commission payment"><i class="ti ti-arrow-back-up"></i>Undo</button>` : ''}</td>
+              <td>${canEditJobFinancials() ? `<button class="comm-pay-btn" data-comm-receipt="${r.job.id}|${r.user.id}" title="Commission breakdown / receipt" style="margin-right:4px"><i class="ti ti-receipt-2"></i>Receipt</button>` : ''}${showPayBtn ? `<button class="comm-pay-btn" data-comm-pay="${r.job.id}|${r.user.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}${(isAdminUser && r.paid>0) ? `<button class="comm-unpay-btn" data-comm-unpay="${r.job.id}|${r.user.id}" title="Revert last commission payment"><i class="ti ti-arrow-back-up"></i>Undo</button>` : ''}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -16298,6 +16796,11 @@ function renderPayrollSales(){
     e.stopPropagation();
     const [jobId, userId] = b.dataset.commPay.split('|');
     openCommPaidModal(jobId, userId);
+  }));
+  body.querySelectorAll('[data-comm-receipt]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const [jobId, userId] = b.dataset.commReceipt.split('|');
+    openCommVoucherEditor(jobId, userId);
   }));
   body.querySelectorAll('[data-comm-unpay]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
