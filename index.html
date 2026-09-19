@@ -4445,12 +4445,24 @@ function jobCommPctPrimary(j){
   const n = parseFloat(j.commPctPrimary);
   return Number.isFinite(n) ? n : DEFAULT_COMM_PCT_PRIMARY;
 }
+// Revenue the commission is figured on: the contract plus any APPROVED
+// supplements. Previously supplements were excluded here while the job P&L
+// counted them, so the profit sheet and the commission voucher disagreed on
+// any supplemented job. One function now feeds both.
+function jobCommissionRevenue(j){
+  const contract = moneyValue(j.potVal);
+  const supp = (typeof supplementsApprovedTotal==='function')
+    ? (supplementsApprovedTotal(j) || 0)
+    : (moneyValue(j.cpSupplement) || 0);
+  return contract + supp;
+}
 function jobNetProfit(j){
   const exps=j.expenses||[];
   const costs=exps.filter(e=>e.cat!=='Returns').reduce((s,e)=>s+moneyValue(e.amount),0);
   const returns=exps.filter(e=>e.cat==='Returns').reduce((s,e)=>s+moneyValue(e.amount),0);
-  return moneyValue(j.potVal)-(costs-returns);
+  return jobCommissionRevenue(j)-(costs-returns);
 }
+window.jobCommissionRevenue = jobCommissionRevenue;
 function jobOverheadAmount(j, netProfit){
   const np = (netProfit==null) ? jobNetProfit(j) : netProfit;
   const flat = jobOverheadFlat(j);
@@ -5435,6 +5447,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             </button>
             <input id="roofrReportFile" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]){importRoofrReport(this.files[0]);this.value='';}">
             <div style="margin-top:6px;font-size:10px;color:var(--muted);text-align:center">Rough satellite estimate · import a Roofr report for exact measurements</div>
+            <button onclick="openDemandEstimate(openJobId)" style="width:100%;margin-top:8px;padding:9px;border:1px solid rgba(251,191,36,0.35);border-radius:7px;background:rgba(251,191,36,0.08);color:#FBBF24;font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+              <i class="ti ti-scale" style="font-size:14px" aria-hidden="true"></i>Demand Estimate Builder${j.demandEstimate ? `<span style="color:var(--muted);font-weight:400;margin-left:2px">· saved</span>` : ''}
+            </button>
+            <div style="margin-top:5px;font-size:10px;color:var(--muted);text-align:center">Compare the carrier's estimate against full scope &amp; print the demand</div>
           </div>
 
           <div class="dp-card" id="contractCalcCard" style="margin-top:10px">
@@ -11532,10 +11548,40 @@ function printJobPnL(jobId){
     else { costs += amt; catTotals[e.cat||'Other'] = (catTotals[e.cat||'Other']||0) + amt; }
   });
   const netCosts = costs - returns;
-  const netProfit = revenue - netCosts;
+  // Use the shared helper so this sheet can never disagree with the commission
+  // voucher or the payroll page about what a rep has earned.
+  const netProfit = (typeof jobNetProfit==='function') ? jobNetProfit(j) : (revenue - netCosts);
   const margin = revenue > 0 ? (netProfit/revenue*100) : 0;
   const collected = moneyNum(j.paidVal);
   const outstanding = revenue - collected;
+
+  // ── Commission: overhead comes off first, then the remainder splits ──
+  const ovPct    = (typeof jobOverheadPct==='function') ? jobOverheadPct(j) : 10;
+  const ovFlat   = (typeof jobOverheadFlat==='function') ? jobOverheadFlat(j) : null;
+  const overhead = (typeof jobOverheadAmount==='function') ? jobOverheadAmount(j, netProfit) : netProfit*(ovPct/100);
+  const netAfterOH = netProfit - overhead;
+  const findUser = id => (window.USERS||[]).find(u=>u.id===id) || null;
+  const primaryUser = j.user ? findUser(j.user) : null;
+  const primaryPct  = (typeof jobCommPctPrimary==='function') ? jobCommPctPrimary(j) : 50;
+  const commRows = [];
+  if(primaryUser && primaryPct > 0){
+    commRows.push({ name: primaryUser.name || 'Assigned agent', pct: primaryPct,
+                    amt: Math.max(0, netAfterOH*(primaryPct/100)) });
+  }
+  (j.commissions||[]).forEach(sp=>{
+    const pct = parseFloat(sp.pct)||0;
+    if(pct>0) commRows.push({ name: sp.name || 'Split', pct, amt: Math.max(0, netAfterOH*(pct/100)) });
+  });
+  const totalComm   = commRows.reduce((a,r)=>a+r.amt, 0);
+  const companyKeep = netProfit - totalComm;          // overhead + the company's share
+  const companyPct  = netAfterOH > 0 ? Math.max(0, 100 - commRows.reduce((a,r)=>a+r.pct,0)) : 0;
+  const fullyPaid   = (typeof jobFullyPaid==='function') ? jobFullyPaid(j) : false;
+  const commPaid    = (typeof jobCommissionPayouts==='function')
+    ? jobCommissionPayouts(j).reduce((a,pp)=>a+moneyNum(pp.amount), 0) : 0;
+  const commBalance = Math.max(0, totalComm - commPaid);
+  const commRowsHtml = commRows.map(r =>
+    '<tr><td>'+escapeHtml(r.name)+' <span style="color:#888">\u2014 '+r.pct+'% of net after overhead</span></td>'
+    +'<td class="num">'+money(r.amt)+'</td></tr>').join('');
   const catRows = Object.keys(catTotals).sort().map(cat =>
     '<tr><td>'+escapeHtml(cat)+'</td><td class="num">'+money(catTotals[cat])+'</td></tr>'
   ).join('');
@@ -11546,22 +11592,29 @@ function printJobPnL(jobId){
   +'<style>'
   +'@page{size:letter;margin:0}*{box-sizing:border-box}'
   +'body{font-family:\'Helvetica Neue\',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:11pt}'
-  +'.pl-page{padding:0.6in 0.6in;min-height:11in}'
-  +'.pl-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid '+accent+';padding-bottom:14px;margin-bottom:22px}'
+  +'.pl-page{padding:0.38in 0.55in 0.1in;min-height:0;overflow:hidden}'
+  +'.pl-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid '+accent+';padding-bottom:12px;margin-bottom:16px}'
   +'.pl-co-name{font-size:15pt;font-weight:800;color:'+accent+'}'
   +'.pl-co-detail{font-size:8.5pt;line-height:1.5;color:#444}'
   +'.pl-title{font-size:18pt;font-weight:900;color:'+accent+';text-transform:uppercase;letter-spacing:.03em;text-align:right}'
   +'.pl-meta{font-size:9pt;text-align:right;line-height:1.6;margin-top:4px;color:#444}'
-  +'.pl-jobline{font-size:11pt;margin-bottom:20px;line-height:1.6}.pl-jobline strong{color:'+accent+'}'
-  +'.pl-sec{font-size:9pt;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:'+accent+';margin:20px 0 6px;border-bottom:1px solid #ddd;padding-bottom:3px}'
-  +'table{width:100%;border-collapse:collapse}td{padding:6px 4px;font-size:10.5pt;border-bottom:1px solid #f0f0f0}'
+  +'.pl-jobline{font-size:10.5pt;margin-bottom:11px;line-height:1.5}.pl-jobline strong{color:'+accent+'}'
+  +'.pl-sec{font-size:9pt;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:'+accent+';margin:15px 0 5px;border-bottom:1px solid #ddd;padding-bottom:3px}'
+  +'table{width:100%;border-collapse:collapse}td{padding:3.5px 4px;font-size:10pt;border-bottom:1px solid #f0f0f0}'
   +'td.num{text-align:right;font-variant-numeric:tabular-nums}'
-  +'.pl-sub td{font-weight:700;border-top:2px solid #ccc;border-bottom:none;padding-top:9px}'
-  +'.pl-profit{margin-top:26px;background:#f6faf7;border:2px solid '+accent+';border-radius:8px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center}'
+  +'.pl-sub td{font-weight:700;border-top:2px solid #ccc;border-bottom:none;padding-top:6px}'
+  +'.pl-profit{margin-top:16px;background:#f6faf7;border:2px solid '+accent+';border-radius:8px;padding:11px 18px;display:flex;justify-content:space-between;align-items:center}'
   +'.pl-profit .lbl{font-size:12pt;font-weight:800;color:'+accent+';text-transform:uppercase;letter-spacing:.04em}'
   +'.pl-profit .val{font-size:22pt;font-weight:900;color:'+(netProfit>=0?'#0a7d3c':'#c0392b')+';font-variant-numeric:tabular-nums}'
   +'.pl-margin{text-align:right;font-size:9pt;color:#666;margin-top:4px}'
-  +'.pl-foot{margin-top:30px;font-size:8pt;color:#999;text-align:center;border-top:1px solid #eee;padding-top:10px}'
+  +'.pl-comm{page-break-inside:avoid;break-inside:avoid}'
+  +'.pl-split{display:flex;gap:14px;margin-top:12px;page-break-inside:avoid;break-inside:avoid}'
+  +'.pl-split-box{flex:1;border:1.5px solid '+accent+';border-radius:8px;padding:9px 14px;text-align:center}'
+  +'.pl-split-lbl{font-size:8.5pt;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:'+accent+'}'
+  +'.pl-split-val{font-size:17pt;font-weight:900;margin-top:4px;font-variant-numeric:tabular-nums}'
+  +'.pl-split-sub{font-size:8pt;color:#777;margin-top:2px}'
+  +'.pl-note{margin-top:9px;font-size:8pt;color:#666;line-height:1.5;font-style:italic}'
+  +'.pl-foot{margin-top:10px;font-size:8pt;color:#999;text-align:center;border-top:1px solid #eee;padding-top:10px}'
   +'.pl-print-btn{position:fixed;top:12px;right:12px;background:'+accent+';color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}'
   +'@media print{.pl-print-btn{display:none}}'
   +'</style></head><body>'
@@ -11592,6 +11645,31 @@ function printJobPnL(jobId){
   +'<tr><td>Balance outstanding</td><td class="num">'+money(outstanding)+'</td></tr></table>'
   +'<div class="pl-profit"><span class="lbl">Net Profit</span><span class="val">'+money(netProfit)+'</span></div>'
   +'<div class="pl-margin">Margin: '+margin.toFixed(1)+'% of revenue</div>'
+  +'<div class="pl-comm"><div class="pl-sec">Commission Split</div><table>'
+  +'<tr><td>Net Profit</td><td class="num">'+money(netProfit)+'</td></tr>'
+  +'<tr><td>Less: Company overhead'+(ovFlat!=null?' (flat)':' ('+ovPct+'%)')+'</td><td class="num">\u2212'+money(overhead)+'</td></tr>'
+  +'<tr class="pl-sub"><td>Net After Overhead</td><td class="num">'+money(netAfterOH)+'</td></tr>'
+  +(commRowsHtml||'<tr><td style="color:#999">No rep assigned to this job</td><td class="num">$0.00</td></tr>')
+  +'<tr class="pl-sub"><td>Total Commission</td><td class="num">'+money(totalComm)+'</td></tr>'
+  +'</table>'
+  +'<div class="pl-split">'
+  +'<div class="pl-split-box"><div class="pl-split-lbl">Company Retains</div>'
+  +'<div class="pl-split-val">'+money(companyKeep)+'</div>'
+  +'<div class="pl-split-sub">'+companyPct+'% of net after overhead + overhead</div></div>'
+  +'<div class="pl-split-box"><div class="pl-split-lbl">'+escapeHtml(commRows.length===1?(commRows[0].name):'Sales Commission')+'</div>'
+  +'<div class="pl-split-val" style="color:#0a7d3c">'+money(totalComm)+'</div>'
+  +'<div class="pl-split-sub">'+(commRows.length===1?commRows[0].pct+'% of net after overhead':commRows.length+' reps')+'</div></div>'
+  +'</div>'
+  +(commPaid>0
+      ? '<table style="margin-top:12px"><tr><td>Commission paid to date</td><td class="num">'+money(commPaid)+'</td></tr>'
+        +'<tr class="pl-sub"><td>Commission still owed</td><td class="num">'+money(commBalance)+'</td></tr></table>'
+      : '')
+  +'<div class="pl-note">'
+  +(fullyPaid
+      ? 'This job is collected in full \u2014 commission shown is payable.'
+      : 'Estimate only. Commission becomes payable once the job is collected in full; '+money(outstanding)+' is still outstanding.')
+  +' Commission is figured on the contract plus approved supplements, less job costs and company overhead.'
+  +'</div></div>'
   +'<div class="pl-foot">Internal summary \u2014 generated '+today+' \u00b7 '+escapeHtml(ci.name||'StormShield Pro Roofing')+'</div>'
   +'</div></body></html>');
   win.document.close();
@@ -13431,7 +13509,8 @@ function commBreakdownData(j, user, excludePid){
     else { costs += a; const k = e.cat || 'Other'; byCat[k] = (byCat[k]||0) + a; }
   });
   const contract = moneyValue(j.potVal);
-  const netProfit = contract - (costs - returns);
+  const supplements = jobCommissionRevenue(j) - contract;
+  const netProfit = jobNetProfit(j);
   const ovFlat = jobOverheadFlat(j), ovPct = jobOverheadPct(j);
   const overhead = jobOverheadAmount(j, netProfit);
   const netAfterOH = netProfit - overhead;
@@ -13443,7 +13522,7 @@ function commBreakdownData(j, user, excludePid){
     for(const p of payouts){ if(p._pid === excludePid) break; prior += moneyValue(p.amount); }
   } else prior = payouts.reduce((s,p)=>s+moneyValue(p.amount),0);
   const paidAll = payouts.reduce((s,p)=>s+moneyValue(p.amount),0);
-  return { contract, costs, returns, byCat, netProfit, ovFlat, ovPct, overhead, netAfterOH,
+  return { contract, supplements, costs, returns, byCat, netProfit, ovFlat, ovPct, overhead, netAfterOH,
            rate, parts, earned, payouts, prior, paidAll,
            balance: Math.max(0, earned - paidAll),
            collected: jobDepositTotal(j), fullyPaid: jobFullyPaid(j) };
@@ -19406,6 +19485,2057 @@ document.addEventListener('keydown', e => {
     else if(document.getElementById('unsavedJobModal')?.classList.contains('open')) closeUnsavedChangesPrompt();
   }
 });
+
+
+// ── LAYOUT-AWARE PDF TEXT EXTRACTION ──────────────────────────────────────────
+// The CRM's extractPdfText() joins every text item on a page with a space, which
+// collapses a whole page into one line. Estimates and measurement reports are
+// tables — the column structure IS the data — so the demand tool reconstructs
+// lines from the glyph coordinates instead, the way `pdftotext -layout` does.
+// Leading indentation is preserved: it's what separates a wrapped description
+// from an F9 note underneath a line item.
+async function demandExtractPdfLayout(file){
+  if(!window.pdfjsLib) throw new Error('PDF reader not loaded');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const CH = 4.2;            // approx. glyph width in PDF units at 10pt
+  let out = '';
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const rows = [];
+    content.items.forEach(it=>{
+      if(!it.str || !it.str.trim()) return;
+      const x = it.transform[4], y = it.transform[5];
+      // Group glyph runs onto the same visual line (tolerance handles sub/superscript drift)
+      let r = null, best = 3;
+      for(const cand of rows){
+        const d = Math.abs(cand.y - y);
+        if(d <= best){ best = d; r = cand; }
+      }
+      if(!r){ r = { y, items:[] }; rows.push(r); }
+      r.items.push({ x, s: it.str, w: (it.width || it.str.length*CH) });
+    });
+    rows.sort((a,b)=> b.y - a.y);            // top of page first
+    rows.forEach(r=>{
+      r.items.sort((a,b)=> a.x - b.x);
+      let line = '', cursor = null;
+      r.items.forEach(it=>{
+        if(cursor === null){
+          line = ' '.repeat(Math.max(0, Math.round(it.x / CH)));   // preserve indent
+        } else {
+          const gap = it.x - cursor;
+          if(gap > 1.2) line += ' '.repeat(Math.max(1, Math.round(gap / CH)));
+        }
+        line += it.s;
+        cursor = it.x + it.w;
+      });
+      out += line.replace(/\s+$/,'') + '\n';
+    });
+    out += '\n';
+  }
+  return out;
+}
+window.demandExtractPdfLayout = demandExtractPdfLayout;
+
+// Reads a PDF for the demand tool: layout-aware first, falling back to the CRM's
+// flat extractor if anything goes wrong so a quirky file still yields something.
+async function demandReadPdf(file){
+  if((file.name||'').toLowerCase().endsWith('.txt')) return await file.text();
+  try {
+    const t = await demandExtractPdfLayout(file);
+    if(t && t.replace(/\s/g,'').length > 40) return t;
+  } catch(e){ console.warn('[demand] layout extract failed, falling back', e); }
+  return await extractPdfText(file);
+}
+window.demandReadPdf = demandReadPdf;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DEMAND ESTIMATE BUILDER
+// Reads a carrier / Xactimate estimate (PDF text layer or pasted text), compares
+// it against a full scope built from the job's measurements, and prints a
+// Contractor Demand Estimate that bolds every line the carrier is missing or
+// short on. Focus scopes: dwelling roof, gutters, window beading, window screens.
+//
+//   j.demandEstimate = {
+//     meta:{...}, measurements:{...}, carrier:{fileName,parsedAt,lines:[]},
+//     lines:[{...}], notes:[{title,body}], updatedAt
+//   }
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DEMAND_SECTIONS = [
+  { key:'roof',       label:'Dwelling Roof' },
+  { key:'front',      label:'Front Elevation' },
+  { key:'right',      label:'Right Elevation' },
+  { key:'rear',       label:'Rear Elevation' },
+  { key:'left',       label:'Left Elevation' },
+  { key:'other',      label:'Other Structures' },
+  { key:'mechanical', label:'Mechanical' },
+  { key:'debris',     label:'Debris Removal' },
+  { key:'labormin',   label:'Labor Minimums Applied' },
+  { key:'permits',    label:'Permits' },
+];
+const DEMAND_ELEVATIONS = ['front','right','rear','left'];
+
+// ── STANDARD LINE ITEM CATALOG ────────────────────────────────────────────────
+// std      : true  → pre-checked on every roof build (the "standard list")
+// calc(m,e): quantity from measurements. m = roof measurements, e = elevation data
+// match    : keyword groups for pairing against the carrier's file. A carrier line
+//            matches when EVERY group has at least one hit, and no `not` term hits.
+// price    : fallback unit price (house list seed, editable in Settings)
+const DEMAND_CATALOG = [
+  // ── DWELLING ROOF ──────────────────────────────────────────────────────────
+  { key:'steep_rem', sec:'roof', std:false, unit:'SQ', price:15.98, mat:0,
+    desc:m=>`Remove Additional charge for steep roof - ${m.steepBand||'7/12 to 9/12'} slope`,
+    calc:m=>m.steepSquares,
+    match:[['remove'],['steep'],['roof','slope']] },
+
+  { key:'steep_add', sec:'roof', std:false, unit:'SQ', price:42.62, mat:0,
+    desc:m=>`Additional charge for steep roof - ${m.steepBand||'7/12 to 9/12'} slope`,
+    calc:m=>m.steepSquares,
+    match:[['steep'],['roof','slope']], not:['remove'] },
+
+  { key:'tearoff', sec:'roof', std:true, unit:'SQ', price:46.55, mat:0,
+    desc:()=>'Tear off composition shingles (no haul off)',
+    calc:m=>m.squares,
+    match:[['tear','removal','remove'],['comp','composition','shingle']], not:['laminated','3 tab'] },
+
+  { key:'shingle', sec:'roof', std:true, unit:'SQ', price:265.16, mat:0.53,
+    desc:()=>'Laminated - comp. shingle rfg. - w/out felt',
+    calc:m=>m.squares*(1+(m.waste||0)/100),
+    // Matches a 3-tab line too: same scope slot, and the spec difference is the
+    // argument to make rather than a reason to carry two shingle lines.
+    match:[['laminated','3 tab','3-tab','architectural','dimensional','composition shingle','comp. shingle']],
+    not:['tear','remove','haul','ridge','hip','starter','cap','felt -','underlayment'] },
+
+  { key:'felt', sec:'roof', std:true, unit:'SQ', price:47.46, mat:0.45,
+    desc:()=>'Roofing felt - synthetic underlayment',
+    calc:m=>m.squares*1.03,
+    match:[['felt','underlayment']],
+    not:['ice','water','without felt','shingle'] },
+
+  { key:'icewater', sec:'roof', std:true, unit:'SF', price:2.15, mat:0.49,
+    desc:()=>'Ice & water shield - valleys',
+    calc:m=>m.valleys*3,
+    match:[['ice'],['water'],['shield','barrier']] },
+
+  { key:'starter', sec:'roof', std:true, unit:'LF', price:1.79, mat:0.32,
+    desc:()=>'Asphalt starter - universal starter course',
+    calc:m=>m.eaves+m.rakes,
+    match:[['starter']] },
+
+  { key:'dripedge', sec:'roof', std:true, unit:'LF', price:3.24, mat:0.36,
+    desc:()=>'R&R Drip edge',
+    calc:m=>m.dripEdgeLF || (m.eaves+m.rakes),
+    match:[['drip'],['edge']], not:['paint','seal'] },
+
+  { key:'dripedge_paint', sec:'roof', std:false, unit:'LF', price:1.85, mat:0.36,
+    desc:()=>'Seal & paint drip edge - one coat',
+    calc:m=>m.dripEdgeLF || (m.eaves+m.rakes),
+    match:[['paint','seal'],['drip'],['edge']] },
+
+  { key:'ridgecap', sec:'roof', std:true, unit:'LF', price:4.64, mat:0.32,
+    desc:()=>'Hip / Ridge cap - cut from 3 tab - composition shingles',
+    calc:m=>m.ridgeCapLF || (m.hips+m.ridges),
+    match:[['ridge','hip'],['cap']], not:['vent']  },
+
+  { key:'ridgevent', sec:'roof', std:false, unit:'LF', price:10.24, mat:0.47,
+    desc:()=>'Continuous ridge vent - shingle-over style',
+    calc:m=>m.ridgeVentLF,
+    match:[['ridge'],['vent']], not:['cap','turbine'] },
+
+  { key:'stepflash', sec:'roof', std:false, unit:'LF', price:9.00, mat:0.3,
+    desc:()=>'R&R Step flashing',
+    calc:m=>m.stepFlash,
+    match:[['step'],['flash']] },
+
+  { key:'apronflash', sec:'roof', std:false, unit:'LF', price:12.00, mat:0.3,
+    desc:()=>'R&R Flashing - apron / headwall',
+    calc:m=>m.wallFlash,
+    match:[['flash'],['apron','headwall']] },
+
+  { key:'counterflash', sec:'roof', std:false, unit:'LF', price:14.50, mat:0.3,
+    desc:()=>'R&R Counterflashing - apron flashing',
+    calc:m=>0,
+    match:[['counterflash','counter flashing']] },
+
+  { key:'valleymetal', sec:'roof', std:false, unit:'LF', price:8.85, mat:0.4,
+    desc:()=>'R&R Valley metal',
+    calc:m=>m.valleys,
+    match:[['valley'],['metal','flashing']], not:['ice','water'] },
+
+  { key:'turtlevent', sec:'roof', std:false, unit:'EA', price:57.95, mat:0.24,
+    desc:()=>'Roof vent - turtle type - Plastic',
+    calc:m=>m.turtleVents,
+    match:[['turtle','box vent','static vent']] },
+
+  { key:'turbine', sec:'roof', std:false, unit:'EA', price:118.40, mat:0.45,
+    desc:()=>'R&R Roof vent - turbine type',
+    calc:m=>m.turbines,
+    match:[['turbine']] },
+
+  { key:'powervent', sec:'roof', std:false, unit:'EA', price:395.00, mat:0.55,
+    desc:()=>'R&R Power attic vent',
+    calc:m=>m.powerVents,
+    match:[['power'],['vent','attic']] },
+
+  { key:'exhaustcap', sec:'roof', std:false, unit:'EA', price:106.10, mat:0.5,
+    desc:()=>'Exhaust cap - through roof - 6" to 8"',
+    calc:m=>m.exhaustCaps,
+    match:[['exhaust'],['cap']] },
+
+  { key:'pipejack', sec:'roof', std:true, unit:'EA', price:86.07, mat:0.62,
+    desc:()=>'Flashing - pipe jack',
+    calc:m=>m.pipeJacks,
+    match:[['pipe'],['jack','flashing','boot']] },
+
+  { key:'leadjack', sec:'roof', std:false, unit:'EA', price:118.65, mat:0.62,
+    desc:()=>'Flashing - pipe jack - lead',
+    calc:m=>0,
+    match:[['pipe'],['jack'],['lead']] },
+
+  { key:'chimneyflash', sec:'roof', std:false, unit:'EA', price:485.00, mat:0.35,
+    desc:()=>'R&R Chimney flashing - average (32" x 36")',
+    calc:m=>0,
+    match:[['chimney'],['flash']] },
+
+  { key:'satellite', sec:'roof', std:false, unit:'EA', price:52.75, mat:0,
+    desc:()=>'Detach & reset Satellite dish',
+    calc:m=>0,
+    match:[['satellite']] },
+
+  { key:'decking', sec:'roof', std:false, unit:'SF', price:3.35, mat:0.55,
+    desc:()=>'R&R Sheathing - plywood - 1/2" CDX',
+    calc:m=>0,
+    match:[['sheathing','decking','plywood','osb']] },
+
+  { key:'twostory', sec:'roof', std:false, unit:'SQ', price:12.40, mat:0,
+    desc:()=>'Additional charge for high roof (2 stories or greater)',
+    calc:m=>m.twoStorySquares,
+    match:[['high roof','two stor','2 stor','second stor']] },
+
+  { key:'paint_jack', sec:'roof', std:false, unit:'EA', price:35.62, mat:0.22,
+    desc:()=>'Prime & paint roof jack',
+    calc:m=>m.pipeJacks,
+    match:[['paint','prime'],['jack']] },
+
+  { key:'paint_vent', sec:'roof', std:false, unit:'EA', price:35.62, mat:0.22,
+    desc:()=>'Prime & paint roof vent',
+    calc:m=>m.turtleVents,
+    match:[['paint','prime'],['vent']], not:['jack','ridge'] },
+
+  { key:'paint_trim', sec:'roof', std:false, unit:'LF', price:1.49, mat:0.22,
+    desc:()=>'Seal (1 coat) & paint (1 coat) trim',
+    calc:m=>0,
+    match:[['seal','paint'],['trim','fascia']], not:['drip','edge'] },
+
+  { key:'furnace_vent', sec:'roof', std:false, unit:'EA', price:100.10, mat:0.5,
+    desc:()=>'R&R Furnace vent - rain cap and storm collar, 6"',
+    calc:m=>0,
+    match:[['furnace','rain cap','storm collar']] },
+
+  { key:'lm_hvac', sec:'labormin', std:false, unit:'EA', price:149.39, mat:0,
+    desc:()=>'Heat, vent, & air cond. labor minimum',
+    calc:()=>1,
+    match:[['heat','hvac','air cond'],['labor'],['minimum']] },
+
+  // ── GUTTERS (per elevation) ────────────────────────────────────────────────
+  { key:'gutter5', sec:'elev', std:false, unit:'LF', price:9.29, mat:0.44,
+    desc:()=>'R&R Gutter - aluminum - up to 5"',
+    calc:(m,e)=>e.gutter5,
+    match:[['gutter'],['aluminum','alum']], not:['downspout','guard','screen','6"','6 in'] },
+
+  { key:'gutter6', sec:'elev', std:false, unit:'LF', price:11.45, mat:0.44,
+    desc:()=>'R&R Gutter - aluminum - 6"',
+    calc:(m,e)=>e.gutter6,
+    match:[['gutter'],['6"','6 in','six']], not:['downspout','guard'] },
+
+  { key:'downspout5', sec:'elev', std:false, unit:'LF', price:9.29, mat:0.44,
+    desc:()=>'R&R Downspout - aluminum - up to 5"',
+    calc:(m,e)=>e.downspout5,
+    match:[['downspout','down spout']], not:['6"','6 in'] },
+
+  { key:'downspout6', sec:'elev', std:false, unit:'LF', price:11.10, mat:0.44,
+    desc:()=>'R&R Downspout - aluminum - 6"',
+    calc:(m,e)=>e.downspout6,
+    match:[['downspout','down spout'],['6"','6 in']] },
+
+  { key:'gutterguard', sec:'elev', std:false, unit:'LF', price:7.85, mat:0.5,
+    desc:()=>'R&R Gutter guard / screen',
+    calc:(m,e)=>e.gutterGuard,
+    match:[['gutter'],['guard','screen','cover']] },
+
+  // ── WINDOW SCREENS + BEADING (per elevation) ───────────────────────────────
+  { key:'screen_sm', sec:'elev', std:false, unit:'EA', price:46.93, mat:0.78,
+    desc:()=>'R&R Window screen, 1 - 9 SF',
+    calc:(m,e)=>e.screenSm,
+    match:[['window','wndw'],['screen']], not:['10','16','17','25','sun','solar','gutter'] },
+
+  { key:'screen_md', sec:'elev', std:false, unit:'EA', price:62.40, mat:0.78,
+    desc:()=>'R&R Window screen, 10 - 16 SF',
+    calc:(m,e)=>e.screenMd,
+    match:[['window'],['screen'],['10','16']] },
+
+  { key:'screen_lg', sec:'elev', std:false, unit:'EA', price:83.15, mat:0.78,
+    desc:()=>'R&R Window screen, 17 - 25 SF',
+    calc:(m,e)=>e.screenLg,
+    match:[['window'],['screen'],['17','25']] },
+
+  { key:'sunscreen', sec:'elev', std:false, unit:'EA', price:108.20, mat:0.78,
+    desc:()=>'R&R Sun screen / solar screen',
+    calc:(m,e)=>e.sunScreen,
+    match:[['sun','solar'],['screen','shade']] },
+
+  { key:'beading', sec:'elev', std:false, unit:'LF', price:6.72, mat:0.6,
+    desc:()=>'R&R Window beading / glazing bead - aluminum',
+    calc:(m,e)=>e.beadingLF,
+    match:[['beading','bead','glazing']] },
+
+  { key:'window_wrap', sec:'elev', std:false, unit:'LF', price:14.85, mat:0.5,
+    desc:()=>'R&R Wrap wood window frame with aluminum sheet',
+    calc:(m,e)=>e.wrapLF,
+    match:[['wrap'],['window'],['aluminum']] },
+
+  { key:'window_sill', sec:'elev', std:false, unit:'LF', price:11.20, mat:0.5,
+    desc:()=>'R&R Window sill / trim - aluminum capped',
+    calc:(m,e)=>e.sillLF,
+    match:[['window'],['sill','trim']] },
+
+  // ── OTHER STRUCTURES ───────────────────────────────────────────────────────
+  { key:'pergola_panel', sec:'other', std:false, unit:'SF', price:7.50, mat:0.55,
+    desc:()=>'R&R Corrugated plastic panel roofing',
+    calc:m=>m.pergolaSF,
+    match:[['corrugated'],['panel','roofing']] },
+
+  { key:'patio_cover', sec:'other', std:false, unit:'SF', price:9.85, mat:0.55,
+    desc:()=>'R&R Aluminum patio cover / awning',
+    calc:m=>0,
+    match:[['patio','awning'],['cover','aluminum']] },
+
+  { key:'fence', sec:'other', std:false, unit:'LF', price:32.50, mat:0.45,
+    desc:()=>'R&R Wood fence - 6\' high',
+    calc:m=>0,
+    match:[['fence']] },
+
+  // ── MECHANICAL ─────────────────────────────────────────────────────────────
+  { key:'ac_fins', sec:'mechanical', std:false, unit:'EA', price:285.00, mat:0,
+    desc:()=>'A/C condenser - comb / straighten fins',
+    calc:m=>m.acUnits,
+    match:[['a/c','ac ','condenser','hvac'],['fin','comb','straighten']] },
+
+  { key:'ac_reset', sec:'mechanical', std:false, unit:'EA', price:186.50, mat:0,
+    desc:()=>'Detach & reset A/C condenser unit',
+    calc:m=>0,
+    match:[['a/c','condenser'],['detach','reset']] },
+
+  // ── DEBRIS REMOVAL ─────────────────────────────────────────────────────────
+  { key:'dumpster', sec:'debris', std:true, unit:'EA', price:741.12, mat:0,
+    desc:()=>'Dumpster load - Approx. 12 yards, 1-3 tons of debris',
+    calc:m=>Math.max(1,Math.ceil(m.squares/16)),
+    match:[['dumpster']] },
+
+  { key:'haul', sec:'debris', std:false, unit:'EA', price:158.40, mat:0,
+    desc:()=>'Haul debris - per pickup truck load - including dump fees',
+    calc:m=>0,
+    match:[['haul'],['debris']] },
+
+  // ── LABOR MINIMUMS ─────────────────────────────────────────────────────────
+  { key:'lm_window', sec:'labormin', std:false, unit:'EA', price:245.55, mat:0,
+    desc:()=>'Window labor minimum', calc:()=>1,
+    match:[['window'],['labor'],['minimum']] },
+  { key:'lm_gutter', sec:'labormin', std:false, unit:'EA', price:198.30, mat:0,
+    desc:()=>'Gutter labor minimum', calc:()=>1,
+    match:[['gutter'],['labor'],['minimum']] },
+  { key:'lm_roof', sec:'labormin', std:false, unit:'EA', price:312.70, mat:0,
+    desc:()=>'Roofing labor minimum', calc:()=>1,
+    match:[['roof'],['labor'],['minimum']] },
+  { key:'lm_paint', sec:'labormin', std:false, unit:'EA', price:176.85, mat:0,
+    desc:()=>'Painting labor minimum', calc:()=>1,
+    match:[['paint'],['labor'],['minimum']] },
+
+  // ── PERMITS ────────────────────────────────────────────────────────────────
+  { key:'permit', sec:'permits', std:true, unit:'EA', price:350.00, mat:0,
+    desc:()=>'Residential roofing permit - City of Houston',
+    calc:()=>1,
+    match:[['permit']] },
+];
+
+const DEMAND_CAT_BY_KEY = {};
+DEMAND_CATALOG.forEach(c=>{ DEMAND_CAT_BY_KEY[c.key]=c; });
+
+// ── CARRIER ESTIMATE PARSER ───────────────────────────────────────────────────
+// Handles Xactimate, Symbility and most carrier PDFs with a text layer, plus
+// pasted scope text. Strategy: find the quantity+unit token on each line, treat
+// everything before it as the description, then solve the trailing numbers for
+// the (unit price, tax, RCV) triple that satisfies qty x unit + tax = RCV.
+
+const DEMAND_UNITS = ['SQ','LF','SF','SY','EA','HR','DA','RL','BX','GL','CF','CY','MO','WK','SN','PR','TN','LB','ST'];
+const DEMAND_UNIT_RE = new RegExp('(-?[\\d,]+\\.?\\d*)\\s*(' + DEMAND_UNITS.join('|') + ')(?![A-Za-z])', 'i');
+
+// Every qty+unit token on a line. Descriptions legitimately contain them
+// ("R&R Window screen, 1 - 9 SF"), so the caller picks the right one by
+// checking which candidate leaves a tail that balances.
+function demandFindQtyUnits(line){
+  const re = new RegExp('(-?[\\d,]+\\.?\\d*)\\s*(' + DEMAND_UNITS.join('|') + ')(?![A-Za-z])', 'gi');
+  const out = []; let m;
+  while((m = re.exec(line)) !== null){
+    out.push({ idx:m.index, len:m[0].length, qty:demandNum(m[1]), unit:m[2].toUpperCase() });
+  }
+  return out;
+}
+
+function demandNum(s){
+  if(s==null) return null;
+  const v = parseFloat(String(s).replace(/[$,]/g,'').replace(/[()]/g,''));
+  return isFinite(v) ? v : null;
+}
+
+// Pull every money-ish number out of the tail of a line.
+function demandTailNumbers(tail){
+  const out = [];
+  const re = /-?\$?\(?[\d,]+\.\d{2}\)?|-?\$?[\d,]{1,9}(?![\d.])/g;
+  let m;
+  while((m = re.exec(tail)) !== null){
+    const v = demandNum(m[0]);
+    if(v !== null) out.push(v);
+  }
+  return out;
+}
+
+// Given qty and the trailing numbers, find the most plausible unit price / tax / RCV.
+function demandSolveMoney(qty, nums){
+  if(!nums.length) return { unitPrice:null, tax:0, rcv:null, ok:false };
+  const ok = (up, tax, rcv) => {
+    if(up==null || rcv==null || up<=0) return false;
+    const calc = qty*up + (tax||0);
+    return Math.abs(calc - rcv) <= Math.max(1.5, Math.abs(rcv)*0.02);
+  };
+  // Preferred Xactimate order: UNIT, TAX, RCV (O&P columns may follow).
+  for(let i=0;i<nums.length;i++){
+    for(let j=i+1;j<nums.length;j++){
+      for(let k=j+1;k<Math.min(nums.length, j+4);k++){
+        if(ok(nums[i], nums[j], nums[k])) return { unitPrice:nums[i], tax:nums[j], rcv:nums[k], ok:true };
+      }
+    }
+  }
+  // No tax column: UNIT, RCV
+  for(let i=0;i<nums.length;i++){
+    for(let j=i+1;j<nums.length;j++){
+      if(ok(nums[i], 0, nums[j])) return { unitPrice:nums[i], tax:0, rcv:nums[j], ok:true };
+    }
+  }
+  // Xactimate's REMOVE / REPLACE layout: qty x (remove + replace) + tax = total.
+  // Tried after the 3-column forms, which already cover the cases where one of
+  // the two is zero (tear-off is remove-only, install is replace-only).
+  for(let i=0;i<nums.length;i++){
+    for(let j=i+1;j<nums.length;j++){
+      for(let k=j+1;k<nums.length;k++){
+        for(let l=k+1;l<Math.min(nums.length, k+3);l++){
+          const up = nums[i] + nums[j];
+          if(up>0 && ok(up, nums[k], nums[l])){
+            return { unitPrice:Math.round(up*100)/100, removePrice:nums[i], replacePrice:nums[j],
+                     tax:nums[k], rcv:nums[l], ok:true, split:true };
+          }
+        }
+      }
+    }
+  }
+  // Fall back to positional reading.
+  const up = nums[0] ?? null;
+  const rcv = nums.length>=3 ? nums[2] : (nums.length===2 ? nums[1] : (up!=null && qty ? up*qty : null));
+  const tax = nums.length>=3 ? nums[1] : 0;
+  return { unitPrice:up, tax:tax||0, rcv:rcv, ok:false };
+}
+
+// STRICT header detection. A line only changes the current section when it is
+// essentially just the section's name — otherwise real line items get eaten
+// ("Additional charge for steep roof - 7/12 to 9/12 slope" contains "roof").
+const DEMAND_HEADERS = {
+  roof:       ['roof','dwelling roof','dwelling','main roof','roofing','roof1','dwelling roof1'],
+  front:      ['front elevation','front','elevation front','front side'],
+  right:      ['right elevation','right','elevation right','right side','right side elevation'],
+  rear:       ['rear elevation','rear','back elevation','back','elevation rear','rear side'],
+  left:       ['left elevation','left','elevation left','left side','left side elevation'],
+  other:      ['other structures','pergola','patio cover','detached garage','shed','fence','outbuilding'],
+  mechanical: ['mechanical','hvac','air conditioning'],
+  debris:     ['debris removal','debris','dumpster'],
+  labormin:   ['labor minimums applied','labor minimums','labor minimum','minimum charges'],
+  permits:    ['permits','permit','permits and fees'],
+};
+function demandHeaderSection(line){
+  const t = String(line||'').toLowerCase()
+    .replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+  if(!t || t.length>34 || t.split(' ').length>4) return null;
+  for(const k in DEMAND_HEADERS){ if(DEMAND_HEADERS[k].includes(t)) return k; }
+  return null;
+}
+// LOOSE guess, applied only to an item's own description as a last resort.
+function demandSectionGuess(text){
+  const t = String(text||'').toLowerCase();
+  if(/front\s*elev/.test(t)) return 'front';
+  if(/right\s*elev/.test(t)) return 'right';
+  if(/rear\s*elev|back\s*elev/.test(t)) return 'rear';
+  if(/left\s*elev/.test(t)) return 'left';
+  if(/dumpster|haul debris/.test(t)) return 'debris';
+  if(/permit/.test(t)) return 'permits';
+  if(/labor\s*min/.test(t)) return 'labormin';
+  if(/condenser|a\/c |hvac/.test(t)) return 'mechanical';
+  if(/gutter|downspout|window screen|beading|glazing/.test(t)) return null; // elevation unknown
+  return null;
+}
+
+// A line with no quantity is either a wrapped description or an F9 note. Notes
+// are full sentences ending in a period (and usually indented further); wraps
+// are fragments. Wraps always precede notes under a given line item.
+function demandIsNoteLine(line, itemIndent){
+  const t = String(line||'').trim();
+  if(!t) return false;
+  const indent = line.length - line.replace(/^\s+/,'').length;
+  if(itemIndent != null && indent >= itemIndent + 3) return true;
+  return /[.!]$/.test(t) && /^[A-Z(]/.test(t) && t.split(/\s+/).length >= 4;
+}
+
+// Headers and footers repeat identically on every page of an estimate. Rather
+// than pattern-match one carrier's template, drop any non-numeric line that
+// recurs three or more times — that is page furniture by definition.
+function demandStripPageFurniture(lines){
+  const seen = {};
+  lines.forEach(l=>{
+    const k = l.trim().replace(/\s+/g,' ');
+    if(k.length >= 4) seen[k] = (seen[k]||0) + 1;
+  });
+  return lines.filter(l=>{
+    const t = l.trim();
+    const k = t.replace(/\s+/g,' ');
+    if(!t) return true;
+    if(/Page:?\s*\d+\s*$/i.test(t)) return false;
+    if(/^Totals?\s*:/i.test(t)) return false;
+    // A repeated full sentence is an F9 note reused on several line items
+    // ("Line item updated to reflect removal cost."), not letterhead — keep it.
+    if(/[.!]$/.test(t) && t.split(/\s+/).length >= 4) return true;
+    // repeated and carries no line-item quantity → letterhead, footer, column head
+    if((seen[k]||0) >= 3 && !DEMAND_UNIT_RE.test(t)) return false;
+    return true;
+  });
+}
+
+function parseCarrierEstimate(text){
+  const raw = String(text||'').replace(/\r/g,'');
+  let lines = raw.split('\n');
+  // Everything after the grand total is recap tables and signatures, not scope.
+  const stop = lines.findIndex(l=>/^\s*(Line Item Totals?|Grand Total|Recap (by|of))\b/i.test(l));
+  if(stop > 0) lines = lines.slice(0, stop);
+  lines = demandStripPageFurniture(lines);
+  const items = [];
+  let pending = [];        // no-quantity lines awaiting classification
+  let section = null;
+  let lastIndent = null;
+  const SKIP = /^(totals?|subtotals?|line item totals?|grand totals?|page:?\s*\d|estimate|insured|claim|policy|date of loss|adjuster|carrier|property|description|qty|quantity|unit|tax|rcv|acv|depreciation|o&p|overhead|profit|coverage|deductible|summary|sketch|continued|recap|client|operator|estimator|company|price list|labor efficiency|file number|type of estimate|date entered|net claim|replacement cost|material sales tax|items|subtotal of areas)\b/i;
+
+  // Attach buffered lines: leading fragments extend the previous description,
+  // the rest become that item's note.
+  const flushPending = () => {
+    if(!pending.length) return;
+    const prev = items[items.length-1];
+    if(prev){
+      let seenNote = false;
+      pending.forEach(pl=>{
+        const isNote = seenNote || demandIsNoteLine(pl, prev._indent);
+        if(isNote){ seenNote = true; prev.carrierNote = ((prev.carrierNote?prev.carrierNote+' ':'') + pl.trim()).trim(); }
+        else { prev.desc = (prev.desc + ' ' + pl.trim()).replace(/\s{2,}/g,' ').trim(); }
+      });
+    }
+    pending = [];
+  };
+
+  for(let i=0;i<lines.length;i++){
+    const line = lines[i].replace(/\s+$/,'');
+    const trimmed = line.trim();
+    if(!trimmed){ flushPending(); continue; }
+
+    const hs = demandHeaderSection(trimmed);
+    if(hs){ flushPending(); section = hs; continue; }
+    if(SKIP.test(trimmed)){ flushPending(); continue; }
+
+    const cands = demandFindQtyUnits(line).filter(c=>c.qty!==null && c.qty>0);
+    if(!cands.length){
+      if(trimmed.length>1 && trimmed.length<180 && /[A-Za-z]/.test(trimmed) &&
+         !/^[\d\s.,$%|-]+$/.test(trimmed) && !/\bPage:?\s*\d/i.test(trimmed)){
+        pending.push(line);
+        if(pending.length>6) pending.shift();
+      }
+      continue;
+    }
+
+    // Walk candidates right-to-left and take the first whose tail balances
+    // (qty x unit + tax = RCV). Falls back to the right-most with real money.
+    let pick=null, money=null;
+    for(let ci=cands.length-1; ci>=0; ci--){
+      const c = cands[ci];
+      const sol = demandSolveMoney(c.qty, demandTailNumbers(line.slice(c.idx + c.len)));
+      if(sol.ok){ pick=c; money=sol; break; }
+      if(!pick && sol.unitPrice!=null){ pick=c; money=sol; }
+    }
+    if(!pick){ pick = cands[cands.length-1]; money = demandSolveMoney(pick.qty, []); }
+
+    let desc = line.slice(0, pick.idx).trim();
+    const indent = line.length - line.replace(/^\s+/,'').length;
+
+    // A description that lives on its own line above the numbers (some carriers
+    // wrap backwards) — pull the buffered text down instead of pushing it up.
+    if(pending.length && desc.replace(/^\s*\d{1,3}\s*[.)\]-]\s*/,'').length < 12){
+      desc = (pending.map(x=>x.trim()).join(' ') + ' ' + desc).trim();
+      pending = [];
+    } else {
+      flushPending();
+    }
+
+    desc = desc.replace(/^\s*\d{1,3}\s*[.)\]-]\s*/, '')
+               .replace(/[\s,|]+$/,'')
+               .replace(/\s{2,}/g,' ').trim();
+    if(!desc || desc.length < 4) continue;
+    if(SKIP.test(desc)) continue;
+
+    items.push({
+      desc, qty:pick.qty, unit:pick.unit,
+      unitPrice: money.unitPrice,
+      removePrice: money.removePrice ?? null,
+      replacePrice: money.replacePrice ?? null,
+      tax: money.tax || 0,
+      rcv: money.rcv,
+      balanced: !!money.ok,
+      carrierNote: '',
+      section: section || demandSectionGuess(desc) || null,
+      _indent: indent,
+      raw: line.trim(),
+    });
+    lastIndent = indent;
+  }
+  flushPending();
+  items.forEach(it=>{
+    delete it._indent;
+    it.desc = it.desc.replace(/\s*[-\u2013]\s*$/,'').replace(/\s{2,}/g,' ').trim();
+  });
+  return items;
+}
+window.parseCarrierEstimate = parseCarrierEstimate;
+
+// ── MATCHING ENGINE ───────────────────────────────────────────────────────────
+// Normalizes carrier wording so "R&R", "Remove & Replace", "Rem/Repl" all read
+// the same, then requires every keyword group of a catalog item to hit.
+
+function demandNorm(s){
+  return ' ' + String(s||'')
+    .toLowerCase()
+    .replace(/&/g,' and ')
+    .replace(/\br\s*and\s*r\b|\brem\/?repl\b|\bremove\s+and\s+replace\b/g,' rr ')
+    .replace(/\bd\s*and\s*r\b|\bdet\/?res\b/g,' detach reset ')
+    .replace(/\brfg\b/g,' roofing ')
+    .replace(/\bcomp\b/g,' composition ')
+    .replace(/\bw\/out\b|\bw\/o\b/g,' without ')
+    .replace(/\bw\//g,' with ')
+    .replace(/\bwndw\b/g,' window ')
+    .replace(/\balum\b/g,' aluminum ')
+    .replace(/\bflashng\b/g,' flashing ')
+    .replace(/["'’“”]/g,'"')
+    .replace(/[^a-z0-9"\/. ]+/g,' ')
+    .replace(/\s+/g,' ') + ' ';
+}
+
+function demandGroupHit(norm, group){
+  return group.some(term=>{
+    const t = ' ' + String(term).toLowerCase().trim();
+    return norm.includes(t) || norm.includes(String(term).toLowerCase().trim());
+  });
+}
+
+// Score a catalog item against one carrier line. 0 = no match.
+function demandScoreLine(cat, carrierLine, descText){
+  const norm = demandNorm(carrierLine.desc);
+  if(cat.not && cat.not.some(n=>norm.includes(String(n).toLowerCase()))) return 0;
+  const groups = cat.match || [];
+  if(!groups.length) return 0;
+  for(const g of groups){ if(!demandGroupHit(norm, g)) return 0; }
+  // Base score on keyword coverage, then bonus for unit agreement and word overlap.
+  let score = 0.6;
+  if(carrierLine.unit && cat.unit && carrierLine.unit.toUpperCase() === cat.unit.toUpperCase()) score += 0.2;
+  const a = new Set(demandNorm(descText).trim().split(' ').filter(w=>w.length>2));
+  const b = new Set(norm.trim().split(' ').filter(w=>w.length>2));
+  let hit=0; a.forEach(w=>{ if(b.has(w)) hit++; });
+  if(a.size) score += 0.2 * (hit/a.size);
+  return Math.min(1, score);
+}
+
+// Pair every demand line against the carrier's file. Mutates lines in place.
+// Status: match | qty-short | price-diff | missing | added | extra-carrier
+function demandCompare(demandLines, carrierLines, opts){
+  const o = Object.assign({ qtyTol:0.02, priceTol:0.01 }, opts||{});
+  const used = new Set();
+
+  demandLines.forEach(L=>{
+    const cat = DEMAND_CAT_BY_KEY[L.catKey];
+    if(!cat || !carrierLines.length){
+      if(L.status!=='added') L.status='missing';
+      L.carrierRef = null; return;
+    }
+    let best=null, bestScore=0, bestIdx=-1;
+    carrierLines.forEach((c,idx)=>{
+      if(used.has(idx)) return;
+      // Elevation lines should prefer a carrier line from the same elevation.
+      const s = demandScoreLine(cat, c, L.desc);
+      if(s<=0) return;
+      // A left-elevation gutter is not the carrier's right-elevation gutter.
+      if(L.elev && c.section && DEMAND_ELEVATIONS.includes(c.section) && c.section!==L.elev) return;
+      let adj = s + ((L.elev && c.section===L.elev) ? 0.15 : 0);
+      if(adj>bestScore){ bestScore=adj; best=c; bestIdx=idx; }
+    });
+
+    if(!best || bestScore < 0.55){
+      L.status = 'missing';
+      L.carrierRef = null;
+      return;
+    }
+    used.add(bestIdx);
+    // We had no measurement for this line but the carrier already pays for it —
+    // adopt their quantity and switch it on rather than dropping agreed scope.
+    if((parseFloat(L.qty)||0) === 0 && (best.qty||0) > 0){
+      L.qty = best.qty;
+      L.unit = L.unit || best.unit;
+      L.checked = true;
+      L.qtyFromCarrier = true;
+    }
+    L.carrierRef = { desc:best.desc, qty:best.qty, unit:best.unit, unitPrice:best.unitPrice,
+                     removePrice:best.removePrice, replacePrice:best.replacePrice,
+                     carrierNote:best.carrierNote||'', tax:best.tax, rcv:best.rcv,
+                     score:Math.round(bestScore*100)/100 };
+
+    const cq = best.qty || 0, dq = parseFloat(L.qty) || 0;
+    const qtyShort = dq > cq * (1 + o.qtyTol) && (dq - cq) > 0.01;
+    // The carrier allowing MORE than our measurements support is worth seeing —
+    // usually our quantity is the one that needs raising.
+    const qtyOver  = !qtyShort && cq > dq * (1 + o.qtyTol) && (cq - dq) > 0.01;
+    const priceDiff = L.unitPrice!=null && best.unitPrice!=null &&
+                      Math.abs(L.unitPrice - best.unitPrice) > Math.max(0.02, best.unitPrice*o.priceTol);
+    L.status = qtyShort ? 'qty-short' : (qtyOver ? 'qty-over' : (priceDiff ? 'price-diff' : 'match'));
+    L.carrierQty = cq;
+    L.carrierUnitPrice = best.unitPrice;
+  });
+
+  // Carrier lines nothing claimed — shown so nothing is silently dropped.
+  const extras = carrierLines.map((c,i)=>({...c, _idx:i})).filter(c=>!used.has(c._idx));
+  return { extras };
+}
+window.demandCompare = demandCompare;
+
+// ── HOUSE PRICE LIST ──────────────────────────────────────────────────────────
+// Team-shared via app_settings, seeded from the catalog. Used whenever the
+// carrier's file has no price to borrow.
+let demandPriceList = null;
+
+function demandSeedPrices(){
+  const p = {};
+  DEMAND_CATALOG.forEach(c=>{ p[c.key] = c.price; });
+  return { prices:p, taxRate:8.25, updatedAt:null };
+}
+
+async function loadDemandPriceList(){
+  if(demandPriceList) return demandPriceList;
+  const seed = demandSeedPrices();
+  try { const c = localStorage.getItem('demand_price_list'); if(c) demandPriceList = JSON.parse(c); } catch(e){}
+  if(!demandPriceList) demandPriceList = seed;
+  if(window.sb){
+    try {
+      const { data } = await window.sb.from('app_settings').select('value').eq('key','demand_price_list').maybeSingle();
+      if(data?.value && typeof data.value==='object'){
+        demandPriceList = Object.assign({}, seed, data.value);
+        demandPriceList.prices = Object.assign({}, seed.prices, data.value.prices||{});
+        localStorage.setItem('demand_price_list', JSON.stringify(demandPriceList));
+      }
+    } catch(e){ console.warn('[demand] price list load failed', e); }
+  }
+  // Any catalog item added after the list was saved still needs a price.
+  demandPriceList.prices = Object.assign({}, seed.prices, demandPriceList.prices||{});
+  if(demandPriceList.taxRate==null) demandPriceList.taxRate = 8.25;
+  return demandPriceList;
+}
+
+async function saveDemandPriceList(){
+  demandPriceList.updatedAt = new Date().toISOString();
+  try { localStorage.setItem('demand_price_list', JSON.stringify(demandPriceList)); } catch(e){}
+  if(window.sb){
+    try {
+      const { error } = await window.sb.from('app_settings').upsert({
+        key:'demand_price_list', value:demandPriceList, updated_at:new Date().toISOString(),
+      }, { onConflict:'key' });
+      if(error){ toast('Saved locally only — could not sync price list'); return; }
+      toast('Demand price list saved for team');
+    } catch(e){ toast('Saved locally only'); }
+  } else { toast('Price list saved'); }
+}
+window.loadDemandPriceList = loadDemandPriceList;
+window.saveDemandPriceList = saveDemandPriceList;
+
+// ── MEASUREMENT + META DEFAULTS FROM THE JOB ──────────────────────────────────
+const DEMAND_MEAS_FIELDS = [
+  ['squares','Squares','SQ'], ['waste','Waste','%'], ['steepSquares','Steep roof','SQ'],
+  ['eaves','Eaves','LF'], ['rakes','Rakes','LF'], ['ridges','Ridges','LF'],
+  ['hips','Hips','LF'], ['valleys','Valleys','LF'], ['ridgeVentLF','Ridge vent','LF'],
+  ['stepFlash','Step flash','LF'], ['wallFlash','Apron/headwall','LF'],
+  ['pipeJacks','Pipe jacks','EA'], ['turtleVents','Turtle vents','EA'],
+  ['exhaustCaps','Exhaust caps','EA'], ['turbines','Turbines','EA'],
+  ['powerVents','Power vents','EA'], ['acUnits','A/C units','EA'],
+  ['pergolaSF','Pergola/patio','SF'], ['twoStorySquares','2-story','SQ'],
+];
+const DEMAND_ELEV_FIELDS = [
+  ['gutter5','Gutter 5"','LF'], ['gutter6','Gutter 6"','LF'],
+  ['downspout5','Downspout 5"','LF'], ['downspout6','Downspout 6"','LF'],
+  ['gutterGuard','Gutter guard','LF'],
+  ['screenSm','Screen 1-9 SF','EA'], ['screenMd','Screen 10-16 SF','EA'],
+  ['screenLg','Screen 17-25 SF','EA'], ['sunScreen','Sun screen','EA'],
+  ['beadingLF','Window beading','LF'], ['wrapLF','Window wrap','LF'], ['sillLF','Sill/trim','LF'],
+];
+
+function demandBlankElev(){
+  const e = {}; DEMAND_ELEV_FIELDS.forEach(([k])=>{ e[k]=0; }); return e;
+}
+
+function demandDefaultMeasurements(j){
+  const re = j?.roofEstimate || {};
+  const ab = j?.abcOrder || {};
+  const n = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+  const m = {
+    squares: n(ab.squares) || n(re.totalSquares),
+    waste: ab.waste != null && ab.waste !== '' ? n(ab.waste) : 13,
+    pitch: re.pitch || '',
+    facets: n(re.facets),
+    steepSquares: 0, steepBand: '7/12 to 9/12',
+    eaves: n(ab.eaves), rakes: n(ab.rakes), ridges: n(ab.ridges),
+    hips: n(ab.hips), valleys: n(ab.valleys),
+    ridgeVentLF: 0, stepFlash: 0, wallFlash: 0,
+    pipeJacks: n(ab.penetrations), turtleVents: 0, exhaustCaps: 0,
+    turbines: 0, powerVents: 0, acUnits: 0, pergolaSF: 0, twoStorySquares: 0,
+  };
+  // A pitch of 7/12 or steeper means the whole roof carries the steep charge.
+  const pn = parseInt(String(m.pitch).split('/')[0], 10);
+  if(isFinite(pn) && pn >= 7){
+    m.steepSquares = m.squares;
+    m.steepBand = pn >= 10 ? '10/12 to 12/12' : '7/12 to 9/12';
+  }
+  const elev = {}; DEMAND_ELEVATIONS.forEach(k=>{ elev[k] = demandBlankElev(); });
+  return { m, elev };
+}
+
+function demandDefaultMeta(j){
+  const ci = (typeof getCompanyInfo==='function') ? getCompanyInfo() : {};
+  const me = (typeof currentUser==='function' ? currentUser() : null) || {};
+  return {
+    insured: j?.name || '',
+    property: (j?.address && j.address!=='—') ? j.address : '',
+    carrier: j?.carrier || '',
+    administrator: '',
+    adjuster: j?.adjName || '',
+    claimNum: j?.claimNum || '',
+    policyNum: j?.policyNum || '',
+    dateOfLoss: j?.dateOfLoss || '',
+    typeOfLoss: (j?.claimType || '').replace(/\s*damage$/i,'') || '',
+    measurements: '',
+    estimateDate: new Date().toISOString().slice(0,10),
+    estimateType: 'Demand estimate — full scope of damage',
+    preparedBy: me.name || j?.projectManager || '',
+    preparedTitle: 'Project Manager',
+    preparedPhone: ci.phone || '',
+    preparedEmail: ci.email || '',
+  };
+}
+
+// ── BUILD THE DEMAND SCOPE FROM MEASUREMENTS ──────────────────────────────────
+// Every catalog item becomes a candidate line. Items with a computed quantity of
+// zero are still offered (unchecked) so they can be switched on by hand.
+let _demandUid = 0;
+function demandNewId(){ return 'dl' + (Date.now()%1e7) + (++_demandUid); }
+
+function demandBuildLines(m, elev, priceList){
+  const round2 = v => Math.round((parseFloat(v)||0)*100)/100;
+  const out = [];
+  DEMAND_CATALOG.forEach(c=>{
+    if(c.sec === 'elev'){
+      DEMAND_ELEVATIONS.forEach(el=>{
+        const e = elev[el] || demandBlankElev();
+        const qty = round2(c.calc(m, e));
+        out.push({
+          id: demandNewId(), sec: el, elev: el, catKey: c.key,
+          desc: c.desc(m, e), qty, unit: c.unit,
+          unitPrice: priceList.prices[c.key] ?? c.price, priceSource: 'house',
+          mat: c.mat ?? 0.45, tax: 0, checked: qty > 0,
+          status: '', note: '', carrierRef: null, custom: false,
+        });
+      });
+    } else {
+      const qty = round2(c.calc(m, {}));
+      out.push({
+        id: demandNewId(), sec: c.sec, elev: null, catKey: c.key,
+        desc: c.desc(m, {}), qty, unit: c.unit,
+        unitPrice: priceList.prices[c.key] ?? c.price, priceSource: 'house',
+        mat: c.mat ?? 0.45, tax: 0, checked: qty > 0 || !!c.std,
+        status: '', note: '', carrierRef: null, custom: false,
+      });
+    }
+  });
+  return out;
+}
+
+// ── PRICING + TAX ─────────────────────────────────────────────────────────────
+// Carrier price wins when the line exists on their file — their own number can't
+// be argued. Missing lines fall back to the house list and are flagged with †.
+function demandApplyPricing(lines, taxRate){
+  const rate = (parseFloat(taxRate)||0)/100;
+  lines.forEach(L=>{
+    if(L.fromCarrier){ L.priceSource = 'carrier'; }
+    else if(L.priceSource === 'manual'){ /* user typed a price — leave it */ }
+    else if(L.carrierRef && L.carrierRef.unitPrice != null){
+      L.unitPrice = L.carrierRef.unitPrice;
+      L.priceSource = 'carrier';
+    } else {
+      L.priceSource = 'house';
+    }
+    const qty = parseFloat(L.qty)||0, up = parseFloat(L.unitPrice)||0;
+    if(L.taxManual){ /* keep */ }
+    else if(L.carrierRef && L.carrierRef.qty && L.status==='match' && L.carrierRef.tax!=null){
+      L.tax = L.carrierRef.tax;
+    } else {
+      L.tax = Math.round(qty * up * (L.mat ?? 0.45) * rate * 100) / 100;
+    }
+    L.rcv = Math.round((qty*up + (parseFloat(L.tax)||0)) * 100) / 100;
+  });
+  return lines;
+}
+
+function demandTotals(lines, carrierLines){
+  const t = { tax:0, rcv:0, carrierRcv:0, count:0, missing:0, short:0 };
+  lines.forEach(L=>{
+    if(!L.checked) return;
+    t.count++;
+    t.tax += parseFloat(L.tax)||0;
+    t.rcv += parseFloat(L.rcv)||0;
+    if(L.carrierRef && L.carrierRef.rcv!=null) t.carrierRcv += L.carrierRef.rcv;
+    if(L.status==='missing') t.missing++;
+    if(L.status==='qty-short') t.short++;
+  });
+  t.tax = Math.round(t.tax*100)/100;
+  t.rcv = Math.round(t.rcv*100)/100;
+  t.carrierRcv = Math.round(t.carrierRcv*100)/100;
+  t.carrierFile = Math.round((carrierLines||[]).reduce((a,c)=>a+(parseFloat(c.rcv)||0),0)*100)/100;
+  t.delta = Math.round((t.rcv - (t.carrierFile || t.carrierRcv))*100)/100;
+  return t;
+}
+
+// A line is "flagged" when the carrier is missing it or short on it — these are
+// what get bolded in the printed demand and what earn a note field.
+function demandIsFlagged(L){
+  return L.status==='missing' || L.status==='qty-short' ||
+         (L.status==='added' && !L.fromCarrier);
+}
+
+// ── STANDARD NOTES LIBRARY ────────────────────────────────────────────────────
+const DEMAND_STD_NOTES = [
+  { title:'Waste factor', body:'Composition shingle is figured at {WASTE}% waste, the factor suggested by the measurement report for this roof. The roof has {FACETS} facets, {HIPS} LF of hips and {VALLEYS} LF of valleys at a {PITCH} predominant pitch. A 15% to 18% factor is supportable on this geometry if the carrier\'s scope differs.' },
+  { title:'Steep charge', body:'{STEEPSF} SF, or {STEEPPCT}% of the roof, is at {PITCH} pitch. A steep charge applies to both the tear-off and the install. Both lines are carried above.' },
+  { title:'Valleys and decking', body:'{VALLEYS} LF of valley is carried above as closed-cut, with ice and water shield running the full length of each valley at a 36 in. width centered on the valley line. No valley metal is carried. No allowance for decking replacement is carried in this estimate; any deteriorated sheathing found at tear-off will be reported and added by supplement.' },
+  { title:'Drip edge finish', body:'The existing drip edge on this roof is painted to match the fascia and trim rather than left as stock prefinished metal. Replacement drip edge is not available in the existing color, so the new metal is scoped to be sealed and painted in the field to match. This line is carried at the same length as the drip edge line.' },
+  { title:'Pending elevations', body:'The carrier\'s letter addresses the roof, but records no findings for one or more elevations. Those elevations are shown as pending rather than as no damage found, and will be scoped at reinspection.' },
+  { title:'Window screens and beading', body:'Window screens and glazing beading on the affected elevations carry hail impact consistent with the roof and gutter damage. Screens cannot be repaired in place and are scoped for replacement. A window labor minimum applies where fewer than the minimum billable units are replaced on an elevation.' },
+  { title:'Gutters and downspouts', body:'Gutters and downspouts on the affected elevations carry round, randomly located indentations consistent with the date of loss. Gutter runs are scoped for full replacement rather than repair; aluminum gutter cannot be dent-repaired to a uniform finish and partial replacement leaves a visible seam and color mismatch on a continuous run.' },
+  { title:'Pricing basis', body:'Unit prices are taken from the same price list applied to storm claims in this market for the {DOL} date of loss. Sales tax is calculated per line item on the material component. Lines marked † are scope items not present on the comparison file and their unit prices are to be confirmed against the current price list. No overhead and profit is carried in this estimate.' },
+  { title:'Status of this document', body:'This is a demand estimate prepared for claim purposes. It is not an invoice and not a final contract price. Quantities marked ‡ remain subject to confirmation at reinspection, and final cost will be adjusted to the conditions found at tear-off.' },
+];
+
+function demandFillNote(body, m, meta){
+  const pct = m.squares>0 ? Math.round((m.steepSquares/m.squares)*100) : 0;
+  return String(body||'')
+    .replace(/\{WASTE\}/g, m.waste ?? 13)
+    .replace(/\{FACETS\}/g, m.facets || '—')
+    .replace(/\{HIPS\}/g, m.hips || 0)
+    .replace(/\{VALLEYS\}/g, m.valleys || 0)
+    .replace(/\{PITCH\}/g, m.pitch || '—')
+    .replace(/\{STEEPSF\}/g, Math.round((m.steepSquares||0)*100).toLocaleString())
+    .replace(/\{STEEPPCT\}/g, pct)
+    .replace(/\{DOL\}/g, meta.dateOfLoss ? new Date(meta.dateOfLoss+'T12:00:00').toLocaleDateString('en-US') : 'date of loss');
+}
+
+// ── PERSISTENCE ───────────────────────────────────────────────────────────────
+// The whole job array is upserted to Supabase on every save, so the stored
+// estimate keeps only lines that carry a decision — anything switched on, edited,
+// noted, custom, or matched to the carrier. Untouched catalog defaults are
+// regenerated on open by demandRestoreCatalog, so nothing is lost from the UI.
+function demandPruneForSave(D){
+  const keep = L => L.checked || (parseFloat(L.qty)||0) > 0 ||
+                    (L.note||'').trim() || L.custom || L.carrierRef || L.tbd;
+  return Object.assign({}, D, { lines: (D.lines||[]).filter(keep) });
+}
+window.demandPruneForSave = demandPruneForSave;
+
+// Add back any catalog line the saved estimate pruned, so the full scope list
+// is available again without forcing a Recalculate.
+function demandRestoreCatalog(D, priceList){
+  const have = {};
+  (D.lines||[]).forEach(L=>{ if(!L.custom && L.catKey) have[(L.elev||'')+'|'+L.catKey] = true; });
+  const fresh = demandBuildLines(D.m || {}, D.elev || {}, priceList);
+  fresh.forEach(F=>{
+    if(!have[(F.elev||'')+'|'+F.catKey]){ F.checked = false; D.lines.push(F); }
+  });
+  // Keep the printed order stable: catalog order, then anything added by hand.
+  const order = {}; DEMAND_CATALOG.forEach((c,i)=>{ order[c.key] = i; });
+  D.lines.sort((a,b)=>{
+    const sa = DEMAND_SECTIONS.findIndex(x=>x.key===a.sec);
+    const sb = DEMAND_SECTIONS.findIndex(x=>x.key===b.sec);
+    if(sa !== sb) return sa - sb;
+    const oa = a.catKey!=null ? (order[a.catKey] ?? 998) : 999;
+    const ob = b.catKey!=null ? (order[b.catKey] ?? 998) : 999;
+    return oa - ob;
+  });
+  return D;
+}
+window.demandRestoreCatalog = demandRestoreCatalog;
+
+// Device-local mirror. The job sync maps explicit columns, so if the
+// demand_estimate column or its mapping is ever missing, the estimate would
+// vanish on the next re-pull. This keeps a copy on the machine that made it.
+function demandMirrorKey(j){ return 'demand_est_' + (j && j.id ? j.id : ''); }
+function demandSaveMirror(j, D){
+  try { if(j && j.id) localStorage.setItem(demandMirrorKey(j), JSON.stringify(D)); } catch(e){}
+}
+function demandReadMirror(j){
+  try {
+    const raw = j && j.id ? localStorage.getItem(demandMirrorKey(j)) : null;
+    if(!raw) return null;
+    const d = JSON.parse(raw);
+    return (d && typeof d === 'object' && Array.isArray(d.lines)) ? d : null;
+  } catch(e){ return null; }
+}
+window.demandSaveMirror = demandSaveMirror;
+window.demandReadMirror = demandReadMirror;
+
+function getDemandEstimate(j){
+  if(!j.demandEstimate || typeof j.demandEstimate !== 'object'){
+    // Not on the job record — fall back to this device's copy if there is one.
+    const mirror = demandReadMirror(j);
+    if(mirror){ j.demandEstimate = mirror; j.__demandFromMirror = true; }
+    else return null;
+  }
+  const d = j.demandEstimate;
+  if(!Array.isArray(d.lines)) d.lines = [];
+  if(!Array.isArray(d.notes)) d.notes = [];
+  if(!d.carrier) d.carrier = { fileName:'', parsedAt:null, lines:[] };
+  if(!d.elev){ d.elev = {}; DEMAND_ELEVATIONS.forEach(k=>{ d.elev[k]=demandBlankElev(); }); }
+  if(!d.m) d.m = {};
+  return d;
+}
+window.getDemandEstimate = getDemandEstimate;
+
+// ── MEASUREMENT REPORT PARSER ─────────────────────────────────────────────────
+// Built against a Nearmap "Roof & Exterior Measurements" report (the engine behind
+// GAF QuickMeasure), and tolerant of EagleView, Roofr and Hover wording.
+// Three passes: the summary label block, the label-row/value-row tables on the
+// Lengths page, and the Pitch / Area / Percent + waste tables on the Summary page.
+
+const DEMAND_MEAS_LABELS = [
+  // longest / most specific first — "Ridge Cap" must beat "Ridge"
+  [/^ridges?\s*\/\s*hips?$/,            'ridgeHipCombined'],
+  [/^(?:total\s+)?ridge\s*caps?$/,      'ridgeCap'],
+  [/^(?:total\s+)?drip\s*edges?$/,      'dripEdge'],
+  [/^(?:total\s+)?leak\s*barriers?$/,   'leakBarrier'],
+  [/^(?:total\s+)?starters?(?:\s+course)?$/, 'starter'],
+  [/^(?:total\s+)?step(?:\s*flashing)?$/,    'stepFlash'],
+  [/^(?:total\s+)?(?:wall\s*)?flash(?:ing)?$/, 'wallFlash'],
+  [/^(?:total\s+)?headwalls?$/,         'wallFlash'],
+  [/^(?:total\s+)?eaves?(?:\s+length)?$/,   'eaves'],
+  [/^(?:total\s+)?rakes?(?:\s+length)?$/,   'rakes'],
+  [/^(?:total\s+)?ridges?(?:\s+length)?$/,  'ridges'],
+  [/^(?:total\s+)?hips?(?:\s+length)?$/,    'hips'],
+  [/^(?:total\s+)?valleys?(?:\s+length)?$/, 'valleys'],
+  [/^(?:number\s+of\s+)?(?:roof\s+)?facets$/, 'facets'],
+  [/^penetrations$/,                    'penetrations'],
+  [/^(?:total\s+)?(?:roof\s+)?area$/,   'totalSqFt'],
+];
+
+function demandLabelKey(tok){
+  const t = String(tok||'').toLowerCase().replace(/[:=]+$/,'').replace(/\s+/g,' ').trim();
+  for(const [re,key] of DEMAND_MEAS_LABELS){ if(re.test(t)) return key; }
+  return null;
+}
+function demandParseQty(tok){
+  const m = String(tok||'').match(/^\(?\$?([\d,]+(?:\.\d+)?)\)?$/);
+  return m ? parseFloat(m[1].replace(/,/g,'')) : null;
+}
+// Token positions within a line, so a value row can be matched to its label row.
+function demandCols(line){
+  const out = []; const re = /\S+/g; let m;
+  while((m = re.exec(line)) !== null) out.push({ col:m.index, s:m[0] });
+  return out;
+}
+
+function parseMeasurementReport(text){
+  const t = String(text||'').replace(/\r/g,'');
+  const lines = t.split('\n');
+  const out = {};
+  const set = (k,v) => { if(v!=null && isFinite(v) && out[k]==null) out[k]=v; };
+
+  // ── Pass 1: "Label   value unit" on one line (the Summary block) ──
+  const LBL = String.raw`([A-Za-z][A-Za-z.\/ ]{2,24}?)`;
+  lines.forEach(line=>{
+    const m = line.match(new RegExp('^\\s*' + LBL + '\\s*[:=]?\\s{1,}([\\d,]+(?:\\.\\d+)?)\\s*(sq\\s*\\.?\\s*ft|sf|ft|feet|\'|")?\\s*$', 'i'));
+    if(!m) return;
+    const key = demandLabelKey(m[1]);
+    if(!key) return;
+    const val = parseFloat(m[2].replace(/,/g,''));
+    // "Area" only counts as the roof area when it's reported in square feet
+    if(key==='totalSqFt' && !/sq|sf/i.test(m[3]||'')) return;
+    set(key, val);
+  });
+
+  // ── Pass 2: label row immediately above a value row (the Lengths page) ──
+  for(let i=0;i<lines.length-1;i++){
+    const labs = demandCols(lines[i]);
+    if(labs.length < 2 || labs.length > 8) continue;
+    const keys = labs.map(c=>demandLabelKey(c.s));
+    if(keys.some(k=>!k)) continue;
+    // find the next non-blank line and read its numbers by column position
+    let j = i+1;
+    while(j<lines.length && !lines[j].trim()) j++;
+    if(j>=lines.length) continue;
+    const vals = demandCols(lines[j]).map(c=>({ col:c.col, v:demandParseQty(c.s) })).filter(c=>c.v!=null);
+    if(vals.length !== labs.length) continue;
+    labs.forEach((lab,idx)=>{
+      // pair by order; columns are already left-to-right on both rows
+      set(keys[idx], vals[idx].v);
+    });
+  }
+
+  // ── Pass 3: Pitch / Area / Percent table → steep and flat (low-slope) areas ──
+  for(let i=0;i<lines.length-1;i++){
+    const pm = lines[i].match(/^\s*Pitch\s+((?:\d{1,2}\s+){1,11}\d{1,2})\s*$/i);
+    if(!pm) continue;
+    const pitches = pm[1].trim().split(/\s+/).map(Number);
+    let areas = null;
+    for(let j=i+1;j<Math.min(i+4,lines.length);j++){
+      const am = lines[j].match(/^\s*Area\s+((?:[\d,]+(?:\.\d+)?\s+){1,11}[\d,]+(?:\.\d+)?)\s*$/i);
+      if(am){ areas = am[1].trim().split(/\s+/).map(x=>parseFloat(x.replace(/,/g,''))); break; }
+    }
+    if(!areas || areas.length !== pitches.length) continue;
+    let steep=0, flat=0, total=0, maxPitch=0, maxArea=0;
+    pitches.forEach((p,k)=>{
+      const a = areas[k]||0; total += a;
+      if(p >= 7) steep += a;
+      if(p <= 1) flat += a;                 // 0–1/12 is a flat/patio facet, not dwelling roof
+      if(a > maxArea){ maxArea = a; maxPitch = p; }
+    });
+    out.steepSqFt = steep; out.flatSqFt = flat; out.pitchTableTotal = total;
+    if(out.pitch == null && maxPitch) out.pitch = maxPitch + '/12';
+    break;
+  }
+
+  // ── Pass 4: waste table — pick the column the report marks "Suggested" ──
+  for(let i=0;i<lines.length;i++){
+    if(!/^\s*Waste\s+/i.test(lines[i])) continue;
+    const pcts = demandCols(lines[i]).slice(1)
+      .map(c=>({ col:c.col, v:(c.s.match(/^(\d{1,2})%$/)||[])[1] }))
+      .filter(c=>c.v!=null);
+    if(!pcts.length) continue;
+    // "Suggested" sits on its own line above the column it refers to
+    let sugCol = null;
+    for(let k=Math.max(0,i-3); k<i; k++){
+      const s = lines[k].indexOf('Suggested');
+      if(s >= 0){ sugCol = s; break; }
+    }
+    if(sugCol != null){
+      let best = pcts[0], bd = Infinity;
+      pcts.forEach(p=>{ const d = Math.abs(p.col - sugCol); if(d < bd){ bd = d; best = p; } });
+      out.waste = parseInt(best.v,10);
+    }
+    break;
+  }
+
+  // ── Pass 5: loose fallbacks for other report vendors ──
+  const loose = (labels, key) => {
+    if(out[key] != null) return;
+    for(const lab of labels){
+      let m = t.match(new RegExp(lab + String.raw`\s*[:=]?\s*([\d,]+)\s*(?:ft|feet|')\s*(?:([\d.]+)\s*(?:in|")|)`, 'i'));
+      if(m){ out[key] = Math.round((parseFloat(m[1].replace(/,/g,'')) + (parseFloat(m[2])||0)/12)*10)/10; return; }
+      m = t.match(new RegExp(lab + String.raw`\s*[:=]?\s*([\d,]+\.?\d*)`, 'i'));
+      if(m){ out[key] = parseFloat(m[1].replace(/,/g,'')); return; }
+    }
+  };
+  if(out.totalSqFt == null){
+    const a = t.match(/Total\s+(?:Roof\s+)?Area[^\d]{0,14}([\d,]+\.?\d*)/i);
+    if(a) out.totalSqFt = parseFloat(a[1].replace(/,/g,''));
+  }
+  if(out.pitch == null){
+    const p = t.match(/(?:Predominant|Primary|Main)?\s*Pitch[^\d]{0,10}(\d{1,2})\s*[\/:]\s*12/i);
+    if(p) out.pitch = p[1] + '/12';
+  }
+  if(out.facets == null){
+    const f = t.match(/(\d{1,3})\s*facets/i);
+    if(f) out.facets = parseInt(f[1],10);
+  }
+  loose([String.raw`Total\s+Eaves`,   String.raw`\bEaves\b`],   'eaves');
+  loose([String.raw`Total\s+Rakes`,   String.raw`\bRakes\b`],   'rakes');
+  loose([String.raw`Total\s+Ridges`,  String.raw`\bRidges\b`],  'ridges');
+  loose([String.raw`Total\s+Hips`,    String.raw`\bHips\b`],    'hips');
+  loose([String.raw`Total\s+Valleys`, String.raw`\bValleys\b`], 'valleys');
+  loose([String.raw`Total\s+Step\s+Flashing`, String.raw`Step\s+Flashing`], 'stepFlash');
+  loose([String.raw`Total\s+Wall\s+Flashing`, String.raw`Wall\s+Flashing`], 'wallFlash');
+  if(out.waste == null){
+    const w = t.match(/Suggested\s+Waste[^\d]{0,14}(\d{1,2})\s*%/i);
+    if(w) out.waste = parseInt(w[1],10);
+  }
+  // EagleView reports ridges and hips as one number; split isn't knowable, so
+  // carry the combined figure and let the user apportion it.
+  if(out.ridges == null && out.hips == null && out.ridgeHipCombined != null){
+    out.ridges = out.ridgeHipCombined;
+  }
+  return out;
+}
+window.parseMeasurementReport = parseMeasurementReport;
+
+// What to print in the demand's "Measurements:" field — the report's own vendor
+// and date beat a mangled upload filename.
+function demandReportLabel(text, fileName){
+  const t = String(text||'');
+  let vendor = '';
+  if(/quickmeasure/i.test(t))        vendor = 'GAF QuickMeasure';
+  else if(/eagleview/i.test(t))      vendor = 'EagleView';
+  else if(/\broofr\b/i.test(t))      vendor = 'Roofr';
+  else if(/\bhover\b/i.test(t))      vendor = 'Hover';
+  else if(/nearmap/i.test(t))        vendor = 'Nearmap Roof & Exterior Measurements';
+  let date = '';
+  const d = t.match(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4})\b/)
+         || t.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
+  if(d){ const dt = new Date(d[1]); date = isNaN(dt) ? d[1] : dt.toLocaleDateString('en-US'); }
+  if(vendor) return date ? `${vendor}, ${date}` : vendor;
+  // Fall back to a tidied filename: drop the upload hash and underscores
+  return String(fileName||'')
+    .replace(/\.(pdf|txt)$/i,'')
+    .replace(/^[0-9a-f]{6,}[-_]/i,'')
+    .replace(/^Full[ _]Report[ _-]*/i,'')
+    .replace(/[_]+/g,' ')
+    .replace(/\s{2,}/g,' ')
+    .trim()
+    .slice(0,60) || 'Measurement report';
+}
+window.demandReportLabel = demandReportLabel;
+
+// Fold a parsed report into the builder's measurement state.
+// Returns the list of fields actually changed, for the confirmation toast.
+function demandApplyReport(p, m){
+  const hits = [];
+  const put = (k,v) => { if(v!=null && isFinite(v)){ m[k] = Math.round(v*100)/100; hits.push(k); } };
+
+  // Dwelling-roof area excludes any 0–1/12 facet (patio cover, pergola), which is
+  // scoped separately under Other Structures rather than as shingle roofing.
+  if(p.totalSqFt != null){
+    const flat = p.flatSqFt || 0;
+    put('squares', (p.totalSqFt - flat) / 100);
+    if(flat > 0) put('pergolaSF', flat);
+  }
+  if(p.steepSqFt != null && p.steepSqFt > 0){
+    put('steepSquares', p.steepSqFt / 100);
+    const pn = parseInt(String(p.pitch||'').split('/')[0], 10);
+    if(isFinite(pn)) m.steepBand = pn >= 10 ? '10/12 to 12/12' : '7/12 to 9/12';
+  }
+  ['eaves','rakes','ridges','hips','valleys','stepFlash','wallFlash'].forEach(k=>put(k, p[k]));
+  if(p.penetrations != null) put('pipeJacks', p.penetrations);
+  if(p.waste != null) put('waste', p.waste);
+  if(p.facets != null) put('facets', p.facets);
+  if(p.pitch) { m.pitch = p.pitch; hits.push('pitch'); }
+  // Report-supplied linear quantities, kept alongside the derived ones so the
+  // scope can prefer the report's own numbers where it carries them.
+  if(p.dripEdge   != null) put('dripEdgeLF',  p.dripEdge);
+  if(p.ridgeCap   != null) put('ridgeCapLF',  p.ridgeCap);
+  if(p.starter    != null) put('starterLF',   p.starter);
+  if(p.leakBarrier!= null) put('leakBarrierLF', p.leakBarrier);
+  return hits;
+}
+window.demandApplyReport = demandApplyReport;
+
+
+// ── THE BUILDER ───────────────────────────────────────────────────────────────
+const DEMAND_STATUS_META = {
+  'match':      { label:'MATCH',   color:'#64748B', bg:'rgba(100,116,139,0.15)' },
+  'qty-short':  { label:'SHORT',   color:'#FBBF24', bg:'rgba(251,191,36,0.15)'  },
+  'price-diff': { label:'PRICE',   color:'#38BDF8', bg:'rgba(56,189,248,0.15)'  },
+  'missing':    { label:'MISSING', color:'#F87171', bg:'rgba(248,113,113,0.15)' },
+  'qty-over':   { label:'OVER',    color:'#60C4FF', bg:'rgba(96,196,255,0.15)'  },
+  'added':      { label:'ADDED',   color:'#A78BFA', bg:'rgba(167,139,250,0.15)' },
+};
+
+async function openDemandEstimate(jobId){
+  const j = (window.jobs||[]).find(x=>x.id===jobId);
+  if(!j){ toast('Open a job first'); return; }
+  const PL = await loadDemandPriceList();
+
+  // ── state ──
+  let D = getDemandEstimate(j);
+  if(!D){
+    const def = demandDefaultMeasurements(j);
+    D = {
+      meta: demandDefaultMeta(j),
+      m: def.m, elev: def.elev,
+      carrier: { fileName:'', parsedAt:null, lines:[] },
+      lines: demandBuildLines(def.m, def.elev, PL),
+      notes: [], taxRate: PL.taxRate, updatedAt: null,
+    };
+  }
+  else {
+    demandRestoreCatalog(D, PL);
+    if(j.__demandFromMirror){
+      delete j.__demandFromMirror;
+      setTimeout(()=>toast('Recovered this estimate from local storage — it did not sync'), 400);
+      console.warn('[demand] estimate recovered from localStorage. The jobs table likely has no demand_estimate column, or supabase-crm.js is not mapping it.');
+    }
+  }
+  if(D.taxRate==null) D.taxRate = PL.taxRate;
+  let extras = [];
+
+  const esc = window.escapeHtml || (s=>String(s==null?'':s));
+  const money = n => '$' + (Math.round((parseFloat(n)||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const qfmt  = n => (Math.round((parseFloat(n)||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const overlay = document.createElement('div');
+  overlay.id = 'demandOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:450;display:flex;align-items:center;justify-content:center;padding:12px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:1120px;max-width:100%;max-height:96vh;display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex:0 0 auto">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:#fff">Demand Estimate Builder</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(j.name||'')}${j.address&&j.address!=='—'?' · '+esc(j.address):''}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="dmPrices" style="background:rgba(100,116,139,0.12);border:1px solid rgba(100,116,139,0.35);color:#94A3B8;font-size:10px;font-weight:600;padding:6px 10px;border-radius:5px;cursor:pointer">Price List</button>
+          <button id="dmSave" class="btn-cancel" style="font-size:11px;padding:7px 12px">Save to Job</button>
+          <button id="dmPrint" class="btn-primary" style="font-size:11px;padding:7px 14px;display:flex;align-items:center;gap:5px"><i class="ti ti-file-text" style="font-size:13px"></i>Print Demand</button>
+          <button id="dmClose" class="icon-btn"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+
+      <div id="dmBody" style="overflow:auto;padding:14px 18px;flex:1 1 auto">
+
+        <!-- A. CLAIM HEADER -->
+        <details id="dmMetaBlock" style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <summary style="padding:9px 12px;background:rgba(255,255,255,0.02);cursor:pointer;font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">1 · Claim header <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0"> — prints at the top of the demand</span></summary>
+          <div id="dmMetaGrid" style="padding:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px"></div>
+        </details>
+
+        <!-- B. CARRIER ESTIMATE -->
+        <div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div style="padding:9px 12px;background:rgba(255,255,255,0.02);font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">2 · Carrier estimate <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0"> — the file we compare against</span></div>
+          <div style="padding:12px">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button id="dmUpload" class="pill-btn" style="font-size:11px;display:flex;align-items:center;gap:5px"><i class="ti ti-file-upload" style="font-size:13px"></i>Upload carrier PDF</button>
+              <button id="dmPasteBtn" class="pill-btn" style="font-size:11px;display:flex;align-items:center;gap:5px"><i class="ti ti-clipboard-text" style="font-size:13px"></i>Paste line items</button>
+              <button id="dmFromJob" class="pill-btn" style="font-size:11px;display:flex;align-items:center;gap:5px"><i class="ti ti-folder" style="font-size:13px"></i>Use a job file</button>
+              <div style="flex:1"></div>
+              <div id="dmCarrierStat" style="font-size:10px;color:var(--muted)"></div>
+            </div>
+            <div id="dmPasteWrap" style="display:none;margin-top:9px">
+              <textarea id="dmPasteText" placeholder="Paste the scope / line item section of the carrier's estimate here…" style="width:100%;height:120px;background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:6px;color:#e6edf6;font-size:11px;font-family:ui-monospace,Menlo,monospace;padding:8px;resize:vertical"></textarea>
+              <button id="dmParsePaste" class="btn-primary" style="font-size:11px;padding:6px 12px;margin-top:6px">Parse pasted text</button>
+            </div>
+            <div id="dmCarrierList" style="margin-top:9px"></div>
+          </div>
+        </div>
+
+        <!-- C. MEASUREMENTS -->
+        <details id="dmMeasBlock" style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <summary style="padding:9px 12px;background:rgba(255,255,255,0.02);cursor:pointer;font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">3 · Measurements <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0"> — drive every quantity below</span></summary>
+          <div style="padding:12px">
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <button id="dmPullJob" class="pill-btn" style="font-size:11px">Pull from job data</button>
+              <button id="dmImportMeas" class="pill-btn" style="font-size:11px">Import measurement report</button>
+              <div style="flex:1"></div>
+              <button id="dmRecalc" class="btn-primary" style="font-size:11px;padding:6px 12px">Recalculate quantities</button>
+            </div>
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Roof</div>
+            <div id="dmMeasGrid" style="display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin-bottom:12px"></div>
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Elevations — gutters, screens &amp; beading</div>
+            <div id="dmElevGrid" style="overflow-x:auto"></div>
+          </div>
+        </details>
+
+        <!-- D. SCOPE -->
+        <div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div style="padding:9px 12px;background:rgba(255,255,255,0.02);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">4 · Scope</span>
+            <div style="flex:1"></div>
+            <label style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="dmHideZero" checked style="accent-color:var(--brand-light)">Hide unused lines</label>
+            <label style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="dmOnlyDiff" style="accent-color:var(--brand-light)">Only differences</label>
+            <label style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer" title="Print an elevation with no scope as &quot;Pending reinspection&quot; rather than leaving it off"><input type="checkbox" id="dmPending" style="accent-color:var(--brand-light)">Pending elevations</label>
+            <button id="dmStdList" style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34D399;font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;cursor:pointer">Standard roof build</button>
+          </div>
+          <div id="dmLines" style="padding:6px 10px 12px"></div>
+        </div>
+
+        <!-- E. NOTES -->
+        <div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div style="padding:9px 12px;background:rgba(255,255,255,0.02);display:flex;align-items:center;gap:10px">
+            <span style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">5 · Notes</span>
+            <span style="font-size:10px;color:var(--muted)">numbered on the printed demand</span>
+            <div style="flex:1"></div>
+            <select id="dmAddNote" class="ie-inp" style="width:210px;font-size:10px;padding:4px 6px">
+              <option value="">+ Insert standard note…</option>
+              ${DEMAND_STD_NOTES.map((n,i)=>`<option value="${i}">${esc(n.title)}</option>`).join('')}
+              <option value="blank">Blank note</option>
+            </select>
+          </div>
+          <div id="dmNotes" style="padding:10px 12px"></div>
+        </div>
+      </div>
+
+      <div style="flex:0 0 auto;border-top:1px solid var(--border);padding:10px 18px;display:flex;align-items:center;gap:18px;background:rgba(0,0,0,0.2)">
+        <div id="dmTotals" style="display:flex;gap:20px;align-items:center;flex-wrap:wrap"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const $d = sel => overlay.querySelector(sel);
+  const close = ()=>overlay.remove();
+  $d('#dmClose').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+
+  // ── recompute + render ──
+  function recompare(){
+    const res = demandCompare(D.lines.filter(L=>!L.custom), D.carrier.lines || []);
+    D.lines.filter(L=>L.custom).forEach(L=>{ L.status = L.fromCarrier ? 'match' : 'added'; });
+    extras = res.extras || [];
+    demandApplyPricing(D.lines, D.taxRate);
+  }
+
+  function renderMeta(){
+    const F = [
+      ['insured','Insured'], ['property','Property'], ['carrier','Carrier'], ['administrator','Administrator'],
+      ['adjuster','Adjuster'], ['claimNum','Claim number'], ['policyNum','Policy number'], ['dateOfLoss','Date of loss'],
+      ['typeOfLoss','Type of loss'], ['measurements','Measurements source'], ['estimateDate','Estimate date'], ['estimateType','Estimate type'],
+      ['preparedBy','Prepared by'], ['preparedTitle','Title'], ['preparedPhone','Phone'], ['preparedEmail','Email'],
+    ];
+    $d('#dmMetaGrid').innerHTML = F.map(([k,lab])=>{
+      const type = (k==='dateOfLoss'||k==='estimateDate') ? 'date' : 'text';
+      return `<div><label class="ie-lbl">${lab}</label><input class="ie-inp" data-meta="${k}" type="${type}" value="${esc(D.meta[k]||'')}"></div>`;
+    }).join('');
+    $d('#dmMetaGrid').querySelectorAll('[data-meta]').forEach(el=>{
+      el.addEventListener('input', ()=>{ D.meta[el.dataset.meta] = el.value; });
+    });
+  }
+
+  function renderMeas(){
+    $d('#dmMeasGrid').innerHTML = DEMAND_MEAS_FIELDS.map(([k,lab,u])=>
+      `<div><label class="ie-lbl" style="font-size:9px">${lab} <span style="color:var(--muted)">${u}</span></label><input class="ie-inp" data-meas="${k}" type="text" inputmode="decimal" value="${D.m[k]??''}"></div>`
+    ).join('') + `<div><label class="ie-lbl" style="font-size:9px">Pitch</label><input class="ie-inp" data-meas="pitch" type="text" value="${esc(D.m.pitch||'')}" placeholder="9/12"></div>
+      <div><label class="ie-lbl" style="font-size:9px">Facets</label><input class="ie-inp" data-meas="facets" type="text" inputmode="decimal" value="${D.m.facets??''}"></div>
+      <div><label class="ie-lbl" style="font-size:9px">Steep band</label><input class="ie-inp" data-meas="steepBand" type="text" value="${esc(D.m.steepBand||'')}"></div>
+      <div><label class="ie-lbl" style="font-size:9px">Tax rate %</label><input class="ie-inp" data-taxrate type="text" inputmode="decimal" value="${D.taxRate??8.25}"></div>`;
+    $d('#dmMeasGrid').querySelectorAll('[data-meas]').forEach(el=>{
+      el.addEventListener('input', ()=>{
+        const k = el.dataset.meas;
+        D.m[k] = (k==='pitch'||k==='steepBand') ? el.value : (parseFloat(el.value)||0);
+      });
+    });
+    $d('#dmMeasGrid').querySelector('[data-taxrate]')?.addEventListener('input', e=>{ D.taxRate = parseFloat(e.target.value)||0; });
+
+    const rows = DEMAND_ELEV_FIELDS.map(([k,lab,u])=>
+      `<tr><td style="padding:3px 6px;font-size:10px;color:var(--muted);white-space:nowrap">${lab} <span style="opacity:.6">${u}</span></td>` +
+      DEMAND_ELEVATIONS.map(el=>`<td style="padding:2px 3px"><input class="ie-inp" style="padding:4px 6px;font-size:11px" data-elev="${el}" data-field="${k}" type="text" inputmode="decimal" value="${D.elev[el][k]||''}"></td>`).join('') +
+      `</tr>`).join('');
+    $d('#dmElevGrid').innerHTML = `<table style="width:100%;border-collapse:collapse;min-width:560px">
+      <tr><td></td>${DEMAND_ELEVATIONS.map(e=>`<td style="padding:3px 6px;font-size:10px;font-weight:700;color:var(--brand-light);text-transform:capitalize">${e}</td>`).join('')}</tr>${rows}</table>`;
+    $d('#dmElevGrid').querySelectorAll('[data-elev]').forEach(el=>{
+      el.addEventListener('input', ()=>{ D.elev[el.dataset.elev][el.dataset.field] = parseFloat(el.value)||0; });
+    });
+  }
+
+  function renderCarrier(){
+    const c = D.carrier;
+    $d('#dmCarrierStat').textContent = c.lines?.length
+      ? `${c.lines.length} line items${c.fileName?' · '+c.fileName:''}${c.parsedAt?' · '+new Date(c.parsedAt).toLocaleString():''}`
+      : 'No carrier estimate loaded — every line will read as MISSING.';
+    if(!c.lines?.length){ $d('#dmCarrierList').innerHTML=''; return; }
+    const unbal = c.lines.filter(l=>!l.balanced).length;
+    $d('#dmCarrierList').innerHTML = `
+      <details style="border:1px solid var(--border);border-radius:6px">
+        <summary style="padding:6px 10px;cursor:pointer;font-size:10px;color:var(--muted)">
+          View parsed carrier lines${unbal?` · <span style="color:#FBBF24">${unbal} need a sanity check</span>`:''}
+        </summary>
+        <div style="max-height:230px;overflow:auto;padding:4px 10px 8px">
+          <table style="width:100%;border-collapse:collapse;font-size:10px">
+            ${c.lines.map(l=>`<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+              <td style="padding:3px 4px;color:${l.balanced?'var(--muted)':'#FBBF24'}">${l.balanced?'':'⚠ '}${esc(l.desc)}${l.carrierNote?`<div style="font-size:9px;opacity:.6;font-style:italic">${esc(l.carrierNote)}</div>`:''}${l.removePrice!=null?`<span style="font-size:9px;opacity:.55"> · rem ${money(l.removePrice)} + repl ${money(l.replacePrice)}</span>`:''}</td>
+              <td style="padding:3px 4px;text-align:right;white-space:nowrap;color:#e6edf6">${qfmt(l.qty)} ${esc(l.unit)}</td>
+              <td style="padding:3px 4px;text-align:right;white-space:nowrap;color:var(--muted)">${l.unitPrice!=null?money(l.unitPrice):'—'}</td>
+              <td style="padding:3px 4px;text-align:right;white-space:nowrap;color:#e6edf6">${l.rcv!=null?money(l.rcv):'—'}</td>
+            </tr>`).join('')}
+          </table>
+        </div>
+      </details>
+      ${extras.length?`
+      <div style="margin-top:9px;border:1px solid rgba(251,191,36,0.3);background:rgba(251,191,36,0.05);border-radius:6px;padding:9px 10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:10px;font-weight:700;color:#FBBF24">${extras.length} carrier line${extras.length===1?'':'s'} nothing in your scope claims</span>
+          <span style="font-size:9.5px;color:var(--muted)">they already agreed to these — carry them so the demand isn't short</span>
+          <div style="flex:1"></div>
+          <button id="dmAddAllExtras" style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#FBBF24;font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:5px;cursor:pointer">Add all</button>
+        </div>
+        ${extras.map((x,i)=>`<div style="display:flex;align-items:center;gap:7px;padding:2px 0;font-size:10px">
+          <button data-addextra="${i}" style="background:none;border:1px solid var(--border);color:var(--brand-light);border-radius:4px;font-size:10px;line-height:1;padding:2px 6px;cursor:pointer" title="Add to scope">+</button>
+          <span style="flex:1;color:var(--muted)">${esc(x.desc)}</span>
+          <span style="color:#e6edf6;white-space:nowrap">${qfmt(x.qty)} ${esc(x.unit)}</span>
+          <span style="color:var(--muted);white-space:nowrap;width:74px;text-align:right">${x.rcv!=null?money(x.rcv):'—'}</span>
+        </div>`).join('')}
+      </div>`:''}`;
+    $d('#dmCarrierList').querySelectorAll('[data-addextra]').forEach(btn=>
+      btn.addEventListener('click', ()=>{ addExtraLine(extras[+btn.dataset.addextra]); }));
+    $d('#dmCarrierList').querySelector('#dmAddAllExtras')?.addEventListener('click', ()=>{
+      const all = extras.slice(); all.forEach(x=>addExtraLine(x, true));
+      recompare(); renderAll(); toast(`${all.length} carrier line${all.length===1?'':'s'} added to scope`);
+    });
+  }
+
+  // Pull a carrier line the catalog didn't recognise into the demand as-is.
+  function addExtraLine(x, bulk){
+    if(!x) return;
+    D.lines.push({
+      id: demandNewId(), sec: x.section || 'roof',
+      elev: DEMAND_ELEVATIONS.includes(x.section) ? x.section : null,
+      catKey: null, desc: x.desc, qty: x.qty, unit: x.unit,
+      unitPrice: x.unitPrice ?? 0, priceSource: 'carrier', mat: 0.45,
+      tax: x.tax || 0, taxManual: true, checked: true,
+      status: 'match', note: '', custom: true, fromCarrier: true,
+      carrierRef: { desc:x.desc, qty:x.qty, unit:x.unit, unitPrice:x.unitPrice,
+                    tax:x.tax, rcv:x.rcv, carrierNote:x.carrierNote||'', score:1 },
+    });
+    if(!bulk){ recompare(); renderAll(); toast('Added to scope'); }
+  }
+
+  function lineRow(L){
+    const st = DEMAND_STATUS_META[L.status] || DEMAND_STATUS_META['missing'];
+    const flagged = demandIsFlagged(L);
+    const ref = L.carrierRef;
+    const shortBy = (L.status==='qty-short' && ref) ? ((parseFloat(L.qty)||0) - (ref.qty||0)) : 0;
+    const overBy  = (L.status==='qty-over'  && ref) ? ((ref.qty||0) - (parseFloat(L.qty)||0)) : 0;
+    return `<div data-row="${L.id}" style="border-bottom:1px solid rgba(255,255,255,0.05);padding:5px 0">
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" data-chk="${L.id}" ${L.checked?'checked':''} style="accent-color:var(--brand-light);flex:0 0 auto">
+        <input class="ie-inp" data-desc="${L.id}" value="${esc(L.desc)}" style="flex:1 1 auto;min-width:120px;padding:4px 7px;font-size:11px;${flagged&&L.checked?'font-weight:700':''}">
+        <input class="ie-inp" data-qty="${L.id}" value="${L.qty??''}" inputmode="decimal" style="width:68px;padding:4px 6px;font-size:11px;text-align:right">
+        <input class="ie-inp" data-unit="${L.id}" value="${esc(L.unit)}" style="width:42px;padding:4px 5px;font-size:11px;text-align:center">
+        <input class="ie-inp" data-price="${L.id}" value="${L.unitPrice??''}" inputmode="decimal" style="width:74px;padding:4px 6px;font-size:11px;text-align:right" title="${L.priceSource==='carrier'?'Carrier’s own unit price':(L.priceSource==='manual'?'Typed by hand':'House price list')}">
+        <span style="width:10px;font-size:10px;text-align:center;color:${L.priceSource==='carrier'?'#34D399':(L.priceSource==='manual'?'#A78BFA':'#FBBF24')}" title="${L.priceSource==='carrier'?'carrier price':(L.priceSource==='manual'?'manual':'house list')}">${L.priceSource==='carrier'?'●':(L.priceSource==='manual'?'✎':'†')}</span>
+        <input class="ie-inp" data-tax="${L.id}" value="${L.tax??''}" inputmode="decimal" style="width:62px;padding:4px 6px;font-size:11px;text-align:right">
+        <span data-rcv="${L.id}" style="width:86px;text-align:right;font-size:11px;font-variant-numeric:tabular-nums;color:#e6edf6">${money(L.rcv)}</span>
+        <button data-tbd="${L.id}" title="Mark quantity to be confirmed at reinspection (prints ‡)" style="width:17px;flex:0 0 auto;background:none;border:1px solid ${L.tbd?'var(--brand-light)':'transparent'};border-radius:3px;color:${L.tbd?'var(--brand-light)':'#3f4a5e'};cursor:pointer;font-size:11px;font-weight:700;padding:1px 0">&Dagger;</button>
+        <span style="width:62px;text-align:center;font-size:8.5px;font-weight:700;letter-spacing:.03em;padding:2px 0;border-radius:3px;color:${st.color};background:${st.bg}">${st.label}</span>
+        <button data-del="${L.id}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 3px;flex:0 0 auto" title="Remove line">×</button>
+      </div>
+      ${ref?`<div style="margin-left:24px;font-size:9.5px;color:var(--muted);margin-top:2px">
+          carrier: ${qfmt(ref.qty)} ${esc(ref.unit||'')} @ ${ref.unitPrice!=null?money(ref.unitPrice):'—'}${ref.rcv!=null?' = '+money(ref.rcv):''}
+          ${shortBy>0?`<span style="color:#FBBF24;font-weight:700"> · short ${qfmt(shortBy)} ${esc(L.unit)}</span>`:''}
+          ${overBy>0?`<span style="color:#60C4FF;font-weight:700"> · they allow ${qfmt(overBy)} ${esc(L.unit)} more — raise ours?</span>`:''}
+          ${L.qtyFromCarrier?`<span style="color:#60C4FF"> · qty taken from their file (no measurement for it)</span>`:''}
+          <span style="opacity:.55"> · "${esc(ref.desc.slice(0,54))}"</span>
+          ${ref.carrierNote?`<div style="opacity:.6;font-style:italic">their note: ${esc(ref.carrierNote)}</div>`:''}
+        </div>`:''}
+      ${(flagged||L.note)?`<div style="margin-left:24px;margin-top:3px;display:flex;align-items:center;gap:5px">
+          <span style="font-size:9px;color:var(--muted);flex:0 0 auto">Note to adjuster</span>
+          <input class="ie-inp" data-note="${L.id}" value="${esc(L.note||'')}" placeholder="Why this line belongs in the scope — prints under the line item" style="flex:1;padding:3px 7px;font-size:10px">
+        </div>`:''}
+    </div>`;
+  }
+
+  function renderLines(){
+    const hideZero = $d('#dmHideZero').checked;
+    const onlyDiff = $d('#dmOnlyDiff').checked;
+    const visible = L => {
+      if(onlyDiff && !demandIsFlagged(L)) return false;
+      if(hideZero && !L.checked && !(parseFloat(L.qty)>0)) return false;
+      return true;
+    };
+    const catOpts = DEMAND_CATALOG.map(c=>`<option value="${c.key}">${esc(c.desc({steepBand:''},{}))}</option>`).join('');
+    let html = `<div style="display:flex;align-items:center;gap:6px;padding:4px 0 6px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)">
+      <span style="width:13px"></span><span style="flex:1">Description</span><span style="width:68px;text-align:right">Qty</span>
+      <span style="width:42px;text-align:center">Unit</span><span style="width:74px;text-align:right">Unit $</span><span style="width:10px"></span>
+      <span style="width:62px;text-align:right">Tax</span><span style="width:86px;text-align:right">RCV</span>
+      <span style="width:17px"></span><span style="width:62px;text-align:center">Status</span><span style="width:19px"></span></div>`;
+
+    DEMAND_SECTIONS.forEach(S=>{
+      // Every section always renders its header and "add line" control, so an
+      // empty elevation can still be scoped by hand.
+      const rows = D.lines.filter(L=>L.sec===S.key);
+      const shown = rows.filter(visible);
+      const secTot = rows.filter(r=>r.checked).reduce((a,r)=>a+(parseFloat(r.rcv)||0),0);
+      html += `<div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;font-weight:700;color:var(--brand-light);text-transform:uppercase;letter-spacing:.04em">${esc(S.label)}</span>
+        <span style="flex:1;height:1px;background:var(--border)"></span>
+        <span style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums">${money(secTot)}</span>
+        <select data-addto="${S.key}" class="ie-inp" style="width:150px;font-size:9.5px;padding:2px 5px"><option value="">+ add line…</option>${catOpts}<option value="__custom">Custom line…</option></select>
+      </div>`;
+      html += shown.map(lineRow).join('') ||
+        `<div style="font-size:10px;color:var(--muted);padding:5px 0 3px;font-style:italic">${rows.some(r=>r.checked)?'Lines hidden by a filter above.':'Nothing scoped here'+(DEMAND_ELEVATIONS.includes(S.key)?' — prints as \u201cPending reinspection\u201d.':'.')} Use <b style="font-style:normal">+ add line</b> to scope it.</div>`;
+    });
+    $d('#dmLines').innerHTML = html;
+    wireLines();
+    renderTotals();
+  }
+
+  function wireLines(){
+    const box = $d('#dmLines');
+    const find = id => D.lines.find(L=>L.id===id);
+    const reprice = L => {
+      const qty = parseFloat(L.qty)||0, up = parseFloat(L.unitPrice)||0;
+      if(!L.taxManual) L.tax = Math.round(qty*up*(L.mat??0.45)*((parseFloat(D.taxRate)||0)/100)*100)/100;
+      L.rcv = Math.round((qty*up + (parseFloat(L.tax)||0))*100)/100;
+      const rc = box.querySelector(`[data-rcv="${L.id}"]`); if(rc) rc.textContent = money(L.rcv);
+      const tx = box.querySelector(`[data-tax="${L.id}"]`); if(tx && !L.taxManual) tx.value = L.tax;
+      renderTotals();
+    };
+    box.querySelectorAll('[data-chk]').forEach(el=>el.addEventListener('change',()=>{ find(el.dataset.chk).checked = el.checked; renderLines(); }));
+    box.querySelectorAll('[data-desc]').forEach(el=>el.addEventListener('input',()=>{ find(el.dataset.desc).desc = el.value; }));
+    box.querySelectorAll('[data-note]').forEach(el=>el.addEventListener('input',()=>{ find(el.dataset.note).note = el.value; }));
+    box.querySelectorAll('[data-unit]').forEach(el=>el.addEventListener('input',()=>{ find(el.dataset.unit).unit = el.value.toUpperCase(); }));
+    box.querySelectorAll('[data-qty]').forEach(el=>el.addEventListener('input',()=>{ const L=find(el.dataset.qty); L.qty = parseFloat(el.value)||0; reprice(L); }));
+    box.querySelectorAll('[data-price]').forEach(el=>el.addEventListener('input',()=>{ const L=find(el.dataset.price); L.unitPrice = parseFloat(el.value)||0; L.priceSource='manual'; reprice(L); }));
+    box.querySelectorAll('[data-tax]').forEach(el=>el.addEventListener('input',()=>{ const L=find(el.dataset.tax); L.tax = parseFloat(el.value)||0; L.taxManual=true; reprice(L); }));
+    box.querySelectorAll('[data-tbd]').forEach(el=>el.addEventListener('click',()=>{ const L=find(el.dataset.tbd); L.tbd=!L.tbd; renderLines(); }));
+    box.querySelectorAll('[data-del]').forEach(el=>el.addEventListener('click',()=>{ D.lines = D.lines.filter(L=>L.id!==el.dataset.del); renderLines(); }));
+    box.querySelectorAll('[data-addto]').forEach(sel=>sel.addEventListener('change',()=>{
+      const secKey = sel.dataset.addto, v = sel.value; sel.value='';
+      if(!v) return;
+      if(v==='__custom'){
+        D.lines.push({ id:demandNewId(), sec:secKey, elev:DEMAND_ELEVATIONS.includes(secKey)?secKey:null, catKey:null,
+          desc:'', qty:0, unit:'EA', unitPrice:0, priceSource:'manual', mat:0.45, tax:0, checked:true,
+          status:'added', note:'', carrierRef:null, custom:true });
+      } else {
+        const c = DEMAND_CAT_BY_KEY[v]; if(!c) return;
+        const e = DEMAND_ELEVATIONS.includes(secKey) ? D.elev[secKey] : {};
+        D.lines.push({ id:demandNewId(), sec:secKey, elev:DEMAND_ELEVATIONS.includes(secKey)?secKey:null, catKey:c.key,
+          desc:c.desc(D.m,e), qty:Math.round((c.calc(D.m,e)||0)*100)/100, unit:c.unit,
+          unitPrice:PL.prices[c.key]??c.price, priceSource:'house', mat:c.mat??0.45, tax:0, checked:true,
+          status:'', note:'', carrierRef:null, custom:false });
+        recompare();
+      }
+      renderLines();
+    }));
+  }
+
+  function renderNotes(){
+    $d('#dmNotes').innerHTML = D.notes.length ? D.notes.map((n,i)=>`
+      <div style="display:flex;gap:7px;margin-bottom:7px;align-items:flex-start">
+        <span style="font-size:10px;color:var(--muted);padding-top:7px;width:14px;text-align:right">${i+1}.</span>
+        <div style="flex:1">
+          <input class="ie-inp" data-ntitle="${i}" value="${esc(n.title)}" placeholder="Note heading" style="font-size:10px;padding:4px 7px;font-weight:700;margin-bottom:3px">
+          <textarea class="ie-inp" data-nbody="${i}" style="width:100%;height:52px;font-size:10px;padding:5px 7px;resize:vertical">${esc(n.body)}</textarea>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;padding-top:4px">
+          <button data-nup="${i}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px">▲</button>
+          <button data-ndel="${i}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px">×</button>
+        </div>
+      </div>`).join('')
+      : `<div style="font-size:10px;color:var(--muted)">No notes yet. Notes carry the argument — why a line belongs, what the carrier's letter says, what stays open. Add one from the menu above.</div>`;
+    $d('#dmNotes').querySelectorAll('[data-ntitle]').forEach(el=>el.addEventListener('input',()=>{ D.notes[+el.dataset.ntitle].title = el.value; }));
+    $d('#dmNotes').querySelectorAll('[data-nbody]').forEach(el=>el.addEventListener('input',()=>{ D.notes[+el.dataset.nbody].body = el.value; }));
+    $d('#dmNotes').querySelectorAll('[data-ndel]').forEach(el=>el.addEventListener('click',()=>{ D.notes.splice(+el.dataset.ndel,1); renderNotes(); }));
+    $d('#dmNotes').querySelectorAll('[data-nup]').forEach(el=>el.addEventListener('click',()=>{
+      const i=+el.dataset.nup; if(i<1) return;
+      const t=D.notes[i-1]; D.notes[i-1]=D.notes[i]; D.notes[i]=t; renderNotes();
+    }));
+  }
+
+  function renderTotals(){
+    const t = demandTotals(D.lines, D.carrier.lines);
+    const cell = (lab,val,color,tip)=>`<div${tip?` title="${esc(tip)}"`:''}><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-size:15px;font-weight:700;color:${color||'#fff'};font-variant-numeric:tabular-nums">${val}</div></div>`;
+    $d('#dmTotals').innerHTML =
+      cell('Demand total', money(t.rcv)) +
+      cell('Carrier file', money(t.carrierFile), 'var(--muted)', 'Every line item parsed from the carrier estimate') +
+      cell('The ask', money(t.delta), t.delta>0?'#34D399':'var(--muted)', 'Demand total less the carrier file total') +
+      cell('Missing', String(t.missing), t.missing?'#F87171':'var(--muted)') +
+      cell('Short', String(t.short), t.short?'#FBBF24':'var(--muted)') +
+      cell('Lines', String(t.count), 'var(--muted)');
+  }
+
+  function renderAll(){ renderCarrier(); renderLines(); renderTotals(); }
+
+  // ── carrier estimate loading ──
+  async function loadCarrierText(text, fileName){
+    const lines = parseCarrierEstimate(text);
+    if(!lines.length){ toast('No line items found in that file — try pasting the scope text instead'); return; }
+    D.carrier = { fileName: fileName||'', parsedAt: new Date().toISOString(), lines };
+    recompare();
+    renderAll();
+    const bal = lines.filter(l=>l.balanced).length;
+    toast(`Parsed ${lines.length} carrier lines (${bal} verified)`);
+  }
+
+  $d('#dmUpload').addEventListener('click', ()=>{
+    const inp = document.createElement('input');
+    inp.type='file'; inp.accept='.pdf,application/pdf,.txt';
+    inp.addEventListener('change', async ()=>{
+      const f = inp.files?.[0]; if(!f) return;
+      toast('Reading carrier estimate…');
+      try {
+        const text = await demandReadPdf(f);
+        if(!text || text.trim().length < 40){
+          toast('That PDF has no text layer — paste the line items instead');
+          $d('#dmPasteWrap').style.display='block'; return;
+        }
+        await loadCarrierText(text, f.name);
+      } catch(e){ console.error('[demand] carrier read', e); toast('Could not read that PDF — try pasting the text'); $d('#dmPasteWrap').style.display='block'; }
+    });
+    inp.click();
+  });
+  $d('#dmPasteBtn').addEventListener('click', ()=>{
+    const w = $d('#dmPasteWrap'); w.style.display = w.style.display==='none' ? 'block' : 'none';
+  });
+  $d('#dmParsePaste').addEventListener('click', ()=>{
+    const txt = $d('#dmPasteText').value;
+    if(!txt.trim()){ toast('Paste the line items first'); return; }
+    loadCarrierText(txt, 'pasted text');
+  });
+  $d('#dmFromJob').addEventListener('click', async ()=>{
+    const files = [].concat(j.lossFiles||[], j.otherFiles||[]).filter(f=>/\.pdf$/i.test(f.name||''));
+    if(!files.length){ toast('No PDFs attached to this job'); return; }
+    const pick = prompt('Which file?\n\n' + files.map((f,i)=>`${i+1}. ${f.name}`).join('\n') + '\n\nEnter a number:');
+    const idx = parseInt(pick,10)-1;
+    if(!(idx>=0 && idx<files.length)) return;
+    try {
+      toast('Reading…');
+      const resp = await fetch(files[idx].url);
+      const blob = await resp.blob();
+      const text = await demandReadPdf(new File([blob], files[idx].name, {type:'application/pdf'}));
+      await loadCarrierText(text, files[idx].name);
+    } catch(e){ console.error(e); toast('Could not read that file'); }
+  });
+
+  // ── measurements ──
+  $d('#dmPullJob').addEventListener('click', ()=>{
+    const def = demandDefaultMeasurements(j);
+    Object.assign(D.m, def.m);
+    if(!D.meta.measurements) D.meta.measurements = j.roofEstimate?.source==='roofr' ? 'Roofr report' : 'Job measurements';
+    renderMeas(); renderMeta();
+    toast('Measurements pulled from job');
+  });
+  $d('#dmImportMeas').addEventListener('click', ()=>{
+    const inp = document.createElement('input');
+    inp.type='file'; inp.accept='.pdf,application/pdf,.txt';
+    inp.addEventListener('change', async ()=>{
+      const f = inp.files?.[0]; if(!f) return;
+      toast('Reading measurement report…');
+      try {
+        const text = await demandReadPdf(f);
+        const p = parseMeasurementReport(text);
+        const hits = demandApplyReport(p, D.m);
+        if(!hits.length){ toast('Could not read measurements from that file'); return; }
+        D.meta.measurements = demandReportLabel(text, f.name);
+        renderMeas(); renderMeta();
+        toast(`Imported ${hits.length} measurements — hit Recalculate`);
+      } catch(e){ console.error('[demand] measurement read', e); toast('Could not read that report'); }
+    });
+    inp.click();
+  });
+  $d('#dmRecalc').addEventListener('click', ()=>{
+    // Rebuild catalog-driven quantities, keeping checked state, notes and manual edits.
+    const prev = {};
+    D.lines.forEach(L=>{ if(!L.custom) prev[(L.elev||'')+'|'+L.catKey] = L; });
+    const fresh = demandBuildLines(D.m, D.elev, PL);
+    fresh.forEach(F=>{
+      const old = prev[(F.elev||'')+'|'+F.catKey];
+      if(old && old.fromCarrier) return;
+      if(old){
+        F.id = old.id; F.note = old.note; F.checked = old.checked || F.qty>0;
+        if(old.priceSource==='manual'){ F.unitPrice = old.unitPrice; F.priceSource='manual'; }
+        if(old.taxManual){ F.tax = old.tax; F.taxManual = true; }
+        if(old.tbd) F.tbd = true;
+        if(old.descEdited) F.desc = old.desc;
+      }
+    });
+    D.lines = fresh.concat(D.lines.filter(L=>L.custom));
+    recompare(); renderLines();
+    toast('Quantities recalculated');
+  });
+
+  // ── standard roof build ──
+  $d('#dmStdList').addEventListener('click', ()=>{
+    let n=0;
+    D.lines.forEach(L=>{
+      const c = L.catKey ? DEMAND_CAT_BY_KEY[L.catKey] : null;
+      if(c && c.std && !L.checked){ L.checked = true; n++; }
+    });
+    renderLines();
+    toast(n ? `${n} standard line${n===1?'':'s'} switched on` : 'All standard lines already on');
+  });
+
+  // ── notes ──
+  $d('#dmAddNote').addEventListener('change', e=>{
+    const v = e.target.value; e.target.value='';
+    if(!v) return;
+    if(v==='blank'){ D.notes.push({ title:'', body:'' }); }
+    else {
+      const s = DEMAND_STD_NOTES[+v];
+      D.notes.push({ title:s.title.toUpperCase(), body: demandFillNote(s.body, D.m, D.meta) });
+    }
+    renderNotes();
+  });
+
+  $d('#dmPending').checked = D.showPending !== false;
+  $d('#dmPending').addEventListener('change', e=>{ D.showPending = e.target.checked; });
+  $d('#dmHideZero').addEventListener('change', renderLines);
+  $d('#dmOnlyDiff').addEventListener('change', renderLines);
+
+  // ── save / print / price list ──
+  $d('#dmSave').addEventListener('click', ()=>{
+    D.updatedAt = new Date().toISOString();
+    j.demandEstimate = demandPruneForSave(D);
+    demandSaveMirror(j, j.demandEstimate);
+    saveToStorage();
+    if(typeof logActivity==='function'){
+      const t = demandTotals(D.lines, D.carrier.lines);
+      logActivity(j, 'estimate', 'Demand estimate saved', `${t.count} lines · ${money(t.rcv)}${t.missing?` · ${t.missing} missing from carrier`:''}`);
+    }
+    if(typeof renderDetailPanel==='function') renderDetailPanel();
+    toast('Demand estimate saved to job');
+  });
+  $d('#dmPrint').addEventListener('click', ()=>{
+    D.updatedAt = new Date().toISOString();
+    j.demandEstimate = demandPruneForSave(D);
+    demandSaveMirror(j, j.demandEstimate); saveToStorage();
+    printDemandEstimate(j, D);
+  });
+  $d('#dmPrices').addEventListener('click', ()=>openDemandPriceEditor(()=>{ recompare(); renderLines(); }));
+
+  // ── first paint ──
+  recompare();
+  renderMeta(); renderMeas(); renderAll(); renderNotes();
+  if(!D.carrier.lines?.length) $d('#dmMeasBlock').open = true;
+  // On a first run the claim header is worth seeing — it prints at the top.
+  if(!D.updatedAt) $d('#dmMetaBlock').open = true;
+}
+window.openDemandEstimate = openDemandEstimate;
+
+// ── PRICE LIST EDITOR ─────────────────────────────────────────────────────────
+function openDemandPriceEditor(onSaved){
+  const esc = window.escapeHtml || (s=>String(s==null?'':s));
+  const PL = demandPriceList || demandSeedPrices();
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:600px;max-width:100%;max-height:90vh;display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Demand Price List</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Fallback unit prices for lines the carrier's file doesn't carry. Shared with the team.</div>
+        </div>
+        <button id="dpClose" class="icon-btn"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:12px 18px;overflow:auto;flex:1">
+        <div style="margin-bottom:10px"><label class="ie-lbl">Sales tax rate %</label><input class="ie-inp" id="dpTax" style="width:110px" value="${PL.taxRate??8.25}"></div>
+        ${DEMAND_SECTIONS.concat([{key:'elev',label:'Gutters, Screens & Beading'}]).map(S=>{
+          const items = DEMAND_CATALOG.filter(c=>c.sec===S.key);
+          if(!items.length) return '';
+          return `<div style="font-size:10px;font-weight:700;color:var(--brand-light);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 5px">${esc(S.label)}</div>` +
+            items.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0">
+              <span style="flex:1;font-size:10.5px;color:var(--muted)">${esc(c.desc({steepBand:''},{}))}</span>
+              <span style="font-size:9px;color:var(--muted);width:24px">${c.unit}</span>
+              <input class="ie-inp" data-price-key="${c.key}" value="${PL.prices[c.key]??c.price}" style="width:86px;padding:3px 6px;font-size:11px;text-align:right">
+            </div>`).join('');
+        }).join('')}
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button id="dpReset" class="btn-cancel" style="font-size:11px;padding:7px 12px">Reset to defaults</button>
+        <button id="dpSave" class="btn-primary" style="font-size:11px;padding:7px 14px">Save for team</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.querySelector('#dpClose').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
+  overlay.querySelector('#dpReset').addEventListener('click',()=>{
+    demandPriceList = demandSeedPrices();
+    overlay.querySelectorAll('[data-price-key]').forEach(el=>{ el.value = demandPriceList.prices[el.dataset.priceKey]; });
+    overlay.querySelector('#dpTax').value = demandPriceList.taxRate;
+  });
+  overlay.querySelector('#dpSave').addEventListener('click',async ()=>{
+    demandPriceList = demandPriceList || demandSeedPrices();
+    overlay.querySelectorAll('[data-price-key]').forEach(el=>{
+      const v = parseFloat(el.value); if(isFinite(v)) demandPriceList.prices[el.dataset.priceKey] = v;
+    });
+    const tr = parseFloat(overlay.querySelector('#dpTax').value);
+    if(isFinite(tr)) demandPriceList.taxRate = tr;
+    await saveDemandPriceList();
+    close();
+    if(typeof onSaved==='function') onSaved();
+  });
+}
+window.openDemandPriceEditor = openDemandPriceEditor;
+
+// ── PRINTED DEMAND ESTIMATE ───────────────────────────────────────────────────
+// Reproduces the Tran_Estimate layout. Lines the carrier is missing or short on
+// print in bold with a † / ‡ marker and their note underneath.
+function printDemandEstimate(j, D){
+  const esc = window.escapeHtml || (s=>String(s==null?'':s));
+  const ci = (typeof getCompanyInfo==='function') ? getCompanyInfo() : {};
+  const accent = '#1a3a6a';
+  const M = D.meta || {};
+  const money = n => (Math.round((parseFloat(n)||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const qfmt  = n => (Math.round((parseFloat(n)||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const dfmt  = s => { if(!s) return ''; const d=new Date(String(s).length<=10? s+'T12:00:00' : s); return isNaN(d)?String(s):d.toLocaleDateString('en-US'); };
+  const longDate = s => { if(!s) return ''; const d=new Date(String(s).length<=10? s+'T12:00:00' : s); return isNaN(d)?String(s):d.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}); };
+
+  const win = window.open('','_blank');
+  if(!win){ toast('Allow pop-ups to print the demand estimate'); return; }
+
+  const active = (D.lines||[]).filter(L=>L.checked && (parseFloat(L.qty)>0 || L.status==='added'));
+  const showPending = D.showPending !== false;
+
+  // Build the body section by section, numbering line items continuously.
+  let n = 0, gTax = 0, gRcv = 0, usedDagger = false, usedDbl = false;
+  let rows = '';
+  DEMAND_SECTIONS.forEach(S=>{
+    const secLines = active.filter(L=>L.sec===S.key);
+    const isElev = DEMAND_ELEVATIONS.includes(S.key);
+    if(!secLines.length){
+      // Never print "no damage found" for an elevation — print it as pending.
+      if(isElev && showPending){
+        rows += `<tr class="de-sec"><td colspan="6">${esc(S.label)}</td></tr>
+          <tr><td></td><td class="de-pending">Pending reinspection — see notes</td><td></td><td></td><td class="de-r">0.00</td><td class="de-r">0.00</td></tr>`;
+      }
+      return;
+    }
+    rows += `<tr class="de-sec"><td colspan="6">${esc(S.label)}</td></tr>`;
+    let sTax = 0, sRcv = 0;
+    secLines.forEach(L=>{
+      n++;
+      const tax = parseFloat(L.tax)||0, rcv = parseFloat(L.rcv)||0;
+      sTax += tax; sRcv += rcv;
+      const flagged = demandIsFlagged(L);
+      const dagger = (L.status==='missing' || L.status==='added') ? ' <span class="de-mk">&dagger;</span>' : '';
+      const dbl    = L.tbd ? ' <span class="de-mk">&Dagger;</span>' : '';
+      if(dagger) usedDagger = true;
+      if(dbl) usedDbl = true;
+      const shortBy = (L.status==='qty-short' && L.carrierRef) ? (parseFloat(L.qty)||0) - (L.carrierRef.qty||0) : 0;
+      rows += `<tr class="${flagged?'de-flag':''}">
+        <td class="de-n">${n}</td>
+        <td>${esc(L.desc)}${dbl}${dagger}${shortBy>0?` <span class="de-delta">(carrier carries ${qfmt(L.carrierRef.qty)} ${esc(L.unit)} — short ${qfmt(shortBy)})</span>`:''}
+          ${L.note?`<div class="de-note">${esc(L.note)}</div>`:''}</td>
+        <td class="de-r">${qfmt(L.qty)} ${esc(L.unit)}</td>
+        <td class="de-r">${money(L.unitPrice)}</td>
+        <td class="de-r">${money(tax)}</td>
+        <td class="de-r">${money(rcv)}</td>
+      </tr>`;
+    });
+    gTax += sTax; gRcv += sRcv;
+    rows += `<tr class="de-tot"><td></td><td></td><td></td><td class="de-r">Totals:&nbsp; ${esc(S.label)}</td><td class="de-r">${money(sTax)}</td><td class="de-r">${money(sRcv)}</td></tr>`;
+  });
+
+  const notes = (D.notes||[]).filter(x=>(x.title||'').trim() || (x.body||'').trim());
+  const legend =
+    (usedDbl ? `<div class="de-leg">&Dagger;&nbsp; Quantity to be confirmed at reinspection.</div>` : '') +
+    (usedDagger ? `<div class="de-leg">&dagger;&nbsp; Scope item not present on the carrier's comparison file. Unit price to be confirmed against the current price list.</div>` : '');
+
+  const metaRow = (l1,v1,l2,v2) =>
+    `<tr><td class="de-ml">${l1}</td><td class="de-mv">${esc(v1||'')}</td><td class="de-ml">${l2}</td><td class="de-mv">${esc(v2||'')}</td></tr>`;
+
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Demand Estimate${M.insured?' - '+esc(M.insured):''}${M.claimNum?' - '+esc(M.claimNum):''}</title>
+<style>
+  @page{size:letter;margin:0.5in}
+  *{box-sizing:border-box}
+  body{font-family:'Helvetica Neue',Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:9pt;line-height:1.35}
+  .de-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:9}
+  @media print{.de-print-btn{display:none}}
+
+  .de-head{display:flex;align-items:center;gap:16px;padding-bottom:14px}
+  .de-logo{height:86px;width:auto;max-width:130px;object-fit:contain}
+  .de-co{font-size:8pt;line-height:1.55;color:#444}
+  .de-co .de-tag{font-style:italic;color:#555;margin-bottom:2px}
+  .de-rule{border-top:2.5pt solid ${accent};margin-bottom:16px}
+
+  h1{font-size:13pt;font-weight:800;color:${accent};text-transform:uppercase;letter-spacing:.02em;margin:0 0 12px}
+
+  table.de-meta{width:100%;border-collapse:collapse;margin-bottom:16px}
+  table.de-meta td{padding:2.5px 0;vertical-align:top;font-size:8.5pt}
+  .de-ml{font-weight:700;color:${accent};width:14%;white-space:nowrap;padding-right:6px!important}
+  .de-mv{width:36%;padding-right:14px!important}
+
+  table.de-items{width:100%;border-collapse:collapse}
+  table.de-items th{background:${accent};color:#fff;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:5px 6px;text-align:right}
+  table.de-items th:nth-child(1){text-align:center;width:22px}
+  table.de-items th:nth-child(2){text-align:left}
+  table.de-items td{padding:4px 6px;font-size:8.5pt;border-bottom:.5pt solid #e3e7ee;vertical-align:top}
+  .de-r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .de-n{text-align:center;color:#666;font-size:8pt;width:22px}
+  th:nth-child(3),td:nth-child(3){width:78px}
+  th:nth-child(4),td:nth-child(4){width:62px}
+  th:nth-child(5),td:nth-child(5){width:58px}
+  th:nth-child(6),td:nth-child(6){width:78px}
+
+  tr.de-sec td{background:#e4eaf3;color:${accent};font-weight:700;font-size:8pt;text-transform:uppercase;letter-spacing:.04em;padding:4px 6px;border-bottom:.5pt solid #cfd8e6}
+  tr.de-tot td{background:#f4f6fa;font-weight:700;font-size:8.5pt;border-bottom:.5pt solid #cfd8e6;border-top:.5pt solid #cfd8e6}
+  tr.de-flag td{font-weight:700;background:#fcfcfd}
+  tr.de-flag td:nth-child(2){font-weight:700}
+  .de-mk{color:${accent};font-weight:700}
+  .de-delta{font-weight:400;font-size:7.5pt;color:#555}
+  .de-note{font-weight:400;font-size:7.5pt;color:#333;font-style:italic;margin-top:2px;padding-left:2px;border-left:2px solid #cfd8e6;padding-left:6px}
+  .de-pending{font-style:italic;color:#666}
+  tr.de-grand td{background:${accent};color:#fff;font-weight:700;font-size:9pt;padding:7px 6px;border:none}
+
+  .de-notes{margin-top:22px;page-break-inside:avoid}
+  .de-notes h2{font-size:8pt;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px}
+  .de-leg{font-size:7.5pt;color:#555;margin-bottom:4px}
+  .de-note-item{margin-top:14px;font-size:8.5pt;line-height:1.6}
+  .de-note-item b{color:#111}
+  .de-foot{margin-top:28px;font-size:8pt;color:#555;border-top:.5pt solid #ddd;padding-top:8px}
+</style></head><body>
+<button class="de-print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
+
+<div class="de-head">
+  ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="de-logo">`:''}
+  <div class="de-co">
+    <div class="de-tag">${esc(ci.tagline||'Storm Damage Experts')}</div>
+    ${esc(ci.address||'')}${ci.cityStateZip?', '+esc(ci.cityStateZip):''}${ci.phone?' &nbsp;•&nbsp; '+esc(ci.phone):''}<br>
+    ${ci.email?esc(ci.email):''}${(ci.website||'stormshieldproroofing.com')?' &nbsp;•&nbsp; '+esc(ci.website||'stormshieldproroofing.com'):''}
+  </div>
+</div>
+<div class="de-rule"></div>
+
+<h1>Contractor Demand Estimate</h1>
+
+<table class="de-meta">
+  ${metaRow('Insured:', M.insured, 'Claim Number:', M.claimNum)}
+  ${metaRow('Property:', M.property, 'Policy Number:', M.policyNum)}
+  ${metaRow('Carrier:', M.carrier, 'Date of Loss:', dfmt(M.dateOfLoss))}
+  ${metaRow('Administrator:', M.administrator, 'Type of Loss:', M.typeOfLoss)}
+  ${metaRow('Adjuster:', M.adjuster, 'Measurements:', M.measurements)}
+  ${metaRow('Date:', longDate(M.estimateDate), 'Estimate Type:', M.estimateType)}
+</table>
+
+<table class="de-items">
+  <thead><tr><th>#</th><th>Description</th><th>Quantity</th><th>Unit</th><th>Tax</th><th>RCV</th></tr></thead>
+  <tbody>
+    ${rows || '<tr><td colspan="6" style="padding:14px;text-align:center;color:#888">No line items selected.</td></tr>'}
+    <tr class="de-grand"><td></td><td></td><td></td><td class="de-r">Line Item Totals — Priced Scope</td><td class="de-r">${money(gTax)}</td><td class="de-r">${money(gRcv)}</td></tr>
+  </tbody>
+</table>
+
+${(legend || notes.length) ? `<div class="de-notes">
+  <h2>Notes</h2>
+  ${legend}
+  ${notes.map((x,i)=>`<div class="de-note-item">${i+1}.&nbsp; ${x.title?`<b>${esc(x.title.toUpperCase())}</b> — `:''}${esc(x.body).replace(/\n/g,'<br>')}</div>`).join('')}
+</div>` : ''}
+
+<div class="de-foot">
+  Prepared by: ${esc(M.preparedBy||'')}${M.preparedTitle?', '+esc(M.preparedTitle):''} — ${esc(ci.name||'')}
+  ${M.preparedPhone?' &nbsp;|&nbsp; '+esc(M.preparedPhone):''}${M.preparedEmail?' &nbsp;|&nbsp; '+esc(M.preparedEmail):''}
+</div>
+</body></html>`);
+  win.document.close();
+}
+window.printDemandEstimate = printDemandEstimate;
+
 
 // Initial sync of USERS (in case team storage has different members than the hardcoded USERS list)
 saveTeam();
