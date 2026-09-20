@@ -5763,14 +5763,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
           <!-- Overhead -->
           <div class="dp-card" id="overheadCard" style="margin-top:4px;margin-bottom:8px">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div id="ovHeader" style="display:flex;align-items:center;justify-content:space-between;gap:8px${canEditJobFinancials()?';cursor:pointer':''}">
               <div style="display:flex;align-items:center;gap:5px">
                 <span style="font-size:12px;font-weight:700;color:var(--brand)">Overhead (<span id="overheadPctLabel">${jobOverheadFlat(j)!=null?'Flat':(jobOverheadPct(j)+'%')}</span>)</span>
                 ${canEditJobFinancials()?'':`<i class="ti ti-lock" title="Only admins and managers can change overhead" style="font-size:12px;color:var(--muted)" aria-hidden="true"></i>`}
               </div>
-              <span style="font-size:13px;font-weight:700;color:#FFFFFF" id="overheadAmt">$0.00</span>
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="font-size:13px;font-weight:700;color:#FFFFFF" id="overheadAmt">$0.00</span>
+                ${canEditJobFinancials()?`<i class="ti ti-chevron-down acc-chev" id="ovChev" style="margin-left:0" aria-hidden="true"></i>`:''}
+              </div>
             </div>
             ${canEditJobFinancials()?`
+            <div id="ovBody" style="display:none">
             <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
               <div id="ovPctBox" style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:5px 9px;gap:3px;flex:1;min-width:0">
                 <input id="ovPctInput" type="number" min="0" max="100" step="0.1" value="${jobOverheadPct(j)}" oninput="ovSetPct(this.value)" aria-label="Overhead percent" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none;text-align:right">
@@ -5783,7 +5787,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               </div>
               <button type="button" onclick="ovReset()" title="Reset to ${DEFAULT_OVERHEAD_PCT}%" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--brand-light);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0"><i class="ti ti-refresh" style="font-size:13px" aria-hidden="true"></i></button>
             </div>
-            <div style="font-size:10px;color:var(--muted);margin-top:5px">% of contract less job costs · a flat $ amount overrides the %</div>`:''}
+            <div style="font-size:10px;color:var(--muted);margin-top:5px">% of contract less job costs · a flat $ amount overrides the %</div>
+            </div>`:''}
           </div>
 
           <!-- Commissions -->
@@ -5852,6 +5857,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
     // Commissions accordion toggle
     {
+      // Overhead starts collapsed — the amount is what matters day to day; the
+      // % / flat inputs are set once and then just take up room.
+      const ovH=$('ovHeader'), ovB=$('ovBody'), ovC=$('ovChev');
+      if(ovH && ovB) ovH.addEventListener('click',()=>{
+        const open = ovB.style.display==='block';
+        ovB.style.display = open?'none':'block';
+        if(ovC) ovC.classList.toggle('open', !open);
+      });
+
       const accH=$('commAccHeader'),bdy=$('jobCommBody');
       if(accH) accH.addEventListener('click',()=>{
         const open=bdy.style.display==='block';
@@ -7590,7 +7604,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span class="chk-thumb-name">${f.name}</span>
           </div>
-          <button class="chk-thumb-del" onclick="event.stopPropagation();checkDelete(${i})" title="Remove">
+          <button class="chk-thumb-del" style="right:34px;width:auto;padding:0 7px;font-size:9px;font-weight:700;color:#7CBCEC" onclick="event.stopPropagation();previewJobFile('checks',${i})" title="Preview">Preview</button>
+            <button class="chk-thumb-del" onclick="event.stopPropagation();checkDelete(${i})" title="Remove">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>`:`
@@ -7600,7 +7615,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span class="chk-thumb-name">${f.name}</span>
           </div>
-          <button class="chk-thumb-del" onclick="event.stopPropagation();checkDelete(${i})" title="Remove">
+          <button class="chk-thumb-del" style="right:34px;width:auto;padding:0 7px;font-size:9px;font-weight:700;color:#7CBCEC" onclick="event.stopPropagation();previewJobFile('checks',${i})" title="Preview">Preview</button>
+            <button class="chk-thumb-del" onclick="event.stopPropagation();checkDelete(${i})" title="Remove">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>`).join('')}
@@ -7695,6 +7711,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <div onclick="openJobStoredFile('lossFiles',${i})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer">
           ${retainedFileIcon(f,'#EF4444')}
           <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div><div style="font-size:10px;color:var(--muted)">${f.date}</div></div>
+          ${previewFileBtn('lossFiles',i)}
           <button onclick="event.stopPropagation();lossDelete(${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
         </div>`).join('')}
       </div>`:''}
@@ -7837,38 +7854,39 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Total Squares</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" placeholder="e.g. 28.5 SQ" type="number" step="0.1">
+            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsSquares" value="${j.roofEstimate?.dwellingSquares ?? j.roofEstimate?.totalSquares ?? ''}" placeholder="e.g. 28.5 SQ" type="number" step="0.1">
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Pitch / Slope</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" placeholder="e.g. 6/12">
+            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsPitch" value="${j.roofEstimate?.pitch || ''}" placeholder="e.g. 6/12">
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Ridge (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" placeholder="Linear feet" type="number">
+            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsRidges" value="${j.roofEstimate?.ridges ?? ''}" placeholder="Linear feet" type="number">
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Valley (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" placeholder="Linear feet" type="number">
+            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsValleys" value="${j.roofEstimate?.valleys ?? ''}" placeholder="Linear feet" type="number">
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Eave (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" placeholder="Linear feet" type="number">
+            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsEaves" value="${j.roofEstimate?.eaves ?? ''}" placeholder="Linear feet" type="number">
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Rake (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" placeholder="Linear feet" type="number">
+            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsRakes" value="${j.roofEstimate?.rakes ?? ''}" placeholder="Linear feet" type="number">
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Stories</label>
-            <select style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A"><option>1</option><option>2</option><option>3+</option></select>
+            <select id="rsStories" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A">${['1','2','3+'].map(o=>`<option${(j.roofEstimate?.stories||'1')===o?' selected':''}>${o}</option>`).join('')}</select>
           </div>
           <div>
             <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Shingle Type</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" placeholder="e.g. GAF Timberline HDZ">
+            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsShingle" value="${j.roofEstimate?.shingle || ''}" placeholder="e.g. GAF Timberline HDZ">
           </div>
         </div>
-        <button class="btn-primary" style="font-size:12px">Save Measurements</button>
+        <button class="btn-primary" style="font-size:12px" onclick="roofSpecSave()">Save Measurements</button>
+        ${j.roofEstimate?.vendor?`<div style="margin-top:8px;font-size:10px;color:var(--muted)">From <b style="color:var(--brand-light)">${escapeHtml(j.roofEstimate.vendor)}</b>${j.roofEstimate.reportName?' \u00b7 '+escapeHtml(j.roofEstimate.reportName):''}${j.roofEstimate.steepSquares?` \u00b7 ${j.roofEstimate.steepSquares} SQ steep`:''}${j.roofEstimate.flatSqFt?` \u00b7 ${j.roofEstimate.flatSqFt} SF low-slope held out`:''}</div>`:''}
       </div>
 
       <div class="dp-card">
@@ -7882,7 +7900,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           ondrop="event.preventDefault();this.classList.remove('dragover');roofAddFiles(event.dataTransfer.files)">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4D9DE0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 8px;display:block;opacity:.55"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:3px">Drag & drop measurement report here</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:14px">PDF, JPG, or PNG — EagleView, GAF QuickMeasure, or similar</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px">PDF — GAF QuickMeasure, FirstMate, EagleView, Roofr or Hover. Measurements are read automatically.</div>
           <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
             <label class="roof-upload-btn primary">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -7906,6 +7924,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
             <div style="font-size:10px;color:var(--muted)">${f.date}</div>
           </div>
+          ${f.isPdf?`<button onclick="event.stopPropagation();roofImportMeasure(${i})" title="Read the measurements out of this report" style="height:24px;padding:0 9px;border-radius:5px;border:1px solid rgba(52,211,153,0.35);background:rgba(52,211,153,0.12);color:#34D399;cursor:pointer;font-size:10px;font-weight:700;font-family:'Barlow',sans-serif;flex-shrink:0">Import</button>`:''}
+          ${previewFileBtn('roofFiles',i)}
           <button onclick="event.stopPropagation();roofDelete(${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
@@ -7920,8 +7940,54 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       j.roofFiles.push(...records);
       saveToStorage();
       body.innerHTML=roofHTML();
+      // A measurement report is worth reading the moment it lands — GAF
+      // QuickMeasure, FirstMate, EagleView, Roofr and Hover all parse.
+      for(const f of pending){
+        if(!/\.pdf$/i.test(f.name||'') && f.type!=='application/pdf') continue;
+        try {
+          const applied = await importMeasurementReport(f, j.id, { silent:true });
+          if(applied){ body.innerHTML=roofHTML(); break; }
+        } catch(e){ console.warn('[roof] auto measurement read failed', e); }
+      }
     };
     window.roofDelete=function(i){j.roofFiles.splice(i,1);saveToStorage();body.innerHTML=roofHTML()};
+    // Re-read a report that is already attached
+    window.roofImportMeasure=async function(i){
+      const rec=j.roofFiles[i]; if(!rec) return;
+      toast('Reading measurement report\u2026');
+      try {
+        const url=await jobFileUrl(rec);
+        if(!url){ toast('That file is not available to read'); return; }
+        const blob=await (await fetch(url)).blob();
+        const file=new File([blob], rec.name||'report.pdf', {type:'application/pdf'});
+        const ok=await importMeasurementReport(file, j.id, {});
+        if(ok) body.innerHTML=roofHTML();
+      } catch(e){ console.error('[roof] import failed', e); toast('Could not read that report'); }
+    };
+    // Roof Specifications write straight onto the job's measurement record
+    window.roofSpecSave=function(){
+      const g=id=>{ const el=document.getElementById(id); return el?String(el.value).trim():''; };
+      const n=v=>{ const x=parseFloat(v); return isFinite(x)?x:null; };
+      const re=Object.assign({}, j.roofEstimate||{});
+      const sq=n(g('rsSquares'));
+      if(sq!=null){ re.dwellingSquares=sq; if(re.totalSquares==null) re.totalSquares=sq; if(re.totalSqFt==null) re.totalSqFt=Math.round(sq*100); }
+      re.pitch=g('rsPitch')||re.pitch||'';
+      [['rsRidges','ridges'],['rsValleys','valleys'],['rsEaves','eaves'],['rsRakes','rakes']].forEach(([id,k])=>{
+        const v=n(g(id)); if(v!=null) re[k]=v;
+      });
+      re.stories=g('rsStories')||re.stories||'';
+      re.shingle=g('rsShingle')||re.shingle||'';
+      re.updatedAt=new Date().toISOString();
+      if(!re.source) re.source='manual';
+      j.roofEstimate=re;
+      const ab=Object.assign({}, j.abcOrder||{});
+      if(sq!=null) ab.squares=sq;
+      ['ridges','valleys','eaves','rakes'].forEach(k=>{ if(re[k]!=null) ab[k]=re[k]; });
+      j.abcOrder=ab;
+      saveToStorage();
+      if(typeof renderDetailPanel==='function') renderDetailPanel();
+      toast('Measurements saved to job');
+    };
 
   } else if(activeTab==='other'){
     if(!j.otherFiles) j.otherFiles=[];
@@ -7973,6 +8039,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
             <div style="font-size:10px;color:var(--muted)">${f.date}</div>
           </div>
+          ${previewFileBtn('otherFiles',i)}
           <button onclick="event.stopPropagation();otherDelete(${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
@@ -15000,6 +15067,7 @@ function renderContractTab(j){
         <div onclick="openJobStoredFile('signedContractFiles',${i})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer">
           ${retainedFileIcon(f,'#34D399')}
           <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</div><div style="font-size:10px;color:var(--muted)">${esc(f.date||'')}</div></div>
+          ${previewFileBtn('signedContractFiles',i)}
           <button onclick="event.stopPropagation();signedContractDelete('${j.id}',${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>
         </div>`).join('')}
       </div>` : ''}
@@ -19599,12 +19667,13 @@ const DEMAND_CATALOG = [
     calc:m=>m.steepSquares,
     match:[['steep'],['roof','slope']], not:['remove'] },
 
-  { key:'tearoff', sec:'roof', std:true, unit:'SQ', price:46.55, mat:0,
+  { key:'tearoff', slot:'tearoff', sec:'roof', std:true, unit:'SQ', price:46.55, mat:0,
     desc:()=>'Tear off composition shingles (no haul off)',
     calc:m=>m.squares,
-    match:[['tear','removal','remove'],['comp','composition','shingle']], not:['laminated','3 tab'] },
+    match:[['tear','removal','remove'],['comp','composition','shingle']],
+    not:['3 tab','haul','dispose'] },
 
-  { key:'shingle', sec:'roof', std:true, unit:'SQ', price:265.16, mat:0.53,
+  { key:'shingle', slot:'shingle', sec:'roof', std:true, unit:'SQ', price:265.16, mat:0.53,
     desc:()=>'Laminated - comp. shingle rfg. - w/out felt',
     calc:m=>m.squares*(1+(m.waste||0)/100),
     // Matches a 3-tab line too: same scope slot, and the spec difference is the
@@ -19612,11 +19681,11 @@ const DEMAND_CATALOG = [
     match:[['laminated','3 tab','3-tab','architectural','dimensional','composition shingle','comp. shingle']],
     not:['tear','remove','haul','ridge','hip','starter','cap','felt -','underlayment'] },
 
-  { key:'felt', sec:'roof', std:true, unit:'SQ', price:47.46, mat:0.45,
+  { key:'felt', slot:'felt', sec:'roof', std:true, unit:'SQ', price:47.46, mat:0.45,
     desc:()=>'Roofing felt - synthetic underlayment',
     calc:m=>m.squares*1.03,
     match:[['felt','underlayment']],
-    not:['ice','water','without felt','shingle'] },
+    not:['ice','water','without felt','shingle','15 lb','30 lb','double'] },
 
   { key:'icewater', sec:'roof', std:true, unit:'SF', price:2.15, mat:0.49,
     desc:()=>'Ice & water shield - valleys',
@@ -19638,7 +19707,7 @@ const DEMAND_CATALOG = [
     calc:m=>m.dripEdgeLF || (m.eaves+m.rakes),
     match:[['paint','seal'],['drip'],['edge']] },
 
-  { key:'ridgecap', sec:'roof', std:true, unit:'LF', price:4.64, mat:0.32,
+  { key:'ridgecap', slot:'ridgecap', sec:'roof', std:true, unit:'LF', price:4.64, mat:0.32,
     desc:()=>'Hip / Ridge cap - cut from 3 tab - composition shingles',
     calc:m=>m.ridgeCapLF || (m.hips+m.ridges),
     match:[['ridge','hip'],['cap']], not:['vent']  },
@@ -19648,7 +19717,7 @@ const DEMAND_CATALOG = [
     calc:m=>m.ridgeVentLF,
     match:[['ridge'],['vent']], not:['cap','turbine'] },
 
-  { key:'stepflash', sec:'roof', std:false, unit:'LF', price:9.00, mat:0.3,
+  { key:'stepflash', sec:'roof', std:false, unit:'LF', price:10.59, mat:0.3,
     desc:()=>'R&R Step flashing',
     calc:m=>m.stepFlash,
     match:[['step'],['flash']] },
@@ -19713,10 +19782,10 @@ const DEMAND_CATALOG = [
     calc:m=>0,
     match:[['sheathing','decking','plywood','osb']] },
 
-  { key:'twostory', sec:'roof', std:false, unit:'SQ', price:12.40, mat:0,
+  { key:'twostory', sec:'roof', std:false, unit:'SQ', price:20.37, mat:0,
     desc:()=>'Additional charge for high roof (2 stories or greater)',
     calc:m=>m.twoStorySquares,
-    match:[['high roof','two stor','2 stor','second stor']] },
+    match:[['high roof','two stor','2 stor','second stor']], not:['remove'] },
 
   { key:'paint_jack', sec:'roof', std:false, unit:'EA', price:35.62, mat:0.22,
     desc:()=>'Prime & paint roof jack',
@@ -19734,7 +19803,7 @@ const DEMAND_CATALOG = [
     match:[['seal','paint'],['trim','fascia']], not:['drip','edge'] },
 
   { key:'furnace_vent', sec:'roof', std:false, unit:'EA', price:100.10, mat:0.5,
-    desc:()=>'R&R Furnace vent - rain cap and storm collar, 6"',
+    desc:()=>'R&R Furnace vent - rain cap and storm collar',
     calc:m=>0,
     match:[['furnace','rain cap','storm collar']] },
 
@@ -19742,6 +19811,58 @@ const DEMAND_CATALOG = [
     desc:()=>'Heat, vent, & air cond. labor minimum',
     calc:()=>1,
     match:[['heat','hvac','air cond'],['labor'],['minimum']] },
+
+  { key:'tearoff_haul', slot:'tearoff', sec:'roof', std:false, alt:true, unit:'SQ', price:69.02, mat:0,
+    desc:()=>'Tear off, haul and dispose of comp. shingles - Laminated',
+    calc:m=>m.squares,
+    match:[['tear'],['haul','dispose']], not:['3 tab'] },
+
+  { key:'tearoff_3tab', slot:'tearoff', sec:'roof', std:false, unit:'SQ', price:67.22, mat:0,
+    desc:()=>'Tear off, haul and dispose of comp. shingles - 3 tab',
+    calc:m=>0,
+    match:[['tear'],['3 tab']] },
+
+  { key:'shingle_3tab', slot:'shingle', sec:'roof', std:false, unit:'SQ', price:243.58, mat:0.5,
+    desc:()=>'3 tab - 25 yr. - comp. shingle roofing - w/out felt',
+    calc:m=>0,
+    match:[['3 tab'],['shingle','roofing']], not:['tear','remove','haul','cap','starter'] },
+
+  { key:'felt15', slot:'felt', sec:'roof', std:false, alt:true, unit:'SQ', price:36.13, mat:0.28,
+    desc:()=>'Roofing felt - 15 lb.',
+    calc:m=>m.squares,
+    match:[['felt'],['15']], not:['double','without felt'] },
+
+  { key:'felt15_double', slot:'felt', sec:'roof', std:false, alt:true, unit:'SQ', price:63.97, mat:0.28,
+    // TWIA / WPI-8 windstorm certification on the Texas coast requires
+    // double-coverage underlayment, which doubles the quantity against area.
+    desc:()=>'Roofing felt - 15 lb. - double coverage',
+    calc:m=>m.squares*2,
+    match:[['felt'],['double']] },
+
+  { key:'felt30', slot:'felt', sec:'roof', std:false, alt:true, unit:'SQ', price:42.46, mat:0.34,
+    desc:()=>'Roofing felt - 30 lb.',
+    calc:m=>m.squares,
+    match:[['felt'],['30']], not:['double','without felt'] },
+
+  { key:'highroof_rem', sec:'roof', std:false, unit:'SQ', price:6.65, mat:0,
+    desc:()=>'Remove Additional charge for high roof (2 stories or greater)',
+    calc:m=>m.twoStorySquares,
+    match:[['remove'],['high roof','2 stor','two stor']] },
+
+  { key:'ridgecap_std', slot:'ridgecap', sec:'roof', std:false, alt:true, unit:'LF', price:9.03, mat:0.33,
+    desc:()=>'R&R Hip / Ridge cap - Standard profile - composition shingles',
+    calc:m=>m.ridgeCapLF || (m.hips+m.ridges),
+    match:[['ridge','hip'],['cap'],['standard']], not:['vent'] },
+
+  { key:'gable_return', sec:'roof', std:false, unit:'EA', price:117.66, mat:0.08,
+    desc:()=>'R&R Gable cornice return - laminated - 2 stories or greater',
+    calc:m=>0,
+    match:[['gable'],['cornice','return']] },
+
+  { key:'flash14', sec:'roof', std:false, unit:'LF', price:5.61, mat:0.4,
+    desc:()=>'R&R Flashing, 14" wide',
+    calc:m=>0,
+    match:[['flash'],['14"','14 in','14in']] },
 
   // ── GUTTERS (per elevation) ────────────────────────────────────────────────
   { key:'gutter5', sec:'elev', std:false, unit:'LF', price:9.29, mat:0.44,
@@ -19763,6 +19884,11 @@ const DEMAND_CATALOG = [
     desc:()=>'R&R Downspout - aluminum - 6"',
     calc:(m,e)=>e.downspout6,
     match:[['downspout','down spout'],['6"','6 in']] },
+
+  { key:'gutter_ds', sec:'elev', std:false, unit:'LF', price:9.42, mat:0.44,
+    desc:()=>'R&R Gutter / downspout - aluminum - up to 5"',
+    calc:(m,e)=>0,
+    match:[['gutter'],['downspout','down spout']] },
 
   { key:'gutterguard', sec:'elev', std:false, unit:'LF', price:7.85, mat:0.5,
     desc:()=>'R&R Gutter guard / screen',
@@ -19991,12 +20117,18 @@ function demandSectionGuess(text){
 // A line with no quantity is either a wrapped description or an F9 note. Notes
 // are full sentences ending in a period (and usually indented further); wraps
 // are fragments. Wraps always precede notes under a given line item.
+const DEMAND_NOTE_OPENERS = /^(updated?|revis(ed|ing)|adjust(ed)?|includ(es|ing)|line item|note[:s]?|added|chang(ed|e)|per\s|required|removed|priced?|this (line|item)|scope|quantity|qty)\b/i;
 function demandIsNoteLine(line, itemIndent){
   const t = String(line||'').trim();
   if(!t) return false;
   const indent = line.length - line.replace(/^\s+/,'').length;
   if(itemIndent != null && indent >= itemIndent + 3) return true;
-  return /[.!]$/.test(t) && /^[A-Z(]/.test(t) && t.split(/\s+/).length >= 4;
+  // A full sentence under a line item is an F9 note, not a wrapped description.
+  if(/[.!]$/.test(t) && /^[A-Z(]/.test(t) && t.split(/\s+/).length >= 4) return true;
+  // Some notes carry no closing period ("updated for remove and replace"), so
+  // also treat an explanatory opener of a few words as a note.
+  if(DEMAND_NOTE_OPENERS.test(t) && t.split(/\s+/).length >= 3) return true;
+  return false;
 }
 
 // Headers and footers repeat identically on every page of an estimate. Rather
@@ -20225,9 +20357,35 @@ function demandCompare(demandLines, carrierLines, opts){
     L.carrierUnitPrice = best.unitPrice;
   });
 
+  demandResolveSlots(demandLines);
+
   // Carrier lines nothing claimed — shown so nothing is silently dropped.
   const extras = carrierLines.map((c,i)=>({...c, _idx:i})).filter(c=>!used.has(c._idx));
   return { extras };
+}
+
+// Several catalog lines can describe the same scope slot in different wording
+// ("Tear off ... (no haul off)" vs "Tear off, haul and dispose ..."). Exactly one
+// may be active: the one the carrier's own file uses if they carry it, otherwise
+// the standard wording. Without this the demand would carry both and double-count.
+function demandResolveSlots(lines){
+  const bySlot = {};
+  lines.forEach(L=>{
+    const c = DEMAND_CAT_BY_KEY[L.catKey];
+    if(!c || !c.slot || L.custom) return;
+    (bySlot[c.slot] = bySlot[c.slot] || []).push(L);
+  });
+  Object.values(bySlot).forEach(group=>{
+    if(group.length < 2) return;
+    const anyChecked = group.some(L=>L.checked);
+    if(!anyChecked) return;                       // whole slot switched off — leave it
+    const matched = group.filter(L=>L.carrierRef);
+    let winner;
+    if(matched.length === 1) winner = matched[0];
+    else if(matched.length > 1) winner = matched.reduce((a,b)=>(b.carrierRef.score||0)>(a.carrierRef.score||0)?b:a);
+    else winner = group.find(L=>!(DEMAND_CAT_BY_KEY[L.catKey]||{}).alt) || group[0];
+    group.forEach(L=>{ L.checked = (L === winner); });
+  });
 }
 window.demandCompare = demandCompare;
 
@@ -20307,24 +20465,30 @@ function demandDefaultMeasurements(j){
   const re = j?.roofEstimate || {};
   const ab = j?.abcOrder || {};
   const n = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+  // Prefer a figure the measurement report actually stated over one derived here.
+  const pick = (...vals) => { for(const v of vals){ const x = parseFloat(v); if(isFinite(x) && x!==0) return x; } return 0; };
   const m = {
-    squares: n(ab.squares) || n(re.totalSquares),
-    waste: ab.waste != null && ab.waste !== '' ? n(ab.waste) : 13,
+    squares: pick(ab.squares, re.dwellingSquares, re.totalSquares),
+    waste: (ab.waste != null && ab.waste !== '') ? n(ab.waste) : (re.waste != null ? n(re.waste) : 13),
     pitch: re.pitch || '',
     facets: n(re.facets),
-    steepSquares: 0, steepBand: '7/12 to 9/12',
-    eaves: n(ab.eaves), rakes: n(ab.rakes), ridges: n(ab.ridges),
-    hips: n(ab.hips), valleys: n(ab.valleys),
-    ridgeVentLF: 0, stepFlash: 0, wallFlash: 0,
-    pipeJacks: n(ab.penetrations), turtleVents: 0, exhaustCaps: 0,
-    turbines: 0, powerVents: 0, acUnits: 0, pergolaSF: 0, twoStorySquares: 0,
+    steepSquares: n(re.steepSquares), steepBand: '7/12 to 9/12',
+    eaves: pick(ab.eaves, re.eaves), rakes: pick(ab.rakes, re.rakes),
+    ridges: pick(ab.ridges, re.ridges), hips: pick(ab.hips, re.hips),
+    valleys: pick(ab.valleys, re.valleys),
+    ridgeVentLF: 0,
+    stepFlash: n(re.stepFlash), wallFlash: n(re.wallFlash),
+    pipeJacks: pick(ab.penetrations, re.penetrations),
+    turtleVents: 0, exhaustCaps: 0, turbines: 0, powerVents: 0, acUnits: 0,
+    pergolaSF: n(re.flatSqFt), twoStorySquares: 0,
+    dripEdgeLF: n(re.dripEdge), ridgeCapLF: n(re.ridgeCap),
+    starterLF: n(re.starter), leakBarrierLF: n(re.leakBarrier),
   };
-  // A pitch of 7/12 or steeper means the whole roof carries the steep charge.
   const pn = parseInt(String(m.pitch).split('/')[0], 10);
-  if(isFinite(pn) && pn >= 7){
-    m.steepSquares = m.squares;
-    m.steepBand = pn >= 10 ? '10/12 to 12/12' : '7/12 to 9/12';
-  }
+  if(isFinite(pn) && pn >= 10) m.steepBand = '10/12 to 12/12';
+  // No steep breakdown on file: a 7/12-or-steeper predominant pitch means the
+  // whole roof carries the steep charge.
+  if(!m.steepSquares && isFinite(pn) && pn >= 7) m.steepSquares = m.squares;
   const elev = {}; DEMAND_ELEVATIONS.forEach(k=>{ elev[k] = demandBlankElev(); });
   return { m, elev };
 }
@@ -20380,7 +20544,9 @@ function demandBuildLines(m, elev, priceList){
         id: demandNewId(), sec: c.sec, elev: null, catKey: c.key,
         desc: c.desc(m, {}), qty, unit: c.unit,
         unitPrice: priceList.prices[c.key] ?? c.price, priceSource: 'house',
-        mat: c.mat ?? 0.45, tax: 0, checked: qty > 0 || !!c.std,
+        // An alternate wording for a slot a standard line already fills stays
+        // off until chosen, so the demand can't carry both and double-count.
+        mat: c.mat ?? 0.45, tax: 0, checked: !c.alt && (qty > 0 || !!c.std),
         status: '', note: '', carrierRef: null, custom: false,
       });
     }
@@ -20778,7 +20944,13 @@ async function openDemandEstimate(jobId){
   const PL = await loadDemandPriceList();
 
   // ── state ──
+  // Work on a copy. getDemandEstimate returns the object stored on the job, so
+  // editing it directly would mean "Discard" had nothing left to discard.
   let D = getDemandEstimate(j);
+  if(D){
+    try { D = JSON.parse(JSON.stringify(D)); }
+    catch(e){ console.warn('[demand] could not clone saved estimate', e); }
+  }
   if(!D){
     const def = demandDefaultMeasurements(j);
     D = {
@@ -20901,9 +21073,61 @@ async function openDemandEstimate(jobId){
     </div>`;
   document.body.appendChild(overlay);
   const $d = sel => overlay.querySelector(sel);
-  const close = ()=>overlay.remove();
-  $d('#dmClose').addEventListener('click', close);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+
+  // ── Unsaved-work guard ─────────────────────────────────────────────────
+  // A demand estimate is a lot of typing to lose to a stray background click,
+  // so closing compares the current state against the last saved one.
+  const snapshot = () => {
+    try {
+      return JSON.stringify({
+        meta: D.meta, m: D.m, elev: D.elev, notes: D.notes,
+        taxRate: D.taxRate, showPending: D.showPending,
+        carrier: (D.carrier.lines||[]).length + '|' + (D.carrier.fileName||''),
+        lines: (D.lines||[]).map(L=>[L.catKey||L.id, L.desc, L.qty, L.unit,
+          L.unitPrice, L.tax, L.checked?1:0, L.note||'', L.tbd?1:0].join('~')),
+      });
+    } catch(e){ return String(Date.now()); }   // unserialisable → treat as dirty
+  };
+  let baseline = snapshot();
+  const markSaved = () => { baseline = snapshot(); };
+  const isDirty = () => snapshot() !== baseline;
+
+  const reallyClose = ()=>{ document.removeEventListener('keydown', onEsc); overlay.remove(); };
+  function onEsc(e){
+    if(e.key !== 'Escape') return;
+    if(document.getElementById('dmUnsaved') || document.getElementById('filePreviewOverlay')) return;
+    e.stopPropagation(); attemptClose();
+  }
+  document.addEventListener('keydown', onEsc);
+
+  function attemptClose(){
+    if(!isDirty()){ reallyClose(); return; }
+    if(document.getElementById('dmUnsaved')) return;
+    const ask = document.createElement('div');
+    ask.id = 'dmUnsaved';
+    ask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:530;display:flex;align-items:center;justify-content:center;padding:16px';
+    ask.innerHTML = `
+      <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:380px;max-width:100%">
+        <div style="padding:15px 18px 4px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Save this demand estimate?</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.55">You have changes that aren't saved to the job yet. Closing without saving discards them.</div>
+        </div>
+        <div style="padding:14px 18px;display:flex;gap:8px">
+          <button id="duCancel" class="btn-cancel" style="flex:1;font-size:12px;padding:9px">Keep editing</button>
+          <button id="duDiscard" style="flex:1;font-size:12px;padding:9px;border-radius:6px;border:1px solid rgba(248,113,113,0.35);background:rgba(248,113,113,0.1);color:var(--danger);font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif">Discard</button>
+          <button id="duSave" class="btn-primary" style="flex:1.2;font-size:12px;padding:9px">Save &amp; close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ask);
+    const shut = ()=>ask.remove();
+    ask.querySelector('#duCancel').addEventListener('click', shut);
+    ask.addEventListener('click', e=>{ if(e.target===ask) shut(); });
+    ask.querySelector('#duDiscard').addEventListener('click', ()=>{ shut(); reallyClose(); });
+    ask.querySelector('#duSave').addEventListener('click', ()=>{ shut(); saveDemand(); reallyClose(); });
+  }
+
+  $d('#dmClose').addEventListener('click', attemptClose);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) attemptClose(); });
 
   // ── recompute + render ──
   function recompare(){
@@ -21234,9 +21458,16 @@ async function openDemandEstimate(jobId){
         const p = parseMeasurementReport(text);
         const hits = demandApplyReport(p, D.m);
         if(!hits.length){ toast('Could not read measurements from that file'); return; }
-        D.meta.measurements = demandReportLabel(text, f.name);
+        const vendor = measureVendorOf(text, f.name);
+        const label  = demandReportLabel(text, f.name);
+        D.meta.measurements = label;
+        // Push the same figures onto the job so the roof size, the ABC material
+        // order and this builder never drift apart.
+        applyMeasurementsToJob(j, p, { vendor, label, fileName:f.name });
+        saveToStorage();
+        if(typeof renderDetailPanel==='function') renderDetailPanel();
         renderMeas(); renderMeta();
-        toast(`Imported ${hits.length} measurements — hit Recalculate`);
+        toast(`${vendor||'Report'} imported — ${hits.length} measurements synced to the job. Hit Recalculate.`);
       } catch(e){ console.error('[demand] measurement read', e); toast('Could not read that report'); }
     });
     inp.click();
@@ -21250,7 +21481,10 @@ async function openDemandEstimate(jobId){
       const old = prev[(F.elev||'')+'|'+F.catKey];
       if(old && old.fromCarrier) return;
       if(old){
-        F.id = old.id; F.note = old.note; F.checked = old.checked || F.qty>0;
+        F.id = old.id; F.note = old.note;
+        // Keep the user's choice; only auto-enable a line that new measurements
+        // gave a quantity to, and never an alternate wording of a standard line.
+        F.checked = old.checked || (!(DEMAND_CAT_BY_KEY[F.catKey]||{}).alt && F.qty>0);
         if(old.priceSource==='manual'){ F.unitPrice = old.unitPrice; F.priceSource='manual'; }
         if(old.taxManual){ F.tax = old.tax; F.taxManual = true; }
         if(old.tbd) F.tbd = true;
@@ -21291,7 +21525,7 @@ async function openDemandEstimate(jobId){
   $d('#dmOnlyDiff').addEventListener('change', renderLines);
 
   // ── save / print / price list ──
-  $d('#dmSave').addEventListener('click', ()=>{
+  function saveDemand(quiet){
     D.updatedAt = new Date().toISOString();
     j.demandEstimate = demandPruneForSave(D);
     demandSaveMirror(j, j.demandEstimate);
@@ -21301,12 +21535,12 @@ async function openDemandEstimate(jobId){
       logActivity(j, 'estimate', 'Demand estimate saved', `${t.count} lines · ${money(t.rcv)}${t.missing?` · ${t.missing} missing from carrier`:''}`);
     }
     if(typeof renderDetailPanel==='function') renderDetailPanel();
-    toast('Demand estimate saved to job');
-  });
+    markSaved();
+    if(!quiet) toast('Demand estimate saved to job');
+  }
+  $d('#dmSave').addEventListener('click', ()=>saveDemand());
   $d('#dmPrint').addEventListener('click', ()=>{
-    D.updatedAt = new Date().toISOString();
-    j.demandEstimate = demandPruneForSave(D);
-    demandSaveMirror(j, j.demandEstimate); saveToStorage();
+    saveDemand(true);                 // printing saves too, without a second toast
     printDemandEstimate(j, D);
   });
   $d('#dmPrices').addEventListener('click', ()=>openDemandPriceEditor(()=>{ recompare(); renderLines(); }));
@@ -21317,6 +21551,7 @@ async function openDemandEstimate(jobId){
   if(!D.carrier.lines?.length) $d('#dmMeasBlock').open = true;
   // On a first run the claim header is worth seeing — it prints at the top.
   if(!D.updatedAt) $d('#dmMetaBlock').open = true;
+  markSaved();
 }
 window.openDemandEstimate = openDemandEstimate;
 
@@ -21540,6 +21775,280 @@ ${(legend || notes.length) ? `<div class="de-notes">
 }
 window.printDemandEstimate = printDemandEstimate;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// MEASUREMENT SYNC + FILE PREVIEW
+// One import path for aerial measurement reports (GAF QuickMeasure, FirstMate,
+// EagleView, Roofr, Hover, Nearmap) that updates every place a measurement is
+// used, and a preview button for stored job files that re-signs expired URLs.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── SIGNED URL REFRESH ────────────────────────────────────────────────────────
+// Supabase signs job-file URLs for 7 days. The app referenced
+// window.signJobFilePath but never defined it, so previews silently broke once
+// a link aged out. Job files live in the same 'job-files' bucket as company docs.
+if(typeof window.signJobFilePath !== 'function'){
+  window.signJobFilePath = async function(path){
+    if(!path || !window.sb) return null;
+    try {
+      const { data } = await window.sb.storage.from('job-files').createSignedUrl(path, 60*60*24*7);
+      return data?.signedUrl || null;
+    } catch(e){ console.warn('[file] re-sign failed', e); return null; }
+  };
+}
+
+// Resolve a usable URL for a stored file record, refreshing it when stale.
+async function jobFileUrl(f){
+  if(!f) return null;
+  if(f.path && typeof window.signJobFilePath === 'function'){
+    const fresh = await window.signJobFilePath(f.path);
+    if(fresh){ f.url = fresh; return fresh; }
+  }
+  return f.url || null;
+}
+window.jobFileUrl = jobFileUrl;
+
+function jobFileIsPdf(f){
+  return !!(f && (f.isPdf || f.type === 'application/pdf' || /\.pdf$/i.test(f.name||'')));
+}
+function jobFileIsImage(f){
+  return !!(f && ((f.type||'').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(f.name||'')));
+}
+
+// ── PREVIEW ───────────────────────────────────────────────────────────────────
+// In-page overlay rather than a popup, so it can't be blocked. Works for PDFs
+// and images; anything else falls back to a download link.
+async function previewStoredFile(f, title){
+  if(!f){ toast('File not found'); return; }
+  const esc = window.escapeHtml || (s=>String(s==null?'':s));
+  const overlay = document.createElement('div');
+  overlay.id = 'filePreviewOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px';
+  overlay.innerHTML = `
+    <div style="width:min(1000px,94vw);display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="flex:1;min-width:0;color:#fff;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title || f.name || 'File')}</div>
+      <a id="fpOpen" href="#" target="_blank" rel="noopener" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:11px;font-weight:600;padding:5px 11px;border-radius:5px;text-decoration:none">Open in new tab</a>
+      <a id="fpDl" href="#" download style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:11px;font-weight:600;padding:5px 11px;border-radius:5px;text-decoration:none">Download</a>
+      <button id="fpClose" style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:15px;line-height:1">×</button>
+    </div>
+    <div id="fpBody" style="width:min(1000px,94vw);height:84vh;background:#fff;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center">
+      <div style="color:#666;font-size:13px;font-family:sans-serif">Loading…</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>{ overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if(e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.querySelector('#fpClose').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target === overlay) close(); });
+
+  const url = await jobFileUrl(f);
+  const body = overlay.querySelector('#fpBody');
+  if(!url){
+    body.innerHTML = '<div style="color:#c0392b;font-size:13px;font-family:sans-serif;padding:20px;text-align:center">This file could not be loaded.<br><span style="color:#777;font-size:11px">It may have been uploaded before cloud sync was enabled, or removed from storage.</span></div>';
+    return;
+  }
+  overlay.querySelector('#fpOpen').href = url;
+  overlay.querySelector('#fpDl').href = url;
+  overlay.querySelector('#fpDl').setAttribute('download', f.name || 'file');
+  if(jobFileIsPdf(f)){
+    body.innerHTML = `<iframe src="${url}#view=FitH" style="width:100%;height:100%;border:0"></iframe>`;
+  } else if(jobFileIsImage(f)){
+    body.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain">`;
+  } else {
+    body.innerHTML = `<div style="text-align:center;font-family:sans-serif;padding:24px">
+      <div style="font-size:13px;color:#333;margin-bottom:10px">No inline preview for this file type.</div>
+      <a href="${url}" target="_blank" rel="noopener" style="color:#1557A8;font-size:13px">Open ${esc(f.name||'file')}</a></div>`;
+  }
+}
+window.previewStoredFile = previewStoredFile;
+
+// Preview a file that lives in one of the job's arrays.
+function previewJobFile(collection, index){
+  const j = (window.jobs||[]).find(x=>x.id===window.openJobId);
+  const f = j && Array.isArray(j[collection]) ? j[collection][index] : null;
+  previewStoredFile(f);
+}
+window.previewJobFile = previewJobFile;
+
+// Button markup, so every file list gets the same control.
+function previewFileBtn(collection, i, tone){
+  const c = tone || 'var(--brand-light)';
+  return `<button onclick="event.stopPropagation();previewJobFile('${collection}',${i})" title="Preview"
+    style="height:24px;padding:0 9px;border-radius:5px;border:1px solid rgba(77,157,224,0.35);background:rgba(77,157,224,0.12);color:${c};cursor:pointer;font-size:10px;font-weight:700;font-family:'Barlow',sans-serif;flex-shrink:0">Preview</button>`;
+}
+window.previewFileBtn = previewFileBtn;
+
+// ── MEASUREMENT IMPORT ────────────────────────────────────────────────────────
+// Vendors this recognises by name; the parser itself is layout-driven, so an
+// unrecognised vendor still imports if its report labels its measurements.
+function measureVendorOf(text, fileName){
+  // GAF QuickMeasure reports are produced by Nearmap and carry Nearmap branding
+  // inside, so the filename is often the only place the ordered brand appears.
+  // Check the name first, then the body, most specific brand winning.
+  const probes = [String(fileName||''), String(text||'')];
+  const RULES = [
+    [/quickmeasure|quick\s*measure/i, 'GAF QuickMeasure'],
+    [/first\s*mate|firstmate/i,        'FirstMate'],
+    [/eagleview|eagle\s*view/i,        'EagleView'],
+    [/\broofr\b/i,                     'Roofr'],
+    [/\bhover\b/i,                     'Hover'],
+    [/skymeasure|sky\s*measure/i,      'SkyMeasure'],
+    [/nearmap/i,                       'Nearmap'],
+  ];
+  for(const probe of probes){
+    for(const [re,name] of RULES){ if(re.test(probe)) return name; }
+  }
+  return '';
+}
+window.measureVendorOf = measureVendorOf;
+
+// Everything a measurement touches, written in one place:
+//   j.roofEstimate — canonical record (syncs to Supabase as roof_estimate jsonb)
+//   j.abcOrder     — feeds the ABC Supply material calculator
+//   j.demandEstimate.m — feeds the Demand Estimate Builder
+// Returns the list of fields that actually changed.
+function applyMeasurementsToJob(j, p, meta){
+  if(!j || !p) return [];
+  const m = {}; const hits = demandApplyReport(p, m);
+  if(!hits.length) return [];
+  const info = meta || {};
+  const num = v => (v==null || !isFinite(v)) ? null : Math.round(v*100)/100;
+
+  // 1) roofEstimate — the canonical store, and what the rest of the CRM reads
+  const prev = (j.roofEstimate && typeof j.roofEstimate==='object') ? j.roofEstimate : {};
+  const totalSqFt = p.totalSqFt != null ? Math.round(p.totalSqFt) : prev.totalSqFt;
+  j.roofEstimate = Object.assign({}, prev, {
+    totalSqFt,
+    totalSquares: totalSqFt != null ? totalSqFt/100 : prev.totalSquares,
+    // dwelling-roof squares exclude any 0–1/12 facet (patio cover / pergola)
+    dwellingSquares: num(m.squares),
+    steepSquares: num(m.steepSquares),
+    flatSqFt: num(m.pergolaSF),
+    pitch: m.pitch || prev.pitch || '',
+    facets: m.facets != null ? m.facets : prev.facets,
+    waste: m.waste != null ? m.waste : prev.waste,
+    eaves: num(m.eaves), rakes: num(m.rakes), ridges: num(m.ridges),
+    hips: num(m.hips), valleys: num(m.valleys),
+    stepFlash: num(m.stepFlash), wallFlash: num(m.wallFlash),
+    dripEdge: num(m.dripEdgeLF), ridgeCap: num(m.ridgeCapLF),
+    starter: num(m.starterLF), leakBarrier: num(m.leakBarrierLF),
+    penetrations: num(m.pipeJacks),
+    sections: Array.isArray(prev.sections) ? prev.sections : [],
+    source: 'report',
+    vendor: info.vendor || prev.vendor || '',
+    reportName: info.fileName || prev.reportName || '',
+    reportLabel: info.label || prev.reportLabel || '',
+    updatedAt: new Date().toISOString(),
+  });
+
+  // 2) abcOrder — the material calculator's measurement inputs
+  const keep = (a,b) => (a!=null && isFinite(a)) ? a : (b ?? '');
+  const ab = (j.abcOrder && typeof j.abcOrder==='object') ? j.abcOrder : {};
+  j.abcOrder = Object.assign({}, ab, {
+    squares:      keep(num(m.squares),   ab.squares),
+    waste:        keep(m.waste,          ab.waste),
+    eaves:        keep(num(m.eaves),     ab.eaves),
+    rakes:        keep(num(m.rakes),     ab.rakes),
+    ridges:       keep(num(m.ridges),    ab.ridges),
+    hips:         keep(num(m.hips),      ab.hips),
+    valleys:      keep(num(m.valleys),   ab.valleys),
+    penetrations: keep(num(m.pipeJacks), ab.penetrations),
+  });
+
+  // 3) demandEstimate — keep an in-progress demand in step with the new report
+  const D = (typeof getDemandEstimate==='function') ? getDemandEstimate(j) : null;
+  if(D && D.m){
+    demandApplyReport(p, D.m);
+    if(info.label) D.meta && (D.meta.measurements = info.label);
+    D.measurementsStale = true;      // quantities need a Recalculate
+  }
+  return hits;
+}
+window.applyMeasurementsToJob = applyMeasurementsToJob;
+
+// Read a measurement report and apply it, with a confirmation step so nothing
+// is overwritten silently. Returns true when applied.
+async function importMeasurementReport(file, jobId, opts){
+  const o = opts || {};
+  const j = (window.jobs||[]).find(x=>x.id===(jobId || window.openJobId));
+  if(!j){ toast('Open a job first'); return false; }
+  if(!jobFileIsPdf(file)){
+    if(!o.silent) toast('Measurements can only be read from a PDF report');
+    return false;
+  }
+  let text = '';
+  try { text = await demandReadPdf(file); }
+  catch(e){ console.warn('[measure] read failed', e); if(!o.silent) toast('Could not read that PDF'); return false; }
+  if(!text || text.replace(/\s/g,'').length < 40){
+    if(!o.silent) toast('That PDF has no text layer — enter the measurements by hand');
+    return false;
+  }
+  const p = parseMeasurementReport(text);
+  const vendor = measureVendorOf(text, file.name);
+  const label  = vendor ? (demandReportLabel(text, file.name).replace(/^[^,]+/, vendor)) : demandReportLabel(text, file.name);
+  const found  = ['totalSqFt','eaves','rakes','ridges','hips','valleys','pitch','facets'].filter(k=>p[k]!=null).length;
+  if(found < 2){
+    if(!o.silent) toast(vendor ? `Read the ${vendor} report but found no measurements in it` : 'No measurements found in that PDF');
+    return false;
+  }
+  return await new Promise(resolve=>{
+    confirmMeasurementImport(j, p, { vendor, label, fileName:file.name }, resolve);
+  });
+}
+window.importMeasurementReport = importMeasurementReport;
+
+function confirmMeasurementImport(j, p, meta, done){
+  const esc = window.escapeHtml || (s=>String(s==null?'':s));
+  const preview = {}; demandApplyReport(p, preview);
+  const ROWS = [
+    ['squares','Dwelling roof','SQ'], ['steepSquares','Steep roof','SQ'], ['pergolaSF','Low-slope / patio','SF'],
+    ['pitch','Predominant pitch',''], ['facets','Facets',''], ['waste','Suggested waste','%'],
+    ['eaves','Eaves','LF'], ['rakes','Rakes','LF'], ['ridges','Ridges','LF'],
+    ['hips','Hips','LF'], ['valleys','Valleys','LF'],
+    ['stepFlash','Step flashing','LF'], ['wallFlash','Apron / headwall','LF'],
+    ['dripEdgeLF','Drip edge','LF'], ['ridgeCapLF','Ridge cap','LF'], ['pipeJacks','Penetrations','EA'],
+  ];
+  const rows = ROWS.filter(([k])=>preview[k]!=null && preview[k]!=='')
+    .map(([k,lab,u])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+      <span style="font-size:11px;color:var(--muted)">${lab}</span>
+      <span style="font-size:12px;font-weight:600;color:var(--brand)">${esc(String(preview[k]))}${u?' '+u:''}</span></div>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:520;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:430px;max-width:100%;max-height:92vh;display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">${esc(meta.vendor || 'Measurement report')}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(meta.fileName||'')}</div>
+      </div>
+      <div style="padding:12px 18px;overflow:auto;flex:1">
+        ${rows || '<div style="font-size:11px;color:var(--muted)">No measurements recognised.</div>'}
+        <div style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.55">
+          Applying updates the roof size on this job, the ABC Supply material order, and any demand estimate in progress.
+          ${preview.pergolaSF ? `A ${preview.pergolaSF} SF low-slope facet was found and is held out of the dwelling roof area — it is scoped separately.` : ''}
+        </div>
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px">
+        <button id="miCancel" class="btn-cancel" style="flex:1;font-size:12px;padding:9px">Cancel</button>
+        <button id="miApply" class="btn-primary" style="flex:1;font-size:12px;padding:9px">Apply to Job</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = v => { overlay.remove(); if(typeof done==='function') done(v); };
+  overlay.querySelector('#miCancel').addEventListener('click', ()=>close(false));
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(false); });
+  overlay.querySelector('#miApply').addEventListener('click', ()=>{
+    const hits = applyMeasurementsToJob(j, p, meta);
+    saveToStorage();
+    if(typeof logActivity==='function'){
+      logActivity(j, 'measurement', (meta.vendor||'Measurement')+' report imported',
+        `${j.roofEstimate?.dwellingSquares ?? '—'} squares${j.roofEstimate?.pitch?' · '+j.roofEstimate.pitch:''} · ${hits.length} fields`);
+    }
+    if(typeof renderDetailPanel==='function') renderDetailPanel();
+    if(typeof renderBoard==='function') renderBoard();
+    toast(`${meta.vendor||'Report'} applied — ${hits.length} measurements updated`);
+    close(true);
+  });
+}
 
 // Initial sync of USERS (in case team storage has different members than the hardcoded USERS list)
 saveTeam();
