@@ -19807,7 +19807,7 @@ const DEMAND_CATALOG = [
     calc:m=>0,
     match:[['furnace','rain cap','storm collar']] },
 
-  { key:'lm_hvac', sec:'labormin', std:false, unit:'EA', price:149.39, mat:0,
+  { key:'lm_hvac', sec:'labormin', fixed:true, std:false, unit:'EA', price:149.39, mat:0,
     desc:()=>'Heat, vent, & air cond. labor minimum',
     calc:()=>1,
     match:[['heat','hvac','air cond'],['labor'],['minimum']] },
@@ -19970,21 +19970,21 @@ const DEMAND_CATALOG = [
     match:[['haul'],['debris']] },
 
   // ── LABOR MINIMUMS ─────────────────────────────────────────────────────────
-  { key:'lm_window', sec:'labormin', std:false, unit:'EA', price:245.55, mat:0,
+  { key:'lm_window', sec:'labormin', fixed:true, std:false, unit:'EA', price:245.55, mat:0,
     desc:()=>'Window labor minimum', calc:()=>1,
     match:[['window'],['labor'],['minimum']] },
-  { key:'lm_gutter', sec:'labormin', std:false, unit:'EA', price:198.30, mat:0,
+  { key:'lm_gutter', sec:'labormin', fixed:true, std:false, unit:'EA', price:198.30, mat:0,
     desc:()=>'Gutter labor minimum', calc:()=>1,
     match:[['gutter'],['labor'],['minimum']] },
-  { key:'lm_roof', sec:'labormin', std:false, unit:'EA', price:312.70, mat:0,
+  { key:'lm_roof', sec:'labormin', fixed:true, std:false, unit:'EA', price:312.70, mat:0,
     desc:()=>'Roofing labor minimum', calc:()=>1,
     match:[['roof'],['labor'],['minimum']] },
-  { key:'lm_paint', sec:'labormin', std:false, unit:'EA', price:176.85, mat:0,
+  { key:'lm_paint', sec:'labormin', fixed:true, std:false, unit:'EA', price:176.85, mat:0,
     desc:()=>'Painting labor minimum', calc:()=>1,
     match:[['paint'],['labor'],['minimum']] },
 
   // ── PERMITS ────────────────────────────────────────────────────────────────
-  { key:'permit', sec:'permits', std:true, unit:'EA', price:350.00, mat:0,
+  { key:'permit', sec:'permits', fixed:true, std:true, unit:'EA', price:350.00, mat:0,
     desc:()=>'Residential roofing permit - City of Houston',
     calc:()=>1,
     match:[['permit']] },
@@ -20395,10 +20395,24 @@ window.demandCompare = demandCompare;
 let demandPriceList = null;
 
 function demandSeedPrices(){
-  const p = {};
-  DEMAND_CATALOG.forEach(c=>{ p[c.key] = c.price; });
-  return { prices:p, taxRate:8.25, updatedAt:null };
+  const p = {}, std = {};
+  DEMAND_CATALOG.forEach(c=>{
+    p[c.key] = c.price;
+    // Seed: every dwelling-roof line that isn't an alternate wording, plus the
+    // dumpster and the permit. Broad on purpose — the estimator prunes per job.
+    std[c.key] = (c.sec==='roof' && !c.alt) || c.key==='dumpster' || c.key==='permit';
+  });
+  return { prices:p, std, taxRate:8.25, updatedAt:null };
 }
+// Is this catalog item on the standard build? The saved list wins; the catalog
+// flag is only the fallback for an item added after the list was last saved.
+function demandIsStd(key){
+  const list = demandPriceList && demandPriceList.std;
+  if(list && Object.prototype.hasOwnProperty.call(list, key)) return !!list[key];
+  const c = DEMAND_CAT_BY_KEY[key];
+  return !!(c && c.std);
+}
+window.demandIsStd = demandIsStd;
 
 async function loadDemandPriceList(){
   if(demandPriceList) return demandPriceList;
@@ -20415,8 +20429,10 @@ async function loadDemandPriceList(){
       }
     } catch(e){ console.warn('[demand] price list load failed', e); }
   }
-  // Any catalog item added after the list was saved still needs a price.
+  // Any catalog item added after the list was saved still needs a price and a
+  // standard-build flag.
   demandPriceList.prices = Object.assign({}, seed.prices, demandPriceList.prices||{});
+  demandPriceList.std    = Object.assign({}, seed.std,    demandPriceList.std||{});
   if(demandPriceList.taxRate==null) demandPriceList.taxRate = 8.25;
   return demandPriceList;
 }
@@ -20546,7 +20562,12 @@ function demandBuildLines(m, elev, priceList){
         unitPrice: priceList.prices[c.key] ?? c.price, priceSource: 'house',
         // An alternate wording for a slot a standard line already fills stays
         // off until chosen, so the demand can't carry both and double-count.
-        mat: c.mat ?? 0.45, tax: 0, checked: !c.alt && (qty > 0 || !!c.std),
+        // An explicit standard-list tick wins, even for an alternate wording —
+        // the slot resolver still guarantees only one per slot survives. A line
+        // whose quantity is a constant (a labor minimum, the permit) only ever
+        // comes on from the standard list, never because it "has a quantity".
+        mat: c.mat ?? 0.45, tax: 0,
+        checked: demandIsStd(c.key) || (!c.alt && !c.fixed && qty > 0),
         status: '', note: '', carrierRef: null, custom: false,
       });
     }
@@ -20584,6 +20605,9 @@ function demandTotals(lines, carrierLines){
   const t = { tax:0, rcv:0, carrierRcv:0, count:0, missing:0, short:0 };
   lines.forEach(L=>{
     if(!L.checked) return;
+    // Switched on but nothing scoped yet — it will not print, so it should not
+    // be counted as a line, nor flagged as missing from the carrier's file.
+    if(!((parseFloat(L.qty)||0) > 0)) return;
     t.count++;
     t.tax += parseFloat(L.tax)||0;
     t.rcv += parseFloat(L.rcv)||0;
@@ -20987,7 +21011,7 @@ async function openDemandEstimate(jobId){
           <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(j.name||'')}${j.address&&j.address!=='—'?' · '+esc(j.address):''}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button id="dmPrices" style="background:rgba(100,116,139,0.12);border:1px solid rgba(100,116,139,0.35);color:#94A3B8;font-size:10px;font-weight:600;padding:6px 10px;border-radius:5px;cursor:pointer">Price List</button>
+          <button id="dmPrices" style="background:rgba(100,116,139,0.12);border:1px solid rgba(100,116,139,0.35);color:#94A3B8;font-size:10px;font-weight:600;padding:6px 10px;border-radius:5px;cursor:pointer">Price &amp; Standard List</button>
           <button id="dmSave" class="btn-cancel" style="font-size:11px;padding:7px 12px">Save to Job</button>
           <button id="dmPrint" class="btn-primary" style="font-size:11px;padding:7px 14px;display:flex;align-items:center;gap:5px"><i class="ti ti-file-text" style="font-size:13px"></i>Print Demand</button>
           <button id="dmClose" class="icon-btn"><i class="ti ti-x"></i></button>
@@ -21004,7 +21028,7 @@ async function openDemandEstimate(jobId){
 
         <!-- B. CARRIER ESTIMATE -->
         <div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-          <div style="padding:9px 12px;background:rgba(255,255,255,0.02);font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">2 · Carrier estimate <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0"> — the file we compare against</span></div>
+          <div id="dmCarrierDrop" style="padding:9px 12px;background:rgba(255,255,255,0.02);font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.04em">2 · Carrier estimate <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0"> — the file we compare against</span></div>
           <div style="padding:12px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <button id="dmUpload" class="pill-btn" style="font-size:11px;display:flex;align-items:center;gap:5px"><i class="ti ti-file-upload" style="font-size:13px"></i>Upload carrier PDF</button>
@@ -21017,6 +21041,7 @@ async function openDemandEstimate(jobId){
               <textarea id="dmPasteText" placeholder="Paste the scope / line item section of the carrier's estimate here…" style="width:100%;height:120px;background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:6px;color:#e6edf6;font-size:11px;font-family:ui-monospace,Menlo,monospace;padding:8px;resize:vertical"></textarea>
               <button id="dmParsePaste" class="btn-primary" style="font-size:11px;padding:6px 12px;margin-top:6px">Parse pasted text</button>
             </div>
+            <div id="dmCarrierMsg" style="margin-top:9px"></div>
             <div id="dmCarrierList" style="margin-top:9px"></div>
           </div>
         </div>
@@ -21390,32 +21415,131 @@ async function openDemandEstimate(jobId){
 
   // ── carrier estimate loading ──
   async function loadCarrierText(text, fileName){
+    lastRawText = text || lastRawText;
     const lines = parseCarrierEstimate(text);
-    if(!lines.length){ toast('No line items found in that file — try pasting the scope text instead'); return; }
+    if(!lines.length){
+      const chars = (text||'').replace(/\s/g,'').length;
+      carrierMsg('warn',
+        `Read ${chars.toLocaleString()} characters from <b>${esc(fileName||'the file')}</b>, but no priced line items were recognised. `
+        + `A line item needs a quantity, a unit (SQ, LF, SF, EA) and a price on the same row. `
+        + `<button id="dmShowRaw" style="margin-top:6px;background:rgba(255,255,255,0.08);border:1px solid var(--border);color:var(--brand-light);font-size:10px;font-weight:700;padding:4px 10px;border-radius:5px;cursor:pointer">Show what was read</button>`
+        + ` &nbsp;then paste the scope section below if it looks wrong.`);
+      $d('#dmPasteWrap').style.display='block';
+      $d('#dmCarrierMsg').querySelector('#dmShowRaw')?.addEventListener('click', ()=>{
+        $d('#dmPasteText').value = (lastRawText||'').slice(0, 20000);
+        $d('#dmPasteText').scrollIntoView({block:'nearest'});
+      });
+      renderCarrier();
+      return;
+    }
     D.carrier = { fileName: fileName||'', parsedAt: new Date().toISOString(), lines };
     recompare();
     renderAll();
     const bal = lines.filter(l=>l.balanced).length;
+    carrierMsg('ok', `<b>${lines.length}</b> line items read from ${esc(fileName||'the file')}${bal<lines.length?` — ${lines.length-bal} need a quick sanity check below`:' — all verified against their own arithmetic'}.`);
     toast(`Parsed ${lines.length} carrier lines (${bal} verified)`);
+  }
+
+  // Report what happened where it can be read, not in a toast that vanishes.
+  function carrierMsg(tone, html){
+    const box = $d('#dmCarrierMsg');
+    if(!box) return;
+    if(!html){ box.innerHTML=''; return; }
+    const c = tone==='error' ? ['rgba(248,113,113,0.35)','rgba(248,113,113,0.07)','#F87171']
+            : tone==='warn' ? ['rgba(251,191,36,0.35)','rgba(251,191,36,0.07)','#FBBF24']
+            : ['rgba(52,211,153,0.35)','rgba(52,211,153,0.07)','#34D399'];
+    box.innerHTML = `<div style="border:1px solid ${c[0]};background:${c[1]};border-radius:6px;padding:9px 11px;font-size:11px;color:#e6edf6;line-height:1.55">
+      <span style="color:${c[2]};font-weight:700">${tone==='error'?'Could not read that file':tone==='warn'?'Read the file, but found no line items':'Loaded'}</span><br>${html}</div>`;
+  }
+
+  let lastRawText = '';
+  async function handleCarrierFile(f){
+    if(!f) return;
+    carrierMsg('', '');
+    $d('#dmCarrierStat').textContent = 'Reading ' + (f.name||'file') + '…';
+    const isPdf  = /\.pdf$/i.test(f.name||'') || f.type==='application/pdf';
+    const isText = /\.(txt|csv)$/i.test(f.name||'') || (f.type||'').startsWith('text/');
+    const isImg  = (f.type||'').startsWith('image/');
+
+    if(!isPdf && !isText && !isImg){
+      carrierMsg('error', `<b>${esc(f.name||'')}</b> is not a PDF, text file or image. Export the estimate as a PDF, or paste the line items below.`);
+      $d('#dmPasteWrap').style.display='block'; renderCarrier(); return;
+    }
+
+    let text = '';
+    try {
+      text = isText ? await f.text() : await demandReadPdf(f);
+    } catch(e){
+      console.error('[demand] carrier read failed', e);
+      const noReader = /reader not loaded/i.test(e.message||'');
+      carrierMsg('error', noReader
+        ? 'The PDF reader did not load — it comes from a CDN, so a blocked or dropped connection stops it. Reload the page and try again, or paste the line items below.'
+        : `${esc(e.message||'Unknown error')}. Try pasting the line items below.`);
+      $d('#dmPasteWrap').style.display='block'; renderCarrier(); return;
+    }
+
+    const chars = (text||'').replace(/\s/g,'').length;
+    // A scanned estimate has no text layer — OCR is the only way in.
+    if(chars < 40 && !isImg){
+      carrierMsg('warn', `This looks like a scan — no selectable text (${chars} characters). `
+        + `<button id="dmOcr" style="margin-top:6px;background:rgba(77,157,224,0.15);border:1px solid rgba(77,157,224,0.4);color:var(--brand-light);font-size:10px;font-weight:700;padding:4px 10px;border-radius:5px;cursor:pointer">Run OCR on it</button>`
+        + ` &nbsp;or paste the line items below.`);
+      $d('#dmPasteWrap').style.display='block';
+      $d('#dmCarrierMsg').querySelector('#dmOcr')?.addEventListener('click', ()=>runCarrierOcr(f));
+      renderCarrier(); return;
+    }
+    if(isImg){ await runCarrierOcr(f); return; }
+
+    lastRawText = text;
+    await loadCarrierText(text, f.name);
+  }
+
+  async function runCarrierOcr(f){
+    if(typeof ocrLossFile !== 'function'){
+      carrierMsg('error','OCR is not available in this build — paste the line items below.'); return;
+    }
+    carrierMsg('warn','Running OCR — this takes a few seconds per page…');
+    try {
+      const text = await ocrLossFile({ name:f.name, _file:f });
+      lastRawText = text || '';
+      if(!text || text.replace(/\s/g,'').length < 40){
+        carrierMsg('error','OCR came back empty. Paste the line items below.');
+        $d('#dmPasteWrap').style.display='block'; return;
+      }
+      await loadCarrierText(text, (f.name||'file') + ' (OCR)');
+    } catch(e){
+      console.error('[demand] OCR failed', e);
+      carrierMsg('error', `OCR failed: ${esc(e.message||'unknown error')}. Paste the line items below.`);
+      $d('#dmPasteWrap').style.display='block';
+    }
   }
 
   $d('#dmUpload').addEventListener('click', ()=>{
     const inp = document.createElement('input');
-    inp.type='file'; inp.accept='.pdf,application/pdf,.txt';
+    inp.type='file';
+    inp.accept='.pdf,application/pdf,.txt,.csv,text/plain,image/*';
+    // Attached to the DOM: a detached input does not fire change in every browser.
+    inp.style.cssText='position:fixed;left:-9999px;width:1px;height:1px';
+    document.body.appendChild(inp);
     inp.addEventListener('change', async ()=>{
-      const f = inp.files?.[0]; if(!f) return;
-      toast('Reading carrier estimate…');
-      try {
-        const text = await demandReadPdf(f);
-        if(!text || text.trim().length < 40){
-          toast('That PDF has no text layer — paste the line items instead');
-          $d('#dmPasteWrap').style.display='block'; return;
-        }
-        await loadCarrierText(text, f.name);
-      } catch(e){ console.error('[demand] carrier read', e); toast('Could not read that PDF — try pasting the text'); $d('#dmPasteWrap').style.display='block'; }
+      const f = inp.files?.[0];
+      inp.remove();
+      await handleCarrierFile(f);
     });
+    inp.addEventListener('cancel', ()=>inp.remove());
     inp.click();
   });
+
+  // Drag a file anywhere onto the carrier block
+  const dropZone = $d('#dmCarrierDrop')?.parentElement;
+  if(dropZone){
+    dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.style.background='rgba(77,157,224,0.06)'; });
+    dropZone.addEventListener('dragleave', ()=>{ dropZone.style.background=''; });
+    dropZone.addEventListener('drop', async e=>{
+      e.preventDefault(); dropZone.style.background='';
+      await handleCarrierFile(e.dataTransfer?.files?.[0]);
+    });
+  }
   $d('#dmPasteBtn').addEventListener('click', ()=>{
     const w = $d('#dmPasteWrap'); w.style.display = w.style.display==='none' ? 'block' : 'none';
   });
@@ -21501,7 +21625,7 @@ async function openDemandEstimate(jobId){
     let n=0;
     D.lines.forEach(L=>{
       const c = L.catKey ? DEMAND_CAT_BY_KEY[L.catKey] : null;
-      if(c && c.std && !L.checked){ L.checked = true; n++; }
+      if(c && demandIsStd(c.key) && !L.checked){ L.checked = true; n++; }
     });
     renderLines();
     toast(n ? `${n} standard line${n===1?'':'s'} switched on` : 'All standard lines already on');
@@ -21565,19 +21689,26 @@ function openDemandPriceEditor(onSaved){
     <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:600px;max-width:100%;max-height:90vh;display:flex;flex-direction:column">
       <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Demand Price List</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px">Fallback unit prices for lines the carrier's file doesn't carry. Shared with the team.</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;color:#fff">Price &amp; Standard List</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Tick <b style="color:#34D399">STD</b> for every line that should start switched on when you open a new demand — you prune per job. Prices are the fallback for lines the carrier's file doesn't carry. Shared with the team.</div>
         </div>
         <button id="dpClose" class="icon-btn"><i class="ti ti-x"></i></button>
       </div>
       <div style="padding:12px 18px;overflow:auto;flex:1">
-        <div style="margin-bottom:10px"><label class="ie-lbl">Sales tax rate %</label><input class="ie-inp" id="dpTax" style="width:110px" value="${PL.taxRate??8.25}"></div>
+        <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:10px;flex-wrap:wrap">
+          <div><label class="ie-lbl">Sales tax rate %</label><input class="ie-inp" id="dpTax" style="width:110px" value="${PL.taxRate??8.25}"></div>
+          <div style="flex:1"></div>
+          <button id="dpAllRoof" style="background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:#34D399;font-size:10px;font-weight:700;padding:5px 10px;border-radius:5px;cursor:pointer">Tick all roof</button>
+          <button id="dpNone" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:700;padding:5px 10px;border-radius:5px;cursor:pointer">Untick all</button>
+          <span id="dpCount" style="font-size:10px;color:var(--muted)"></span>
+        </div>
         ${DEMAND_SECTIONS.concat([{key:'elev',label:'Gutters, Screens & Beading'}]).map(S=>{
           const items = DEMAND_CATALOG.filter(c=>c.sec===S.key);
           if(!items.length) return '';
           return `<div style="font-size:10px;font-weight:700;color:var(--brand-light);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 5px">${esc(S.label)}</div>` +
             items.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0">
-              <span style="flex:1;font-size:10.5px;color:var(--muted)">${esc(c.desc({steepBand:''},{}))}</span>
+              <input type="checkbox" data-std-key="${c.key}" ${demandIsStd(c.key)?'checked':''} title="Start this line switched on for a new demand" style="accent-color:#34D399;flex:0 0 auto">
+              <span style="flex:1;font-size:10.5px;color:var(--muted)">${esc(c.desc({steepBand:''},{}))}${c.alt?' <span style="color:#A78BFA;font-size:9px">alt</span>':''}</span>
               <span style="font-size:9px;color:var(--muted);width:24px">${c.unit}</span>
               <input class="ie-inp" data-price-key="${c.key}" value="${PL.prices[c.key]??c.price}" style="width:86px;padding:3px 6px;font-size:11px;text-align:right">
             </div>`).join('');
@@ -21592,16 +21723,37 @@ function openDemandPriceEditor(onSaved){
   const close=()=>overlay.remove();
   overlay.querySelector('#dpClose').addEventListener('click',close);
   overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
+  const countStd = ()=>{
+    const n = overlay.querySelectorAll('[data-std-key]:checked').length;
+    const el = overlay.querySelector('#dpCount');
+    if(el) el.textContent = n + ' of ' + overlay.querySelectorAll('[data-std-key]').length + ' start switched on';
+  };
+  overlay.querySelectorAll('[data-std-key]').forEach(cb=>cb.addEventListener('change', countStd));
+  countStd();
+  overlay.querySelector('#dpAllRoof').addEventListener('click',()=>{
+    overlay.querySelectorAll('[data-std-key]').forEach(cb=>{
+      const c = DEMAND_CAT_BY_KEY[cb.dataset.stdKey];
+      if(c && c.sec==='roof' && !c.alt) cb.checked = true;
+    });
+    countStd();
+  });
+  overlay.querySelector('#dpNone').addEventListener('click',()=>{
+    overlay.querySelectorAll('[data-std-key]').forEach(cb=>{ cb.checked=false; }); countStd();
+  });
   overlay.querySelector('#dpReset').addEventListener('click',()=>{
     demandPriceList = demandSeedPrices();
     overlay.querySelectorAll('[data-price-key]').forEach(el=>{ el.value = demandPriceList.prices[el.dataset.priceKey]; });
+    overlay.querySelectorAll('[data-std-key]').forEach(cb=>{ cb.checked = !!demandPriceList.std[cb.dataset.stdKey]; });
     overlay.querySelector('#dpTax').value = demandPriceList.taxRate;
+    countStd();
   });
   overlay.querySelector('#dpSave').addEventListener('click',async ()=>{
     demandPriceList = demandPriceList || demandSeedPrices();
+    demandPriceList.std = demandPriceList.std || {};
     overlay.querySelectorAll('[data-price-key]').forEach(el=>{
       const v = parseFloat(el.value); if(isFinite(v)) demandPriceList.prices[el.dataset.priceKey] = v;
     });
+    overlay.querySelectorAll('[data-std-key]').forEach(cb=>{ demandPriceList.std[cb.dataset.stdKey] = cb.checked; });
     const tr = parseFloat(overlay.querySelector('#dpTax').value);
     if(isFinite(tr)) demandPriceList.taxRate = tr;
     await saveDemandPriceList();
