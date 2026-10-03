@@ -5752,13 +5752,16 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
           <!-- Profit -->
           <div class="dp-card" id="profitCard" style="margin-top:8px;margin-bottom:10px">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div id="profitHeader" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer" onclick="var b=document.getElementById('profitPrintBtn'),c=document.getElementById('profitChev'),o=b.style.display==='none';b.style.display=o?'flex':'none';c.classList.toggle('open',o)">
               <div style="display:flex;align-items:center;gap:5px">
                 <span style="font-size:12px;font-weight:700;color:var(--brand)">Net Profit</span>
               </div>
-              <span style="font-size:13px;font-weight:700" id="profitNet">$${parseFloat(j.potVal||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="font-size:13px;font-weight:700" id="profitNet">$${parseFloat(j.potVal||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                <i class="ti ti-chevron-down acc-chev" id="profitChev" style="margin-left:0" aria-hidden="true"></i>
+              </div>
             </div>
-            <button onclick="printJobPnL('${j.id}')" style="margin-top:9px;width:100%;background:rgba(11,79,108,0.12);border:1px solid rgba(77,157,224,0.35);color:var(--brand-light);font-size:11px;font-weight:700;padding:7px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-printer" style="font-size:13px"></i>Print Job Summary (P&amp;L)</button>
+            <button id="profitPrintBtn" onclick="printJobPnL('${j.id}')" style="display:none;margin-top:9px;width:100%;background:rgba(11,79,108,0.12);border:1px solid rgba(77,157,224,0.35);color:var(--brand-light);font-size:11px;font-weight:700;padding:7px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;align-items:center;justify-content:center;gap:6px"><i class="ti ti-printer" style="font-size:13px"></i>Print Job Summary (P&amp;L)</button>
           </div>
 
           <!-- Overhead -->
