@@ -421,7 +421,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 /* True phone widths only — iPad Mini portrait (744px) stays two-column */
 @media (max-width:640px){
   /* Job detail modal: stack side-by-side cards into one column */
-  .two-col{grid-template-columns:1fr}
+  .two-col{grid-template-columns:minmax(0,1fr)}
+  .two-col>*{min-width:0}
   /* Collapse inline-styled two-column grids to one column */
   [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr!important}
   [style*="grid-template-columns:repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr)!important}
@@ -5390,7 +5391,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               return `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
                 <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;width:62px;flex-shrink:0;padding-top:1px">${label}</span>
                 ${entry
-                  ? `<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:5px"><i class="ti ${methodIcon(entry.method)}" style="font-size:12px;color:${ageColor(d)}"></i><span style="font-size:12px;font-weight:700;color:${ageColor(d)}">${contactAgoText(entry.at)}</span><span style="font-size:10px;color:var(--muted)">· ${escapeHtml(entry.method)} · ${escapeHtml(entry.by||'')}</span></div>${entry.note?`<div style="font-size:10px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(entry.note)}</div>`:''}</div>`
+                  ? `<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px 5px;min-width:0"><i class="ti ${methodIcon(entry.method)}" style="font-size:12px;color:${ageColor(d)}"></i><span style="font-size:12px;font-weight:700;color:${ageColor(d)}">${contactAgoText(entry.at)}</span><span style="font-size:10px;color:var(--muted);min-width:0;overflow-wrap:anywhere">· ${escapeHtml(entry.method)} · ${escapeHtml(entry.by||'')}</span></div>${entry.note?`<div title="${escapeHtml(entry.note)}" style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.35;white-space:normal;overflow-wrap:anywhere;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(entry.note)}</div>`:''}</div>`
                   : `<span style="font-size:11px;color:var(--muted);font-style:italic">no contact logged</span>`}
               </div>`;
             };
