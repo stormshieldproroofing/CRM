@@ -6498,6 +6498,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         j2.zohoDeleted.pay.push(removed.zohoId);
       }
       j2.deposits.splice(i,1);
+      if(!j2.deposits.length) j2._depsCleared=true;   // tells sync this was a real delete-all
       j2.paidVal=(j2.deposits.reduce((s,d)=>s+parseFloat(d.amount),0)).toFixed(2);
       if(removed) logActivity(j2, 'deposit_remove', 'Deposit removed', `$${parseFloat(removed.amount).toLocaleString()} · ${removed.desc}`);
       saveToStorage();refreshDepositUI();renderBoard();

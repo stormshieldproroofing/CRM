@@ -234,7 +234,7 @@ async function loadAllFromSupabase() {
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
-          .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined,checkFile:(d.check_file&&typeof d.check_file==='object')?d.check_file:undefined})),
+          .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined,_did:d.did||undefined,checkFile:(d.check_file&&typeof d.check_file==='object')?d.check_file:undefined})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
           .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
@@ -286,6 +286,16 @@ async function loadAllFromSupabase() {
         keep.push(e);
       });
       if(keep.length !== j.expenses.length) j.expenses = keep;
+      // Deposits: same idea — drop exact copies by their unique id (_did) only.
+      if(Array.isArray(j.deposits)){
+        const seenDid = new Set(), depKeep = [];
+        j.deposits.forEach(d => {
+          if(!d) return;
+          if(d._did){ if(seenDid.has(d._did)){ _dupRemoved++; return; } seenDid.add(d._did); }
+          depKeep.push(d);
+        });
+        if(depKeep.length !== j.deposits.length) j.deposits = depKeep;
+      }
     });
     if(_dupRemoved > 0){
       console.log('[Supabase] removed', _dupRemoved, 'true duplicate expense line(s) by id');
@@ -531,20 +541,44 @@ async function pushAllToSupabase() {
       // Deposits: only delete-then-insert when there ARE deposits to write,
       // and surface insert errors so a mid-sync failure doesn't silently wipe
       // them (same hardening as expenses).
+      // Deposits: write the new rows FIRST, then remove the previous copies by id
+      // only after the write succeeds — an interrupted save can never leave the
+      // job with zero deposits. Brief duplicates are dropped on load by _did.
       if (j.deposits?.length) {
-        await sb.from('deposits').delete().eq('job_id', j.id);
-        const depRows = j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
+        j.deposits.forEach(d => { if (d && !d._did) d._did = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); });
+        const { data: oldDepRows, error: oldDepErr } = await sb.from('deposits').select('id').eq('job_id', j.id);
+        if (oldDepErr) console.error('[Supabase] could not read existing deposit ids — saving new rows without removing old ones (dedup on load):', oldDepErr);
+        const depRows = j.deposits.filter(Boolean).map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
             zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null,
-            check_file: d.checkFile || null }));
+            did: d._did || null, check_file: d.checkFile || null }));
+        let depSaved = 0;
         let { error: depErr } = await sb.from('deposits').insert(depRows);
-        // If the check_file column is ever missing, retry without it so deposits are never lost.
-        if (depErr && /check_file/i.test((depErr.message||'') + ' ' + (depErr.details||''))) {
-          console.warn('[Supabase] deposits.check_file missing — saving without check photo links');
-          ({ error: depErr } = await sb.from('deposits').insert(depRows.map(({ check_file, ...r }) => r)));
+        if (!depErr) depSaved = depRows.length;
+        else {
+          console.error('[Supabase] deposit batch insert failed, retrying row by row:', depErr);
+          for (const row of depRows) {
+            let { error } = await sb.from('deposits').insert(row);
+            // If a newer column is ever missing, save the deposit without it rather than lose it.
+            if (error && /check_file|did/i.test((error.message||'') + ' ' + (error.details||''))) {
+              const { check_file, did, ...basic } = row;
+              ({ error } = await sb.from('deposits').insert(basic));
+            }
+            if (error) console.error('[Supabase] deposit rejected:', row, error);
+            else depSaved++;
+          }
+          if (depSaved < depRows.length && window.toast) window.toast('Deposit save failed — check connection & retry');
         }
-        if(depErr){ console.error('[Supabase] deposit insert failed — may be lost, retry save:', depErr); if(window.toast) window.toast('Deposit save failed — check connection & retry'); }
-      } else {
+        const oldDepIds = (oldDepRows || []).map(r => r.id).filter(Boolean);
+        if (depSaved > 0 && oldDepIds.length) {
+          const { error: delErr } = await sb.from('deposits').delete().in('id', oldDepIds);
+          if (delErr) console.error('[Supabase] removing old deposit rows failed (duplicates will be deduped on load):', delErr);
+        }
+        j._depsCleared = false;
+      } else if (j._depsCleared) {
+        // Only clear remote deposits when the user actually deleted the last one —
+        // never just because the local list happens to be empty (load race).
         await sb.from('deposits').delete().eq('job_id', j.id);
+        j._depsCleared = false;
       }
 
       // Replace expenses safely: insert first into a temp-free flow by
