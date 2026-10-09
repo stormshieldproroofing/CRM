@@ -143,6 +143,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .dp-tab:hover{color:var(--brand)}
 .dp-tab.active{border-bottom-color:var(--brand-light);color:var(--brand);font-weight:700}
 .dp-tab i{display:none}
+.dp-tab-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px 1px 5px;border-radius:999px;font-size:9.5px;font-weight:800;letter-spacing:0;line-height:15px;text-transform:none}
+.dp-tab-badge.ok{background:rgba(34,197,94,0.16);color:#4ADE80;border:1px solid rgba(74,222,128,0.35)}
+.dp-tab-badge.wait{background:rgba(245,158,11,0.14);color:#FBBF24;border:1px solid rgba(251,191,36,0.35)}
+.dp-tab-badge .ck{font-size:10px;line-height:1}
 .dp-body{padding:14px 16px}
 .action-pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
 .ap-pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid}
@@ -5239,7 +5243,7 @@ function renderDetailPanel(){
       </div>
 
       <div class="dp-tabs">
-        ${tabs.map(t=>`<button class="dp-tab${activeTab===t.id?' active':''}" data-dptab="${t.id}"><i class="ti ${t.icon}" aria-hidden="true"></i>${t.label}</button>`).join('')}
+        ${tabs.map(t=>`<button class="dp-tab${activeTab===t.id?' active':''}" data-dptab="${t.id}"><i class="ti ${t.icon}" aria-hidden="true"></i>${t.label}<span class="dp-tab-badge-slot" data-badge-for="${t.id}">${dpTabBadgeHTML(t.id,j)}</span></button>`).join('')}
       </div>
     </div>
     <div class="dp-body" id="dpBody"></div>`;
@@ -5253,6 +5257,61 @@ function renderDetailPanel(){
 
   renderDetailTab(j,u,col,jobPipeline,jobColumns);
   renderJobWeather(j); // fills #jobWxBox when the overview tab is showing (no-op otherwise)
+  watchDpTabBadges();
+}
+
+/* ── Upload status badges on the job modal tabs ──
+   Shows a green ✓ + count on Photos / Contract / Checks / Loss Statement /
+   Roof Measurement / Other when files are uploaded, so you can see what's
+   on a job without clicking into every tab. Contract shows an amber "Sent"
+   when it went out for e-signature but no signed copy is uploaded yet. */
+function jobDocCounts(j){
+  const len = a => Array.isArray(a) ? a.length : 0;
+  let photos = 0;
+  if(j.photos && typeof j.photos === 'object') Object.values(j.photos).forEach(a => { photos += len(a); });
+  return {
+    photos,
+    contract: len(j.signedContractFiles) + len(j.contracts),
+    checks: len(j.checks),
+    loss: len(j.lossFiles),
+    roof: len(j.roofFiles),
+    other: len(j.otherFiles),
+  };
+}
+window.jobDocCounts = jobDocCounts;
+
+function dpTabBadgeHTML(tabId, j){
+  if(!j) return '';
+  const counts = jobDocCounts(j);
+  if(!(tabId in counts)) return '';
+  const n = counts[tabId];
+  if(n > 0){
+    const what = tabId === 'photos' ? (n===1?'photo':'photos') : (n===1?'file':'files');
+    return `<span class="dp-tab-badge ok" title="${n} ${what} uploaded"><span class="ck">✓</span>${n}</span>`;
+  }
+  if(tabId === 'contract' && j.contract && j.contract.sentForSignature){
+    return `<span class="dp-tab-badge wait" title="Sent for signature — signed copy not uploaded yet">Sent</span>`;
+  }
+  return '';
+}
+
+function refreshDpTabBadges(){
+  const j = jobs.find(x => x.id === openJobId); if(!j) return;
+  document.querySelectorAll('#detailPanel .dp-tab-badge-slot').forEach(slot => {
+    const html = dpTabBadgeHTML(slot.dataset.badgeFor, j);
+    if(slot.innerHTML !== html) slot.innerHTML = html;
+  });
+}
+window.refreshDpTabBadges = refreshDpTabBadges;
+
+// Tabs re-render their own body after an upload or delete; watch for that
+// so the badges at the top stay current without reopening the job.
+let _dpBadgeObserver = null;
+function watchDpTabBadges(){
+  const body = $('dpBody'); if(!body || typeof MutationObserver === 'undefined') return;
+  if(_dpBadgeObserver) _dpBadgeObserver.disconnect();
+  _dpBadgeObserver = new MutationObserver(() => refreshDpTabBadges());
+  _dpBadgeObserver.observe(body, { childList:true });
 }
 
 function renderDetailTab(j,u,col,jobPipeline,jobColumns){
