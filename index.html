@@ -162,6 +162,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .job-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;min-width:0}
 .job-bar .action-pills{flex:1;margin:0}
 .jb-caret{font-size:9px;opacity:.6}
+
 @media (max-width:760px){.dp-name-row{gap:10px}.dp-title-group{flex-direction:column;align-items:flex-start;gap:5px}.dp-title-group .dp-name{max-width:100%}}
 .action-pills::-webkit-scrollbar{display:none}
 .action-pills .ap-pill{flex-shrink:0;white-space:nowrap}
@@ -6302,7 +6303,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     </div>
                   </div>
                   <div style="display:flex;gap:5px;flex-shrink:0">
-                    ${d.checkFile ? `<button onclick="depOpenCheck(${i})" title="View check: ${escapeHtml(d.checkFile.name||'check')}" style="width:24px;height:24px;border-radius:5px;border:1px solid ${window._depFindCheckRec&&!window._depFindCheckRec(j2,d.checkFile)?'rgba(251,191,36,0.4)':'rgba(77,157,224,0.3)'};background:rgba(77,157,224,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--brand-light);padding:0"><i class="ti ti-file-dollar" style="font-size:14px"></i></button>` : ''}
+                    ${d.checkFile ? `<button onclick="openDepositCheck('${j2.id}',${i})" title="Preview check: ${escapeHtml(d.checkFile.name||'check')}" aria-label="Preview attached check" style="width:24px;height:24px;border-radius:5px;border:1px solid ${window._depFindCheckRec&&!window._depFindCheckRec(j2,d.checkFile)?'rgba(251,191,36,0.4)':'rgba(77,157,224,0.3)'};background:rgba(77,157,224,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--brand-light);padding:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5-6.5a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5-6.5"/></svg></button>` : ''}
                     <button onclick="depEditOpen(${i})" title="Edit" style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);padding:0;transition:border-color 0.12s,color 0.12s" onmouseover="this.style.borderColor='var(--brand-light)';this.style.color='var(--brand-light)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">${svgPencil}</button>
                     <button onclick="depDelete(${i})" title="Delete" style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--danger);padding:0;transition:background 0.12s" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.07)'">${svgTrash}</button>
                   </div>
@@ -22426,6 +22427,73 @@ async function previewStoredFile(f, title){
   }
 }
 window.previewStoredFile = previewStoredFile;
+
+// ── Deposit attachments: paperclip on each deposit in the expanded list ──
+// Lists the check photos/PDFs linked to a job's deposits (earliest first),
+// labelled with the deposit amount + description, for the preview's ‹ › nav.
+function depositAttachments(j){
+  if(!j) return [];
+  const checks = Array.isArray(j.checks) ? j.checks : [];
+  const same = (l,f) => !!(l && f && ((l.id && l.id===f.id) || (l.path && l.path===f.path) || (!l.id && !l.path && l.name && l.name===f.name)));
+  const used = new Set();
+  const out = [];
+  const deps = (Array.isArray(j.deposits) ? j.deposits : []).map((d,depIdx) => d ? Object.assign({}, d, {depIdx}) : null).filter(d => d && d.checkFile)
+    .sort((a,b) => (new Date(a.date||0)) - (new Date(b.date||0)));
+  deps.forEach(d => {
+    const idx = checks.findIndex(f => same(d.checkFile, f));
+    if(idx < 0 || used.has(idx)) return;
+    used.add(idx);
+    const amt = (parseFloat(d.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const desc = d.desc ? d.desc.charAt(0).toUpperCase()+d.desc.slice(1) : 'Deposit';
+    out.push({ rec: checks[idx], title: `$${amt} · ${desc}`, depIdx: d.depIdx });
+  });
+  return out;
+}
+window.depositAttachments = depositAttachments;
+
+
+// Open the deposit attachments in the standard file preview, with
+// previous / next arrows (and ← → keys) when there is more than one.
+function openDepositAttachments(jobId, idx){
+  const j = (window.jobs||[]).find(x => x.id === jobId);
+  const items = depositAttachments(j);
+  if(!items.length){ toast('No check photos attached yet'); return; }
+  idx = ((idx||0) % items.length + items.length) % items.length;
+  document.querySelectorAll('#filePreviewOverlay').forEach(o => o.querySelector('#fpClose')?.click());
+  const it = items[idx];
+  previewStoredFile(it.rec, items.length > 1 ? `${it.title}  (${idx+1} of ${items.length})` : it.title);
+  if(items.length < 2) return;
+  const ovs = document.querySelectorAll('#filePreviewOverlay');
+  const ov = ovs[ovs.length-1]; if(!ov) return;
+  const bar = ov.querySelector('#fpOpen')?.parentNode; if(!bar) return;
+  const navBtn = (dir, label, ch) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.title = label; b.setAttribute('aria-label', label); b.textContent = ch;
+    b.style.cssText = 'width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0';
+    b.addEventListener('click', e => { e.stopPropagation(); openDepositAttachments(jobId, idx+dir); });
+    return b;
+  };
+  const first = bar.querySelector('#fpOpen');
+  bar.insertBefore(navBtn(-1,'Previous check','‹'), first);
+  bar.insertBefore(navBtn(1,'Next check','›'), first);
+  const onKey = e => {
+    if(!document.body.contains(ov)){ document.removeEventListener('keydown', onKey); return; }
+    if(e.key === 'ArrowLeft'){ document.removeEventListener('keydown', onKey); openDepositAttachments(jobId, idx-1); }
+    else if(e.key === 'ArrowRight'){ document.removeEventListener('keydown', onKey); openDepositAttachments(jobId, idx+1); }
+  };
+  document.addEventListener('keydown', onKey);
+}
+window.openDepositAttachments = openDepositAttachments;
+
+// Paperclip on a deposit row: open that deposit's check (with ‹ › to the others).
+function openDepositCheck(jobId, depIdx){
+  const j = (window.jobs||[]).find(x => x.id === jobId);
+  const items = depositAttachments(j);
+  const at = items.findIndex(it => it.depIdx === depIdx);
+  if(at < 0){ toast('Check photo not found — it may have been removed from the Checks tab'); return; }
+  openDepositAttachments(jobId, at);
+}
+window.openDepositCheck = openDepositCheck;
 
 // Preview a file that lives in one of the job's arrays.
 function previewJobFile(collection, index){
