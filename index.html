@@ -134,6 +134,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .dp-header-area{background:#141927;border-bottom:1px solid var(--border);padding:0 16px;border-radius:12px 12px 0 0;position:sticky;top:0;z-index:10}
 .dp-name-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0 0}
 .dp-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;color:#fff}
+.dp-title-group{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.dp-title-group .dp-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-pipe-wrap{position:relative;display:inline-flex;flex-shrink:0}
+.dp-pipe-wrap>div{top:100%;left:0}
+.dp-pipe-tag{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border:1px solid var(--border);border-radius:5px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);cursor:pointer;white-space:nowrap;transition:color .12s,border-color .12s}
+.dp-pipe-tag:hover{color:var(--brand);border-color:var(--brand-mid)}
 .dp-close{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:15px}
 .dp-edit-btn{display:flex;align-items:center;gap:5px;padding:0 12px;height:28px;border-radius:7px;border:1px solid var(--brand-light);background:rgba(77,157,224,0.12);color:var(--brand-light);font-family:'Barlow',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:background 0.15s,border-color 0.15s;white-space:nowrap}
 .dp-edit-btn:hover{background:rgba(77,157,224,0.22);border-color:var(--brand-light)}
@@ -152,12 +158,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .job-bar .action-pills{flex:1;margin:0}
 .job-bar-stage{display:flex;align-items:center;gap:4px;flex-shrink:0;position:relative}
 .job-bar .stage-badge{padding:3px 10px;white-space:nowrap}
-.jb-pipe{background:none;border:1px solid var(--border);color:var(--muted)}
 .jb-caret{font-size:9px;opacity:.6}
-.jb-sep{font-size:12px;color:var(--muted);opacity:.6}
 .jb-divider{width:1px;height:18px;background:var(--border);flex-shrink:0}
 .job-bar-stage>div{top:100%;left:0}
-@media (max-width:760px){.job-bar{flex-wrap:wrap;row-gap:8px}.jb-divider{display:none}.job-bar .action-pills{flex-basis:100%}}
+@media (max-width:760px){.dp-name-row{gap:10px}.dp-title-group{flex-direction:column;align-items:flex-start;gap:5px}.dp-title-group .dp-name{max-width:100%}}
 .action-pills::-webkit-scrollbar{display:none}
 .action-pills .ap-pill{flex-shrink:0;white-space:nowrap}
 .ap-pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid}
@@ -5226,6 +5230,39 @@ function openDetail(id){
 }
 window.openDetail = openDetail;
 
+function openJobPipelineMenu(e){
+  if(e) e.stopPropagation();
+  if(document.querySelector('.dp-pipe-wrap>div')) return; // already open
+  const j=jobs.find(x=>x.id===openJobId);if(!j)return;
+  const opts=pipelines.map(p=>`
+    <div data-job-pipeline="${p.id}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:${(j.pipeline||'insurance')===p.id?'700':'500'};color:${(j.pipeline||'insurance')===p.id?'#4D9DE0':'var(--brand)'};background:${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'};transition:background 0.1s" onmouseover="this.style.background='#4D9DE018'" onmouseout="this.style.background='${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'}'">
+      <span style="width:8px;height:8px;border-radius:50%;background:#4D9DE0;flex-shrink:0"></span>${escapeHtml(p.name)}
+    </div>`).join('');
+  const drop=document.createElement('div');drop.style.cssText='position:absolute;background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:5px;z-index:200;width:200px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
+  drop.innerHTML=opts;
+  $('jobPipelineSelector').parentNode.style.position='relative';
+  $('jobPipelineSelector').parentNode.appendChild(drop);
+  drop.querySelectorAll('[data-job-pipeline]').forEach(d=>d.addEventListener('click',e=>{
+    e.stopPropagation();
+    const targetPipelineId=d.dataset.jobPipeline;
+    const targetPipeline=pipelines.find(p=>p.id===targetPipelineId);
+    if(!targetPipeline)return;
+    const targetColumns=columnsForPipeline(targetPipelineId);
+    j.pipeline=targetPipelineId;
+    if(!targetColumns.some(c=>c.id===j.col)) j.col=targetColumns[0]?.id||j.col;
+    currentPipelineId=targetPipelineId;
+    syncActivePipeline();
+    saveToStorage();
+    toast(`Pipeline set to ${targetPipeline.name}`);
+    drop.remove();
+    renderBoard();
+    if($('jobsPage')?.style.display!=='none') renderJobsPage();
+    renderDetailPanel();
+  }));
+  setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
+}
+window.openJobPipelineMenu = openJobPipelineMenu;
+
 function renderDetailPanel(){
   const j=jobs.find(x=>x.id===openJobId);if(!j)return;
   const u=USERS.find(x=>x.id===j.user);
@@ -5246,8 +5283,11 @@ function renderDetailPanel(){
   $('detailPanel').innerHTML=`
     <div class="dp-header-area">
       <div class="dp-name-row">
-        <div class="dp-name">${j.name}</div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div class="dp-title-group">
+          <div class="dp-name">${j.name}</div>
+          <span class="dp-pipe-wrap"><span class="dp-pipe-tag" id="jobPipelineSelector" title="Pipeline — click to change">${escapeHtml(jobPipeline?.name||'Pipeline')}<span class="jb-caret">&#9662;</span></span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           <button class="dp-edit-btn" id="dpEdit"><i class="ti ti-pencil" style="font-size:13px" aria-hidden="true"></i>Edit Job</button>
           <button class="dp-close" id="dpClose"><i class="ti ti-x" aria-hidden="true"></i></button>
         </div>
@@ -5264,6 +5304,7 @@ function renderDetailPanel(){
   });
   $('dpClose').onclick=()=>$('detailOverlay').classList.remove('open');
   $('dpEdit').onclick=()=>openEditJob(openJobId);
+  $('jobPipelineSelector') && ($('jobPipelineSelector').onclick=openJobPipelineMenu);
   $('detailOverlay').onclick=e=>{if(e.target===$('detailOverlay'))$('detailOverlay').classList.remove('open')};
 
   renderDetailTab(j,u,col,jobPipeline,jobColumns);
@@ -5403,8 +5444,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     body.innerHTML=`
       <div class="job-bar">
         <div class="job-bar-stage">
-          <span class="stage-badge jb-pipe" id="jobPipelineSelector" title="Pipeline — click to change">${escapeHtml(jobPipeline?.name||'Pipeline')}<span class="jb-caret">&#9662;</span></span>
-          <i class="ti ti-chevron-right jb-sep" aria-hidden="true"></i>
           <span class="stage-badge" id="stageSelector" title="Stage — click to change" style="background:${col.color||'#4D9DE0'}22;border:1px solid ${col.color||'#4D9DE0'}55;color:${col.color||'#4D9DE0'}">
             <span style="width:7px;height:7px;border-radius:50%;background:${col.color||'#4D9DE0'};flex-shrink:0"></span>${col.name}<span class="jb-caret">&#9662;</span>
           </span>
@@ -7097,35 +7136,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     }));
     $('dpDelete')&&$('dpDelete').addEventListener('click',()=>{
       openDeleteJobModal(openJobId);
-    });
-    $('jobPipelineSelector')&&$('jobPipelineSelector').addEventListener('click',()=>{
-      const j=jobs.find(x=>x.id===openJobId);if(!j)return;
-      const opts=pipelines.map(p=>`
-        <div data-job-pipeline="${p.id}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:${(j.pipeline||'insurance')===p.id?'700':'500'};color:${(j.pipeline||'insurance')===p.id?'#4D9DE0':'var(--brand)'};background:${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'};transition:background 0.1s" onmouseover="this.style.background='#4D9DE018'" onmouseout="this.style.background='${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'}'">
-          <span style="width:8px;height:8px;border-radius:50%;background:#4D9DE0;flex-shrink:0"></span>${escapeHtml(p.name)}
-        </div>`).join('');
-      const drop=document.createElement('div');drop.style.cssText='position:absolute;background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:5px;z-index:200;width:200px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
-      drop.innerHTML=opts;
-      $('jobPipelineSelector').parentNode.style.position='relative';
-      $('jobPipelineSelector').parentNode.appendChild(drop);
-      drop.querySelectorAll('[data-job-pipeline]').forEach(d=>d.addEventListener('click',e=>{
-        e.stopPropagation();
-        const targetPipelineId=d.dataset.jobPipeline;
-        const targetPipeline=pipelines.find(p=>p.id===targetPipelineId);
-        if(!targetPipeline)return;
-        const targetColumns=columnsForPipeline(targetPipelineId);
-        j.pipeline=targetPipelineId;
-        if(!targetColumns.some(c=>c.id===j.col)) j.col=targetColumns[0]?.id||j.col;
-        currentPipelineId=targetPipelineId;
-        syncActivePipeline();
-        saveToStorage();
-        toast(`Pipeline set to ${targetPipeline.name}`);
-        drop.remove();
-        renderBoard();
-        if($('jobsPage')?.style.display!=='none') renderJobsPage();
-        renderDetailPanel();
-      }));
-      setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
     });
     $('dpMove')&&$('dpMove').addEventListener('click',()=>{
       const j=jobs.find(x=>x.id===openJobId);if(!j)return;
