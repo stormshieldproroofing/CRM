@@ -670,8 +670,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- CALENDAR / PRODUCTION SCHEDULE PAGE -->
 <div id="calendarPage" style="display:none">
-  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Production Schedule</div>
+  <div id="calTopBar" style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div id="calTitle" style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Production Schedule</div>
     <button id="calPrev" class="icon-btn" title="Previous"><i class="ti ti-chevron-left"></i></button>
     <div id="calWeekLabel" style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;color:#fff;min-width:200px;text-align:center"></div>
     <button id="calNext" class="icon-btn" title="Next"><i class="ti ti-chevron-right"></i></button>
@@ -693,9 +693,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
   </div>
-  <div style="display:flex;height:calc(100vh - 110px);overflow:hidden">
+  <div id="calLayout" style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
-    <div style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
+    <div id="calSidebar" style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
       <div style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
         <div id="calUnschedCount" style="font-size:10px;color:var(--muted);margin-top:2px">0 jobs awaiting build date</div>
@@ -1088,6 +1088,65 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .cal-unsched-search:focus{border-color:var(--brand-light)}
 .cal-unsched-search::placeholder{color:rgba(226,232,244,0.32)}
 
+
+/* ── Schedule sheet (job "Schedule" button + calendar on phones) ── */
+.sched-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:700;display:flex;align-items:center;justify-content:center;padding:16px;transition:background .18s}
+.sched-sheet-bg.open{background:rgba(0,0,0,0.6)}
+.sched-sheet{width:100%;max-width:520px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#161B2A;border:1px solid var(--border);border-radius:14px;padding:14px 16px 18px;box-shadow:0 20px 60px rgba(0,0,0,0.5);transform:translateY(12px);opacity:0;transition:transform .18s,opacity .18s}
+.sched-sheet-bg.open .sched-sheet{transform:none;opacity:1}
+.sched-grab{display:none;width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,0.2);margin:0 auto 10px}
+.sched-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+.sched-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:#fff;text-transform:uppercase;letter-spacing:.4px}
+.sched-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sched-current{display:flex;align-items:center;gap:10px;background:rgba(77,157,224,0.08);border:1px solid rgba(77,157,224,0.3);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.sched-unsched{display:flex;align-items:center;gap:5px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.35);color:var(--danger);font-size:11px;font-weight:700;padding:8px 10px;border-radius:7px;cursor:pointer;font-family:'Barlow',sans-serif;flex-shrink:0}
+.sched-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.sched-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:7px}
+.sched-day{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;min-height:84px;border-radius:9px;border:1px solid var(--border);background:#1E253A;color:var(--brand);cursor:pointer;font-family:'Barlow',sans-serif;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.sched-day:active{transform:scale(0.97)}
+.sched-day.cur{border-color:var(--brand-light);background:rgba(77,157,224,0.18);box-shadow:inset 0 0 0 1px var(--brand-light)}
+.sched-day.bad{border-color:rgba(239,68,68,0.45)}
+.sched-day.full{opacity:.4}
+.sched-day.sun{background:#191E2D}
+.sched-dow{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.sched-date{font-size:14px;font-weight:700;color:#fff}
+.sched-wx{display:flex;align-items:center;gap:2px;font-size:10px;font-weight:600;min-height:14px}
+.sched-wx i{font-size:14px}
+.sched-cap{font-size:9px;font-weight:700;color:var(--muted)}
+.sched-day.full .sched-cap{color:var(--danger)}
+.sched-more{width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif}
+.sched-other{display:flex;gap:8px}
+.sched-other input{flex:1;min-width:0;height:42px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--brand);font-size:16px;font-family:'Barlow',sans-serif;color-scheme:dark}
+.sched-other .btn-primary{padding:0 18px;height:42px;font-size:13px}
+.cal-pop-act{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--brand-light);font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif}
+.cal-pop-add{width:100%;display:flex;align-items:center;gap:9px;padding:10px 11px;margin-bottom:6px;border-radius:7px;border:1px dashed rgba(77,157,224,0.35);background:rgba(77,157,224,0.05);cursor:pointer;font-family:'Barlow',sans-serif}
+.cal-pop-add:disabled{opacity:.4;cursor:not-allowed}
+@media (max-width:760px){
+  .sched-sheet-bg{align-items:flex-end;padding:0}
+  .sched-sheet{max-width:none;border-radius:16px 16px 0 0;max-height:90vh;padding:10px 14px calc(18px + env(safe-area-inset-bottom));transform:translateY(100%)}
+  .sched-grab{display:block}
+  .sched-days{grid-template-columns:repeat(4,1fr)}
+
+  /* Calendar page on phones: stack instead of a 260px sidebar beside the grid. */
+  #calTopBar{padding:10px 12px !important;gap:8px !important}
+  #calTitle{width:100%;font-size:16px !important}
+  #calWeekLabel{min-width:0 !important;flex:1}
+  #calLayout{flex-direction:column;height:auto !important;overflow:visible !important}
+  #calSidebar{width:100% !important;border-right:none !important;border-bottom:1px solid var(--border);max-height:none !important;overflow:visible !important}
+  #calSidebar > div:first-child{position:static !important}
+  #calLayout > div:last-child{overflow:visible !important}
+  #calWeekGrid{overflow:visible !important;flex:none !important}
+  #calUnschedList{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;padding:8px 12px 12px !important}
+  #calUnschedList > .cal-job-card{flex:0 0 72%;scroll-snap-align:start;margin-bottom:0 !important}
+  #calUnschedList > div:not(.cal-job-card){width:100%}
+  #calReadinessBar{grid-template-columns:repeat(4,1fr) !important;gap:6px !important;padding:8px 10px !important}
+  .cal-rd-card{padding:7px 4px !important;border-radius:8px !important}
+  .cal-rd-card .cal-rd-ic{display:none}
+  .cal-rd-card .cal-rd-n{font-size:18px !important}
+  .cal-rd-card .cal-rd-lbl{font-size:8px !important}
+  .cal-day-popup{width:100% !important;max-width:none !important;max-height:85vh !important;border-radius:16px 16px 0 0 !important;align-self:flex-end}
+  .cal-day-popup-bg{align-items:flex-end !important}
+}
 /* Month view */
 #calWeekGrid.cal-month{grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(96px,1fr)}
 .cal-month-dow{background:#0F1117;padding:6px 8px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)}
@@ -5472,7 +5531,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <span class="ap-pill" style="background:rgba(249,115,22,0.15);border-color:rgba(249,115,22,0.35);color:#FB923C"><i class="ti ti-search" style="font-size:12px" aria-hidden="true"></i>Inspection</span>
         <span class="ap-pill" title="Certificate of Completion" onclick="printCertificateOfCompletion('${j.id}')" style="background:rgba(52,211,153,0.15);border-color:rgba(52,211,153,0.3);color:#34D399"><i class="ti ti-certificate" style="font-size:12px" aria-hidden="true"></i>COC</span>
         <span class="ap-pill" style="background:rgba(56,189,248,0.15);border-color:rgba(56,189,248,0.3);color:#38BDF8"><i class="ti ti-cloud" style="font-size:12px" aria-hidden="true"></i>Weather DOL</span>
-        <span class="ap-pill" style="background:none;border-color:var(--border);color:var(--muted)"><i class="ti ti-calendar" style="font-size:12px" aria-hidden="true"></i>Schedule</span>
+        <span class="ap-pill" id="jobSchedPill" role="button" onclick="openScheduleSheet('${j.id}')" title="${j.buildDate?'Build date '+j.buildDate+' — tap to reschedule':'Schedule build date'}" style="cursor:pointer;${j.buildDate?'background:rgba(77,157,224,0.15);border-color:rgba(77,157,224,0.35);color:var(--brand-light)':'background:none;border-color:var(--border);color:var(--muted)'}"><i class="ti ti-calendar${j.buildDate?'-event':'-plus'}" style="font-size:12px" aria-hidden="true"></i>${j.buildDate?schedPillLabel(j.buildDate):'Schedule'}</span>
         </div>
       </div>
       <div class="checklist-box" style="margin-bottom:12px">
@@ -10702,6 +10761,15 @@ function renderCalendarWeek(){
       </div>`;
   }).join('');
   wireCalDragDrop();
+  grid.querySelectorAll('.cal-day-header').forEach(h => {
+    h.style.cursor = 'pointer';
+    h.addEventListener('click', () => openCalDayPopup(h.closest('[data-cal-day]').dataset.calDay));
+  });
+  // Tapping a scheduled card in week view opens the reschedule sheet.
+  grid.querySelectorAll('.cal-job-card[data-cal-job]').forEach(c => c.addEventListener('click', e => {
+    if(e.target.closest('[data-cal-confirm]')) return;
+    openScheduleSheet(c.dataset.calJob);
+  }));
 }
 
 function renderCalendarMonth(){
@@ -10821,6 +10889,153 @@ function scheduleJobToDate(jobId, key){
 }
 window.scheduleJobToDate = scheduleJobToDate;
 
+// Remove a job's build date (same as dragging a card back to Unscheduled).
+function unscheduleJob(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j || !j.buildDate) return false;
+  const prev = j.buildDate;
+  delete j.buildDate;
+  j.buildConfirmed = false;
+  if(typeof logActivity === 'function') logActivity(j, 'stage', 'Build date removed', `was ${prev}`);
+  saveToStorage();
+  toast(`Unscheduled ${j.name}`);
+  if(document.getElementById('calendarPage')?.style.display !== 'none') renderCalendarPage();
+  return true;
+}
+window.unscheduleJob = unscheduleJob;
+
+// "Thu, Oct 16" from yyyy-mm-dd (local)
+function schedPillLabel(key){
+  const d = (typeof calParseKey === 'function') ? calParseKey(key) : null;
+  return d ? d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : key;
+}
+window.schedPillLabel = schedPillLabel;
+
+// After a schedule change, refresh anything showing it (job bar pill, board, calendar).
+function schedAfterChange(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  const pill = document.getElementById('jobSchedPill');
+  if(pill && j && (typeof openJobId === 'undefined' || openJobId === jobId)){
+    const on = !!j.buildDate;
+    pill.innerHTML = `<i class="ti ti-calendar${on?'-event':'-plus'}" style="font-size:12px" aria-hidden="true"></i>${on?schedPillLabel(j.buildDate):'Schedule'}`;
+    pill.style.background = on ? 'rgba(77,157,224,0.15)' : 'none';
+    pill.style.borderColor = on ? 'rgba(77,157,224,0.35)' : 'var(--border)';
+    pill.style.color = on ? 'var(--brand-light)' : 'var(--muted)';
+  }
+  if(typeof renderBoard === 'function') try{ renderBoard(); }catch(_){}
+  if(document.getElementById('calDayPopupBg')?.classList.contains('open') && window._calPopupKey) openCalDayPopup(window._calPopupKey);
+}
+
+// Phone-friendly scheduling sheet: tap a day (with weather + crew capacity) to
+// set the build date. Used by the job's Schedule button and the calendar.
+function openScheduleSheet(jobId){
+  const j = jobs.find(x => x.id === jobId);
+  if(!j) return;
+  document.getElementById('schedSheetBg')?.remove();
+  // Make sure weather is loading so the day tiles can show it.
+  if(typeof fetchWeatherForecast === 'function' && (!window.__wxByDate || (Date.now() - (window.__wxLoaded||0)) > WX_CACHE_MS)){
+    fetchWeatherForecast(false).then(()=>{ if(document.getElementById('schedSheetBg')) renderDays(); }).catch(()=>{});
+  }
+  const bg = document.createElement('div');
+  bg.id = 'schedSheetBg';
+  bg.className = 'sched-sheet-bg';
+  const addr = (j.address && j.address !== '—') ? j.address.split(',')[0] : '';
+  bg.innerHTML = `
+    <div class="sched-sheet" role="dialog" aria-label="Schedule build date">
+      <div class="sched-grab"></div>
+      <div class="sched-head">
+        <div style="min-width:0">
+          <div class="sched-title">Schedule Build</div>
+          <div class="sched-sub">${escapeHtml(j.name||'—')}${addr?' · '+escapeHtml(addr):''}</div>
+        </div>
+        <button class="icon-btn" id="schedClose" title="Close"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="schedCurrent"></div>
+      <div class="sched-label">Pick a day</div>
+      <div class="sched-days" id="schedDays"></div>
+      <button class="sched-more" id="schedMore"><i class="ti ti-chevron-down"></i>Show 2 more weeks</button>
+      <div class="sched-label" style="margin-top:12px">Or choose another date</div>
+      <div class="sched-other">
+        <input type="date" id="schedOtherDate">
+        <button id="schedOtherSet" class="btn-primary">Set</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+
+  let span = 21;
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  function renderCurrent(){
+    const el = bg.querySelector('#schedCurrent');
+    if(!j.buildDate){ el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div class="sched-current">
+        <i class="ti ti-calendar-event" style="font-size:18px;color:var(--brand-light)"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#fff">${escapeHtml(schedPillLabel(j.buildDate))}</div>
+          <div style="font-size:10px;color:${j.buildConfirmed?'#34D399':'#FBBF24'}">${j.buildConfirmed?'Confirmed with crew':'Not yet confirmed with crew'}</div>
+        </div>
+        <button id="schedUnsched" class="sched-unsched"><i class="ti ti-calendar-off"></i>Unschedule</button>
+      </div>`;
+    el.querySelector('#schedUnsched').addEventListener('click', () => {
+      if(!confirm(`Remove the build date for ${j.name}?`)) return;
+      if(unscheduleJob(j.id)){ schedAfterChange(j.id); close(); }
+    });
+  }
+
+  function renderDays(){
+    const wrap = bg.querySelector('#schedDays');
+    let html = '';
+    for(let i=0;i<span;i++){
+      const d = new Date(today); d.setDate(today.getDate()+i);
+      const key = calDateKey(d);
+      const booked = calJobsOnDay(key).filter(x => x.id !== j.id).length;
+      const full = booked >= calCrewsPerDay;
+      const isCur = j.buildDate === key;
+      const w = (typeof getWeatherForDate === 'function') ? getWeatherForDate(key) : null;
+      const lvl = w ? classifyWeather(w).level : '';
+      const wxColor = lvl === 'bad' ? '#EF4444' : (lvl === 'caution' ? '#F59E0B' : '#34D399');
+      const wx = w ? `<span class="sched-wx" style="color:${wxColor}"><i class="ti ${weatherIconFor(w)}"></i>${w.precip!=null?Math.round(w.precip)+'%':''}</span>` : '<span class="sched-wx"></span>';
+      const isSun = d.getDay() === 0;
+      html += `
+        <button class="sched-day${isCur?' cur':''}${full?' full':''}${lvl==='bad'?' bad':''}${isSun?' sun':''}" data-key="${key}" ${full && !isCur?'aria-disabled="true"':''}>
+          <span class="sched-dow">${i===0?'Today':(i===1?'Tmrw':d.toLocaleDateString('en-US',{weekday:'short'}))}</span>
+          <span class="sched-date">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+          ${wx}
+          <span class="sched-cap">${full?'Full':booked+'/'+calCrewsPerDay}</span>
+        </button>`;
+    }
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.sched-day').forEach(b => b.addEventListener('click', () => pick(b.dataset.key)));
+  }
+
+  function pick(key){
+    if(!key) return;
+    if(j.buildDate === key){ close(); return; }
+    if(scheduleJobToDate(j.id, key)){ schedAfterChange(j.id); close(); }
+  }
+  function close(){ bg.classList.remove('open'); setTimeout(()=>bg.remove(), 180); }
+
+  bg.querySelector('#schedClose').addEventListener('click', close);
+  bg.addEventListener('click', e => { if(e.target === bg) close(); });
+  bg.querySelector('#schedMore').addEventListener('click', e => {
+    span += 14; renderDays();
+    if(span >= 63) e.currentTarget.style.display = 'none';
+  });
+  const other = bg.querySelector('#schedOtherDate');
+  other.value = j.buildDate || '';
+  other.min = calDateKey(today);
+  bg.querySelector('#schedOtherSet').addEventListener('click', () => {
+    if(!other.value){ other.focus(); return; }
+    pick(other.value);
+  });
+
+  renderCurrent();
+  renderDays();
+  requestAnimationFrame(() => bg.classList.add('open'));
+}
+window.openScheduleSheet = openScheduleSheet;
+
 // Push a job's build date to Zoho Calendar as an all-day event. Stores the
 // returned event UID on the job so re-scheduling UPDATES the same event.
 async function pushBuildToZohoCalendar(j){
@@ -10907,23 +11122,7 @@ function wireCalTapSchedule(){
     card.dataset.tapWired = '1';
     card.addEventListener('click', e => {
       if(e.target.closest('[data-cal-confirm]')) return;
-      const id = card.dataset.calJob;
-      // Hidden date input, opened on tap. Value change schedules the job.
-      let input = document.getElementById('calTapDateInput');
-      if(!input){
-        input = document.createElement('input');
-        input.type = 'date';
-        input.id = 'calTapDateInput';
-        input.style.cssText = 'position:fixed;left:-9999px;top:0';
-        document.body.appendChild(input);
-      }
-      input.value = '';
-      input.onchange = () => {
-        if(input.value) scheduleJobToDate(id, input.value);
-        input.onchange = null;
-      };
-      // showPicker() is supported on iOS Safari; fall back to focus+click.
-      try { input.showPicker(); } catch(_) { input.focus(); input.click(); }
+      openScheduleSheet(card.dataset.calJob);
     });
   });
 }
@@ -10940,6 +11139,7 @@ function wireCalMonthInteractions(){
     chip.addEventListener('click', e => {
       // Don't open detail when tapping the confirm toggle icon.
       if(e.target.closest('[data-cal-confirm]')) return;
+      if(window.matchMedia && window.matchMedia('(max-width:760px),(pointer:coarse)').matches) return;   // phone: the day popup opens instead
       e.stopPropagation();
       const id = chip.dataset.calJob;
       const j = jobs.find(x => x.id === id);
@@ -10949,7 +11149,8 @@ function wireCalMonthInteractions(){
   document.querySelectorAll('.cal-mday').forEach(cell => {
     cell.addEventListener('click', e => {
       // Click on empty cell area (not on chip/more) opens the day popup
-      if(e.target.classList.contains('cal-mday') || e.target.classList.contains('cal-mday-head') || e.target.classList.contains('cal-mday-num') || e.target.classList.contains('cal-mday-cap')){
+      const touch = window.matchMedia && window.matchMedia('(max-width:760px),(pointer:coarse)').matches;
+      if(touch || e.target.classList.contains('cal-mday') || e.target.classList.contains('cal-mday-head') || e.target.classList.contains('cal-mday-num') || e.target.classList.contains('cal-mday-cap')){
         openCalDayPopup(cell.dataset.calDay);
       }
     });
@@ -10959,6 +11160,7 @@ function wireCalMonthInteractions(){
 function openCalDayPopup(dateKey){
   const date = calParseKey(dateKey);
   if(!date) return;
+  window._calPopupKey = dateKey;
   const dayJobs = calJobsOnDay(dateKey);
   const fmt = date.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
   document.getElementById('calDayPopupDate').textContent = fmt;
@@ -11004,9 +11206,39 @@ function openCalDayPopup(dateKey){
           <div style="font-size:13px;font-weight:600;color:#fff;display:flex;align-items:center;gap:6px">${escapeHtml(j.name||'—')}${jobBad?` <i class="ti ti-alert-triangle" style="color:#EF4444;font-size:12px"></i>`:''}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px">${escapeHtml((j.address||'').split(',')[0]||'—')}</div>
           ${j.carrier?`<div style="font-size:10px;color:var(--brand-light);margin-top:3px">${escapeHtml(j.carrier)}${j.claimNum?' · '+escapeHtml(j.claimNum):''}</div>`:''}
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="cal-pop-act" data-cal-resched="${j.id}"><i class="ti ti-calendar-repeat"></i>Reschedule</button>
+            <button class="cal-pop-act" data-cal-open="${j.id}"><i class="ti ti-external-link"></i>Open job</button>
+          </div>
         </div>`;
       }).join('')
-    : `<div style="text-align:center;padding:20px 8px;color:var(--muted);font-size:12px">No jobs scheduled on this day.</div>`);
+    : `<div style="text-align:center;padding:16px 8px;color:var(--muted);font-size:12px">No jobs scheduled on this day.</div>`)
+    + (() => {
+        // Schedule straight onto this day — the touch-friendly replacement for drag & drop.
+        const isPast = date < new Date(new Date().setHours(0,0,0,0));
+        if(isPast) return '';
+        const saved = calUnschedSearch; calUnschedSearch = '';
+        const waiting = calUnscheduledJobs();
+        calUnschedSearch = saved;
+        if(!waiting.length) return '';
+        const full = !calCanScheduleOnDay(dateKey);
+        return `<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Schedule a job on this day${full?' <span style="color:var(--danger)">· day is full</span>':''}</div>`
+          + waiting.map(w => `<button class="cal-pop-add" data-cal-add="${w.id}" ${full?'disabled':''}><span style="width:8px;height:8px;border-radius:50%;background:${calReadinessColor(calReadinessBucket(w))};flex-shrink:0"></span><span style="flex:1;min-width:0;text-align:left"><span style="display:block;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(w.name||'—')}</span><span style="display:block;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml((w.address||'').split(',')[0]||'')}</span></span><i class="ti ti-plus" style="font-size:14px;color:var(--brand-light)"></i></button>`).join('');
+      })();
+  body.querySelectorAll('[data-cal-resched]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    document.getElementById('calDayPopupBg').classList.remove('open');
+    openScheduleSheet(b.dataset.calResched);
+  }));
+  body.querySelectorAll('[data-cal-open]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    document.getElementById('calDayPopupBg').classList.remove('open');
+    if(typeof openDetail === 'function') openDetail(b.dataset.calOpen);
+  }));
+  body.querySelectorAll('[data-cal-add]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    if(scheduleJobToDate(b.dataset.calAdd, dateKey)) { schedAfterChange(b.dataset.calAdd); openCalDayPopup(dateKey); }
+  }));
   body.querySelectorAll('[data-cal-popup-job]').forEach(el => {
     el.addEventListener('click', () => {
       const id = el.dataset.calPopupJob;
