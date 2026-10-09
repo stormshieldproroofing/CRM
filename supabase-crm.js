@@ -234,7 +234,7 @@ async function loadAllFromSupabase() {
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
         deposits:(deps||[]).filter(d=>d.job_id===r.id)
-          .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined})),
+          .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined,checkFile:(d.check_file&&typeof d.check_file==='object')?d.check_file:undefined})),
         expenses:(exps||[]).filter(e=>e.job_id===r.id)
           .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
         photos, contracts:byKind('contract'), checks:byKind('check'),
@@ -533,9 +533,15 @@ async function pushAllToSupabase() {
       // them (same hardening as expenses).
       if (j.deposits?.length) {
         await sb.from('deposits').delete().eq('job_id', j.id);
-        const { error: depErr } = await sb.from('deposits').insert(
-          j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
-            zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null })));
+        const depRows = j.deposits.map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
+            zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null,
+            check_file: d.checkFile || null }));
+        let { error: depErr } = await sb.from('deposits').insert(depRows);
+        // If the check_file column is ever missing, retry without it so deposits are never lost.
+        if (depErr && /check_file/i.test((depErr.message||'') + ' ' + (depErr.details||''))) {
+          console.warn('[Supabase] deposits.check_file missing — saving without check photo links');
+          ({ error: depErr } = await sb.from('deposits').insert(depRows.map(({ check_file, ...r }) => r)));
+        }
         if(depErr){ console.error('[Supabase] deposit insert failed — may be lost, retry save:', depErr); if(window.toast) window.toast('Deposit save failed — check connection & retry'); }
       } else {
         await sb.from('deposits').delete().eq('job_id', j.id);

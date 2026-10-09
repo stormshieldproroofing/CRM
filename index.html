@@ -5759,14 +5759,17 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add Deposit
                   </button>
                   <div id="depAddForm" style="display:none;margin-top:8px;padding:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px">
-                    <!-- OCR check upload -->
+                    <!-- Check photo (saved to the Checks tab and linked to this deposit) -->
                     <div style="margin-bottom:10px;padding:8px;background:rgba(77,157,224,0.05);border:1px dashed rgba(77,157,224,0.3);border-radius:6px">
-                      <button id="depUploadCheckBtn" type="button" style="width:100%;padding:7px;border:none;border-radius:5px;background:rgba(77,157,224,0.15);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif">
-                        <i class="ti ti-camera" style="font-size:13px"></i>
-                        <span id="depUploadCheckLabel">Scan Check Photo</span>
-                      </button>
-                      <input id="depCheckFile" type="file" accept="image/*" capture="environment" style="display:none">
-                      <div id="depCheckStatus" style="display:none;margin-top:6px;font-size:10px;line-height:1.4"></div>
+                      <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Check Photo <span style="font-weight:400;opacity:0.6;text-transform:none">(optional · saves to Checks tab)</span></div>
+                      <div id="depCheckPick" style="display:flex;gap:6px">
+                        <button id="depCheckSnapBtn" type="button" style="flex:1;padding:7px;border:none;border-radius:5px;background:rgba(77,157,224,0.15);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif"><i class="ti ti-camera" style="font-size:13px"></i>Take Photo</button>
+                        <button id="depCheckUploadBtn" type="button" style="flex:1;padding:7px;border:none;border-radius:5px;background:rgba(77,157,224,0.15);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif"><i class="ti ti-upload" style="font-size:13px"></i>Upload</button>
+                      </div>
+                      <select id="depCheckExisting" style="display:none;width:100%;margin-top:6px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer"></select>
+                      <input id="depCheckCamFile" type="file" accept="image/*" capture="environment" style="display:none">
+                      <input id="depCheckFile" type="file" accept="image/*,.pdf" style="display:none">
+                      <div id="depCheckPreview" style="display:none;margin-top:6px;align-items:center;gap:8px;padding:6px;background:#141927;border:1px solid var(--border);border-radius:6px"></div>
                     </div>
                     <div style="margin-bottom:8px">
                       <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Description</label>
@@ -6240,6 +6243,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     </div>
                   </div>
                   <div style="display:flex;gap:5px;flex-shrink:0">
+                    ${d.checkFile ? `<button onclick="depOpenCheck(${i})" title="View check: ${escapeHtml(d.checkFile.name||'check')}" style="width:24px;height:24px;border-radius:5px;border:1px solid ${window._depFindCheckRec&&!window._depFindCheckRec(j2,d.checkFile)?'rgba(251,191,36,0.4)':'rgba(77,157,224,0.3)'};background:rgba(77,157,224,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--brand-light);padding:0"><i class="ti ti-file-dollar" style="font-size:14px"></i></button>` : ''}
                     <button onclick="depEditOpen(${i})" title="Edit" style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);padding:0;transition:border-color 0.12s,color 0.12s" onmouseover="this.style.borderColor='var(--brand-light)';this.style.color='var(--brand-light)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">${svgPencil}</button>
                     <button onclick="depDelete(${i})" title="Delete" style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--danger);padding:0;transition:background 0.12s" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.07)'">${svgTrash}</button>
                   </div>
@@ -6265,6 +6269,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Date</label>
                     <input id="dep-edit-date-${i}" type="date" value="${isoDate}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
                   </div>
+                </div>
+                <div style="margin-bottom:9px">
+                  <label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Check Photo</label>
+                  ${d.checkFile ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11px;color:var(--brand)"><i class="ti ti-file-dollar" style="font-size:13px;color:var(--brand-light)"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(d.checkFile.name||'Check')}</span><button type="button" onclick="depUnlinkCheck(${i})" style="background:none;border:none;color:var(--muted);font-size:10px;cursor:pointer;text-decoration:underline;padding:0">Unlink</button></div>` : ''}
+                  <div style="display:flex;gap:5px">
+                    <label style="flex:1;padding:5px;border-radius:5px;background:rgba(77,157,224,0.12);color:var(--brand-light);font-size:10px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px"><i class="ti ti-camera" style="font-size:12px"></i>${d.checkFile?'Retake':'Take Photo'}<input type="file" accept="image/*" capture="environment" style="display:none" onchange="depAttachCheckFile(${i}, this)"></label>
+                    <label style="flex:1;padding:5px;border-radius:5px;background:rgba(77,157,224,0.12);color:var(--brand-light);font-size:10px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px"><i class="ti ti-upload" style="font-size:12px"></i>Upload<input type="file" accept="image/*,.pdf" style="display:none" onchange="depAttachCheckFile(${i}, this)"></label>
+                  </div>
+                  ${(j2.checks||[]).length ? `<select onchange="depLinkExistingCheck(${i}, this)" style="width:100%;margin-top:5px;background:#1E253A;border:1px solid var(--border);border-radius:5px;padding:5px 7px;font-size:10px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">${window._depCheckOptions?window._depCheckOptions(i):''}</select>` : ''}
                 </div>
                 <div style="display:flex;gap:5px">
                   <button onclick="depEditSave(${i})" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 10px;border-radius:5px;border:1px solid rgba(52,211,153,0.4);background:rgba(52,211,153,0.1);color:var(--success);font-size:11px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif">${svgCheck} Save</button>
@@ -6295,81 +6308,96 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       $('depAmtInput').focus();
     });
 
-    // ── Check photo OCR via Google Vision API ──
-    const checkBtn   = $('depUploadCheckBtn');
-    const checkInput = $('depCheckFile');
-    const checkLbl   = $('depUploadCheckLabel');
-    const checkStat  = $('depCheckStatus');
-    if(checkBtn && checkInput){
-      checkBtn.addEventListener('click', e => { e.stopPropagation(); checkInput.click(); });
-      checkInput.addEventListener('click', e => e.stopPropagation());
-      checkInput.addEventListener('change', async e => {
-        e.stopPropagation();
-        const file = e.target.files?.[0];
-        if(!file) return;
-        // Show "reading…" state
-        checkBtn.disabled = true;
-        if(checkLbl) checkLbl.textContent = 'Reading check…';
-        if(checkStat){ checkStat.style.display = 'block'; checkStat.style.color = 'var(--muted)'; checkStat.textContent = 'Processing photo…'; }
+    // ── Check photo attach (no OCR) — file is saved to the Checks tab and
+    //    linked to the deposit via d.checkFile = {id, name}. ──
+    let depPendingCheck = null;   // { file } for a new upload, or { rec } for an existing Checks-tab file
+    const depCheckPreview = $('depCheckPreview');
+    const depCheckPick    = $('depCheckPick');
+    const depCheckSel     = $('depCheckExisting');
 
-        try {
-          // 1. Read file as base64
-          const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload  = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = () => reject(new Error('Could not read file'));
-            reader.readAsDataURL(file);
-          });
-          // 2. Call Google Vision API
-          const apiKey = 'AIzaSyAkwB1-yQIBajaxb6HLo-3tMwHX8gCsReU';
-          const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              requests: [{
-                image: { content: base64 },
-                features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-              }],
-            }),
-          });
-          const data = await res.json();
-          if(data.error || data.responses?.[0]?.error){
-            throw new Error(data.error?.message || data.responses[0].error.message || 'OCR failed');
-          }
-          const fullText = data.responses?.[0]?.fullTextAnnotation?.text || '';
-          if(!fullText){ throw new Error('No text detected in image'); }
-
-          // 3. Parse for amount and check number
-          const parsed = parseCheckText(fullText);
-
-          // 4. Pre-fill fields
-          let prefilled = [];
-          if(parsed.amount != null){
-            $('depAmtInput').value = parsed.amount.toFixed(2);
-            prefilled.push(`amount $${parsed.amount.toLocaleString()}`);
-          }
-          if(parsed.checkNum && $('depDescSel')){
-            // Just leave the dropdown as-is (deductible/net claim/etc.), but show check # in status
-            prefilled.push(`check #${parsed.checkNum}`);
-          }
-          if(prefilled.length){
-            checkStat.style.color = '#34D399';
-            checkStat.innerHTML = `Found: ${prefilled.join(' · ')}<br><span style="color:var(--muted)">Verify before saving</span>`;
-          } else {
-            checkStat.style.color = 'var(--warn)';
-            checkStat.textContent = 'Could not find amount automatically. Please enter manually.';
-          }
-        } catch(err){
-          console.warn('Check OCR failed', err);
-          checkStat.style.display = 'block';
-          checkStat.style.color = 'var(--danger)';
-          checkStat.textContent = 'OCR failed: ' + (err.message || 'unknown error');
-        } finally {
-          checkBtn.disabled = false;
-          if(checkLbl) checkLbl.textContent = 'Scan Check Photo';
-          checkInput.value = '';   // allow re-uploading same file
-        }
+    function depFindCheckRec(j2, link){
+      if(!j2 || !link) return null;
+      const list = j2.checks || [];
+      return list.find(f=>f && link.id && f.id===link.id)
+          || list.find(f=>f && link.path && f.path===link.path)
+          || list.find(f=>f && link.name && f.name===link.name) || null;
+    }
+    function depCheckLinkFor(rec){ return rec ? { id: rec.id, name: rec.name, path: rec.path || undefined } : null; }
+    function depCheckOptions(j2, currentLink){
+      const list = (j2.checks||[]);
+      const same=(l,f)=>!!(l&&f&&((l.path&&l.path===f.path)||(l.id&&l.id===f.id)));
+      return `<option value="">Or link a check already on the Checks tab…</option>` + list.map((f,k)=>{
+        const isCur = same(currentLink,f);
+        const taken = !isCur && (j2.deposits||[]).some(d=>same(d.checkFile,f));
+        return `<option value="${k}"${isCur?' selected':''}>${escapeHtml(f.name||('Check '+(k+1)))}${taken?' (linked)':''}</option>`;
+      }).join('');
+    }
+    function depRefreshExistingSelect(){
+      if(!depCheckSel) return;
+      const j2 = curJob();
+      if(!(j2.checks||[]).length){ depCheckSel.style.display='none'; return; }
+      depCheckSel.innerHTML = depCheckOptions(j2, null);
+      depCheckSel.style.display = 'block';
+    }
+    function depShowPending(){
+      if(!depCheckPreview) return;
+      if(!depPendingCheck){
+        depCheckPreview.style.display='none'; depCheckPreview.innerHTML='';
+        if(depCheckPick) depCheckPick.style.display='flex';
+        depRefreshExistingSelect();
+        return;
+      }
+      const f = depPendingCheck.file, r = depPendingCheck.rec;
+      const name = f ? f.name : (r?.name || 'Check');
+      const isPdf = f ? (f.type==='application/pdf'||/\.pdf$/i.test(f.name)) : !!r?.isPdf;
+      const src = isPdf ? '' : (f ? URL.createObjectURL(f) : (r.url||r.dataUrl||''));
+      depCheckPreview.innerHTML = `
+        ${src ? `<img src="${src}" style="width:44px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0">`
+              : `<div style="width:44px;height:44px;border-radius:4px;background:#1E253A;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-file-type-pdf" style="font-size:20px;color:#F87171"></i></div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(name)}</div>
+          <div style="font-size:10px;color:#34D399">${f?'Will save to Checks tab':'Linked from Checks tab'}</div>
+        </div>
+        <button type="button" id="depCheckClear" title="Remove" style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.07);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0"><i class="ti ti-x" style="font-size:12px"></i></button>`;
+      depCheckPreview.style.display='flex';
+      if(depCheckPick) depCheckPick.style.display='none';
+      if(depCheckSel) depCheckSel.style.display='none';
+      $('depCheckClear')?.addEventListener('click', ev=>{ ev.stopPropagation(); depPendingCheck=null; depShowPending(); });
+    }
+    function depWireCheckInput(btnId, inputId){
+      const btn=$(btnId), inp=$(inputId);
+      if(!btn || !inp) return;
+      btn.addEventListener('click', ev=>{ ev.stopPropagation(); inp.click(); });
+      inp.addEventListener('click', ev=>ev.stopPropagation());
+      inp.addEventListener('change', ev=>{
+        ev.stopPropagation();
+        const f = ev.target.files?.[0];
+        inp.value='';
+        if(!f) return;
+        depPendingCheck = { file: f };
+        depShowPending();
       });
+    }
+    depWireCheckInput('depCheckSnapBtn','depCheckCamFile');
+    depWireCheckInput('depCheckUploadBtn','depCheckFile');
+    if(depCheckSel){
+      depCheckSel.addEventListener('click', ev=>ev.stopPropagation());
+      depCheckSel.addEventListener('change', ev=>{
+        ev.stopPropagation();
+        const rec = (curJob().checks||[])[parseInt(depCheckSel.value)];
+        if(!rec) return;
+        depPendingCheck = { rec };
+        depShowPending();
+      });
+    }
+    depRefreshExistingSelect();
+
+    // Upload a picked file to the Checks tab and return the link to store on the deposit.
+    async function depSaveCheckFile(j2, file){
+      const rec = await intakeJobFile(file, 'check', null);
+      if(!j2.checks) j2.checks = [];
+      j2.checks.push(rec);
+      return depCheckLinkFor(rec);
     }
 
     $('depCancelNew')&&$('depCancelNew').addEventListener('click',e=>{
@@ -6377,9 +6405,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       $('depAddForm').style.display='none';
       $('depAddToggle').style.display='flex';
       $('depAmtInput').value='';
-      if(checkStat){ checkStat.style.display = 'none'; checkStat.textContent = ''; }
+      depPendingCheck=null; depShowPending();
     });
-    $('depSaveNew')&&$('depSaveNew').addEventListener('click',e=>{
+    $('depSaveNew')&&$('depSaveNew').addEventListener('click',async e=>{
       e.stopPropagation();
       const j2=curJob();
       const amt=parseFloat(String($('depAmtInput').value||'').replace(/[^0-9.\-]/g,''))||0;
@@ -6388,17 +6416,78 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const now=new Date();
       const dateStr=now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
       const timeStr=now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-      j2.deposits.push({amount:amt.toFixed(2),desc,date:dateStr,time:timeStr});
+      const saveBtn=$('depSaveNew');
+      let checkFile;
+      if(depPendingCheck){
+        try {
+          if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='Uploading check…'; }
+          checkFile = depPendingCheck.file ? await depSaveCheckFile(j2, depPendingCheck.file) : depCheckLinkFor(depPendingCheck.rec);
+        } catch(err){
+          console.error('[deposit] check upload failed', err);
+          toast('Check photo upload failed — deposit not saved. Try again.');
+          if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Add Deposit'; }
+          return;
+        }
+        if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Add Deposit'; }
+      }
+      const dep={amount:amt.toFixed(2),desc,date:dateStr,time:timeStr};
+      if(checkFile) dep.checkFile=checkFile;
+      j2.deposits.push(dep);
       j2.paidVal=(j2.deposits.reduce((s,d)=>s+parseFloat(d.amount),0)).toFixed(2);
-      logActivity(j2, 'deposit_add', 'Deposit added', `$${amt.toLocaleString()} · ${desc}`);
+      logActivity(j2, 'deposit_add', 'Deposit added', `$${amt.toLocaleString()} · ${desc}${checkFile?' · check photo attached':''}`);
       saveToStorage();
       notifyFinalCheck(j2);   // auto: fires once if this brings the job to paid-in-full
       $('depAddForm').style.display='none';
       $('depAddToggle').style.display='flex';
       $('depAmtInput').value='';
+      depPendingCheck=null; depShowPending();
       refreshDepositUI();
       renderBoard();
+      if(typeof refreshDpTabBadges==='function') try{ refreshDpTabBadges(); }catch(_){}
     });
+
+    // View the check photo linked to a deposit (same lightbox style as expense invoices).
+    window.depOpenCheck=function(i){
+      const j2=curJob(); const d=(j2.deposits||[])[i]; if(!d || !d.checkFile) return;
+      const rec=depFindCheckRec(j2, d.checkFile);
+      const url=rec ? (rec.url||rec.dataUrl) : null;
+      if(!url){ toast('Check photo not found — it may have been removed from the Checks tab'); return; }
+      const isPdf=!!rec.isPdf||/\.pdf(\?|$)/i.test(rec.name||'')||/pdf/i.test(rec.type||'');
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px;flex-direction:column;gap:10px';
+      ov.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;width:88vw;max-width:900px"><span style="color:#fff;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">$${fmtMoney(d.amount)} · ${escapeHtml(rec.name||'Check')}</span><button id="depChkClose" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;flex-shrink:0">✕</button></div>${isPdf?`<iframe src="${url}#toolbar=1" style="width:88vw;max-width:900px;height:80vh;border:none;border-radius:8px;background:#fff"></iframe>`:`<img src="${url}" style="max-width:88vw;max-height:80vh;border-radius:8px;object-fit:contain">`}`;
+      document.body.appendChild(ov);
+      const close=()=>ov.remove();
+      ov.querySelector('#depChkClose').addEventListener('click',close);
+      ov.addEventListener('click',ev=>{ if(ev.target===ov) close(); });
+    };
+    // Attach / replace / unlink a check photo on an existing deposit (from its edit row).
+    window.depAttachCheckFile=async function(i, input){
+      const f=input.files?.[0]; input.value='';
+      if(!f) return;
+      const j2=curJob(); const d=j2.deposits?.[i]; if(!d) return;
+      toast('Uploading check…');
+      try {
+        d.checkFile = await depSaveCheckFile(j2, f);
+      } catch(err){ console.error('[deposit] check upload failed', err); toast('Check photo upload failed'); return; }
+      saveToStorage(); refreshDepositUI(); toast('Check photo attached');
+      if(typeof refreshDpTabBadges==='function') try{ refreshDpTabBadges(); }catch(_){}
+    };
+    window.depLinkExistingCheck=function(i, sel){
+      const j2=curJob(); const d=j2.deposits?.[i]; if(!d) return;
+      const rec=(j2.checks||[])[parseInt(sel.value)];
+      if(!rec) return;
+      d.checkFile=depCheckLinkFor(rec);
+      saveToStorage(); refreshDepositUI(); toast('Check photo linked');
+    };
+    window.depUnlinkCheck=function(i){
+      const j2=curJob(); const d=j2.deposits?.[i]; if(!d) return;
+      delete d.checkFile;
+      saveToStorage(); refreshDepositUI(); toast('Check photo unlinked (still on Checks tab)');
+    };
+    window._depCheckOptions=(i)=>{ const j2=curJob(); return depCheckOptions(j2, j2.deposits?.[i]?.checkFile||null); };
+    window._depFindCheckRec=depFindCheckRec;
+    refreshDepositUI();   // re-render now that the check-photo helpers exist
 
     // Edit / delete deposit (global so onclick= works)
     window.depDelete=function(i){
@@ -7617,6 +7706,13 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
   } else if(activeTab==='checks'){
     if(!j.checks) j.checks=[];
+    // Tag a Checks-tab file with the deposit it's linked to (from Contract Summary → Deposits).
+    function chkDepTag(f){
+      const d=(j.deposits||[]).find(x=>x.checkFile && ((x.checkFile.id&&x.checkFile.id===f.id)||(x.checkFile.path&&x.checkFile.path===f.path)));
+      if(!d) return '';
+      const lbl=d.desc?d.desc.charAt(0).toUpperCase()+d.desc.slice(1):'Deposit';
+      return `<div style="position:absolute;left:5px;top:5px;max-width:calc(100% - 70px);background:rgba(21,128,61,0.92);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:999px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:1" title="Linked to deposit">$${fmtMoney(d.amount)} · ${escapeHtml(lbl)}</div>`;
+    }
     function checksHTML(){
       const all=j.checks;
       return `
@@ -7681,7 +7777,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       </div>
       <div class="chk-grid">
         ${all.map((f,i)=>f.isPdf?`
-        <div class="chk-thumb" onclick="checkOpenFile(${i})">
+        <div class="chk-thumb" onclick="checkOpenFile(${i})">${chkDepTag(f)}
           <div class="chk-thumb-pdf-inner">
             <iframe src="${f.url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH" title="${f.name}"></iframe>
           </div>
@@ -7694,7 +7790,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>`:`
-        <div class="chk-thumb" onclick="checkOpenFile(${i})">
+        <div class="chk-thumb" onclick="checkOpenFile(${i})">${chkDepTag(f)}
           <img class="chk-thumb-img" src="${f.url}" alt="${f.name}">
           <div class="chk-thumb-bar">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -7719,7 +7815,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       wireCheckLightbox();
       toast('Check uploaded');
     };
-    window.checkDelete=function(i){const rec=j.checks[i];window.deleteJobFile?.(rec);j.checks.splice(i,1);saveToStorage();body.innerHTML=checksHTML();wireCheckLightbox()};
+    window.checkDelete=function(i){const rec=j.checks[i];(j.deposits||[]).forEach(d=>{if(d.checkFile&&rec&&((d.checkFile.id&&d.checkFile.id===rec.id)||(d.checkFile.path&&d.checkFile.path===rec.path)))delete d.checkFile;});window.deleteJobFile?.(rec);j.checks.splice(i,1);saveToStorage();body.innerHTML=checksHTML();wireCheckLightbox()};
     window.checkOpenFile=function(i){
       const f=j.checks[i];if(!f)return;
       const content=document.getElementById('chk-lb-content');
