@@ -143,10 +143,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .dp-tab:hover{color:var(--brand)}
 .dp-tab.active{border-bottom-color:var(--brand-light);color:var(--brand);font-weight:700}
 .dp-tab i{display:none}
-.dp-tab-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px 1px 5px;border-radius:999px;font-size:9.5px;font-weight:800;letter-spacing:0;line-height:15px;text-transform:none}
-.dp-tab-badge.ok{background:rgba(34,197,94,0.16);color:#4ADE80;border:1px solid rgba(74,222,128,0.35)}
-.dp-tab-badge.wait{background:rgba(245,158,11,0.14);color:#FBBF24;border:1px solid rgba(251,191,36,0.35)}
-.dp-tab-badge .ck{font-size:10px;line-height:1}
+.dp-tab-badge{display:inline-block;margin-left:5px;line-height:1;vertical-align:middle}
+.dp-tab-badge.ok{font-size:10px;font-weight:700;color:rgba(74,222,128,0.75)}
+.dp-tab-badge.wait{width:5px;height:5px;border-radius:50%;background:rgba(251,191,36,0.8);margin-bottom:1px}
 .dp-body{padding:14px 16px}
 .action-pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
 .ap-pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid}
@@ -5223,13 +5222,13 @@ function renderDetailPanel(){
   const col=jobColumns.find(c=>c.id===j.col)||jobColumns[0];
   const tabs=[
     {id:'overview',icon:'ti-layout-2',label:'Overview'},
-    {id:'timeline',icon:'ti-history',label:'Timeline'},
     {id:'photos',icon:'ti-camera',label:'Photos'},
     {id:'contract',icon:'ti-writing',label:'Contract'},
     {id:'checks',icon:'ti-writing-sign',label:'Checks'},
     {id:'loss',icon:'ti-file-alert',label:'Loss Statement'},
     {id:'roof',icon:'ti-ruler-measure',label:'Roof Measurement'},
     {id:'other',icon:'ti-dots',label:'Other'},
+    {id:'timeline',icon:'ti-history',label:'Timeline'},
   ];
 
   $('detailPanel').innerHTML=`
@@ -5287,10 +5286,10 @@ function dpTabBadgeHTML(tabId, j){
   const n = counts[tabId];
   if(n > 0){
     const what = tabId === 'photos' ? (n===1?'photo':'photos') : (n===1?'file':'files');
-    return `<span class="dp-tab-badge ok" title="${n} ${what} uploaded"><span class="ck">✓</span>${n}</span>`;
+    return `<span class="dp-tab-badge ok" title="${n} ${what} uploaded" aria-label="${n} ${what} uploaded">✓</span>`;
   }
   if(tabId === 'contract' && j.contract && j.contract.sentForSignature){
-    return `<span class="dp-tab-badge wait" title="Sent for signature — signed copy not uploaded yet">Sent</span>`;
+    return `<span class="dp-tab-badge wait" title="Sent for signature — signed copy not uploaded yet" aria-label="Sent for signature"></span>`;
   }
   return '';
 }
