@@ -134,6 +134,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .dp-header-area{background:#141927;border-bottom:1px solid var(--border);padding:0 16px;border-radius:12px 12px 0 0;position:sticky;top:0;z-index:10}
 .dp-name-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0 0}
 .dp-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;color:#fff}
+.dp-title-group{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.dp-title-group .dp-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-pipe-wrap{position:relative;display:inline-flex;flex-shrink:0}
+.dp-pipe-wrap>div{top:100%;left:0}
+.dp-pipe-tag{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border:1px solid var(--border);border-radius:5px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);cursor:pointer;white-space:nowrap;transition:color .12s,border-color .12s}
+.dp-pipe-tag:hover{color:var(--brand);border-color:var(--brand-mid)}
+.dp-status-group{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.dp-status-sep{font-size:12px;color:var(--muted);opacity:.6}
+.dp-stage-tag{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border:1px solid;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .12s}
+.dp-stage-tag:hover{opacity:.8}
+.dp-stage-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .dp-close{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:15px}
 .dp-edit-btn{display:flex;align-items:center;gap:5px;padding:0 12px;height:28px;border-radius:7px;border:1px solid var(--brand-light);background:rgba(77,157,224,0.12);color:var(--brand-light);font-family:'Barlow',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:background 0.15s,border-color 0.15s;white-space:nowrap}
 .dp-edit-btn:hover{background:rgba(77,157,224,0.22);border-color:var(--brand-light)}
@@ -147,7 +158,13 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .dp-tab-badge.ok{font-size:10px;font-weight:700;color:rgba(74,222,128,0.75)}
 .dp-tab-badge.wait{width:5px;height:5px;border-radius:50%;background:rgba(251,191,36,0.8);margin-bottom:1px}
 .dp-body{padding:14px 16px}
-.action-pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
+.action-pills{display:flex;gap:5px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0}
+.job-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;min-width:0}
+.job-bar .action-pills{flex:1;margin:0}
+.jb-caret{font-size:9px;opacity:.6}
+@media (max-width:760px){.dp-name-row{gap:10px}.dp-title-group{flex-direction:column;align-items:flex-start;gap:5px}.dp-title-group .dp-name{max-width:100%}}
+.action-pills::-webkit-scrollbar{display:none}
+.action-pills .ap-pill{flex-shrink:0;white-space:nowrap}
 .ap-pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid}
 .stage-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 .stage-badge{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity 0.12s}
@@ -5214,6 +5231,57 @@ function openDetail(id){
 }
 window.openDetail = openDetail;
 
+function openJobPipelineMenu(e){
+  if(e) e.stopPropagation();
+  if(document.querySelector('#jobPipelineSelector')?.parentNode.querySelector(':scope>div')) return; // already open
+  const j=jobs.find(x=>x.id===openJobId);if(!j)return;
+  const opts=pipelines.map(p=>`
+    <div data-job-pipeline="${p.id}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:${(j.pipeline||'insurance')===p.id?'700':'500'};color:${(j.pipeline||'insurance')===p.id?'#4D9DE0':'var(--brand)'};background:${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'};transition:background 0.1s" onmouseover="this.style.background='#4D9DE018'" onmouseout="this.style.background='${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'}'">
+      <span style="width:8px;height:8px;border-radius:50%;background:#4D9DE0;flex-shrink:0"></span>${escapeHtml(p.name)}
+    </div>`).join('');
+  const drop=document.createElement('div');drop.style.cssText='position:absolute;background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:5px;z-index:200;width:200px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
+  drop.innerHTML=opts;
+  $('jobPipelineSelector').parentNode.style.position='relative';
+  $('jobPipelineSelector').parentNode.appendChild(drop);
+  drop.querySelectorAll('[data-job-pipeline]').forEach(d=>d.addEventListener('click',e=>{
+    e.stopPropagation();
+    const targetPipelineId=d.dataset.jobPipeline;
+    const targetPipeline=pipelines.find(p=>p.id===targetPipelineId);
+    if(!targetPipeline)return;
+    const targetColumns=columnsForPipeline(targetPipelineId);
+    j.pipeline=targetPipelineId;
+    if(!targetColumns.some(c=>c.id===j.col)) j.col=targetColumns[0]?.id||j.col;
+    currentPipelineId=targetPipelineId;
+    syncActivePipeline();
+    saveToStorage();
+    toast(`Pipeline set to ${targetPipeline.name}`);
+    drop.remove();
+    renderBoard();
+    if($('jobsPage')?.style.display!=='none') renderJobsPage();
+    renderDetailPanel();
+  }));
+  setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
+}
+window.openJobPipelineMenu = openJobPipelineMenu;
+
+function openJobStageMenu(e){
+  if(e) e.stopPropagation();
+  if(document.querySelector('#stageSelector')?.parentNode.querySelector(':scope>div')) return; // already open
+  const j=jobs.find(x=>x.id===openJobId);if(!j)return;
+  const jobColumns=columnsForPipeline(pipelineForJob(j)?.id);
+  const opts=jobColumns.map(c=>`
+    <div data-stage="${c.id}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:${j.col===c.id?'700':'500'};color:${j.col===c.id?c.color||'#4D9DE0':'var(--brand)'};background:${j.col===c.id?`${c.color||'#4D9DE0'}18`:'none'};transition:background 0.1s" onmouseover="this.style.background='${c.color||'#4D9DE0'}18'" onmouseout="this.style.background='${j.col===c.id?`${c.color||'#4D9DE0'}18`:'none'}'">
+      <span style="width:8px;height:8px;border-radius:50%;background:${c.color||'#4D9DE0'};flex-shrink:0"></span>${c.name}
+    </div>`).join('');
+  const drop=document.createElement('div');drop.style.cssText='position:absolute;background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:5px;z-index:200;width:200px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
+  drop.innerHTML=opts;
+  $('stageSelector').parentNode.style.position='relative';
+  $('stageSelector').parentNode.appendChild(drop);
+  drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();if(j.col!==d.dataset.stage&&!canMoveToStage(j,d.dataset.stage))return;j.col=d.dataset.stage;saveToStorage();drop.remove();renderBoard();renderDetailPanel()}));
+  setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
+}
+window.openJobStageMenu = openJobStageMenu;
+
 function renderDetailPanel(){
   const j=jobs.find(x=>x.id===openJobId);if(!j)return;
   const u=USERS.find(x=>x.id===j.user);
@@ -5234,8 +5302,15 @@ function renderDetailPanel(){
   $('detailPanel').innerHTML=`
     <div class="dp-header-area">
       <div class="dp-name-row">
-        <div class="dp-name">${j.name}</div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div class="dp-title-group">
+          <div class="dp-name">${j.name}</div>
+          <div class="dp-status-group">
+            <span class="dp-pipe-wrap"><span class="dp-pipe-tag" id="jobPipelineSelector" title="Pipeline — click to change">${escapeHtml(jobPipeline?.name||'Pipeline')}<span class="jb-caret">&#9662;</span></span></span>
+            <i class="ti ti-chevron-right dp-status-sep" aria-hidden="true"></i>
+            <span class="dp-pipe-wrap"><span class="dp-stage-tag" id="stageSelector" title="Stage — click to change" style="background:${col.color||'#4D9DE0'}1f;border-color:${col.color||'#4D9DE0'}55;color:${col.color||'#4D9DE0'}"><span class="dp-stage-dot" style="background:${col.color||'#4D9DE0'}"></span>${escapeHtml(col.name||'Stage')}<span class="jb-caret">&#9662;</span></span></span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           <button class="dp-edit-btn" id="dpEdit"><i class="ti ti-pencil" style="font-size:13px" aria-hidden="true"></i>Edit Job</button>
           <button class="dp-close" id="dpClose"><i class="ti ti-x" aria-hidden="true"></i></button>
         </div>
@@ -5252,6 +5327,8 @@ function renderDetailPanel(){
   });
   $('dpClose').onclick=()=>$('detailOverlay').classList.remove('open');
   $('dpEdit').onclick=()=>openEditJob(openJobId);
+  $('jobPipelineSelector') && ($('jobPipelineSelector').onclick=openJobPipelineMenu);
+  $('stageSelector') && ($('stageSelector').onclick=openJobStageMenu);
   $('detailOverlay').onclick=e=>{if(e.target===$('detailOverlay'))$('detailOverlay').classList.remove('open')};
 
   renderDetailTab(j,u,col,jobPipeline,jobColumns);
@@ -5389,26 +5466,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       ? `${groupHtml('Sales Tasks', salesRows, '#4D9DE0', 'rgba(77,157,224,0.1)', 'ti-user')}${groupHtml('Admin Tasks', adminRows, '#A78BFA', 'rgba(167,139,250,0.1)', 'ti-shield-lock')}`
       : `<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);padding:8px 0"><i class="ti ti-list-check" style="font-size:13px" aria-hidden="true"></i>No checklist items for this stage</div>`;
     body.innerHTML=`
-      <div class="action-pills" style="margin-bottom:12px">
-        <span class="ap-pill" style="background:rgba(139,92,246,0.15);border-color:rgba(139,92,246,0.35);color:#A78BFA"><i class="ti ti-sparkles" style="font-size:12px" aria-hidden="true"></i>AI Summary</span>
-        <span class="ap-pill" style="background:none;border-color:var(--border);color:var(--muted)"><i class="ti ti-message-circle" style="font-size:12px" aria-hidden="true"></i>Ask AI</span>
+      <div class="job-bar">
+        <div class="action-pills">
         <span class="ap-pill" style="background:none;border-color:var(--border);color:var(--muted)"><i class="ti ti-world" style="font-size:12px" aria-hidden="true"></i>Customer Portal</span>
         <span class="ap-pill" style="background:rgba(249,115,22,0.15);border-color:rgba(249,115,22,0.35);color:#FB923C"><i class="ti ti-search" style="font-size:12px" aria-hidden="true"></i>Inspection</span>
         <span class="ap-pill" title="Certificate of Completion" onclick="printCertificateOfCompletion('${j.id}')" style="background:rgba(52,211,153,0.15);border-color:rgba(52,211,153,0.3);color:#34D399"><i class="ti ti-certificate" style="font-size:12px" aria-hidden="true"></i>COC</span>
         <span class="ap-pill" style="background:rgba(56,189,248,0.15);border-color:rgba(56,189,248,0.3);color:#38BDF8"><i class="ti ti-cloud" style="font-size:12px" aria-hidden="true"></i>Weather DOL</span>
         <span class="ap-pill" style="background:none;border-color:var(--border);color:var(--muted)"><i class="ti ti-calendar" style="font-size:12px" aria-hidden="true"></i>Schedule</span>
-      </div>
-      <div class="stage-row">
-        <span style="font-size:11px;color:var(--muted)">Pipeline</span>
-        <span class="stage-badge" id="jobPipelineSelector" style="background:#4D9DE022;border:1px solid #4D9DE055;color:#4D9DE0">
-          <span style="width:7px;height:7px;border-radius:50%;background:#4D9DE0;flex-shrink:0"></span>${escapeHtml(jobPipeline?.name||'Pipeline')}<span style="font-size:9px;opacity:.7">&#9662;</span>
-        </span>
-        <span style="font-size:11px;color:var(--muted)">Stage</span>
-        <span class="stage-badge" id="stageSelector" style="background:${col.color||'#4D9DE0'}22;border:1px solid ${col.color||'#4D9DE0'}55;color:${col.color||'#4D9DE0'}">
-          <span style="width:7px;height:7px;border-radius:50%;background:${col.color||'#4D9DE0'};flex-shrink:0"></span>${col.name}<span style="font-size:9px;opacity:.7">&#9662;</span>
-        </span>
-        <div style="flex:1"></div>
-        <span style="font-size:11px;color:var(--muted)">Created <strong style="color:var(--brand)">${j.created}</strong></span>
+        </div>
       </div>
       <div class="checklist-box" style="margin-bottom:12px">
         <div id="checklistToggle" style="display:flex;align-items:center;gap:7px;${checklistCollapsed?'':'margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid var(--border)'};cursor:pointer;user-select:none">
@@ -7090,35 +7155,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     $('dpDelete')&&$('dpDelete').addEventListener('click',()=>{
       openDeleteJobModal(openJobId);
     });
-    $('jobPipelineSelector')&&$('jobPipelineSelector').addEventListener('click',()=>{
-      const j=jobs.find(x=>x.id===openJobId);if(!j)return;
-      const opts=pipelines.map(p=>`
-        <div data-job-pipeline="${p.id}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:${(j.pipeline||'insurance')===p.id?'700':'500'};color:${(j.pipeline||'insurance')===p.id?'#4D9DE0':'var(--brand)'};background:${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'};transition:background 0.1s" onmouseover="this.style.background='#4D9DE018'" onmouseout="this.style.background='${(j.pipeline||'insurance')===p.id?'#4D9DE018':'none'}'">
-          <span style="width:8px;height:8px;border-radius:50%;background:#4D9DE0;flex-shrink:0"></span>${escapeHtml(p.name)}
-        </div>`).join('');
-      const drop=document.createElement('div');drop.style.cssText='position:absolute;background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:5px;z-index:200;width:200px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
-      drop.innerHTML=opts;
-      $('jobPipelineSelector').parentNode.style.position='relative';
-      $('jobPipelineSelector').parentNode.appendChild(drop);
-      drop.querySelectorAll('[data-job-pipeline]').forEach(d=>d.addEventListener('click',e=>{
-        e.stopPropagation();
-        const targetPipelineId=d.dataset.jobPipeline;
-        const targetPipeline=pipelines.find(p=>p.id===targetPipelineId);
-        if(!targetPipeline)return;
-        const targetColumns=columnsForPipeline(targetPipelineId);
-        j.pipeline=targetPipelineId;
-        if(!targetColumns.some(c=>c.id===j.col)) j.col=targetColumns[0]?.id||j.col;
-        currentPipelineId=targetPipelineId;
-        syncActivePipeline();
-        saveToStorage();
-        toast(`Pipeline set to ${targetPipeline.name}`);
-        drop.remove();
-        renderBoard();
-        if($('jobsPage')?.style.display!=='none') renderJobsPage();
-        renderDetailPanel();
-      }));
-      setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
-    });
     $('dpMove')&&$('dpMove').addEventListener('click',()=>{
       const j=jobs.find(x=>x.id===openJobId);if(!j)return;
       const ci=jobColumns.findIndex(c=>c.id===j.col),next=jobColumns[ci+1];
@@ -7129,19 +7165,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       j.col=next.id;logActivity(j,'stage','Stage changed',`${fromStageName} → ${next.name}`);saveToStorage();toast(`Moved to ${next.name}`);renderBoard();
       if($('jobsPage')?.style.display!=='none') renderJobsPage();
       renderDetailPanel();
-    });
-    $('stageSelector')&&$('stageSelector').addEventListener('click',()=>{
-      const j=jobs.find(x=>x.id===openJobId);if(!j)return;
-      const opts=jobColumns.map(c=>`
-        <div data-stage="${c.id}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:${j.col===c.id?'700':'500'};color:${j.col===c.id?c.color||'#4D9DE0':'var(--brand)'};background:${j.col===c.id?`${c.color||'#4D9DE0'}18`:'none'};transition:background 0.1s" onmouseover="this.style.background='${c.color||'#4D9DE0'}18'" onmouseout="this.style.background='${j.col===c.id?`${c.color||'#4D9DE0'}18`:'none'}'">
-          <span style="width:8px;height:8px;border-radius:50%;background:${c.color||'#4D9DE0'};flex-shrink:0"></span>${c.name}
-        </div>`).join('');
-      const drop=document.createElement('div');drop.style.cssText='position:absolute;background:#1A1F2E;border:1px solid var(--border);border-radius:8px;padding:5px;z-index:200;width:200px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
-      drop.innerHTML=opts;
-      $('stageSelector').parentNode.style.position='relative';
-      $('stageSelector').parentNode.appendChild(drop);
-      drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();if(j.col!==d.dataset.stage&&!canMoveToStage(j,d.dataset.stage))return;j.col=d.dataset.stage;saveToStorage();drop.remove();renderBoard();renderDetailPanel()}));
-      setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
     });
 
   } else if(activeTab==='timeline'){
