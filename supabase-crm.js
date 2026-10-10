@@ -99,6 +99,7 @@ async function loadAllFromSupabase() {
       window.USERS.length = 0;
       window.TEAM.forEach(m => window.USERS.push({ id:m.id, name:m.name, color:m.color }));
     }
+    __loadedTeamIds = new Set(newTeam.map(m => m.id));
     console.log('[Supabase] loaded', window.TEAM.length, 'team members; you are:', window.currentMember?.role || 'unknown');
     // Show/hide admin-only nav links now that we know the role
     if (typeof window.updateProfitsNavVisibility === 'function') {
@@ -124,6 +125,8 @@ async function loadAllFromSupabase() {
     } else {
       window.pipelines = newPipelines;
     }
+    __loadedPipelineIds = new Set(pipes.map(p => p.id));
+    __loadedStageIds = new Set((stages || []).map(s => s.id));
   }
 
   // Stages considered "closed" (completed / lost). These are NOT loaded on boot —
@@ -164,13 +167,8 @@ async function loadAllFromSupabase() {
       const byKind = k => jobFiles.filter(f => f.kind === k).map(fileRec);
       const stageChecklistDone = {};
       (chk || []).filter(c => c.job_id === r.id).forEach(c => {
-        (stageChecklistDone[c.stage_id] ||= {})[c.item_key] = {
-          completed:true,
-          completedAt: c.completed_at ? new Date(c.completed_at).getTime() : Date.now(),
-          agentId:   c.agent_id   || '',
-          agentName: c.agent_name || 'Unassigned',
-          agentRole: c.agent_role || '',
-        };
+        const rec = window.crmSync.checklistFromRow(c);
+        (stageChecklistDone[c.stage_id] ||= {})[c.item_key] = rec;
       });
       return {
         id: r.id, _sb:true,
@@ -233,10 +231,8 @@ async function loadAllFromSupabase() {
         zohoDeleted: (r.zoho_deleted && typeof r.zoho_deleted === 'object') ? r.zoho_deleted : undefined,
         created:new Date(r.created_at).toLocaleString('en-US',
           {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}),
-        deposits:(deps||[]).filter(d=>d.job_id===r.id)
-          .map(d=>({amount:String(d.amount),desc:d.description,zohoId:d.zoho_id||undefined,_pid:d.pid||undefined,date:d.dep_date||undefined,_did:d.did||undefined,checkFile:(d.check_file&&typeof d.check_file==='object')?d.check_file:undefined})),
-        expenses:(exps||[]).filter(e=>e.job_id===r.id)
-          .map(e=>({cat:e.category,desc:e.description,amount:String(e.amount),vendor:e.vendor||null,vendorName:e.vendor_name||null,paid:!!e.paid,paidDate:e.paid_date||null,paidMethod:e.paid_method||null,paidNotes:e.paid_notes||null,breakdown:(e.breakdown&&typeof e.breakdown==='object')?e.breakdown:null,invoiceFile:(e.breakdown&&e.breakdown.__invoiceFile)?e.breakdown.__invoiceFile:undefined,_src:e.src||null,_vid:e.vid||null,zohoId:e.zoho_id||undefined,zohoAmt:e.zoho_amt||undefined,zohoV:(e.zoho_v!=null)?e.zoho_v:undefined,_eid:e.eid||undefined,date:e.exp_date||undefined,onAccount:!!e.on_account})),
+        deposits:(deps||[]).filter(d=>d.job_id===r.id).map(d=>window.crmSync.depositFromRow(d)),
+        expenses:(exps||[]).filter(e=>e.job_id===r.id).map(e=>window.crmSync.expenseFromRow(e)),
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         signedContractFiles:byKind('signed_contract'),
@@ -261,42 +257,11 @@ async function loadAllFromSupabase() {
     } else {
       window.jobs = newJobs;
     }
-    // One-time cleanup: remove duplicate expense rows. A sync glitch can insert
-    // byte-identical copies of an expense, which doubles the tracker total.
-    // We collapse records that match on ALL meaningful fields (amount normalized),
-    // which is the signature of a duplicate — legitimate separate entries differ.
-    let _dupRemoved = 0;
-    (window.jobs||[]).forEach(j => {
-      if(!Array.isArray(j.expenses)) return;
-      // Normalize legacy category names so expenses aren't hidden from the grouped
-      // list (the total counts every record, but the list only shows known cats).
-      j.expenses.forEach(e => {
-        if(e && (e.cat === 'Labor' || e.cat === 'labor')) e.cat = 'Roofing Labor';
-      });
-      // Dedup ONLY on unique ids (_vid / _eid). Never on content signature —
-      // two real ABC purchases can legitimately share category/amount/vendor,
-      // and deleting one as a "duplicate" was silently losing real expenses.
-      const keep = [];
-      const seenVid = new Set();
-      const seenEid = new Set();
-      j.expenses.forEach(e => {
-        if(!e) return;
-        if(e._vid){ if(seenVid.has(e._vid)){ _dupRemoved++; return; } seenVid.add(e._vid); }
-        if(e._eid){ if(seenEid.has(e._eid)){ _dupRemoved++; return; } seenEid.add(e._eid); }
-        keep.push(e);
-      });
-      if(keep.length !== j.expenses.length) j.expenses = keep;
-      // Deposits: same idea — drop exact copies by their unique id (_did) only.
-      if(Array.isArray(j.deposits)){
-        const seenDid = new Set(), depKeep = [];
-        j.deposits.forEach(d => {
-          if(!d) return;
-          if(d._did){ if(seenDid.has(d._did)){ _dupRemoved++; return; } seenDid.add(d._did); }
-          depKeep.push(d);
-        });
-        if(depKeep.length !== j.deposits.length) j.deposits = depKeep;
-      }
-    });
+    // Collapse true id duplicates (same _eid / _vid / _did) and remember the
+    // rows this session loaded. A later save deletes only keys that were in
+    // that snapshot and then removed — never rows it has not seen.
+    const _dupRemoved = stampJobBaselines(window.jobs);
+    __loadedJobIds = new Set((window.jobs || []).map(j => j.id).filter(isPersistedJobId));
     if(_dupRemoved > 0){
       console.log('[Supabase] removed', _dupRemoved, 'true duplicate expense line(s) by id');
       setTimeout(()=>{ if(window.saveToStorage) window.saveToStorage(); }, 1500);
@@ -318,6 +283,13 @@ async function loadClosedJobs(force){
       .order('created_at', { ascending:false });
     if(error){ console.error('[Supabase] closed jobs load failed:', error); return false; }
     const closedJobs = await window.__buildJobsFromRows(rows);
+    const closedDupes = stampJobBaselines(closedJobs);
+    if (__loadedJobIds) {
+      closedJobs.forEach(j => { if (isPersistedJobId(j.id)) __loadedJobIds.add(j.id); });
+    }
+    if (closedDupes > 0) {
+      setTimeout(()=>{ if(window.saveToStorage) window.saveToStorage(); }, 1500);
+    }
     // Merge: remove any existing copies of these ids, then add.
     const closedIds = new Set(closedJobs.map(j => j.id));
     if(Array.isArray(window.jobs)){
@@ -341,11 +313,9 @@ window.loadClosedJobs = loadClosedJobs;
 
 let saveTimer = null;
 let savePending = false;
-// SAVE LOCK: pushAllToSupabase does delete-then-insert on every job's expenses.
-// Two pushes overlapping (debounce + blur flush + realtime-triggered save) each
-// delete, then each insert — so every overlap DOUBLED the expense rows
-// (1→2→4→8…→hundreds). Only one push may run; extra requests collapse into a
-// single follow-up run after the current one finishes.
+// SAVE LOCK: overlapping pushes used to each insert a full copy of a job's
+// expenses. Only one push may run; extra requests collapse into a single
+// follow-up run after the current one finishes.
 let __pushRunning = null;
 let __pushQueued = false;
 function runPushSerialized() {
@@ -399,13 +369,290 @@ if (typeof document !== 'undefined') {
   window.addEventListener('blur', flushPendingSave);
 }
 
+// Ids this browser has actually loaded. A save may delete only these, and
+// only when the user has since removed them from memory. Null until the
+// first successful load so a save during boot cannot wipe the database.
+let __loadedJobIds = null;
+let __loadedPipelineIds = null;
+let __loadedStageIds = null;
+let __loadedTeamIds = null;
+
+function isPersistedJobId(id) {
+  return typeof id === 'string' && id.length > 20;
+}
+
+// Normalize legacy categories, collapse id-duplicates, and snapshot the
+// child rows this session is allowed to delete later.
+function stampJobBaselines(jobs) {
+  const S = window.crmSync;
+  let removed = 0;
+  (jobs || []).forEach(j => {
+    if (!Array.isArray(j.expenses)) j.expenses = [];
+    // Snapshot before renaming legacy "Labor" → "Roofing Labor", so that
+    // rename is a local edit (updated in place) rather than looking like a
+    // newer server value we should copy back.
+    const expBase = S.captureBaseline(j.expenses, {
+      keyOf: e => e._eid, rowIdOf: e => e._rowId, fingerprint: S.expenseFingerprint,
+    });
+    j.expenses.forEach(e => {
+      if (e && (e.cat === 'Labor' || e.cat === 'labor')) e.cat = 'Roofing Labor';
+    });
+    const expDeduped = S.dedupeExpenses(j.expenses);
+    removed += j.expenses.length - expDeduped.kept.length;
+    j.expenses = expDeduped.kept;
+    S.noteRemovals(expBase, expDeduped.removedKeys, expDeduped.kept, e => e._eid);
+
+    if (!Array.isArray(j.deposits)) j.deposits = [];
+    const depBase = S.captureBaseline(j.deposits, {
+      keyOf: d => d._did, rowIdOf: d => d._rowId, fingerprint: S.depositFingerprint,
+    });
+    const depDeduped = S.dedupeByKey(j.deposits, d => d._did);
+    removed += j.deposits.length - depDeduped.kept.length;
+    j.deposits = depDeduped.kept;
+    S.noteRemovals(depBase, depDeduped.removedKeys, depDeduped.kept, d => d._did);
+
+    const flat = S.flattenChecklist(j.stageChecklistDone);
+    const chkBase = S.captureBaseline(flat, {
+      keyOf: r => S.checklistKey(r.stageId, r.itemKey),
+      rowIdOf: r => r._rowId,
+      fingerprint: S.checklistFingerprint,
+    });
+    const chkDeduped = S.dedupeByKey(flat, r => S.checklistKey(r.stageId, r.itemKey));
+    removed += flat.length - chkDeduped.kept.length;
+    if (chkDeduped.removedKeys.length) {
+      j.stageChecklistDone = {};
+      chkDeduped.kept.forEach(rec => {
+        (j.stageChecklistDone[rec.stageId] ||= {})[rec.itemKey] = rec;
+      });
+    }
+    S.noteRemovals(chkBase, chkDeduped.removedKeys, chkDeduped.kept, r => S.checklistKey(r.stageId, r.itemKey));
+
+    j.__childSync = { expenses: expBase, deposits: depBase, checklist: chkBase };
+  });
+  return removed;
+}
+
+async function selectAllIds(table) {
+  const out = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb.from(table).select('id').range(from, from + PAGE - 1);
+    if (error) return { data: null, error };
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { data: out, error: null };
+}
+
+async function selectByJobIds(table, jobIds) {
+  if (!jobIds.length) return { data: [], error: null };
+  const out = [];
+  const CHUNK = 50;
+  const PAGE = 1000;
+  for (let i = 0; i < jobIds.length; i += CHUNK) {
+    const slice = jobIds.slice(i, i + CHUNK);
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.from(table).select('*').in('job_id', slice).range(from, from + PAGE - 1);
+      if (error) return { data: null, error };
+      out.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+    }
+  }
+  return { data: out, error: null };
+}
+
+function groupByJobId(rows) {
+  const map = new Map();
+  for (const row of rows || []) {
+    if (!map.has(row.job_id)) map.set(row.job_id, []);
+    map.get(row.job_id).push(row);
+  }
+  return map;
+}
+
+function applyKeyedPlan(list, plan, keyOf) {
+  const drop = new Set(plan.dropKeys);
+  const next = (list || []).filter(item => item && !drop.has(keyOf(item)));
+  for (const rep of plan.replace) {
+    const idx = next.findIndex(item => keyOf(item) === rep.key);
+    if (idx >= 0) next[idx] = rep.item;
+    else next.push(rep.item);
+  }
+  const have = new Set(next.map(keyOf));
+  for (const item of plan.adopt) {
+    const k = keyOf(item);
+    if (k && !have.has(k)) { next.push(item); have.add(k); }
+  }
+  return next;
+}
+
+function applyChecklistPlan(done, plan) {
+  const S = window.crmSync;
+  const next = (done && typeof done === 'object') ? done : {};
+  for (const key of plan.dropKeys) {
+    const { stageId, itemKey } = S.splitChecklistKey(key);
+    if (next[stageId]) delete next[stageId][itemKey];
+  }
+  for (const rep of plan.replace) {
+    const { stageId, itemKey } = S.splitChecklistKey(rep.key);
+    (next[stageId] ||= {})[itemKey] = rep.item;
+  }
+  for (const item of plan.adopt) {
+    (next[item.stageId] ||= {})[item.itemKey] = item;
+  }
+  return next;
+}
+
+async function writeKeyedRows(table, jobId, plan, toRow, matchInsert, findExisting) {
+  let ok = true;
+  const inserts = plan.writes.filter(w => !w.existingId);
+  const updates = plan.writes.filter(w => w.existingId);
+  if (inserts.length) {
+    const rows = inserts.map(w => ({ ...toRow(w.item), job_id: jobId }));
+    const { data, error } = await sb.from(table).insert(rows).select('*');
+    if (!error && data) {
+      inserts.forEach((w, i) => {
+        const match = (matchInsert && matchInsert(data, w.item)) || (data.length === inserts.length ? data[i] : null);
+        if (match && match.id) w.item._rowId = w.item._id = match.id;
+      });
+    } else {
+      console.error('[Supabase] ' + table + ' insert failed, retrying row by row:', error);
+      for (let i = 0; i < inserts.length; i++) {
+        const row = rows[i];
+        let { data: one, error: oneErr } = await sb.from(table).insert(row).select('id').maybeSingle();
+        if (oneErr && findExisting && /duplicate|unique/i.test((oneErr.message || '') + ' ' + (oneErr.details || ''))) {
+          try {
+            const existing = await findExisting(row);
+            if (existing && existing.id) {
+              const payload = { ...row };
+              delete payload.job_id;
+              const { error: updErr } = await sb.from(table).update(payload).eq('id', existing.id);
+              if (updErr) { ok = false; console.error('[Supabase] ' + table + ' conflict update failed:', updErr); }
+              else inserts[i].item._rowId = inserts[i].item._id = existing.id;
+              continue;
+            }
+          } catch (e) { console.error(e); }
+        }
+        if (oneErr) {
+          ok = false;
+          console.error('[Supabase] ' + table + ' row rejected:', row, oneErr);
+        } else if (one) {
+          inserts[i].item._rowId = inserts[i].item._id = one.id;
+        }
+      }
+    }
+  }
+  for (const w of updates) {
+    const { error } = await sb.from(table).update(toRow(w.item)).eq('id', w.existingId);
+    if (error) {
+      ok = false;
+      console.error('[Supabase] ' + table + ' update failed:', w.existingId, error);
+    } else {
+      w.item._rowId = w.item._id = w.existingId;
+    }
+  }
+  if (ok && plan.deleteIds.length) {
+    for (let i = 0; i < plan.deleteIds.length; i += 100) {
+      const chunk = plan.deleteIds.slice(i, i + 100);
+      const { error } = await sb.from(table).delete().in('id', chunk);
+      if (error) {
+        ok = false;
+        console.error('[Supabase] ' + table + ' delete failed:', error);
+      }
+    }
+  }
+  return ok;
+}
+
+// Merge one child table for one job. Patches in-memory rows either way so a
+// stale tab drops keys the server deleted and picks up keys it never loaded.
+// The baseline (what this session is allowed to overwrite or delete) advances
+// only after the writes succeed.
+async function syncKeyedCollection(j, slot, localList, serverRows, spec, toRow, keyOf, fingerprint, baselineSpec, patch, findExisting) {
+  const S = window.crmSync;
+  if (!j.__childSync) j.__childSync = {};
+  if (!j.__childSync[slot]) j.__childSync[slot] = S.emptyBaseline();
+  const plan = S.planKeyedSync(Object.assign({
+    local: localList,
+    server: serverRows || [],
+    baseline: j.__childSync[slot],
+  }, spec));
+  const table = slot === 'checklist' ? 'stage_checklist_done' : slot;
+  const matchInsert = (data, item) => {
+    if (table === 'expenses') return data.find(r => r.eid && r.eid === item._eid) || null;
+    if (table === 'deposits') return data.find(r => r.did && r.did === item._did) || null;
+    if (table === 'stage_checklist_done') {
+      return data.find(r => r.stage_id === item.stageId && r.item_key === item.itemKey) || null;
+    }
+    return null;
+  };
+  const ok = await writeKeyedRows(table, j.id, plan, toRow, matchInsert, findExisting);
+  patch(plan);
+  if (ok) {
+    j.__childSync[slot] = S.captureBaseline(baselineSpec.items(), baselineSpec);
+  } else {
+    const b = j.__childSync[slot];
+    for (const k of plan.dropKeys.concat(plan.deleteKeys)) {
+      if (k && !b.removedKeys.includes(k)) b.removedKeys.push(k);
+      if (k) delete b.fingerprints[k];
+    }
+    if (!window.__childSyncFailureToasted && window.toast) {
+      window.__childSyncFailureToasted = true;
+      window.toast('Some ' + slot + ' changes did not save — they will retry');
+    }
+  }
+  const notable = plan.conflicts.filter(c => c.reason === 'both-changed' || c.reason === 'deleted-on-server');
+  if (plan.adopt.length || plan.dropKeys.length || plan.deleteIds.length || plan.writes.length) {
+    console.log('[Supabase] merged ' + slot, j.name || j.id, {
+      insert: plan.writes.filter(w => !w.existingId).length,
+      update: plan.writes.filter(w => w.existingId).length,
+      delete: plan.deleteIds.length,
+      keptFromServer: plan.adopt.length,
+      droppedStale: plan.dropKeys.length,
+    });
+  }
+  return notable.length > 0;
+}
+
 async function pushAllToSupabase() {
   window.__lastLocalPushAt = Date.now();
+  window.__childSyncFailureToasted = false;
   try {
     // Build base rows without id, then categorize
     const newJobs = [];        // no real UUID yet — needs insert without id
     const newJobIndices = [];  // their index in window.jobs for writeback
     const existingJobs = [];   // has UUID — safe to upsert with id
+    // Jobs this session loaded and the user has removed. Applied after the
+    // upsert so a failed upsert cannot delete them first. Jobs this session
+    // never loaded (closed jobs, jobs created in another tab) are left alone.
+    // Jobs deleted on the server are dropped locally so this tab does not
+    // upsert them back into existence.
+    let jobIdsToDelete = [];
+    if (__loadedJobIds) {
+      const { data: remoteJobRows, error: idErr } = await selectAllIds('jobs');
+      if (idErr) console.error('[Supabase] could not list job ids — skipping job delete/resurrection check:', idErr);
+      else {
+        const plan = window.crmSync.planIdDeletes(
+          __loadedJobIds,
+          (window.jobs || []).map(j => j.id),
+          (remoteJobRows || []).map(r => r.id),
+        );
+        jobIdsToDelete = plan.deleteIds;
+        if (plan.dropLocalIds.length) {
+          const drop = new Set(plan.dropLocalIds);
+          console.warn('[Supabase] not resurrecting jobs deleted elsewhere:', plan.dropLocalIds);
+          if (window.toast) window.toast('A job was deleted in another session and was not restored');
+          for (let i = window.jobs.length - 1; i >= 0; i--) {
+            if (drop.has(window.jobs[i].id)) window.jobs.splice(i, 1);
+          }
+          // Forget these ids. If the same row shows up again (the other save
+          // was still in flight), the next save must not treat it as a job
+          // this user deleted — that delete cascades to expenses and files.
+          plan.dropLocalIds.forEach(id => __loadedJobIds.delete(id));
+          try { if (typeof window.renderBoard === 'function') window.renderBoard(); } catch (e) { console.warn(e); }
+        }
+      }
+    }
 
     (window.jobs || []).forEach((j, i) => {
       const base = {
@@ -522,205 +769,199 @@ async function pushAllToSupabase() {
       }
     }
 
-    // delete any jobs that exist in Supabase but no longer in our local array
-    {
-      const { data: remoteIds, error: idErr } = await sb.from('jobs').select('id');
-      if (!idErr) {
-        const localIds = new Set((window.jobs || []).map(j => j.id).filter(Boolean));
-        const toDelete = (remoteIds || []).map(r => r.id).filter(id => !localIds.has(id));
-        if (toDelete.length) {
-          const { error: delErr } = await sb.from('jobs').delete().in('id', toDelete);
-          if (delErr) console.error('[Supabase] delete jobs failed:', delErr);
-        }
-      }
+    if (jobIdsToDelete.length) {
+      const { error: delErr } = await sb.from('jobs').delete().in('id', jobIdsToDelete);
+      if (delErr) console.error('[Supabase] delete jobs failed:', delErr);
+      else if (__loadedJobIds) jobIdsToDelete.forEach(id => __loadedJobIds.delete(id));
+    }
+    if (__loadedJobIds) {
+      (window.jobs || []).forEach(j => { if (isPersistedJobId(j.id)) __loadedJobIds.add(j.id); });
     }
 
-    // children: simplest reliable strategy — replace per job
+    // Child rows are merged by stable key (expense eid, deposit did, checklist
+    // item). A stale tab updates only rows it changed, deletes only rows it
+    // removed, and leaves rows it never loaded in place. created_at is not
+    // written on update, so saving a job no longer resets it.
+    // job_files are not rewritten here — uploads and deletes go through
+    // uploadJobFile / deleteJobFile — so an expense merge cannot drop invoices.
+    if (!__loadedJobIds) {
+      console.warn('[Supabase] initial load has not finished — skipping child-row sync');
+    } else {
+    const persistedIds = (window.jobs || []).map(j => j.id).filter(isPersistedJobId);
+    const [expRes, depRes, chkRes] = await Promise.all([
+      selectByJobIds('expenses', persistedIds),
+      selectByJobIds('deposits', persistedIds),
+      selectByJobIds('stage_checklist_done', persistedIds),
+    ]);
+    if (expRes.error) console.error('[Supabase] expense read failed — leaving expense rows untouched:', expRes.error);
+    if (depRes.error) console.error('[Supabase] deposit read failed — leaving deposit rows untouched:', depRes.error);
+    if (chkRes.error) console.error('[Supabase] checklist read failed — leaving checklist rows untouched:', chkRes.error);
+    const expByJob = groupByJobId(expRes.data);
+    const depByJob = groupByJobId(depRes.data);
+    const chkByJob = groupByJobId(chkRes.data);
+    const conflictJobs = [];
+    const S = window.crmSync;
     for (const j of (window.jobs || [])) {
-      if (!j.id) continue;
-      // Deposits: only delete-then-insert when there ARE deposits to write,
-      // and surface insert errors so a mid-sync failure doesn't silently wipe
-      // them (same hardening as expenses).
-      // Deposits: write the new rows FIRST, then remove the previous copies by id
-      // only after the write succeeds — an interrupted save can never leave the
-      // job with zero deposits. Brief duplicates are dropped on load by _did.
-      if (j.deposits?.length) {
-        j.deposits.forEach(d => { if (d && !d._did) d._did = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); });
-        const { data: oldDepRows, error: oldDepErr } = await sb.from('deposits').select('id').eq('job_id', j.id);
-        if (oldDepErr) console.error('[Supabase] could not read existing deposit ids — saving new rows without removing old ones (dedup on load):', oldDepErr);
-        const depRows = j.deposits.filter(Boolean).map(d => ({ job_id:j.id, amount:parseFloat(d.amount||0), description:d.desc,
-            zoho_id: d.zohoId || null, pid: d._pid || null, dep_date: d.date || null,
-            did: d._did || null, check_file: d.checkFile || null }));
-        let depSaved = 0;
-        let { error: depErr } = await sb.from('deposits').insert(depRows);
-        if (!depErr) depSaved = depRows.length;
-        else {
-          console.error('[Supabase] deposit batch insert failed, retrying row by row:', depErr);
-          for (const row of depRows) {
-            let { error } = await sb.from('deposits').insert(row);
-            // If a newer column is ever missing, save the deposit without it rather than lose it.
-            if (error && /check_file|did/i.test((error.message||'') + ' ' + (error.details||''))) {
-              const { check_file, did, ...basic } = row;
-              ({ error } = await sb.from('deposits').insert(basic));
-            }
-            if (error) console.error('[Supabase] deposit rejected:', row, error);
-            else depSaved++;
-          }
-          if (depSaved < depRows.length && window.toast) window.toast('Deposit save failed — check connection & retry');
-        }
-        const oldDepIds = (oldDepRows || []).map(r => r.id).filter(Boolean);
-        if (depSaved > 0 && oldDepIds.length) {
-          const { error: delErr } = await sb.from('deposits').delete().in('id', oldDepIds);
-          if (delErr) console.error('[Supabase] removing old deposit rows failed (duplicates will be deduped on load):', delErr);
-        }
-        j._depsCleared = false;
-      } else if (j._depsCleared) {
-        // Only clear remote deposits when the user actually deleted the last one —
-        // never just because the local list happens to be empty (load race).
-        await sb.from('deposits').delete().eq('job_id', j.id);
-        j._depsCleared = false;
+      if (!isPersistedJobId(j.id)) continue;
+      if (!j.__childSync) {
+        j.__childSync = {
+          expenses: S.emptyBaseline(),
+          deposits: S.emptyBaseline(),
+          checklist: S.emptyBaseline(),
+        };
       }
-
-      // Replace expenses safely: insert first into a temp-free flow by
-      // deleting then inserting, but if the insert throws, the delete has
-      // already run — so guard the insert and re-throw only after logging,
-      // and skip the delete entirely when there's nothing new to write AND
-      // the job legitimately has no expenses (avoids wiping on transient
-      // empty states during load races).
-      if (j.expenses?.length) {
-        // Every expense gets a stable id so load-time dedup can catch copies.
-        j.expenses.forEach(e => { if (e && !e._eid) e._eid = 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); });
-        // Snapshot the rows already saved for this job. New rows are written FIRST and the
-        // old ones are removed only after the write succeeds — so closing the app or
-        // losing signal mid-save can never leave the job with zero expenses.
-        // (Any brief duplicate is dropped on load by the _eid dedup.)
-        const { data: oldExpRows, error: oldExpErr } = await sb.from('expenses').select('id').eq('job_id', j.id);
-        if (oldExpErr) console.error('[Supabase] could not read existing expense ids — saving new rows without removing old ones (dedup on load):', oldExpErr);
-        const expRows = j.expenses.filter(Boolean).map(e => ({
-          job_id: j.id,
-          category: e.cat,
-          description: e.desc,
-          amount: parseFloat(e.amount||0),
-          vendor: e.vendor || null,
-          vendor_name: e.vendorName || null,
-          paid: !!e.paid,
-          paid_date: e.paidDate || null,
-          paid_method: e.paidMethod || null,
-          paid_notes: e.paidNotes || null,
-          breakdown: (() => {
-            // Merge the expense's breakdown with a linked invoiceFile ref so the
-            // attached invoice survives syncs (no dedicated column needed).
-            const base = (e.breakdown && typeof e.breakdown === 'object') ? { ...e.breakdown } : {};
-            if(e.invoiceFile) base.__invoiceFile = e.invoiceFile;
-            return Object.keys(base).length ? base : null;
-          })(),
-          src: e._src || null,
-          vid: e._vid || null,
-          zoho_id: e.zohoId || null,
-          zoho_amt: (e.zohoAmt != null) ? String(e.zohoAmt) : null,
-          zoho_v: (e.zohoV != null) ? e.zohoV : null,
-          eid: e._eid || null,
-          exp_date: e.date || null,
-          on_account: !!e.onAccount,
-        }));
-        let savedCount = 0;
-        const { error: expErr } = await sb.from('expenses').insert(expRows);
-        if(!expErr){
-          savedCount = expRows.length;
-        } else {
-          // One bad row fails the whole batch. Retry one row at a time so the
-          // good rows always land, and report exactly which one was rejected.
-          console.error('[Supabase] expense batch insert failed, retrying row by row:', expErr);
-          const bad = [];
-          for (const row of expRows) {
-            const { error } = await sb.from('expenses').insert(row);
-            if (error) { bad.push(row); console.error('[Supabase] expense rejected:', row, error); }
-            else savedCount++;
-          }
-          if (bad.length && window.toast) {
-            const b = bad[0];
-            window.toast(`Couldn't save ${b.category} $${b.amount} on ${j.name || 'job'}: ${expErr.message || 'database error'}`);
-          }
-        }
-        // Only now remove the previous copies — and only if the new rows actually saved.
-        const oldIds = (oldExpRows || []).map(r => r.id).filter(Boolean);
-        if (savedCount > 0 && oldIds.length) {
-          const { error: delErr } = await sb.from('expenses').delete().in('id', oldIds);
-          if (delErr) console.error('[Supabase] removing old expense rows failed (duplicates will be deduped on load):', delErr);
-        }
-      } else {
-        // No expenses in local memory. This is almost always a transient load
-        // race or a realtime re-pull in progress — NOT a real intent to delete
-        // every expense. We do NOT delete remote rows here, because doing so
-        // wiped real data. Deletions happen explicitly via removeExpense, not by
-        // inferring "delete everything" from an empty local array.
-        // (If you truly need to clear a job's expenses, that's an explicit action.)
+      if (!expRes.error) {
+        const hit = await syncKeyedCollection(
+          j, 'expenses', j.expenses || [], expByJob.get(j.id) || [],
+          S.expenseSyncSpec(), S.expenseToRow, e => e._eid, S.expenseFingerprint,
+          { keyOf: e => e._eid, rowIdOf: e => e._rowId, fingerprint: S.expenseFingerprint, items: () => j.expenses || [] },
+          (plan) => { j.expenses = applyKeyedPlan(j.expenses, plan, e => e._eid); },
+          async (row) => {
+            if (!row.eid) return null;
+            const { data } = await sb.from('expenses').select('id').eq('eid', row.eid).limit(1);
+            return data && data[0];
+          },
+        );
+        if (hit) conflictJobs.push(j.name || 'a job');
       }
-
-      await sb.from('stage_checklist_done').delete().eq('job_id', j.id);
-      const chkRows = [];
-      Object.entries(j.stageChecklistDone || {}).forEach(([stageId, items]) => {
-        Object.entries(items).forEach(([itemKey, rec]) => {
-          if (rec) chkRows.push({
-            job_id: j.id,
-            stage_id: stageId,
-            item_key: itemKey,
-            agent_id:   rec.agentId   || null,
-            agent_name: rec.agentName || null,
-            agent_role: rec.agentRole || null,
-            completed_at: rec.completedAt ? new Date(rec.completedAt).toISOString() : null,
-          });
-        });
-      });
-      if (chkRows.length) await sb.from('stage_checklist_done').insert(chkRows);
+      if (!depRes.error) {
+        const hit = await syncKeyedCollection(
+          j, 'deposits', j.deposits || [], depByJob.get(j.id) || [],
+          S.depositSyncSpec(), S.depositToRow, d => d._did, S.depositFingerprint,
+          { keyOf: d => d._did, rowIdOf: d => d._rowId, fingerprint: S.depositFingerprint, items: () => j.deposits || [] },
+          (plan) => { j.deposits = applyKeyedPlan(j.deposits, plan, d => d._did); },
+          async (row) => {
+            if (!row.did) return null;
+            const { data } = await sb.from('deposits').select('id').eq('did', row.did).limit(1);
+            return data && data[0];
+          },
+        );
+        if (hit) conflictJobs.push(j.name || 'a job');
+      }
+      j._depsCleared = false;
+      if (!chkRes.error) {
+        const flat = S.flattenChecklist(j.stageChecklistDone);
+        const hit = await syncKeyedCollection(
+          j, 'checklist', flat, chkByJob.get(j.id) || [],
+          S.checklistSyncSpec(), S.checklistToRow,
+          r => S.checklistKey(r.stageId, r.itemKey), S.checklistFingerprint,
+          {
+            keyOf: r => S.checklistKey(r.stageId, r.itemKey),
+            rowIdOf: r => r._rowId,
+            fingerprint: S.checklistFingerprint,
+            items: () => S.flattenChecklist(j.stageChecklistDone),
+          },
+          (plan) => { j.stageChecklistDone = applyChecklistPlan(j.stageChecklistDone, plan); },
+          async (row) => {
+            const { data } = await sb.from('stage_checklist_done').select('id')
+              .eq('job_id', j.id).eq('stage_id', row.stage_id).eq('item_key', row.item_key).limit(1);
+            return data && data[0];
+          },
+        );
+        if (hit) conflictJobs.push(j.name || 'a job');
+      }
+    }
+    if (conflictJobs.length && window.toast) {
+      const names = [...new Set(conflictJobs)].slice(0, 3).join(', ');
+      window.toast('Kept newer changes from another session on ' + names);
+    }
     }
 
     // ── Pipelines & stages: upsert current, delete what's gone ──
     // Only admins and managers can write to these tables (per RLS).
     // Skip the sync for salesmen to avoid 403 errors filling the console.
+    // List remote ids BEFORE the upsert so a pipeline or stage deleted in
+    // another session is dropped locally instead of written back.
     const myRole = window.currentMember?.role;
     const canManageBoards = (myRole === 'admin' || myRole === 'manager');
-    const localPipelines = window.pipelines || [];
-    if (canManageBoards && localPipelines.length) {
-      const pipeRows = localPipelines.map((p, i) => ({
-        id: p.id, name: p.name, position: i,
-      }));
-      const { error: pipeErr } = await sb.from('pipelines').upsert(pipeRows);
-      if (pipeErr) console.error('[Supabase] pipelines upsert failed:', pipeErr);
-
-      // Stages: flatten all from all pipelines
-      const stageRows = [];
-      localPipelines.forEach(p => {
-        (p.columns || []).forEach((c, i) => {
-          stageRows.push({
-            id: c.id, pipeline_id: p.id, name: c.name,
-            icon: c.icon || null, color: c.color || null,
-            locked: !!c.locked, position: i,
-            checklist: Array.isArray(c.checklist) ? c.checklist : [],
-          });
-        });
-      });
-      if (stageRows.length) {
-        const { error: stageErr } = await sb.from('stages').upsert(stageRows);
-        if (stageErr) console.error('[Supabase] stages upsert failed:', stageErr);
+    if (canManageBoards && __loadedPipelineIds) {
+      const { data: remotePipes, error: rpErr } = await selectAllIds('pipelines');
+      if (rpErr) console.error('[Supabase] pipelines list failed — leaving pipeline rows untouched:', rpErr);
+      else {
+        const plan = window.crmSync.planIdDeletes(
+          __loadedPipelineIds,
+          (window.pipelines || []).map(p => p.id),
+          (remotePipes || []).map(r => r.id),
+        );
+        if (plan.dropLocalIds.length && Array.isArray(window.pipelines)) {
+          const drop = new Set(plan.dropLocalIds);
+          console.warn('[Supabase] not resurrecting pipelines deleted elsewhere:', plan.dropLocalIds);
+          for (let i = window.pipelines.length - 1; i >= 0; i--) {
+            if (!drop.has(window.pipelines[i].id)) continue;
+            (window.pipelines[i].columns || []).forEach(c => {
+              if (c && c.id && __loadedStageIds) __loadedStageIds.delete(c.id);
+            });
+            window.pipelines.splice(i, 1);
+          }
+          plan.dropLocalIds.forEach(id => __loadedPipelineIds.delete(id));
+        }
+        const localPipelines = window.pipelines || [];
+        if (localPipelines.length) {
+          const pipeRows = localPipelines.map((p, i) => ({
+            id: p.id, name: p.name, position: i,
+          }));
+          const { error: pipeErr } = await sb.from('pipelines').upsert(pipeRows);
+          if (pipeErr) console.error('[Supabase] pipelines upsert failed:', pipeErr);
+        }
+        let pipeDeleteOk = true;
+        if (plan.deleteIds.length) {
+          const { error: pdErr } = await sb.from('pipelines').delete().in('id', plan.deleteIds);
+          if (pdErr) { pipeDeleteOk = false; console.error('[Supabase] pipelines delete failed:', pdErr); }
+          else plan.deleteIds.forEach(id => __loadedPipelineIds.delete(id));
+        }
+        if (pipeDeleteOk) {
+          (window.pipelines || []).forEach(p => { if (p && p.id) __loadedPipelineIds.add(p.id); });
+        }
       }
 
-      // Delete pipelines not in local list
-      const { data: remotePipes } = await sb.from('pipelines').select('id');
-      const localPipeIds = new Set(localPipelines.map(p => p.id));
-      const pipesToDelete = (remotePipes || []).map(r => r.id).filter(id => !localPipeIds.has(id));
-      if (pipesToDelete.length) {
-        const { error: pdErr } = await sb.from('pipelines').delete().in('id', pipesToDelete);
-        if (pdErr) console.error('[Supabase] pipelines delete failed:', pdErr);
-      }
-
-      // Delete stages not in local list (across all pipelines)
-      const { data: remoteStages } = await sb.from('stages').select('id');
-      const localStageIds = new Set(stageRows.map(s => s.id));
-      const stagesToDelete = (remoteStages || []).map(r => r.id).filter(id => !localStageIds.has(id));
-      if (stagesToDelete.length) {
-        const { error: sdErr } = await sb.from('stages').delete().in('id', stagesToDelete);
-        if (sdErr) console.error('[Supabase] stages delete failed:', sdErr);
+      if (__loadedStageIds) {
+        const { data: remoteStages, error: rsErr } = await selectAllIds('stages');
+        if (rsErr) console.error('[Supabase] stages list failed — leaving stage rows untouched:', rsErr);
+        else {
+          const stagePayload = () => {
+            const rows = [];
+            (window.pipelines || []).forEach(p => {
+              (p.columns || []).forEach((c, i) => {
+                rows.push({
+                  id: c.id, pipeline_id: p.id, name: c.name,
+                  icon: c.icon || null, color: c.color || null,
+                  locked: !!c.locked, position: i,
+                  checklist: Array.isArray(c.checklist) ? c.checklist : [],
+                });
+              });
+            });
+            return rows;
+          };
+          const plan = window.crmSync.planIdDeletes(
+            __loadedStageIds,
+            stagePayload().map(s => s.id),
+            (remoteStages || []).map(r => r.id),
+          );
+          if (plan.dropLocalIds.length) {
+            const drop = new Set(plan.dropLocalIds);
+            console.warn('[Supabase] not resurrecting stages deleted elsewhere:', plan.dropLocalIds);
+            (window.pipelines || []).forEach(p => {
+              if (Array.isArray(p.columns)) p.columns = p.columns.filter(c => c && !drop.has(c.id));
+            });
+            plan.dropLocalIds.forEach(id => __loadedStageIds.delete(id));
+          }
+          const liveStageRows = stagePayload();
+          if (liveStageRows.length) {
+            const { error: stageErr } = await sb.from('stages').upsert(liveStageRows);
+            if (stageErr) console.error('[Supabase] stages upsert failed:', stageErr);
+          }
+          let stageDeleteOk = true;
+          if (plan.deleteIds.length) {
+            const { error: sdErr } = await sb.from('stages').delete().in('id', plan.deleteIds);
+            if (sdErr) { stageDeleteOk = false; console.error('[Supabase] stages delete failed:', sdErr); }
+            else plan.deleteIds.forEach(id => __loadedStageIds.delete(id));
+          }
+          if (stageDeleteOk) {
+            (window.pipelines || []).forEach(p => {
+              (p.columns || []).forEach(c => { if (c && c.id) __loadedStageIds.add(c.id); });
+            });
+          }
+        }
       }
     }
   } catch (e) {
@@ -732,21 +973,54 @@ async function pushAllToSupabase() {
 /* ---------- TEAM save ------------------------------------ */
 async function pushTeamToSupabase() {
   try {
-    const rows = (window.TEAM || []).map(t => ({
+    const teamRows = () => (window.TEAM || []).map(t => ({
       id: t.id, name: t.name, email: t.email, phone: t.phone,
       role: t.role, color: t.color, status: t.status, permissions: t.permissions || [],
     }));
+    // Delete members this session loaded and the user has since removed.
+    // A member added in another session is not in __loadedTeamIds and stays.
+    // Members deleted on the server are dropped before the upsert so this
+    // tab does not recreate them.
+    if (__loadedTeamIds) {
+      const { data: remote, error: remoteErr } = await selectAllIds('team_members');
+      if (remoteErr) {
+        console.error('[Supabase] team list failed — leaving team rows untouched:', remoteErr);
+        return;
+      }
+      const plan = window.crmSync.planIdDeletes(__loadedTeamIds, teamRows().map(r => r.id), (remote || []).map(r => r.id));
+        if (plan.dropLocalIds.length && Array.isArray(window.TEAM)) {
+          const drop = new Set(plan.dropLocalIds);
+          console.warn('[Supabase] not resurrecting team members deleted elsewhere:', plan.dropLocalIds);
+          for (let i = window.TEAM.length - 1; i >= 0; i--) {
+            if (drop.has(window.TEAM[i].id)) window.TEAM.splice(i, 1);
+          }
+          if (Array.isArray(window.USERS)) {
+            for (let i = window.USERS.length - 1; i >= 0; i--) {
+              if (drop.has(window.USERS[i].id)) window.USERS.splice(i, 1);
+            }
+          }
+          plan.dropLocalIds.forEach(id => __loadedTeamIds.delete(id));
+        }
+        const rows = teamRows();
+        if (rows.length) {
+          const { error } = await sb.from('team_members').upsert(rows);
+          if (error) console.error('[Supabase] team upsert failed:', error);
+        }
+        let teamDeleteOk = true;
+        if (plan.deleteIds.length) {
+          const { error: delErr } = await sb.from('team_members').delete().in('id', plan.deleteIds);
+          if (delErr) { teamDeleteOk = false; console.error('[Supabase] team delete failed:', delErr); }
+          else plan.deleteIds.forEach(id => __loadedTeamIds.delete(id));
+        }
+        if (teamDeleteOk) {
+          (window.TEAM || []).forEach(t => { if (t && t.id) __loadedTeamIds.add(t.id); });
+        }
+        return;
+    }
+    const rows = teamRows();
     if (rows.length) {
       const { error } = await sb.from('team_members').upsert(rows);
       if (error) console.error('[Supabase] team upsert failed:', error);
-    }
-    // Delete team rows not in local TEAM
-    const { data: remote } = await sb.from('team_members').select('id');
-    const localIds = new Set(rows.map(r => r.id));
-    const toDelete = (remote || []).map(r => r.id).filter(id => !localIds.has(id));
-    if (toDelete.length) {
-      const { error: delErr } = await sb.from('team_members').delete().in('id', toDelete);
-      if (delErr) console.error('[Supabase] team delete failed:', delErr);
     }
   } catch (e) { console.error('team sync failed', e); }
 }

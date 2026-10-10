@@ -479,6 +479,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <script>window.addEventListener('load',function(){if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}});</script>
 <script defer src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
+<script src="crm-sync.js"></script>
 <script src="supabase-crm.js"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -6558,7 +6559,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         j2.zohoDeleted.pay.push(removed.zohoId);
       }
       j2.deposits.splice(i,1);
-      if(!j2.deposits.length) j2._depsCleared=true;   // tells sync this was a real delete-all
+      // Delete this row by its database id. The save also deletes it by its
+      // stable did if this call fails, and will not wipe deposits this tab
+      // never loaded.
+      if(removed && (removed._id || removed._rowId) && window.sb){
+        window.sb.from('deposits').delete().eq('id', removed._id || removed._rowId)
+          .then(({ error }) => {
+            if(error){
+              console.error('[Supabase] deposit delete failed:', error);
+              if(window.toast) window.toast('Could not delete that deposit — refresh and retry');
+            }
+          });
+      }
       j2.paidVal=(j2.deposits.reduce((s,d)=>s+parseFloat(d.amount),0)).toFixed(2);
       if(removed) logActivity(j2, 'deposit_remove', 'Deposit removed', `$${parseFloat(removed.amount).toLocaleString()} · ${removed.desc}`);
       saveToStorage();refreshDepositUI();renderBoard();
@@ -6811,11 +6823,11 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         j2.zohoDeleted.exp.push(removed.zohoId);
       }
       j2.expenses.splice(i,1);
-      // Delete the row directly. The bulk sync no longer removes anything —
-      // inferring deletions from the local array shape was destroying data —
-      // so an explicit removal has to do its own delete, by primary key.
-      if(removed && removed._id && window.sb){
-        window.sb.from('expenses').delete().eq('id', removed._id)
+      // Delete this row by its database id. The save also deletes it by eid
+      // if this call fails. A stale tab that still has the row will not
+      // insert it again, and will not delete rows it never loaded.
+      if(removed && (removed._id || removed._rowId) && window.sb){
+        window.sb.from('expenses').delete().eq('id', removed._id || removed._rowId)
           .then(({ error }) => {
             if(error){
               console.error('[Supabase] expense delete failed:', error);
