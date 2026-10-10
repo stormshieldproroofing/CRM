@@ -227,29 +227,59 @@
     return list;
   }
 
+  function expenseVid(e) {
+    if (!e) return '';
+    const v = (e._vid != null && e._vid !== '') ? e._vid : e.vid;
+    if (v == null) return '';
+    return String(v).trim();
+  }
+
+  // A voucher id is not a stable expense key. Two rows can share a vid when a
+  // reprint inserted a second line instead of updating the first. Collapsing
+  // those locally and recording the dropped eid as "removed" makes the next
+  // save delete that eid. Only an identical eid is a true duplicate.
   function dedupeExpenses(items) {
     const kept = [];
     const removedKeys = [];
-    const seenVid = new Set();
     const seenEid = new Set();
     for (const e of items || []) {
       if (!e) continue;
-      let drop = false;
-      if (e._vid) {
-        if (seenVid.has(e._vid)) drop = true;
-        else seenVid.add(e._vid);
-      }
-      if (!drop && e._eid) {
-        if (seenEid.has(e._eid)) drop = true;
-        else seenEid.add(e._eid);
-      }
-      if (drop) {
-        if (e._eid) removedKeys.push(e._eid);
-        continue;
+      if (e._eid) {
+        if (seenEid.has(e._eid)) {
+          removedKeys.push(e._eid);
+          continue;
+        }
+        seenEid.add(e._eid);
       }
       kept.push(e);
     }
     return { kept, removedKeys };
+  }
+
+  // The expense a voucher save should update. Prefers a row already stored
+  // (eid or database id). Does not remove any other row that happens to
+  // share the vid — that row stays until the user deletes it.
+  function findVoucherExpense(expenses, vid) {
+    const key = vid == null ? '' : String(vid).trim();
+    if (!key) return null;
+    const matches = (expenses || []).filter(e => e && expenseVid(e) === key);
+    if (!matches.length) return null;
+    return matches.find(e => e._eid || e._rowId || e._id) || matches[0];
+  }
+
+  // Update the existing row for this vid, or append exactly one new row.
+  function attachVoucherExpense(expenses, vid, create) {
+    if (!Array.isArray(expenses)) return null;
+    const key = vid == null ? '' : String(vid).trim();
+    const existing = key ? findVoucherExpense(expenses, key) : null;
+    if (existing) {
+      existing._vid = key;
+      return { expense: existing, created: false };
+    }
+    const exp = (typeof create === 'function' ? create() : null) || { _src: 'subvoucher' };
+    if (key) exp._vid = key;
+    expenses.push(exp);
+    return { expense: exp, created: true };
   }
 
   function dedupeByKey(items, keyOf) {
@@ -493,7 +523,10 @@
     checklistToRow,
     checklistFingerprint,
     flattenChecklist,
+    expenseVid,
     dedupeExpenses,
+    findVoucherExpense,
+    attachVoucherExpense,
     dedupeByKey,
     planKeyedSync,
     planIdDeletes,

@@ -181,24 +181,93 @@ test('duplicate server eids: update the newest and delete the extra', () => {
   assert.ok(!plan.deleteIds.includes(newer.id));
 });
 
-test('vid dedupe marks the dropped eid for deletion', () => {
-  const a = localFrom(expenseRow({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', eid: 'e1', vid: 'v-same', amount: '10.00' }));
-  const b = localFrom(expenseRow({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', eid: 'e2', vid: 'v-same', amount: '10.00', created_at: '2026-10-02T00:00:00.000Z' }));
-  const baseline = sync.captureBaseline([a, b], {
+test('shared vid with different eids is kept and not deleted', () => {
+  const labor = localFrom(expenseRow({
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', eid: 'e-labor', vid: 'v-same',
+    category: 'Roofing Labor', amount: '800.00', src: null, description: 'Crew labor',
+  }));
+  const voucher = localFrom(expenseRow({
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', eid: 'e-voucher', vid: 'v-same',
+    category: 'Roofing Labor', amount: '800.00', src: 'subvoucher', description: 'Sub labor',
+    created_at: '2026-10-02T00:00:00.000Z',
+  }));
+  const baseline = sync.captureBaseline([labor, voucher], {
     keyOf: e => e._eid, rowIdOf: e => e._rowId, fingerprint: sync.expenseFingerprint,
   });
-  const deduped = sync.dedupeExpenses([a, b]);
-  assert.strictEqual(deduped.kept.length, 1);
-  assert.strictEqual(deduped.kept[0]._eid, 'e1');
+  const deduped = sync.dedupeExpenses([labor, voucher]);
+  assert.strictEqual(deduped.kept.length, 2);
+  assert.deepStrictEqual(deduped.removedKeys, []);
   sync.noteRemovals(baseline, deduped.removedKeys, deduped.kept, e => e._eid);
+  assert.deepStrictEqual(baseline.removedKeys, []);
   const server = [
-    expenseRow({ id: a._rowId, eid: 'e1', vid: 'v-same', amount: '10.00' }),
-    expenseRow({ id: b._rowId, eid: 'e2', vid: 'v-same', amount: '10.00', created_at: '2026-10-02T00:00:00.000Z' }),
+    expenseRow({ id: labor._rowId, eid: 'e-labor', vid: 'v-same', category: 'Roofing Labor', amount: '800.00', description: 'Crew labor' }),
+    expenseRow({ id: voucher._rowId, eid: 'e-voucher', vid: 'v-same', category: 'Roofing Labor', amount: '800.00', src: 'subvoucher', description: 'Sub labor', created_at: '2026-10-02T00:00:00.000Z' }),
   ];
   const plan = planExpenses(deduped.kept, server, baseline);
-  assert.ok(plan.deleteIds.includes(b._rowId));
-  assert.ok(!plan.deleteIds.includes(a._rowId));
-  assert.ok(!plan.adopt.some(e => e._eid === 'e2'));
+  assert.deepStrictEqual(plan.deleteIds, []);
+  assert.deepStrictEqual(plan.dropKeys, []);
+  // The user deleting one of the two still removes only that eid.
+  const afterUserDelete = deduped.kept.filter(e => e._eid !== 'e-voucher');
+  const deleted = planExpenses(afterUserDelete, server, baseline);
+  assert.deepStrictEqual(deleted.deleteIds, [voucher._rowId]);
+  assert.ok(deleted.adopt.every(e => e._eid !== 'e-labor'));
+});
+
+test('same eid still collapses and a different eid that shares the vid stays', () => {
+  const first = localFrom(expenseRow({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', eid: 'e1', vid: 'v-same', amount: '10.00' }));
+  const sameEid = localFrom(expenseRow({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', eid: 'e1', vid: 'v-same', amount: '10.00', created_at: '2026-10-03T00:00:00.000Z' }));
+  const other = localFrom(expenseRow({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', eid: 'e2', vid: 'v-same', amount: '10.00', created_at: '2026-10-02T00:00:00.000Z' }));
+  const baseline = sync.captureBaseline([first, sameEid, other], {
+    keyOf: e => e._eid, rowIdOf: e => e._rowId, fingerprint: sync.expenseFingerprint,
+  });
+  const deduped = sync.dedupeExpenses([first, sameEid, other]);
+  assert.deepStrictEqual(deduped.kept.map(e => e._eid), ['e1', 'e2']);
+  assert.deepStrictEqual(deduped.removedKeys, ['e1']);
+  sync.noteRemovals(baseline, deduped.removedKeys, deduped.kept, e => e._eid);
+  assert.ok(!baseline.removedKeys.includes('e1'));
+  assert.ok(!baseline.removedKeys.includes('e2'));
+  // The extra physical copy of e1 is still collapsed. e2, which only shares the vid, is not.
+  const serverRows = [
+    expenseRow({ id: first._rowId, eid: 'e1', vid: 'v-same', amount: '10.00', created_at: '2026-10-01T00:00:00.000Z' }),
+    expenseRow({ id: sameEid._rowId, eid: 'e1', vid: 'v-same', amount: '10.00', created_at: '2026-10-03T00:00:00.000Z' }),
+    expenseRow({ id: other._rowId, eid: 'e2', vid: 'v-same', amount: '10.00', created_at: '2026-10-02T00:00:00.000Z' }),
+  ];
+  const plan = planExpenses(deduped.kept, serverRows, baseline);
+  assert.ok(!plan.deleteIds.includes(other._rowId));
+  assert.ok(plan.deleteIds.includes(first._rowId) || plan.deleteIds.includes(sameEid._rowId));
+  assert.ok(!(plan.deleteIds.includes(first._rowId) && plan.deleteIds.includes(sameEid._rowId)));
+});
+
+test('re-saving a voucher updates the stored row and does not insert another', () => {
+  const expenses = [
+    { _eid: 'e-labor', _vid: 'v1', _rowId: 'row-1', cat: 'Roofing Labor', amount: '100.00', _src: 'subvoucher' },
+    { _eid: 'e-other', vid: 'v1', cat: 'Roofing Labor', amount: '50.00', desc: 'real labor' },
+  ];
+  const first = sync.attachVoucherExpense(expenses, 'v1', () => { throw new Error('should not create'); });
+  assert.strictEqual(first.created, false);
+  assert.strictEqual(first.expense._eid, 'e-labor');
+  assert.strictEqual(first.expense._vid, 'v1');
+  first.expense.amount = '120.00';
+  const again = sync.attachVoucherExpense(expenses, ' v1 ', () => { throw new Error('should not create'); });
+  assert.strictEqual(again.created, false);
+  assert.strictEqual(again.expense, first.expense);
+  assert.strictEqual(expenses.length, 2);
+  assert.strictEqual(expenses[1]._eid, 'e-other');
+  assert.strictEqual(expenses[1].amount, '50.00');
+});
+
+test('a new voucher vid inserts one row and the next save updates it', () => {
+  const expenses = [{ _eid: 'e-materials', _vid: null, cat: 'Materials', amount: '20.00' }];
+  const created = sync.attachVoucherExpense(expenses, 'v-new', () => ({ _src: 'subvoucher', amount: '10.00', cat: 'Roofing Labor' }));
+  assert.strictEqual(created.created, true);
+  assert.strictEqual(created.expense._vid, 'v-new');
+  assert.strictEqual(expenses.length, 2);
+  created.expense.amount = '15.00';
+  const again = sync.attachVoucherExpense(expenses, 'v-new', () => { throw new Error('should not create'); });
+  assert.strictEqual(again.created, false);
+  assert.strictEqual(again.expense.amount, '15.00');
+  assert.strictEqual(expenses.length, 2);
+  assert.strictEqual(expenses[0]._eid, 'e-materials');
 });
 
 test('empty local list does not wipe rows this session never loaded', () => {

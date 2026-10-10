@@ -257,7 +257,7 @@ async function loadAllFromSupabase() {
     } else {
       window.jobs = newJobs;
     }
-    // Collapse true id duplicates (same _eid / _vid / _did) and remember the
+    // Collapse true id duplicates (same expense eid or deposit did) and remember the
     // rows this session loaded. A later save deletes only keys that were in
     // that snapshot and then removed — never rows it has not seen.
     const _dupRemoved = stampJobBaselines(window.jobs);
