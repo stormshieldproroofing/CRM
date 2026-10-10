@@ -7792,7 +7792,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const d=(j.deposits||[]).find(x=>x.checkFile && ((x.checkFile.id&&x.checkFile.id===f.id)||(x.checkFile.path&&x.checkFile.path===f.path)));
       if(!d) return '';
       const lbl=d.desc?d.desc.charAt(0).toUpperCase()+d.desc.slice(1):'Deposit';
-      return `<div style="position:absolute;left:5px;top:5px;max-width:calc(100% - 70px);background:rgba(21,128,61,0.92);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:999px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:1" title="Linked to deposit">$${fmtMoney(d.amount)} · ${escapeHtml(lbl)}</div>`;
+      return `<div style="position:absolute;left:5px;top:5px;max-width:calc(100% - 70px);background:rgba(21,128,61,0.92);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:999px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:1" title="Linked to deposit">$${(parseFloat(d.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} · ${escapeHtml(lbl)}</div>`;
     }
     function checksHTML(){
       const all=j.checks;
@@ -15409,8 +15409,17 @@ function renderQuoteTab(j){
 // CONTRACT TAB — editable, checkable, e-signable contract
 // ═══════════════════════════════════════════════════════════
 function renderContractTab(j){
-  const panel = document.getElementById('detailPanel') || document.getElementById('jobDetailBody') || document.querySelector('.detail-body');
+  // Draw inside the job window's tab body so the name, Pipeline/Stage and
+  // tab bar stay visible, like every other tab.
+  if(typeof activeTab !== 'undefined' && activeTab !== 'contract') return;
+  const panel = document.getElementById('dpBody');
   if(!panel) return;
+  const scFiles = [
+    ...(Array.isArray(j.signedContractFiles) ? j.signedContractFiles : []).map((f,i)=>({f, col:'signedContractFiles', i, del:`signedContractDelete('${j.id}',${i})`})),
+    ...(Array.isArray(j.contracts) ? j.contracts : []).map((f,i)=>({f, col:'contracts', i, del:`contractFileDelete('${j.id}',${i})`})),
+  ];
+  // Contract form: open by default until a signed copy is on file.
+  const formOpen = (window._ctFormOpen && window._ctFormOpen[j.id] !== undefined) ? window._ctFormOpen[j.id] : !scFiles.length;
   const c = j.contract || {};
   // prefill from job
   const pf = {
@@ -15481,49 +15490,85 @@ function renderContractTab(j){
     .sc-upload-btn:hover{background:rgba(255,255,255,0.1);border-color:#34D399}
     .sc-upload-btn.primary{background:#059669;border-color:#059669;color:#fff}
     .sc-upload-btn.primary:hover{background:#047857}
+    .sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:4px}
+    .sc-thumb{position:relative;border-radius:9px;overflow:hidden;cursor:pointer;background:#141927;border:1px solid var(--border);transition:border-color .15s}
+    .sc-thumb:hover{border-color:#34D399}
+    .sc-thumb-img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#fff}
+    .sc-thumb-pdf{width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:#fff}
+    .sc-thumb-pdf iframe{width:250%;height:250%;transform:scale(0.4);transform-origin:top left;border:none;pointer-events:none}
+    .sc-thumb-blank{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+    .sc-thumb-bar{display:flex;align-items:center;gap:5px;padding:6px 8px;border-top:1px solid var(--border);background:#141927}
+    .sc-thumb-name{font-size:9px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+    .sc-thumb-tag{position:absolute;left:5px;top:5px;background:rgba(5,150,105,0.92);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:999px;z-index:1}
+    .sc-thumb-del{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.8);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;padding:0;z-index:2}
+    .sc-thumb:hover .sc-thumb-del,.sc-thumb:focus-within .sc-thumb-del{opacity:1}
+    @media (pointer:coarse){.sc-thumb-del{opacity:1}}
+    .ct-form-toggle{display:flex;align-items:center;gap:9px;width:100%;margin:20px 0 12px;padding:11px 14px;border:1px solid var(--border);border-radius:9px;background:#141927;color:var(--brand);font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;font-family:'Barlow',sans-serif;cursor:pointer;transition:border-color .15s}
+    .ct-form-toggle:hover{border-color:var(--brand-mid)}
+    .ct-form-caret{font-size:10px;color:var(--muted);transition:transform .15s}
+    .ct-form-caret.open{transform:rotate(180deg)}
 
     .ct-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
     .ct-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
   </style>
   <div class="ct-wrap">
-    <div class="ct-head">
-      <button class="ct-back" onclick="activeTab='overview';renderDetailPanel()"><i class="ti ti-arrow-left"></i> Back to Overview</button>
-    </div>
     ${(c.sentForSignature && c.sentForSignature.at) ? `<div style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.4);color:#A78BFA;border-radius:8px;padding:9px 12px;font-size:11px;margin-bottom:12px;display:flex;align-items:center;gap:7px"><i class="ti ti-circle-check"></i> Sent for signature to ${esc(c.sentForSignature.to||'')} on ${new Date(c.sentForSignature.at).toLocaleString()}</div>` : ''}
 
-    <!-- Signed Contract on File -->
-    <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Signed Contract on File</div>
-      <div class="sc-zone"
-        ondragover="event.preventDefault();this.classList.add('dragover')"
-        ondragleave="this.classList.remove('dragover')"
-        ondrop="event.preventDefault();this.classList.remove('dragover');signedContractAddFiles('${j.id}', event.dataTransfer.files)">
-        <i class="ti ti-file-certificate" style="font-size:26px;color:var(--brand-light);opacity:.6;display:block;margin-bottom:6px"></i>
-        <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:2px">Upload the signed copy</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">PDF, JPG, or PNG — the executed/signed contract for your records</div>
-        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-          <label class="sc-upload-btn primary">
-            <i class="ti ti-upload"></i> Upload Signed Copy
-            <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
-          </label>
-          <label class="sc-upload-btn">
-            <i class="ti ti-camera"></i> Scan
-            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
-          </label>
-        </div>
+    <!-- Contract uploads (same layout as the Checks tab) -->
+    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Contract Uploads — Signed Copy</div>
+    <div class="sc-zone"
+      ondragover="event.preventDefault();this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="event.preventDefault();this.classList.remove('dragover');signedContractAddFiles('${j.id}', event.dataTransfer.files)">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 8px;display:block;opacity:.6" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 15l2 2 4-4"/></svg>
+      <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:3px">Drag &amp; drop the signed contract here</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">PDF, JPG, or PNG — the executed/signed contract for your records</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <label class="sc-upload-btn primary">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload File
+          <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
+        </label>
+        <label class="sc-upload-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Scan Contract
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
+        </label>
       </div>
-      ${(j.signedContractFiles && j.signedContractFiles.length) ? `
-      <div style="margin-top:12px">
-        ${j.signedContractFiles.map((f,i)=>`
-        <div onclick="openJobStoredFile('signedContractFiles',${i})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer">
-          ${retainedFileIcon(f,'#34D399')}
-          <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</div><div style="font-size:10px;color:var(--muted)">${esc(f.date||'')}</div></div>
-          ${previewFileBtn('signedContractFiles',i)}
-          <button onclick="event.stopPropagation();signedContractDelete('${j.id}',${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:13px"></i></button>
-        </div>`).join('')}
-      </div>` : ''}
     </div>
 
+    ${scFiles.length ? `
+    <div style="display:flex;align-items:center;gap:7px;margin:16px 0 10px">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Uploaded Files</div>
+      <span style="background:rgba(52,211,153,0.15);color:#34D399;border:1px solid rgba(52,211,153,0.3);border-radius:10px;font-size:10px;font-weight:700;padding:1px 7px">${scFiles.length}</span>
+    </div>
+    <div class="sc-grid">
+      ${scFiles.map(x=>{
+        const f = x.f || {};
+        const isPdf = !!f.isPdf || /\.pdf(\?|$)/i.test(f.name||'');
+        const url = f.url || f.dataUrl || '';
+        const thumb = !url
+          ? `<div class="sc-thumb-blank"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg></div>`
+          : (isPdf
+            ? `<div class="sc-thumb-pdf"><iframe src="${esc(url)}#toolbar=0&navpanes=0&scrollbar=0&view=FitH" title="${esc(f.name||'Contract')}" tabindex="-1"></iframe></div>`
+            : `<img class="sc-thumb-img" src="${esc(url)}" alt="${esc(f.name||'Contract')}" loading="lazy">`);
+        return `<div class="sc-thumb" onclick="previewJobFile('${x.col}',${x.i})" title="Preview ${esc(f.name||'contract')}">
+          ${x.col==='signedContractFiles' ? '<div class="sc-thumb-tag">Signed</div>' : ''}
+          ${thumb}
+          <button class="sc-thumb-del" onclick="event.stopPropagation();${x.del}" title="Delete" aria-label="Delete ${esc(f.name||'file')}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+          <div class="sc-thumb-bar"><div class="sc-thumb-name">${esc(f.name||'Contract')}</div></div>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+
+    <!-- Contract form (fill out / print / email / send for signature) -->
+    <button type="button" class="ct-form-toggle" onclick="toggleContractForm('${j.id}')" aria-expanded="${formOpen}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+      <span style="flex:1;text-align:left">Fill Out Contract</span>
+      <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0">${formOpen?'Hide':'Print, email or send for signature'}</span>
+      <span class="ct-form-caret${formOpen?' open':''}">&#9662;</span>
+    </button>
+    ${formOpen ? `
     <div class="ct-sec">
       <h4>Customer &amp; Project Information</h4>
       <div class="ct-grid2">
@@ -15648,10 +15693,31 @@ function renderContractTab(j){
 
 
     <div class="ct-note">Electronic signatures capture the drawn signature plus a date/time stamp. Have your contract language reviewed by a Texas attorney to ensure it meets home-improvement and insurance-claim disclosure requirements.</div>
+    ` : ''}
   </div>`;
 
-  initContractSignPads(j);
+  if(formOpen) initContractSignPads(j);
 }
+
+// Open / close the contract form (redraws so signature pads size correctly).
+window.toggleContractForm = function(jobId){
+  const j = jobs.find(x => x.id === jobId); if(!j) return;
+  window._ctFormOpen = window._ctFormOpen || {};
+  const cur = window._ctFormOpen[jobId] !== undefined ? window._ctFormOpen[jobId]
+    : !(((j.signedContractFiles||[]).length + (j.contracts||[]).length));
+  window._ctFormOpen[jobId] = !cur;
+  renderContractTab(j);
+};
+
+// Delete an older contract upload (kept in j.contracts) from the Contract tab.
+window.contractFileDelete = function(jobId, i){
+  const j = jobs.find(x => x.id === jobId); if(!j || !Array.isArray(j.contracts)) return;
+  const f = j.contracts[i]; if(!f) return;
+  try{ window.deleteJobFile?.(f); }catch(e){ console.warn('delete failed', e); }
+  j.contracts.splice(i, 1);
+  if(typeof saveToStorage === 'function') saveToStorage();
+  if(typeof renderDetailPanel === 'function') renderDetailPanel();
+};
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
