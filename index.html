@@ -480,6 +480,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <script defer src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
 <script src="crm-sync.js"></script>
+<script src="crm-profit.js"></script>
 <script src="supabase-crm.js"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -4538,11 +4539,18 @@ function jobCommissionRevenue(j){
     : (moneyValue(j.cpSupplement) || 0);
   return contract + supp;
 }
+// Contract + approved supplements − net expenses. The job panel card, overhead,
+// commissions, the printed P&L, and payroll all go through this.
 function jobNetProfit(j){
-  const exps=j.expenses||[];
+  const contract = moneyValue(j && j.potVal);
+  const supp = jobCommissionRevenue(j) - contract;
+  if(window.crmProfit && window.crmProfit.jobNetProfitAmount){
+    return window.crmProfit.jobNetProfitAmount(contract, supp, j && j.expenses);
+  }
+  const exps=(j&&j.expenses)||[];
   const costs=exps.filter(e=>e.cat!=='Returns').reduce((s,e)=>s+moneyValue(e.amount),0);
   const returns=exps.filter(e=>e.cat==='Returns').reduce((s,e)=>s+moneyValue(e.amount),0);
-  return jobCommissionRevenue(j)-(costs-returns);
+  return (contract+supp)-(costs-returns);
 }
 window.jobCommissionRevenue = jobCommissionRevenue;
 function jobOverheadAmount(j, netProfit){
@@ -5945,7 +5953,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <span style="font-size:12px;font-weight:700;color:var(--brand)">Net Profit</span>
               </div>
               <div style="display:flex;align-items:center;gap:7px">
-                <span style="font-size:13px;font-weight:700" id="profitNet">$${parseFloat(j.potVal||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                <span style="font-size:13px;font-weight:700;color:${jobNetProfit(j)>=0?'var(--success)':'var(--danger)'}" id="profitNet">$${jobNetProfit(j).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
                 <i class="ti ti-chevron-down acc-chev" id="profitChev" style="margin-left:0" aria-hidden="true"></i>
               </div>
             </div>
@@ -6672,9 +6680,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         }
       }
 
-      // Profit card (Net Profit = Contract Price − Total Expenses)
-      const contractPrice=parseFloat(j2.potVal||0);
-      const profit=contractPrice-netTotal;
+      // Profit card. Same figure as overhead, commissions, the printed P&L,
+      // and payroll: contract + approved supplements − net expenses.
+      const profit=jobNetProfit(j2);
       const pnet=$('profitNet');
       if(pnet){
         pnet.textContent='$'+fmtExp(profit);
