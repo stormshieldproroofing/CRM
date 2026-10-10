@@ -13327,10 +13327,14 @@ async function openSubVoucher(jobId){
       if(!confirm('Delete this voucher? Its expense on the job will also be removed.')) return;
       // Remove the voucher and its linked expense (queue Zoho deletion too).
       j.subVouchers = getJobVouchers(j).filter(v=>v._vid!==vid);
-      const exp = (j.expenses||[]).find(x=>x._vid===vid);
+      const exp = (window.crmSync && window.crmSync.findVoucherExpense)
+        ? window.crmSync.findVoucherExpense(j.expenses, vid)
+        : (j.expenses||[]).find(x=>x._vid===vid);
       if(exp){
         if(exp.zohoId && exp.zohoId!=='synced'){ if(!j.zohoDeleted) j.zohoDeleted={exp:[],pay:[]}; j.zohoDeleted.exp.push(exp.zohoId); }
-        j.expenses = j.expenses.filter(x=>x._vid!==vid);
+        // Remove this expense only. Another row that merely shares the vid
+        // stays; a shared vid is not itself a delete.
+        j.expenses = j.expenses.filter(x=>x!==exp);
       }
       if(j.subVoucher && j.subVoucher._vid===vid) j.subVoucher = j.subVouchers[j.subVouchers.length-1] || null;
       saveToStorage();
@@ -13757,21 +13761,33 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
   const desc = c.repair
     ? `${payLabel}${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`
     : `Sub labor — ${c.sq} sq${c.handNail?' hand nail':''}${c.doubleFelt?' double felt':''}${c.decking?` + ${c.sheets} decking`:''}${checkNo?` (Check #${checkNo})`:''}`;
-  // Match the specific voucher by its unique id (so multiple per sub/job are kept distinct)
-  const vid = (voucherData && voucherData._vid) ? voucherData._vid : null;
-  let exp = vid ? j.expenses.find(e=>e._vid===vid)
-                : j.expenses.find(e=>e._src===tag && !e._vid);
-  // Legacy fallback: match an older voucher expense for this sub that predates
-  // vids. Only safe when this voucher has no id of its own AND the candidate
-  // has none either — otherwise a second voucher for the same sub on the same
-  // job would overwrite the first instead of adding a new line.
-  if(!exp && !vid) exp = j.expenses.find(e=>e._src===tag && !e._vid && e.vendor===sub.id);
+  // Match the specific voucher by its id (so multiple per sub/job stay distinct).
+  // A second save must update that row. It must not append another expense
+  // with the same vid — load-time dedupe no longer deletes the other eid.
+  const rawVid = voucherData && (voucherData._vid || voucherData.vid);
+  const vid = rawVid ? String(rawVid).trim() : '';
+  let exp = null;
+  // Legacy fallback: an older voucher expense for this sub that predates
+  // vids. Only when this voucher has no id of its own AND the candidate has
+  // none either — a second voucher for the same sub must not overwrite the first.
+  if(!vid){
+    exp = j.expenses.find(e=>e && e._src===tag && !(e._vid || e.vid) && sub && e.vendor===sub.id)
+       || j.expenses.find(e=>e && e._src===tag && !(e._vid || e.vid));
+  }
+  if(!exp && window.crmSync && window.crmSync.attachVoucherExpense){
+    const linked = window.crmSync.attachVoucherExpense(j.expenses, vid, () => ({
+      _src: tag,
+      _vid: vid || ('v'+Date.now()+Math.random().toString(36).slice(2,6)),
+      date: today,
+    }));
+    exp = linked && linked.expense;
+  }
   if(!exp){
     exp = { _src:tag, _vid: vid || ('v'+Date.now()+Math.random().toString(36).slice(2,6)), date: today };
     j.expenses.push(exp);
   }
   if(!exp.date) exp.date = today;   // backfill legacy vouchers on next touch
-  if(voucherData) exp._vid = exp._vid || vid;
+  if(vid) exp._vid = vid;
   // File the payment under its own expense category (Permits, Inspections, etc.)
   exp.cat = (voucherData && voucherData.expCat) || payTypeExpCat(c.payType || 'roof');
   exp.desc = desc;
