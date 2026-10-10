@@ -481,6 +481,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
+<script src="crm-rep.js"></script>
 <script src="supabase-crm.js"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -3428,13 +3429,26 @@ async function ocrLossFile(f){
   }
 }
 
-function currentAgentView(){return currentAgentViewId==='all'?null:(USERS.find(u=>u.id===currentAgentViewId)||USERS[0])}
-function activeBoardUserId(){return filterUser || (currentAgentViewId==='all'?null:currentAgentViewId)}
+function currentAgentView(){
+  if(!currentAgentViewId || currentAgentViewId==='all') return null;
+  return (USERS||[]).find(u=>u.id===currentAgentViewId) || null;
+}
+function activeBoardUserId(){
+  if(filterUser==='__unassigned') return '__unassigned';
+  if(filterUser && (USERS||[]).some(u=>u.id===filterUser)) return filterUser;
+  if(!currentAgentViewId || currentAgentViewId==='all') return null;
+  return (USERS||[]).some(u=>u.id===currentAgentViewId) ? currentAgentViewId : null;
+}
+function jobMatchesAssigneeFilter(j, userId){
+  if(!userId) return true;
+  if(userId==='__unassigned') return !jobRep(j).known;
+  return j.user===userId;
+}
 
 function filteredJobs(){
   const pipelineJobs=jobs.filter(j=>(j.pipeline||'insurance')===currentPipelineId);
   const userId=activeBoardUserId();
-  return userId?pipelineJobs.filter(j=>j.user===userId):pipelineJobs;
+  return pipelineJobs.filter(j=>jobMatchesAssigneeFilter(j, userId));
 }
 
 function pipelineForJob(j){
@@ -3628,9 +3642,32 @@ function stageChecklistProgress(j,col){
   return {items,done:items.filter(item=>doneMap[item.id]).length,total:items.length};
 }
 
+function repDirectory(){
+  const out=[];
+  const seen=new Set();
+  const add=u=>{
+    if(!u || u.id==null || String(u.id).trim()==='') return;
+    const key=String(u.id);
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push(u);
+  };
+  (window.TEAM||[]).forEach(add);
+  (window.USERS||[]).forEach(add);
+  return out;
+}
+// Always returns {id, name, color, known}. Missing and unknown assignees are Unassigned.
+function jobRep(jobOrId){
+  if(window.crmRep) return window.crmRep.jobAssignee(repDirectory(), jobOrId);
+  const raw=jobOrId && typeof jobOrId==='object' ? jobOrId.user : jobOrId;
+  const id=raw==null?'':String(raw).trim();
+  const u=id?(window.USERS||[]).find(x=>String(x.id)===id):null;
+  if(u) return { id:String(u.id), name:u.name||'Unassigned', color:u.color||'#64748B', known:true };
+  return { id:'—', name:'Unassigned', color:'#64748B', known:false };
+}
+window.jobRep = jobRep;
 function userNameById(id){
-  const u=USERS.find(x=>x.id===id);
-  return u?u.name:'Unassigned';
+  return jobRep(id).name;
 }
 
 function formatChecklistCompletedAt(value){
@@ -4669,8 +4706,8 @@ function renderBoardSalesSummary(){
   const wrap=$('boardSalesSummary');
   if(!wrap) return;
   const userId=activeBoardUserId();
-  const user=userId?USERS.find(u=>u.id===userId):null;
-  const summaryJobs=jobs.filter(j=>(j.pipeline||'insurance')===currentPipelineId && (!userId||j.user===userId));
+  const user=(userId && userId!=='__unassigned')?(USERS.find(u=>u.id===userId)||null):null;
+  const summaryJobs=jobs.filter(j=>(j.pipeline||'insurance')===currentPipelineId && jobMatchesAssigneeFilter(j, userId));
   const summary=summaryForJobs(summaryJobs,user);
   const activeJobs=summaryJobs.filter(j=>j.col!=='completed');
   const wonJobs=summaryJobs.filter(j=>j.col==='completed');
@@ -4714,7 +4751,7 @@ function renderBoardSalesSummary(){
   }).filter(r=>r.count||user).sort((a,b)=>b.value-a.value);
   const maxAgentValue=Math.max(1,...agentRows.map(r=>r.value));
   const topOpportunities=(openReceivables.length?openReceivables:activeJobs.slice().sort((a,b)=>moneyValue(b.potVal)-moneyValue(a.potVal))).slice(0,3);
-  const title=user?`${escapeHtml(user.name)} Sales Summary`:`${escapeHtml(currentPipeline().name)} Team Summary`;
+  const title=user?`${escapeHtml(user.name)} Sales Summary`:(userId==='__unassigned'?'Unassigned Sales Summary':`${escapeHtml(currentPipeline().name)} Team Summary`);
   const badge=user?`<div class="user-dot" style="background:${user.color};width:22px;height:22px;font-size:9px">${user.id.toUpperCase()}</div>`:`<i class="ti ti-chart-bar" style="font-size:16px;color:var(--brand-light)" aria-hidden="true"></i>`;
   const items=[
     {label:'Jobs in Pipeline',value:summary.jobsInPipeline,color:'var(--brand)'},
@@ -4824,7 +4861,7 @@ function renderBoardSalesSummary(){
               <span style="font-size:9px;color:var(--muted)">${x.jobs.length} job${x.jobs.length===1?'':'s'}</span>
             </div>
             ${x.jobs.map(j=>{
-              const who = (weekTeam.find(u=>u.id===j.user)||{}).name || '';
+              const who = jobRep(j).name;
               const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
               return `
               <div onclick="openDetail && openDetail('${j.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:3px;cursor:pointer">
@@ -5158,7 +5195,7 @@ function renderBoard(){
 }
 
 function renderCard(j){
-  const u=USERS.find(x=>x.id===j.user);
+  const u=jobRep(j);
   const col=columns.find(c=>c.id===j.col);
   const hasInsurance=j.carrier||j.claimNum;
   const ageDays=daysSinceCreated(j);
@@ -5224,7 +5261,7 @@ function renderCard(j){
       ${buildDateLabel ? `<div class="card-meta${buildIsBad?' warn':''}" title="${buildIsBad?'⚠ High rain risk on this date · ':''}Scheduled build date"><i class="ti ti-calendar-event" aria-hidden="true"></i>${buildDateLabel}${buildIsBad?` <i class="ti ti-alert-triangle" style="font-size:10px;color:#EF4444;margin-left:2px"></i>`:''}</div>` : ''}
       <div style="flex:1"></div>
       <div class="card-move-btn" data-move-jid="${j.id}" title="Move to stage"><i class="ti ti-arrows-move" style="font-size:14px" aria-hidden="true"></i></div>
-      <div class="user-dot" style="background:${u.color}" title="${u.name}">${u.id.toUpperCase()}</div>
+      <div class="user-dot" style="background:${u.color}" title="${escapeHtml(u.name)}">${escapeHtml(u.id.toUpperCase())}</div>
     </div>
   </div>`;
 }
@@ -5353,7 +5390,7 @@ window.openJobStageMenu = openJobStageMenu;
 
 function renderDetailPanel(){
   const j=jobs.find(x=>x.id===openJobId);if(!j)return;
-  const u=USERS.find(x=>x.id===j.user);
+  const u=jobRep(j);
   const jobPipeline=pipelineForJob(j);
   const jobColumns=columnsForPipeline(jobPipeline?.id);
   const col=jobColumns.find(c=>c.id===j.col)||jobColumns[0];
@@ -5460,6 +5497,7 @@ function watchDpTabBadges(){
 }
 
 function renderDetailTab(j,u,col,jobPipeline,jobColumns){
+  if(!u) u=jobRep(j);
   const body=$('dpBody');
 
   /* ── helper: reusable upload zone ── */
@@ -8588,6 +8626,7 @@ function openDeleteColModal(id){
 function renderFilterDrop(){
   const drop=$('filterDrop');
   drop.innerHTML=`<div class="filter-item${!filterUser?' active':''}" data-filter=""><i class="ti ti-users" style="font-size:14px" aria-hidden="true"></i>All users</div>`+
+    `<div class="filter-item${filterUser==='__unassigned'?' active':''}" data-filter="__unassigned"><div class="filter-dot" style="background:#64748B">—</div>Unassigned</div>`+
     USERS.map(u=>`<div class="filter-item${filterUser===u.id?' active':''}" data-filter="${u.id}"><div class="filter-dot" style="background:${u.color}">${u.id.toUpperCase()}</div>${u.name}</div>`).join('');
   drop.querySelectorAll('[data-filter]').forEach(item=>item.addEventListener('click',()=>{
     filterUser=item.dataset.filter||null;
@@ -8689,7 +8728,7 @@ function pipelineJobCount(id){
   return jobs.filter(j =>
     (j.pipeline||'insurance')===id
     && !closedStageIds.has(j.col)
-    && (!userId||j.user===userId)
+    && jobMatchesAssigneeFilter(j, userId)
   ).length;
 }
 
@@ -8837,7 +8876,10 @@ function toggleAssignDrop(e){
 
 function renderAssignMenu(){
   const menu = $('aj-dropMenu');
-  menu.innerHTML = USERS.map(u => `
+  menu.innerHTML = `<div onclick="selectAssignUser('')" style="display:flex;align-items:center;gap:10px;padding:9px 13px;cursor:pointer;background:${!selectedUserId?'rgba(77,157,224,0.1)':'none'}" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='${!selectedUserId?'rgba(77,157,224,0.1)':'none'}'">
+      <div style="width:24px;height:24px;border-radius:50%;background:#64748B;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0">—</div>
+      <span style="font-size:12px;font-weight:600;color:var(--brand);flex:1">Unassigned</span>
+    </div>` + USERS.map(u => `
     <div onclick="selectAssignUser('${u.id}')" style="display:flex;align-items:center;gap:10px;padding:9px 13px;cursor:pointer;transition:background 0.1s;background:${selectedUserId===u.id?'rgba(77,157,224,0.1)':'none'}" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='${selectedUserId===u.id?'rgba(77,157,224,0.1)':'none'}'">
       <div style="width:24px;height:24px;border-radius:50%;background:${u.color};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0">${u.id.toUpperCase()}</div>
       <span style="font-size:12px;font-weight:600;color:var(--brand);flex:1">${u.name}</span>
@@ -8846,13 +8888,19 @@ function renderAssignMenu(){
 }
 
 function selectAssignUser(uid){
-  selectedUserId = uid;
-  const u = USERS.find(x=>x.id===uid);
+  const rep = jobRep(uid);
+  // Known reps keep their id. A blank or unknown assignee saves as none,
+  // so editing Catherine Do (no rep) does not silently assign the first user.
+  selectedUserId = rep.known ? rep.id : null;
   const display = $('aj-dropDisplay');
-  display.innerHTML = `<div style="width:22px;height:22px;border-radius:50%;background:${u.color};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;flex-shrink:0">${u.id.toUpperCase()}</div><span style="font-size:12px;font-weight:600;color:var(--brand)">${u.name}</span>`;
-  $('aj-dropMenu').style.display = 'none';
-  $('aj-dropChev').style.transform = '';
-  $('aj-dropTrigger').style.borderColor = 'var(--border)';
+  if(!display) return;
+  display.innerHTML = `<div style="width:22px;height:22px;border-radius:50%;background:${rep.color};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;flex-shrink:0">${escapeHtml(rep.id.toUpperCase())}</div><span style="font-size:12px;font-weight:600;color:var(--brand)">${escapeHtml(rep.name)}</span>`;
+  const menu = $('aj-dropMenu');
+  if(menu) menu.style.display = 'none';
+  const chev = $('aj-dropChev');
+  if(chev) chev.style.transform = '';
+  const trigger = $('aj-dropTrigger');
+  if(trigger) trigger.style.borderColor = 'var(--border)';
 }
 
 document.addEventListener('click', e => {
@@ -8868,12 +8916,7 @@ document.addEventListener('click', e => {
 
 function populateAssignList(){
   const agent=currentAgentView();
-  selectedUserId = agent?.id || USERS[0]?.id || null;
-  const u = USERS.find(x=>x.id===selectedUserId)||USERS[0];
-  const display = $('aj-dropDisplay');
-  if(!display) return;
-  if(!u){ display.innerHTML = '<span style="font-size:12px;color:var(--muted)">No users yet</span>'; return; }
-  display.innerHTML = `<div style="width:22px;height:22px;border-radius:50%;background:${u.color};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;flex-shrink:0">${u.id.toUpperCase()}</div><span style="font-size:12px;font-weight:600;color:var(--brand)">${u.name}</span>`;
+  selectAssignUser(agent?.id || USERS[0]?.id || null);
 }
 
 let insToggleOn = false;
@@ -9115,7 +9158,7 @@ function openEditJob(id){
   setInsuranceSection(!!hasIns);
 
   // Set assign dropdown to the job's assigned user
-  selectAssignUser(j.user || USERS[0]?.id || null);
+  selectAssignUser(j.user || null);
 
   $('addJobModal').classList.add('open');
   setTimeout(() => { __ajSnapshot = snapshotAddJobForm(); }, 30);
@@ -9342,7 +9385,7 @@ $('saveJob').onclick=async ()=>{
   const apt=$('f-apt').value.trim();
   const addrParts=[street,apt,city&&st?`${city}, ${st}`:city||st,zip].filter(Boolean);
   const address=addrParts.join(', ')||'—';
-  const userId = selectedUserId || USERS[0]?.id || null;
+  const userId = selectedUserId || null;
   const picked = window.__pickedLngLat || {};
 
   // Coordinates: prefer what the user picked from suggestions.
@@ -9418,7 +9461,7 @@ $('saveJob').onclick=async ()=>{
       const oldPipeline = j.pipeline, newPipeline = claimData.pipeline;
       const stages = columnsForPipeline(newPipeline || j.pipeline);
       const stageName = id => stages.find(c => c.id === id)?.name || id;
-      const userName  = id => USERS.find(u => u.id === id)?.name || id;
+      const userName  = id => jobRep(id).name;
       const pipeName  = id => pipelines.find(p => p.id === id)?.name || id;
       // Insurance/claim numeric change detection — once per save
       const insChanged =
@@ -9744,7 +9787,7 @@ function renderJobsPage(){
 
   pipelineFilter.innerHTML=`<option value="">All pipelines</option>`+pipelines.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   pipelineFilter.value=selectedPipeline;
-  agentFilter.innerHTML=`<option value="">All agents</option>`+USERS.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  agentFilter.innerHTML=`<option value="">All agents</option><option value="__unassigned">Unassigned</option>`+USERS.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
   agentFilter.value=selectedAgent;
 
   const stageOptions=[];
@@ -9758,7 +9801,7 @@ function renderJobsPage(){
   const q=searchInput.value.trim().toLowerCase();
   const visibleJobs=jobs.filter(j=>{
     if(selectedPipeline && (j.pipeline||'insurance')!==selectedPipeline) return false;
-    if(selectedAgent && j.user!==selectedAgent) return false;
+    if(!jobMatchesAssigneeFilter(j, selectedAgent)) return false;
     if(selectedStage && j.col!==selectedStage) return false;
     if(selectedPriority && j.priority!==selectedPriority) return false;
     if(q && !jobMatchesSearch(j,q) && !String(j.carrier||'').toLowerCase().includes(q) && !String(j.source||'').toLowerCase().includes(q)) return false;
@@ -9780,7 +9823,7 @@ function renderJobsPage(){
   `).join('');
 
   body.innerHTML=visibleJobs.length?visibleJobs.map(j=>{
-    const u=USERS.find(x=>x.id===j.user);
+    const u=jobRep(j);
     const stage=jobStageInfo(j);
     const balance=Math.max(0,moneyValue(j.potVal)-jobDepositTotal(j));
     return `<tr data-jobs-row="${j.id}">
@@ -9791,8 +9834,8 @@ function renderJobsPage(){
       <td><span class="stage-pill"><span class="stage-dot" style="background:${stage.color||'var(--brand-light)'}"></span>${escapeHtml(stage.name)}</span></td>
       <td>
         <div style="display:flex;align-items:center;gap:7px">
-          <div class="user-dot" style="background:${u?.color||'var(--muted)'}">${escapeHtml((u?.id||'?').toUpperCase())}</div>
-          <span>${escapeHtml(u?.name||'Unassigned')}</span>
+          <div class="user-dot" style="background:${u.color}">${escapeHtml(u.id.toUpperCase())}</div>
+          <span>${escapeHtml(u.name)}</span>
         </div>
       </td>
       <td><span class="priority-badge ${PMAP[j.priority]||'p-low'}">${PLBL[j.priority]||'Low'}</span></td>
@@ -10121,7 +10164,7 @@ function isAdmin(){
   return (window.currentMember && window.currentMember.role === 'admin');
 }
 function calSalesmanForJob(j){
-  return (TEAM || []).find(t => t.id === j?.user) || (USERS || []).find(u => u.id === j?.user) || null;
+  return jobRep(j);
 }
 function calInitialsForSalesman(member){
   const source = member?.name || member?.id || '?';
@@ -11670,7 +11713,7 @@ function renderProfitsPage(){
   const salesmanHtml = salesmanRows.length
     ? `<table class="pl-table"><thead><tr><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
         ${salesmanRows.map(([uid, v]) => {
-          const u = USERS.find(x => x.id === uid);
+          const u = jobRep(uid);
           const profit = v.rev - v.cost;
           const marg = v.rev > 0 ? (profit / v.rev * 100).toFixed(1) + '%' : '—';
           return `<tr><td>${escapeHtml(u?.name || 'Unassigned')}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td></tr>`;
@@ -11695,7 +11738,7 @@ function renderProfitsPage(){
   const jobsHtml = jobRows.length
     ? `<table class="pl-table"><thead><tr><th>Job</th><th>Pipeline</th><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
         ${jobRows.map(r => {
-          const u = USERS.find(x => x.id === r.salesman);
+          const u = jobRep(r.salesman);
           const p = pipelines.find(x => x.id === r.pipeline);
           const profit = r.profit;
           const marg = r.revenue > 0 ? (profit / r.revenue * 100).toFixed(1) + '%' : '—';
@@ -11705,7 +11748,7 @@ function renderProfitsPage(){
               <div class="muted" style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(r.address)}</div>
             </td>
             <td class="muted">${escapeHtml(p?.name || r.pipeline)}</td>
-            <td class="muted">${escapeHtml(u?.name || '—')}</td>
+            <td class="muted">${escapeHtml(u.name)}</td>
             <td class="num">${plFmt(r.revenue)}</td>
             <td class="num">${plFmt(r.cost)}</td>
             <td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td>
@@ -11810,13 +11853,13 @@ function plExportCsv(){
   const data = plAggregate(from, to);
   const rows = [['Job','Address','Pipeline','Salesman','Revenue','Costs','Profit','Margin %']];
   data.jobRows.forEach(r => {
-    const u = USERS.find(x => x.id === r.salesman);
+    const u = jobRep(r.salesman);
     const p = pipelines.find(x => x.id === r.pipeline);
     const marg = r.revenue > 0 ? (r.profit / r.revenue * 100).toFixed(1) : '';
     rows.push([
       r.name, r.address,
       p?.name || r.pipeline,
-      u?.name || 'Unassigned',
+      u.name,
       r.revenue.toFixed(2), r.cost.toFixed(2), r.profit.toFixed(2),
       marg,
     ]);
@@ -18200,7 +18243,7 @@ function renderTodoPage(){
   body.innerHTML = cards.map(c => {
     const { j, col, items, doneMap, reqItems, reqDone, openCount, reqOpen } = c;
     const stageColor = col.color || '#4D9DE0';
-    const owner = USERS.find(u => u.id === j.user);
+    const owner = jobRep(j);
     const addrLine = (j.address || '—').split(',')[0];
     const reqClass = reqOpen === 0 && reqItems.length > 0 ? ' ok' : '';
     return `
@@ -18210,7 +18253,7 @@ function renderTodoPage(){
             <div class="todo-job-name">${escapeHtml(j.name || '—')}</div>
             <div class="todo-job-meta">
               <span>${escapeHtml(addrLine)}</span>
-              ${owner ? `<span>· ${escapeHtml(owner.name)}</span>` : ''}
+              <span>· ${escapeHtml(owner.name)}</span>
               ${j.carrier ? `<span>· ${escapeHtml(j.carrier)}</span>` : ''}
             </div>
           </div>
