@@ -5944,16 +5944,21 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </button>
                 <input id="abcInvoiceFile" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]){importAbcInvoice(this.files[0]);this.value='';}">
                 <div id="expAddForm" style="display:none;margin-top:8px;padding:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px">
+                  <!-- Receipt (saved to the Other tab and linked to this expense) -->
+                  <div style="margin-bottom:10px;padding:8px;background:rgba(77,157,224,0.05);border:1px dashed rgba(77,157,224,0.3);border-radius:6px">
+                    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Receipt <span style="font-weight:400;opacity:0.6;text-transform:none">(optional · saves to Other tab)</span></div>
+                    <div id="expRcptPick" style="display:flex;gap:6px">
+                      <button id="expRcptSnapBtn" type="button" style="flex:1;padding:7px;border:none;border-radius:5px;background:rgba(77,157,224,0.15);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Scan Receipt</button>
+                      <button id="expRcptUploadBtn" type="button" style="flex:1;padding:7px;border:none;border-radius:5px;background:rgba(77,157,224,0.15);color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload</button>
+                    </div>
+                    <input id="expRcptCamFile" type="file" accept="image/*" capture="environment" style="display:none">
+                    <input id="expRcptFile" type="file" accept="image/*,.pdf" style="display:none">
+                    <div id="expRcptPreview" style="display:none;margin-top:6px;align-items:center;gap:8px;padding:6px;background:#141927;border:1px solid var(--border);border-radius:6px"></div>
+                  </div>
                   <div style="margin-bottom:8px">
                     <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Category</label>
                     <select id="expCatSel" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
-                      <option value="Materials">Materials</option>
-                      <option value="Roofing Labor">Roofing Labor</option>
-                      <option value="Additional Labor">Additional Labor</option>
-                      <option value="Measurements">Measurements</option>
-                      <option value="Permits">Permits</option>
-                      <option value="Appraisals">Appraisals</option>
-                      <option value="Returns">Returns</option>
+                      ${EXPENSE_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}
                     </select>
                   </div>
                   <div style="margin-bottom:8px">
@@ -5964,6 +5969,12 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Vendor / Sub <span style="font-weight:400;opacity:0.6">(optional · for tracking payables)</span></label>
                     <select id="expVendorSel" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
                       <option value="">— No vendor —</option>
+                    </select>
+                  </div>
+                  <div style="margin-bottom:8px">
+                    <label for="expTeamSel" style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Team Member <span id="expTeamHint" style="font-weight:400;opacity:0.6;text-transform:none">(optional)</span></label>
+                    <select id="expTeamSel" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+                      <option value="">— No team member —</option>
                     </select>
                   </div>
                   <div style="margin-bottom:10px">
@@ -6771,9 +6782,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div id="exp-row-${e.origIdx}" style="border-top:1px solid var(--border)">
               <!-- View state -->
               <div id="exp-view-${e.origIdx}" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;gap:6px">
-                <span onclick="expEditOpen(${e.origIdx})" style="font-size:11px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit · ${e.desc||cat}">${e.desc||cat}</span>
+                <span onclick="expEditOpen(${e.origIdx})" style="font-size:11px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit · ${e.desc||cat}">${e.desc||cat}${e.teamMemberName && !(e.desc||'').includes(e.teamMemberName) ? `<span style="opacity:.75"> · ${escapeHtml(e.teamMemberName)}</span>` : ''}</span>
                 <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
-                  ${e.invoiceFile ? `<button onclick="openExpenseInvoice(${e.origIdx})" title="View invoice: ${escapeHtml(e.invoiceFile.name||'invoice')}" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(77,157,224,0.3);background:rgba(77,157,224,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--brand-light);padding:0"><i class="ti ti-file-invoice" style="font-size:13px"></i></button>` : ''}
+                  ${e.invoiceFile ? `<button onclick="openExpenseInvoice(${e.origIdx})" title="Preview receipt / invoice: ${escapeHtml(e.invoiceFile.name||'receipt')}" aria-label="Preview attached receipt" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(77,157,224,0.3);background:rgba(77,157,224,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--brand-light);padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5-6.5a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5-6.5"/></svg></button>` : ''}
                   <span style="font-size:11px;font-weight:600;color:${isReturn?'var(--success)':'var(--brand)'}">${isReturn?'−':''}$${fmtExp(e.amount)}</span>
                   ${!isReturn ? `<span onclick="expTogglePaid(${e.origIdx})" title="${e.paid===false?'Marked UNPAID — held from Zoho. Tap to mark paid.':'Paid — syncs to Zoho. Tap to mark unpaid.'}" style="font-size:8px;font-weight:800;letter-spacing:0.3px;padding:2px 6px;border-radius:999px;cursor:pointer;border:1px solid ${e.paid===false?'rgba(251,191,36,0.5)':'rgba(52,211,153,0.5)'};background:${e.paid===false?'rgba(251,191,36,0.12)':'rgba(52,211,153,0.12)'};color:${e.paid===false?'#FBBF24':'#34D399'}">${e.paid===false?'UNPAID':'PAID'}</span>` : ''}
                   <button onclick="expDelete(${e.origIdx})" title="Remove" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(248,113,113,0.25);background:rgba(248,113,113,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--danger);padding:0;transition:background 0.1s" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.06)'">${svgTrashE}</button>
@@ -6800,6 +6811,13 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Description</label>
                   <input id="exp-edit-desc-${e.origIdx}" type="text" value="${e.desc||''}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:5px;padding:5px 7px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
                 </div>
+                <div style="margin-bottom:8px;padding:6px 8px;background:#1E253A;border:1px solid var(--border);border-radius:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Receipt</span>
+                  ${e.invoiceFile ? `<button type="button" onclick="openExpenseInvoice(${e.origIdx})" style="flex:1;min-width:0;display:flex;align-items:center;gap:4px;background:none;border:none;padding:0;color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif;text-align:left"><span style="flex-shrink:0;display:flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5-6.5a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5-6.5"/></svg></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(e.invoiceFile.name||'Receipt')}</span></button>` : `<span style="flex:1;font-size:10px;color:var(--muted)">None attached</span>`}
+                  <label style="display:flex;align-items:center;gap:3px;font-size:10px;font-weight:600;color:var(--brand-light);cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Scan<input type="file" accept="image/*" capture="environment" style="display:none" onchange="expAttachReceipt(${e.origIdx}, this)"></label>
+                  <label style="display:flex;align-items:center;gap:3px;font-size:10px;font-weight:600;color:var(--brand-light);cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>${e.invoiceFile?'Replace':'Upload'}<input type="file" accept="image/*,.pdf" style="display:none" onchange="expAttachReceipt(${e.origIdx}, this)"></label>
+                  ${e.invoiceFile ? `<button type="button" onclick="expRemoveReceipt(${e.origIdx})" style="background:none;border:none;padding:0;font-size:10px;font-weight:600;color:var(--danger);cursor:pointer;font-family:'Barlow',sans-serif">Unlink</button>` : ''}
+                </div>
                 <div style="display:flex;gap:5px">
                   <button onclick="expEditSave(${e.origIdx})" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 8px;border-radius:5px;border:1px solid rgba(52,211,153,0.4);background:rgba(52,211,153,0.1);color:var(--success);font-size:11px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif">${svgCheckE} Save</button>
                   <button onclick="expEditClose(${e.origIdx})" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--muted);font-size:11px;cursor:pointer;font-family:'Barlow',sans-serif">${svgXE} Cancel</button>
@@ -6819,24 +6837,58 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(body) body.style.display=window._expCatOpen[slug]?'block':'none';
       if(chev) chev.style.transform=window._expCatOpen[slug]?'rotate(0deg)':'rotate(-90deg)';
     };
+    // Find the stored file for an expense's receipt / invoice (kept in otherFiles).
+    function expFindReceiptRec(j, link){
+      if(!j || !link) return null;
+      const list = j.otherFiles || [];
+      return list.find(f=>f && link.id && f.id===link.id)
+          || list.find(f=>f && link.path && f.path===link.path)
+          || list.find(f=>f && link.name && f.name===link.name) || null;
+    }
     window.openExpenseInvoice=function(i){
       const j=curJob(); if(!j) return;
       const e=(j.expenses||[])[i]; if(!e || !e.invoiceFile) return;
-      // Find the attached file record by id (stored in otherFiles).
-      const want=e.invoiceFile.id;
-      const rec=(j.otherFiles||[]).find(f=>f && f.id && f.id===want)
-             || (j.otherFiles||[]).find(f=>f && (f.name===e.invoiceFile.name));
-      const url=rec ? (rec.url||rec.dataUrl) : null;
-      if(!url){ toast('Invoice file not found — it may not have synced yet'); return; }
-      // Open in a lightbox overlay (PDF or image).
-      const isPdf=/\.pdf(\?|$)/i.test(rec.name||'')||/pdf/i.test(rec.type||'');
-      const ov=document.createElement('div');
-      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px;flex-direction:column;gap:10px';
-      ov.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;width:88vw;max-width:900px"><span style="color:#fff;font-size:13px;font-weight:600">${escapeHtml(rec.name||'Invoice')}</span><button id="invClose" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px">✕</button></div>${isPdf?`<iframe src="${url}#toolbar=1" style="width:88vw;max-width:900px;height:80vh;border:none;border-radius:8px;background:#fff"></iframe>`:`<img src="${url}" style="max-width:88vw;max-height:80vh;border-radius:8px;object-fit:contain">`}`;
-      document.body.appendChild(ov);
-      const close=()=>ov.remove();
-      ov.querySelector('#invClose').addEventListener('click',close);
-      ov.addEventListener('click',ev=>{ if(ev.target===ov) close(); });
+      const rec=expFindReceiptRec(j, e.invoiceFile);
+      if(!rec){ toast('Receipt file not found — it may not have synced yet'); return; }
+      const amt=(parseFloat(e.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      previewStoredFile(rec, `$${amt} · ${e.desc||e.cat||'Expense'}`);
+    };
+    // Save a receipt photo/PDF to the Other tab and return the link stored on the expense.
+    async function expSaveReceiptFile(file){
+      const rec = await intakeJobFile(file, 'other', 'Receipt');
+      const live = curJob();
+      if(!Array.isArray(live.otherFiles)) live.otherFiles = [];
+      live.otherFiles.push(rec);
+      return { id: rec.id, name: rec.name || file.name || 'Receipt', path: rec.path || undefined };
+    }
+    // Attach / replace a receipt on an existing expense (from its edit row).
+    window.expAttachReceipt=async function(i, input){
+      const f=input.files?.[0]; input.value='';
+      if(!f) return;
+      const eid=(curJob().expenses||[])[i]?._eid;
+      toast('Uploading receipt…');
+      try{
+        const link=await expSaveReceiptFile(f);
+        const j2=curJob();
+        const ex=(j2.expenses||[]).find(x=>x && eid && x._eid===eid) || (j2.expenses||[])[i];
+        if(!ex) return;
+        ex.invoiceFile=link;
+        saveToStorage(); refreshExpenseUI();
+        toast('Receipt attached');
+      }catch(err){ console.warn('receipt upload failed', err); toast('Receipt upload failed — try again'); }
+    };
+    // Unlink a receipt from an expense (the file stays on the Other tab).
+    window.expRemoveReceipt=function(i){
+      const j2=curJob(); const ex=(j2.expenses||[])[i]; if(!ex) return;
+      delete ex.invoiceFile;
+      // The link is also stored inside the saved breakdown; clear it there too
+      // or it comes back on the next load.
+      if(ex.breakdown && typeof ex.breakdown==='object' && ex.breakdown.__invoiceFile){
+        const bd={...ex.breakdown}; delete bd.__invoiceFile;
+        ex.breakdown=Object.keys(bd).length ? bd : null;
+      }
+      saveToStorage(); refreshExpenseUI();
+      toast('Receipt unlinked — the file is still on the Other tab');
     };
     window.expTogglePaid=function(i){
       const j2=curJob();
@@ -6851,6 +6903,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       } else {
         ex.paid=false;
       }
+      if(ex._src==='pm'){
+        j2.pmFeePaid = !!ex.paid;
+        if(ex.paid){ j2.pmFeePaidDate = ex.paidDate; } else { delete j2.pmFeePaidDate; delete j2.pmFeePaidMethod; delete j2.pmFeePaidNotes; }
+      }
       if(typeof logActivity==='function') logActivity(j2,'expense', ex.paid?'Expense marked paid':'Expense marked unpaid', `${ex.cat||''} · $${parseFloat(ex.amount||0).toLocaleString()}`);
       saveToStorage();
       if(typeof renderDetailPanel==='function') renderDetailPanel();
@@ -6858,6 +6914,15 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.expDelete=function(i){
       const j2=curJob();
       const removed = j2.expenses[i];
+      // The PM fee line mirrors the job's project manager — deleting it removes the PM.
+      if(removed && removed._src==='pm' && j2.projectManager){
+        const pmName = teamMemberById(j2.projectManager)?.name || 'the project manager';
+        if(j2.pmFeePaid && !confirm(`${pmName}'s PM fee is marked paid in Payroll.\n\nRemove ${pmName} as project manager and delete this expense?`)) return;
+        logActivity(j2, 'assigned', 'Project manager', `${pmName} → None`);
+        j2.projectManager = null;
+        resetPmFeePaid(j2);
+        toast(`${pmName} removed as project manager`);
+      }
       // If this expense was the one linked to the Payment Breakdown voucher, unlink it
       if(removed && removed._vid && j2.subVoucher && j2.subVoucher._vid === removed._vid){
         j2.subVoucher = null;
@@ -6907,6 +6972,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       e.cat=document.getElementById('exp-edit-cat-'+i).value;
       e.desc=document.getElementById('exp-edit-desc-'+i).value.trim()||e.cat;
       e.amount=amt.toFixed(2);
+      if(e._src==='pm'){
+        if(e.cat==='Project Manager'){ j2.pmFee = amt; }
+        else { delete e._src; }   // re-categorised: no longer the PM fee line
+      }
       saveToStorage();
       refreshExpenseUI();
       renderBoard();
@@ -6925,6 +6994,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           subs.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
         vendorSel.value = '';
       }
+      const teamSel = $('expTeamSel');
+      if(teamSel){
+        const team = window.TEAM || window.USERS || [];
+        teamSel.innerHTML = `<option value="">— No team member —</option>` +
+          team.map(u => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+        teamSel.value = '';
+      }
+      expSyncPmFields();
       window._expDraftBreakdown = null;
       updateExpBreakdownBtn();
       $('expDescInput').focus();
@@ -6958,9 +7035,63 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       $('expDescInput').value='';$('expAmtInput').value='';
       if($('expVendorSel')) $('expVendorSel').value = '';
     });
-    $('expSaveNew')&&$('expSaveNew').addEventListener('click',e=>{
+    // Project Manager category: team member is required (it becomes the job's
+    // PM) and the amount starts at the job's PM fee.
+    function expSyncPmFields(){
+      const isPm = $('expCatSel')?.value === 'Project Manager';
+      const hint = $('expTeamHint'), teamSel = $('expTeamSel'), amt = $('expAmtInput');
+      if(hint) hint.textContent = isPm ? "(required · becomes the job's project manager)" : '(optional)';
+      if(isPm){
+        const j2 = curJob();
+        if(teamSel && !teamSel.value && j2.projectManager) teamSel.value = j2.projectManager;
+        if(amt && !amt.value) amt.value = String(parseFloat(j2.pmFee != null ? j2.pmFee : 250) || 250);
+        if($('expDescInput')) $('expDescInput').placeholder = 'PM fee (optional note)';
+      } else if($('expDescInput')){
+        $('expDescInput').placeholder = 'e.g. GAF Timberline shingles';
+      }
+    }
+    $('expCatSel')&&$('expCatSel').addEventListener('change', expSyncPmFields);
+
+    // ── Receipt for a manually added expense ──
+    let expPendingReceipt = null;   // File chosen in the add form, uploaded on save
+    function expShowPendingReceipt(){
+      const box=$('expRcptPreview'), pick=$('expRcptPick');
+      if(!box) return;
+      if(!expPendingReceipt){ box.style.display='none'; box.innerHTML=''; if(pick) pick.style.display='flex'; return; }
+      const f=expPendingReceipt;
+      const isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);
+      const src=isPdf?'':URL.createObjectURL(f);
+      box.innerHTML=`
+        ${src ? `<img src="${src}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;flex-shrink:0">`
+              : `<div style="width:44px;height:44px;border-radius:4px;background:#1E253A;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#F87171;font-size:10px;font-weight:800">PDF</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(f.name||'Receipt')}</div>
+          <div style="font-size:10px;color:#34D399">Will save to Other tab</div>
+        </div>
+        <button type="button" id="expRcptClear" title="Remove" aria-label="Remove receipt" style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.07);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;font-size:14px;line-height:1">×</button>`;
+      box.style.display='flex';
+      if(pick) pick.style.display='none';
+      $('expRcptClear')?.addEventListener('click', ev=>{ ev.stopPropagation(); expPendingReceipt=null; expShowPendingReceipt(); });
+    }
+    function expWireReceiptInput(btnId, inputId){
+      const btn=$(btnId), inp=$(inputId);
+      if(!btn || !inp) return;
+      btn.addEventListener('click', ev=>{ ev.stopPropagation(); inp.click(); });
+      inp.addEventListener('click', ev=>ev.stopPropagation());
+      inp.addEventListener('change', ev=>{
+        ev.stopPropagation();
+        const f=ev.target.files?.[0]; inp.value='';
+        if(!f) return;
+        expPendingReceipt=f; expShowPendingReceipt();
+      });
+    }
+    expWireReceiptInput('expRcptSnapBtn','expRcptCamFile');
+    expWireReceiptInput('expRcptUploadBtn','expRcptFile');
+    $('expCancelNew')&&$('expCancelNew').addEventListener('click',()=>{ expPendingReceipt=null; expShowPendingReceipt(); });
+
+    $('expSaveNew')&&$('expSaveNew').addEventListener('click',async e=>{
       e.stopPropagation();
-      const j2=curJob();
+      let j2=curJob();
       const amt=moneyNum($('expAmtInput').value);
       if(!amt||isNaN(amt)){$('expAmtInput').style.outline='1px solid var(--danger)';setTimeout(()=>$('expAmtInput').style.outline='',800);return;}
       const cat=$('expCatSel').value;
@@ -6974,12 +7105,70 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         const proceed = confirm('No contractor selected.\n\nLabor expenses sync to Payroll → Subs and the Payment Breakdown only when a contractor is chosen. Add as a plain expense anyway?');
         if(!proceed){ $('expVendorSel')?.focus(); return; }
       }
+      if(cat === 'Project Manager' && !$('expTeamSel')?.value){
+        const ts=$('expTeamSel'); if(ts){ ts.style.outline='1px solid var(--danger)'; setTimeout(()=>ts.style.outline='',1200); ts.focus(); }
+        toast('Pick the team member who is the project manager');
+        return;
+      }
+
+      // Upload the receipt first, before anything is written to the job (the
+      // jobs list can be refreshed while uploading, so re-resolve it after).
+      let rcptLink = null;
+      if(expPendingReceipt){
+        const saveBtn=$('expSaveNew');
+        if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='Uploading receipt…'; }
+        try{
+          rcptLink = await expSaveReceiptFile(expPendingReceipt);
+        }catch(err){
+          console.warn('receipt upload failed', err);
+          toast('Receipt upload failed — expense saved without it');
+        }
+        if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Add Expense'; }
+        expPendingReceipt=null; expShowPendingReceipt();
+        j2=curJob();
+        if(!Array.isArray(j2.expenses)) j2.expenses=[];
+      }
+
+      const teamId = $('expTeamSel')?.value || '';
+      const teamObj = teamMemberById(teamId);
+      const resetForm = () => {
+        $('expAddForm').style.display='none';
+        $('expAddToggle').style.display='flex';
+        $('expDescInput').value='';$('expAmtInput').value='';
+        if($('expVendorSel')) $('expVendorSel').value = '';
+        if($('expTeamSel')) $('expTeamSel').value = '';
+      };
+      if(cat === 'Project Manager'){
+        // One PM fee line per job: adding it sets (or changes) the job's PM.
+        const prevPm = j2.projectManager || null;
+        j2.projectManager = teamId;
+        j2.pmFee = amt;
+        if(prevPm !== teamId){
+          resetPmFeePaid(j2);
+          logActivity(j2, 'assigned', 'Project manager', `${prevPm ? (teamMemberById(prevPm)?.name || '—') : 'None'} → ${teamObj?.name || '—'}`);
+        }
+        syncPmExpense(j2);
+        const pe = j2.expenses.find(x => x && x._src === 'pm');
+        if(pe){
+          const typed = $('expDescInput').value.trim();
+          if(typed) pe.desc = typed;
+          if(rcptLink) pe.invoiceFile = rcptLink;
+        }
+        resetForm();
+        saveToStorage();
+        refreshExpenseUI();
+        renderBoard();
+        toast(prevPm && prevPm !== teamId ? `Project manager changed to ${teamObj?.name || 'team member'}` : `PM fee added · ${teamObj?.name || ''} is the project manager`);
+        return;
+      }
 
       // Returns are stored as a POSITIVE credit (the totals subtract them).
       // Typing "-473" used to store a negative return, which ADDED to costs.
       const storeAmt = cat === 'Returns' ? Math.abs(amt) : amt;
       const exp = { cat, desc, amount: storeAmt.toFixed(2), paid: true, date: new Date().toISOString().slice(0,10),
         _eid: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) };
+      if(rcptLink) exp.invoiceFile = rcptLink;
+      if(teamId){ exp.teamMember = teamId; exp.teamMemberName = teamObj?.name || ''; }
       if(vendorId){
         exp.vendor = vendorId;
         exp.vendorName = vendorObj?.name || '';
@@ -7016,6 +7205,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       $('expAddToggle').style.display='flex';
       $('expDescInput').value='';$('expAmtInput').value='';
       if($('expVendorSel')) $('expVendorSel').value = '';
+      if($('expTeamSel')) $('expTeamSel').value = '';
       saveToStorage();
       refreshExpenseUI();
       if(linkedToVoucher){
@@ -9471,7 +9661,14 @@ $('saveJob').onclick=async ()=>{
         (j.nonRecoverableDep||'') !== (claimData.nonRecoverableDep||'') ||
         (j.netClaim||'') !== (claimData.netClaim||'');
 
+      const oldPm = j.projectManager || null;
       j.name=name; Object.assign(j,claimData);
+      if(oldPm !== (j.projectManager || null)){
+        const pmN = id => teamMemberById(id)?.name || '—';
+        logActivity(j, 'assigned', 'Project manager', `${oldPm ? pmN(oldPm) : 'None'} → ${j.projectManager ? pmN(j.projectManager) : 'None'}`);
+        resetPmFeePaid(j);
+      }
+      syncPmExpense(j);
 
       if(oldStage !== newStage) logActivity(j, 'stage', 'Stage changed', `${stageName(oldStage)} → ${stageName(newStage)}`);
       if(oldUser  !== newUser)  logActivity(j, 'assigned', 'Reassigned',   `${userName(oldUser) || '—'} → ${userName(newUser) || '—'}`);
@@ -9491,6 +9688,7 @@ $('saveJob').onclick=async ()=>{
   } else {
     const newJob = Object.assign({id:'j'+Date.now(),name,priority:'low',docs:0,notes:0,tasks:0,tasksDone:0,potVal:'0.00',paidVal:'0.00',created:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})},claimData);
     newJob.timeline = [];
+    syncPmExpense(newJob);
     jobs.push(newJob);
     logActivity(newJob, 'created', 'Job created', `Stage: ${columnsForPipeline(newJob.pipeline).find(c=>c.id===newJob.col)?.name || newJob.col}`);
     saveToStorage();
@@ -12298,11 +12496,77 @@ async function loadCompanyInfo(){
 // then prints a one-page voucher to attach to the sub's check.
 // Expense categories, shared by the Expense Tracker and the Payment Breakdown
 // voucher so a permit/inspection payment files under its own category.
-const EXPENSE_CATEGORIES = ['Materials','Roofing Labor','Additional Labor','Measurements','Permits','Inspections','Appraisals','Returns'];
+const EXPENSE_CATEGORIES = ['Materials','Roofing Labor','Additional Labor','Project Manager','Measurements','Permits','Inspections','Appraisals','Returns'];
 const EXPENSE_CATEGORY_COLORS = {
-  'Materials':'#4D9DE0','Roofing Labor':'#F59E0B','Additional Labor':'#FB923C',
+  'Materials':'#4D9DE0','Project Manager':'#E879F9','Roofing Labor':'#F59E0B','Additional Labor':'#FB923C',
   'Measurements':'#A78BFA','Permits':'#38BDF8','Inspections':'#22D3EE','Appraisals':'#34D399','Returns':'#F87171'
 };
+
+// ── Project Manager fee as an expense line ─────────────────────────
+// A job's PM (job.projectManager) and fee (job.pmFee, default $250) are set
+// in Edit Job or by adding a "Project Manager" expense. One expense line per
+// job (tagged _src:'pm') mirrors them so the fee counts in the job's costs.
+// Paid status follows Payroll → PM fee paid.
+function teamMemberById(id){ return id ? ((window.TEAM || window.USERS || []).find(u => u.id === id) || null) : null; }
+window.teamMemberById = teamMemberById;
+
+// Remove one expense from a job, including the database row and Zoho record.
+function removeJobExpenseAt(j, idx){
+  const removed = (j.expenses || [])[idx]; if(!removed) return;
+  if(removed.zohoId && removed.zohoId !== 'synced'){
+    if(!j.zohoDeleted) j.zohoDeleted = { exp: [], pay: [] };
+    j.zohoDeleted.exp.push(removed.zohoId);
+  }
+  j.expenses.splice(idx, 1);
+  if((removed._id || removed._rowId) && window.sb){
+    window.sb.from('expenses').delete().eq('id', removed._id || removed._rowId)
+      .then(({ error }) => { if(error) console.error('[Supabase] expense delete failed:', error); });
+  }
+}
+
+// A different (or no) project manager hasn't been paid yet.
+function resetPmFeePaid(j){
+  if(!j) return;
+  j.pmFeePaid = false;
+  delete j.pmFeePaidDate; delete j.pmFeePaidMethod; delete j.pmFeePaidNotes;
+}
+window.resetPmFeePaid = resetPmFeePaid;
+
+// Make the job's PM expense line match its PM + fee. Returns true if anything changed.
+function syncPmExpense(j){
+  if(!j) return false;
+  if(!Array.isArray(j.expenses)) j.expenses = [];
+  const idx = j.expenses.findIndex(e => e && e._src === 'pm');
+  if(!j.projectManager){
+    if(idx >= 0){ removeJobExpenseAt(j, idx); return true; }
+    return false;
+  }
+  const pm = teamMemberById(j.projectManager);
+  const name = pm ? pm.name : 'Project Manager';
+  const fee = (parseFloat(j.pmFee != null ? j.pmFee : 250) || 0).toFixed(2);
+  const paid = !!j.pmFeePaid;
+  const today = new Date().toISOString().slice(0,10);
+  if(idx < 0){
+    const e = { cat:'Project Manager', desc:`PM fee — ${name}`, amount: fee, paid,
+      teamMember: j.projectManager, teamMemberName: name, _src:'pm', date: today,
+      _eid: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) };
+    if(paid) e.paidDate = j.pmFeePaidDate || today;
+    j.expenses.push(e);
+    return true;
+  }
+  const e = j.expenses[idx];
+  let changed = false;
+  const set = (k, v) => { if(e[k] !== v){ e[k] = v; changed = true; } };
+  set('cat', 'Project Manager');
+  set('amount', fee);
+  set('teamMember', j.projectManager);
+  set('teamMemberName', name);
+  if(!e.desc || /^PM fee — /.test(e.desc)) set('desc', `PM fee — ${name}`);
+  set('paid', paid);
+  if(paid && !e.paidDate) set('paidDate', j.pmFeePaidDate || today);
+  return changed;
+}
+window.syncPmExpense = syncPmExpense;
 
 const SUB_PAY = {
   base: 75,        // fallback $/sq if no pitch tier selected
@@ -17969,6 +18233,7 @@ function unpayCommission(jobId, userId){
     if(!confirm('Revert this PM fee back to unpaid?')) return;
     j.pmFeePaid = false;
     delete j.pmFeePaidDate; delete j.pmFeePaidMethod; delete j.pmFeePaidNotes;
+    syncPmExpense(j);
     if(typeof logActivity === 'function'){
       const pm = (window.TEAM || window.USERS || []).find(u => u.id === j.projectManager);
       logActivity(j, 'pmfee', 'PM fee reverted to unpaid', pm?.name || 'PM');
@@ -18035,6 +18300,7 @@ function saveCommPayment(){
     j.pmFeePaidNotes = notes;
     // Also record amount paid; if different from default fee, store it
     if(amount !== (parseFloat(j.pmFee) || 250)) j.pmFee = amount;
+    syncPmExpense(j);
     if(typeof logActivity === 'function'){
       const pm = (window.TEAM || window.USERS || []).find(u => u.id === j.projectManager);
       logActivity(j, 'pmfee', 'PM fee paid', `${pm?.name || 'PM'}: ${fmtMoney(amount)} · ${method}`);
