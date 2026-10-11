@@ -53,6 +53,23 @@ function test(name, fn) {
   console.log('ok', name);
 }
 
+test('receipt and team member live outside the labor breakdown', () => {
+  const local = sync.expenseFromRow(expenseRow({ breakdown: { __invoiceFile: { id: 'r1', name: 'Receipt.jpg' }, __teamMember: { id: 'u7', name: 'Matthew' } } }));
+  assert.strictEqual(local.breakdown, null);
+  assert.deepStrictEqual(local.invoiceFile, { id: 'r1', name: 'Receipt.jpg' });
+  assert.strictEqual(local.teamMember, 'u7');
+  assert.strictEqual(local.teamMemberName, 'Matthew');
+  const back = sync.expenseToRow(local).breakdown;
+  assert.deepStrictEqual(back, { __invoiceFile: { id: 'r1', name: 'Receipt.jpg' }, __teamMember: { id: 'u7', name: 'Matthew' } });
+});
+
+test('a real labor breakdown keeps its fields alongside a receipt', () => {
+  const local = sync.expenseFromRow(expenseRow({ breakdown: { squares: 30, pitch: '7', __invoiceFile: { id: 'r1', name: 'R.pdf' } } }));
+  assert.deepStrictEqual(local.breakdown, { squares: 30, pitch: '7' });
+  assert.deepStrictEqual(local.invoiceFile, { id: 'r1', name: 'R.pdf' });
+  assert.deepStrictEqual(sync.expenseToRow(local).breakdown, { squares: 30, pitch: '7', __invoiceFile: { id: 'r1', name: 'R.pdf' } });
+});
+
 test('expense payload omits created_at and id', () => {
   const row = expenseToCheck();
   const payload = sync.expenseToRow(sync.expenseFromRow(row));

@@ -80,7 +80,17 @@
   }
 
   function expenseFromRow(row) {
-    const breakdown = (row.breakdown && typeof row.breakdown === 'object') ? row.breakdown : null;
+    const raw = (row.breakdown && typeof row.breakdown === 'object') ? row.breakdown : null;
+    // The breakdown column also carries the receipt/invoice link and the team
+    // member. Pull those out so a plain expense with a receipt is not mistaken
+    // for a labor breakdown elsewhere in the app.
+    let breakdown = null, invoiceFile, teamMember;
+    if (raw) {
+      const rest = { ...raw };
+      invoiceFile = rest.__invoiceFile || undefined; delete rest.__invoiceFile;
+      teamMember = rest.__teamMember || undefined; delete rest.__teamMember;
+      breakdown = Object.keys(rest).length ? rest : null;
+    }
     return {
       cat: row.category,
       desc: row.description,
@@ -92,7 +102,9 @@
       paidMethod: row.paid_method || null,
       paidNotes: row.paid_notes || null,
       breakdown,
-      invoiceFile: (breakdown && breakdown.__invoiceFile) ? breakdown.__invoiceFile : undefined,
+      invoiceFile,
+      teamMember: (teamMember && teamMember.id) || undefined,
+      teamMemberName: (teamMember && teamMember.name) || undefined,
       _src: row.src || null,
       _vid: row.vid || null,
       zohoId: row.zoho_id || undefined,
@@ -112,6 +124,7 @@
   function expenseToRow(e) {
     const base = (e.breakdown && typeof e.breakdown === 'object') ? { ...e.breakdown } : {};
     if (e.invoiceFile) base.__invoiceFile = e.invoiceFile;
+    if (e.teamMember) base.__teamMember = { id: e.teamMember, name: e.teamMemberName || '' };
     return {
       category: e.cat,
       description: e.desc,
