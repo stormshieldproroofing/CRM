@@ -3956,7 +3956,9 @@ function parseAbcInvoice(text){
   // ── Vendor auto-detection ──
   const isAso = /ASO\s*ROOFING\s*SUPPLY/i.test(text);
   const isHomeDepot = /HOME\s*DEPOT|PRO\s*XTRA|homedepot\.com/i.test(text) || /\bTHE\s*HOME\s*DEPOT\b/i.test(text);
+  const isLowes = !isHomeDepot && (/lowes\.com/i.test(text) || /\bLOWE['’`]?S\b/i.test(text));
   if(isHomeDepot) out.vendor = 'Home Depot';
+  else if(isLowes) out.vendor = "Lowe's";
   else if(isAso) out.vendor = 'ASO Roofing Supply';
   else if(/ABC\s*SUPPLY/i.test(text)) out.vendor = 'ABC Supply';
 
@@ -3987,6 +3989,51 @@ function parseAbcInvoice(text){
     if(inv) out.orderNum = inv[1];
     const dt = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if(dt){ let yr=parseInt(dt[3],10); if(yr<100) yr+=2000; out.date=`${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`; }
+    return out;
+  }
+
+  if(isLowes){
+    // ── Lowe's: online "Order Details" page (saved as PDF) or a store receipt ──
+    // Purchase: "Transaction # 310150237  Placed October 11, 2026 … Subtotal $18.48
+    //   Tax $1.52  Total Billed $20.00". Every purchase page also carries
+    //   "Present or show this barcode for In-Store returns:", so the word
+    //   "returns" alone never means a return.
+    // Return: a refund total ("Total Refunded", "Refund Total", "Amount Refunded",
+    //   "Refunded to…"), a "Returned"/"Refunded" status, a store receipt with a
+    //   RETURN/REFUND header, or a negative total.
+    const amt = '(\\(?\\s*-?\\s*\\$?\\s*-?[\\d,]+\\.\\d{2}\\s*\\)?)';
+    const grab = (label, flags) => { const all=[...text.matchAll(new RegExp(label+'\\s*:?\\s*'+amt, flags||'gi'))]; return all.length ? all[all.length-1][1] : null; };
+    const signed = raw => { if(!raw) return null; let v=money(raw); if(v!=null && /-|\(/.test(raw)) v=-Math.abs(v); return v; };
+    const refundRaw = grab('(?:Total\\s*Refund(?:ed)?|Refund\\s*Total|Amount\\s*Refunded|Total\\s*Credit(?:ed)?|Refund(?:ed)?\\s*Amount)');
+    const billedRaw = grab('(?:Total\\s*Billed|Order\\s*Total|Grand\\s*Total|Total\\s*Charged|Amount\\s*Charged)');
+    const plainTotRaw = grab('(?:^|[^A-Za-z])(?<!SUB-?\\s?)TOTAL');
+    const statusReturn = /\b(?:Returned|Refunded)\b/i.test(text) || /\bRETURN\s*(?:RECEIPT|TRANSACTION)\b/i.test(text) || /^\s*(?:RETURN|REFUND)\b/im.test(text) || /\bREFUND\s*(?:TENDER|DUE)\b/i.test(text);
+    out.isReturn = !!refundRaw || statusReturn;
+    out.total = signed(refundRaw || billedRaw || plainTotRaw);
+    out.subTotal = signed(grab('Sub-?\\s*total'));
+    out.tax = signed(grab('(?:Sales\\s*)?Tax(?!\\s*Exempt)'));
+    if(out.total != null && out.total < 0) out.isReturn = true;
+    if(out.isReturn){
+      if(out.total != null) out.total = -Math.abs(out.total);
+      if(out.subTotal != null) out.subTotal = -Math.abs(out.subTotal);
+      if(out.tax != null) out.tax = -Math.abs(out.tax);
+    }
+    const num = text.match(/Transaction\s*#\s*:?\s*(\d{4,})/i) || text.match(/Order\s*(?:#|Number)\s*:?\s*(\d{4,})/i) || text.match(/Invoice\s*(?:#|Number)\s*:?\s*(\d{4,})/i);
+    if(num) out.orderNum = num[1];
+    const po = text.match(/\bPO\s*(?:#|Number)\s*:?\s*([A-Za-z0-9][A-Za-z0-9\-]*)/i);
+    if(po) out.po = po[1];
+    const jobNm = text.match(/Job\s*Name\s*:?\s*([^\n$]+?)(?:\s{2,}|\n|$)/i);
+    if(jobNm) out.orderName = jobNm[1].trim();
+    // Date: "Placed October 11, 2026" (online), else a store receipt's m/d/yy.
+    // The page header's print timestamp ("10/11/26, 6:30 PM") is only a fallback.
+    const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const long = text.match(/(?:Placed|Returned|Refunded|Purchased|Order\s*Date)\s*:?\s*(?:on\s+)?([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})/i);
+    const mo = long && MON[long[1].slice(0,3).toLowerCase()];
+    if(mo){ out.date = `${long[3]}-${String(mo).padStart(2,'0')}-${String(long[2]).padStart(2,'0')}`; }
+    else {
+      const dt = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if(dt){ let yr=parseInt(dt[3],10); if(yr<100) yr+=2000; out.date=`${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`; }
+    }
     return out;
   }
 
@@ -5940,7 +5987,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add Expense
                 </button>
                 <button id="abcImportBtn" style="width:100%;margin-top:6px;padding:9px;border-radius:7px;border:1px solid rgba(249,115,22,0.3);background:rgba(249,115,22,0.08);color:#F97316;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif" onclick="document.getElementById('abcInvoiceFile').click()">
-                  <i class="ti ti-file-upload" style="font-size:13px" aria-hidden="true"></i>Import ABC Supply Invoice (PDF)
+                  <i class="ti ti-file-upload" style="font-size:13px" aria-hidden="true"></i>Upload Invoice (PDF)
                 </button>
                 <input id="abcInvoiceFile" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]){importAbcInvoice(this.files[0]);this.value='';}">
                 <div id="expAddForm" style="display:none;margin-top:8px;padding:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px">
