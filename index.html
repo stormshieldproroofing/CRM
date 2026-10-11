@@ -14818,7 +14818,6 @@ function printPmFeeReceipt(jobId){
   // Check # isn't a separate field on PM payments — pick it out of the notes ("#1042", "check 1042", "ck 1042").
   const checkNo = (notes.match(/(?:#|\bche?c?k\.?\s*#?\s*|\bck\.?\s*#?\s*)(\d{2,})/i) || [])[1] || '';
   const addr = (j.address && j.address !== '—') ? j.address : '';
-  const contract = moneyValue(j.potVal);
   const esc = escapeHtml;
   const draft = !paid;
 
@@ -14833,7 +14832,7 @@ function printPmFeeReceipt(jobId){
           </div>
         </div>
         <div>
-          <div class="v-title">PM Fee Payment Receipt${draft?' <span style="color:#c0392b">(Unpaid)</span>':''}</div>
+          <div class="v-title">Payment Receipt${draft?' <span style="color:#c0392b">(Unpaid)</span>':''}</div>
           <div class="v-meta"><strong>Date:</strong> ${dateText}${checkNo?`<br><strong>Check #:</strong> ${esc(checkNo)}`:''}${method&&method!=='Check'?`<br><strong>Method:</strong> ${esc(method)}`:''}</div>
         </div>
       </div>
@@ -14849,15 +14848,12 @@ function printPmFeeReceipt(jobId){
       </div>`;
 
   const breakdownBlock = `
-      <div class="v-label">Payment Details</div>
+      <div class="v-label">Payment Breakdown</div>
       <table>
-        <tr><td>Project management fee — ${esc(j.name||'job')}${addr?` <span class="v-sub">${esc(addr.split(',')[0])}</span>`:''}</td><td class="n">${fmt(amount)}</td></tr>
-        ${contract>0?`<tr><td>Contract price <span class="v-sub">for reference</span></td><td class="n">${fmt(contract)}</td></tr>`:''}
-        <tr><td>Payment method</td><td class="n">${paid ? esc(method) + (checkNo?` #${esc(checkNo)}`:'') : '____________'}</td></tr>
-        ${notes?`<tr><td colspan="2" style="color:#555">Notes: ${esc(notes)}</td></tr>`:''}
-        <tr class="v-total"><td>${paid?'AMOUNT PAID':'AMOUNT DUE'}</td><td class="n">${fmt(amount)}</td></tr>
+        <tr><td>Project management fee</td><td class="n">${fmt(amount)}</td></tr>
+        <tr class="v-total"><td>TOTAL PAYMENT</td><td class="n">${fmt(amount)}</td></tr>
       </table>
-      <div class="v-after">${paid?`PM fee for this job paid in full on ${dateText}.`:'Not yet marked paid in Payroll — record the payment to finalize this receipt.'}</div>`;
+      ${draft?'<div class="v-after">Not yet marked paid in Payroll — record the payment to finalize this receipt.</div>':''}`;
 
   const signRow = `
       <div class="v-sign">
@@ -14890,7 +14886,7 @@ function printPmFeeReceipt(jobId){
   const page3 = page('Accounting Copy — file with payroll', `${issued}${signRow}<div class="v-filenote">Forward this copy to accounting for payroll and reconciliation.</div>`, true);
 
   win.document.open();
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>PM Fee Receipt - ${esc(pm.name||'')}${addr?' - '+esc(addr.split(',')[0]):''}</title>
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Receipt - ${esc(pm.name||'')}${addr?' - '+esc(addr.split(',')[0]):''}</title>
   <style>${paymentVoucherCss(accent)}</style></head><body>
     <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
     ${page1}${page2}${page3}
