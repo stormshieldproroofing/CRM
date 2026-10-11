@@ -6784,6 +6784,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               <div id="exp-view-${e.origIdx}" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;gap:6px">
                 <span onclick="expEditOpen(${e.origIdx})" style="font-size:11px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to edit · ${e.desc||cat}">${e.desc||cat}${e.teamMemberName && !(e.desc||'').includes(e.teamMemberName) ? `<span style="opacity:.75"> · ${escapeHtml(e.teamMemberName)}</span>` : ''}</span>
                 <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                  ${(e._src==='pm' && e.paid) ? `<button onclick="printPmFeeReceipt(openJobId)" title="Print PM fee payment receipt" aria-label="Print PM fee payment receipt" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(232,121,249,0.35);background:rgba(232,121,249,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#E879F9;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>` : ''}
                   ${e.invoiceFile ? `<button onclick="openExpenseInvoice(${e.origIdx})" title="Preview receipt / invoice: ${escapeHtml(e.invoiceFile.name||'receipt')}" aria-label="Preview attached receipt" style="width:22px;height:22px;border-radius:4px;border:1px solid rgba(77,157,224,0.3);background:rgba(77,157,224,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--brand-light);padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5-6.5a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5-6.5"/></svg></button>` : ''}
                   <span style="font-size:11px;font-weight:600;color:${isReturn?'var(--success)':'var(--brand)'}">${isReturn?'−':''}$${fmtExp(e.amount)}</span>
                   ${!isReturn ? `<span onclick="expTogglePaid(${e.origIdx})" title="${e.paid===false?'Marked UNPAID — held from Zoho. Tap to mark paid.':'Paid — syncs to Zoho. Tap to mark unpaid.'}" style="font-size:8px;font-weight:800;letter-spacing:0.3px;padding:2px 6px;border-radius:999px;cursor:pointer;border:1px solid ${e.paid===false?'rgba(251,191,36,0.5)':'rgba(52,211,153,0.5)'};background:${e.paid===false?'rgba(251,191,36,0.12)':'rgba(52,211,153,0.12)'};color:${e.paid===false?'#FBBF24':'#34D399'}">${e.paid===false?'UNPAID':'PAID'}</span>` : ''}
@@ -14630,6 +14631,59 @@ function openCommVoucherEditor(jobId, userId, fromList){
 }
 window.openCommVoucherEditor = openCommVoucherEditor;
 
+// Stylesheet for the tri-fold payment receipts (commission statement, PM fee receipt).
+function paymentVoucherCss(accent){
+  return `
+    @page { size: letter; margin: 0; }
+    *{box-sizing:border-box}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10pt}
+    .v-page{position:relative;height:11in;overflow:hidden;page-break-after:always;break-after:page}
+    .v-page-last{page-break-after:auto}
+    .v-panel{height:3.6666in;padding:0.26in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-page .v-panel:last-child{border-bottom:none}
+    .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
+    .v-page .v-panel:last-child::after{content:none}
+    .v-panel-check{padding:0;display:flex;align-items:center;justify-content:center}
+    .v-copytag{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:${accent};display:inline-block;padding:3px 10px;border-radius:3px;margin-bottom:9px}
+    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:8px;margin-bottom:10px}
+    .v-co{display:flex;align-items:center;gap:11px}
+    .v-logo{height:48px;width:auto;max-width:78px;object-fit:contain}
+    .v-co-name{font-size:13pt;font-weight:800;color:${accent}}
+    .v-co-detail{font-size:8pt;line-height:1.45}
+    .v-title{font-size:13pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
+    .v-meta{font-size:9pt;text-align:right;line-height:1.5;margin-top:3px}
+    .v-meta strong{color:${accent}}
+    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:3px}
+    .v-box{font-size:10pt;line-height:1.4}
+    table{width:100%;border-collapse:collapse}
+    table td{border-bottom:1px solid #eee;padding:2.5px 8px;font-size:9pt;vertical-align:top}
+    td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;width:1.3in}
+    .v-sub{font-size:7.5pt;color:#777;margin-left:6px}
+    .v-subtot td{font-weight:700;background:#f5f7fa}
+    .v-total td{font-size:12pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:5px;background:none}
+    .v-after{font-size:8pt;color:#444;margin-top:3px}
+    .v-sign{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+    .v-sign-line{border-bottom:1px solid #000;height:24px;margin-bottom:3px}
+    .v-sign-lbl{font-size:8pt;color:#555}
+    .v-issued{font-size:9pt;color:#333;border:1px solid #ddd;border-radius:5px;padding:7px 10px;background:#fafafa;line-height:1.5}
+    .v-filenote{margin-top:12px;font-size:7.5pt;color:#999;font-style:italic}
+    .v-check-zone{border:1.5px dashed #777;border-radius:4px;width:8.25in;height:3in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
+    .v-corner{position:absolute;width:16px;height:16px;border:2px solid #555}
+    .v-corner.tl{top:-2px;left:-2px;border-right:none;border-bottom:none}
+    .v-corner.tr{top:-2px;right:-2px;border-left:none;border-bottom:none}
+    .v-corner.bl{bottom:-2px;left:-2px;border-right:none;border-top:none}
+    .v-corner.br{bottom:-2px;right:-2px;border-left:none;border-top:none}
+    .v-check-title{font-size:13pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bbb}
+    .v-check-sub{font-size:9pt;color:#bbb;margin-top:6px;line-height:1.5}
+    .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
+    .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
+    .v-checkcopy{padding:0.5in;height:auto;overflow:visible}
+    .v-checkimg{display:block;max-width:100%;max-height:8.8in;margin:0 auto;border:1px solid #ccc}
+    .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
+    @media print{.v-print-btn{display:none}}
+`;
+}
+
 async function printCommVoucher(j, user, pay, isDraft){
   // Open the window first (synchronously) so pop-up blockers allow it
   const win = window.open('', '_blank');
@@ -14733,61 +14787,117 @@ async function printCommVoucher(j, user, pay, isDraft){
 
   win.document.open();
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commission Statement - ${escapeHtml(user.name||'')}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
-  <style>
-    @page { size: letter; margin: 0; }
-    *{box-sizing:border-box}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10pt}
-    .v-page{position:relative;height:11in;overflow:hidden;page-break-after:always;break-after:page}
-    .v-page-last{page-break-after:auto}
-    .v-panel{height:3.6666in;padding:0.26in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
-    .v-page .v-panel:last-child{border-bottom:none}
-    .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
-    .v-page .v-panel:last-child::after{content:none}
-    .v-panel-check{padding:0;display:flex;align-items:center;justify-content:center}
-    .v-copytag{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:${accent};display:inline-block;padding:3px 10px;border-radius:3px;margin-bottom:9px}
-    .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:8px;margin-bottom:10px}
-    .v-co{display:flex;align-items:center;gap:11px}
-    .v-logo{height:48px;width:auto;max-width:78px;object-fit:contain}
-    .v-co-name{font-size:13pt;font-weight:800;color:${accent}}
-    .v-co-detail{font-size:8pt;line-height:1.45}
-    .v-title{font-size:13pt;font-weight:900;color:${accent};text-transform:uppercase;letter-spacing:.03em;text-align:right}
-    .v-meta{font-size:9pt;text-align:right;line-height:1.5;margin-top:3px}
-    .v-meta strong{color:${accent}}
-    .v-label{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};margin-bottom:3px}
-    .v-box{font-size:10pt;line-height:1.4}
-    table{width:100%;border-collapse:collapse}
-    table td{border-bottom:1px solid #eee;padding:2.5px 8px;font-size:9pt;vertical-align:top}
-    td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;width:1.3in}
-    .v-sub{font-size:7.5pt;color:#777;margin-left:6px}
-    .v-subtot td{font-weight:700;background:#f5f7fa}
-    .v-total td{font-size:12pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:5px;background:none}
-    .v-after{font-size:8pt;color:#444;margin-top:3px}
-    .v-sign{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
-    .v-sign-line{border-bottom:1px solid #000;height:24px;margin-bottom:3px}
-    .v-sign-lbl{font-size:8pt;color:#555}
-    .v-issued{font-size:9pt;color:#333;border:1px solid #ddd;border-radius:5px;padding:7px 10px;background:#fafafa;line-height:1.5}
-    .v-filenote{margin-top:12px;font-size:7.5pt;color:#999;font-style:italic}
-    .v-check-zone{border:1.5px dashed #777;border-radius:4px;width:8.25in;height:3in;position:relative;display:flex;align-items:center;justify-content:center;text-align:center}
-    .v-corner{position:absolute;width:16px;height:16px;border:2px solid #555}
-    .v-corner.tl{top:-2px;left:-2px;border-right:none;border-bottom:none}
-    .v-corner.tr{top:-2px;right:-2px;border-left:none;border-bottom:none}
-    .v-corner.bl{bottom:-2px;left:-2px;border-right:none;border-top:none}
-    .v-corner.br{bottom:-2px;right:-2px;border-left:none;border-top:none}
-    .v-check-title{font-size:13pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bbb}
-    .v-check-sub{font-size:9pt;color:#bbb;margin-top:6px;line-height:1.5}
-    .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
-    .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
-    .v-checkcopy{padding:0.5in;height:auto;overflow:visible}
-    .v-checkimg{display:block;max-width:100%;max-height:8.8in;margin:0 auto;border:1px solid #ccc}
-    .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
-    @media print{.v-print-btn{display:none}}
-  </style></head><body>
+  <style>${paymentVoucherCss(accent)}  </style></head><body>
     <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
     ${page1}${page2}${page3}${page4}
   </body></html>`);
   win.document.close();
 }
 window.printCommVoucher = printCommVoucher;
+
+// ── PM fee payment receipt ─────────────────────────────────────────
+// Same fold-in-thirds layout as the commission statement: Project Manager's
+// copy (with a spot to tape the check), Office copy, Accounting copy.
+function printPmFeeReceipt(jobId){
+  const j = (window.jobs || jobs || []).find(x => x.id === jobId);
+  if(!j){ toast('Job not found'); return; }
+  const pm = teamMemberById(j.projectManager);
+  if(!pm){ toast('No project manager on this job'); return; }
+  const win = window.open('', '_blank');
+  if(!win){ toast('Allow pop-ups to print'); return; }
+
+  const ci = getCompanyInfo();
+  const accent = '#1a3a6a';
+  const fmt = n => _cvMoney(n);
+  const amount = parseFloat(j.pmFee != null ? j.pmFee : 250) || 0;
+  const paid = !!j.pmFeePaid;
+  const payDate = (paid && j.pmFeePaidDate) ? new Date(j.pmFeePaidDate + 'T12:00:00') : new Date();
+  const dateText = payDate.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const method = paid ? (j.pmFeePaidMethod || 'Check') : '';
+  const notes = paid ? (j.pmFeePaidNotes || '') : '';
+  // Check # isn't a separate field on PM payments — pick it out of the notes ("#1042", "check 1042", "ck 1042").
+  const checkNo = (notes.match(/(?:#|\bche?c?k\.?\s*#?\s*|\bck\.?\s*#?\s*)(\d{2,})/i) || [])[1] || '';
+  const addr = (j.address && j.address !== '—') ? j.address : '';
+  const contract = moneyValue(j.potVal);
+  const esc = escapeHtml;
+  const draft = !paid;
+
+  const headBlock = (tag) => `
+      <div class="v-copytag">${tag}</div>
+      <div class="v-head">
+        <div class="v-co">
+          ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="v-logo">`:''}
+          <div>
+            <div class="v-co-name">${esc(ci.name||'')}</div>
+            <div class="v-co-detail">${ci.address?esc(ci.address)+'<br>':''}${ci.cityStateZip?esc(ci.cityStateZip)+'<br>':''}${ci.phone?esc(ci.phone):''}</div>
+          </div>
+        </div>
+        <div>
+          <div class="v-title">PM Fee Payment Receipt${draft?' <span style="color:#c0392b">(Unpaid)</span>':''}</div>
+          <div class="v-meta"><strong>Date:</strong> ${dateText}${checkNo?`<br><strong>Check #:</strong> ${esc(checkNo)}`:''}${method&&method!=='Check'?`<br><strong>Method:</strong> ${esc(method)}`:''}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+        <div>
+          <div class="v-label">Pay To</div>
+          <div class="v-box"><strong>${esc(pm.name||'_______________________')}</strong>${pm.phone?'<br>'+esc(pm.phone):''}<br>Project Manager</div>
+        </div>
+        <div>
+          <div class="v-label">Job</div>
+          <div class="v-box">${esc(j.name||'')}${addr?'<br>'+esc(addr):''}${j.claimNum?'<br>Claim #'+esc(j.claimNum):''}</div>
+        </div>
+      </div>`;
+
+  const breakdownBlock = `
+      <div class="v-label">Payment Details</div>
+      <table>
+        <tr><td>Project management fee — ${esc(j.name||'job')}${addr?` <span class="v-sub">${esc(addr.split(',')[0])}</span>`:''}</td><td class="n">${fmt(amount)}</td></tr>
+        ${contract>0?`<tr><td>Contract price <span class="v-sub">for reference</span></td><td class="n">${fmt(contract)}</td></tr>`:''}
+        <tr><td>Payment method</td><td class="n">${paid ? esc(method) + (checkNo?` #${esc(checkNo)}`:'') : '____________'}</td></tr>
+        ${notes?`<tr><td colspan="2" style="color:#555">Notes: ${esc(notes)}</td></tr>`:''}
+        <tr class="v-total"><td>${paid?'AMOUNT PAID':'AMOUNT DUE'}</td><td class="n">${fmt(amount)}</td></tr>
+      </table>
+      <div class="v-after">${paid?`PM fee for this job paid in full on ${dateText}.`:'Not yet marked paid in Payroll — record the payment to finalize this receipt.'}</div>`;
+
+  const signRow = `
+      <div class="v-sign">
+        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Project manager signature / date</div></div>
+        <div><div class="v-sign-line"></div><div class="v-sign-lbl">Approved by / date — ${esc(ci.name||'')}</div></div>
+      </div>`;
+
+  const checkZone = `
+      <div class="v-check-zone">
+        <span class="v-corner tl"></span><span class="v-corner tr"></span><span class="v-corner bl"></span><span class="v-corner br"></span>
+        <span class="v-tape">▾ tape check top edge here ▾</span>
+        <div>
+          <div class="v-check-title">Attach Check Here</div>
+          <div class="v-check-sub">Business check 8.25″ × 3″ · tape the TOP edge</div>
+          <div class="v-check-amt">Amount: ${fmt(amount)}${checkNo?` · Check #${esc(checkNo)}`:''} · Pay to ${esc(pm.name||'')}</div>
+        </div>
+      </div>`;
+
+  const issued = `<div class="v-issued">${(method==='Check'||!method)?`Check #${checkNo?esc(checkNo):'____________'}`:esc(method)} ${paid?'issued':'to be issued'} ${dateText} · Amount ${fmt(amount)} · Pay to ${esc(pm.name||'')}</div>`;
+
+  const page = (tag, third, last) => `
+    <div class="v-page${last?' v-page-last':''}">
+      <div class="v-panel">${headBlock(tag)}</div>
+      <div class="v-panel">${breakdownBlock}${third===null?signRow:''}</div>
+      <div class="v-panel${third===null?' v-panel-check':''}">${third===null?checkZone:third}</div>
+    </div>`;
+
+  const page1 = page("Project Manager's Copy — keep with your check", null, false);
+  const page2 = page('Office Copy — retained by '+esc(ci.name||'company'), `${issued}${signRow}<div class="v-filenote">Retain this signed original for company records.</div>`, false);
+  const page3 = page('Accounting Copy — file with payroll', `${issued}${signRow}<div class="v-filenote">Forward this copy to accounting for payroll and reconciliation.</div>`, true);
+
+  win.document.open();
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>PM Fee Receipt - ${esc(pm.name||'')}${addr?' - '+esc(addr.split(',')[0]):''}</title>
+  <style>${paymentVoucherCss(accent)}</style></head><body>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
+    ${page1}${page2}${page3}
+  </body></html>`);
+  win.document.close();
+}
+window.printPmFeeReceipt = printPmFeeReceipt;
 
 
 // ── ABC SUPPLY MATERIAL ORDER CALCULATOR ──
@@ -17887,7 +17997,7 @@ function renderPayrollPM(){
               <td class="num">${fmtMoney(moneyValue(r.job.potVal))}</td>
               <td class="num">${fmtMoney(r.fee)}</td>
               <td><span class="comm-status-pill ${statusCls}">${statusLabel}</span>${r.paidDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">Paid ${r.paidDate}${r.paidMethod?' · '+escapeHtml(r.paidMethod):''}</div>`:''}</td>
-              <td>${showPayBtn ? `<button class="comm-pay-btn" data-pm-pay="${r.job.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}${(isAdminUser && r.feePaid) ? `<button class="comm-unpay-btn" data-pm-unpay="${r.job.id}" title="Revert PM fee to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>` : ''}</td>
+              <td>${showPayBtn ? `<button class="comm-pay-btn" data-pm-pay="${r.job.id}"><i class="ti ti-cash"></i>Pay</button>` : ''}${(isAdminUser && r.feePaid) ? `<button class="comm-pay-btn" data-pm-receipt="${r.job.id}" title="Print PM fee payment receipt" style="margin-right:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:3px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Receipt</button>` : ''}${(isAdminUser && r.feePaid) ? `<button class="comm-unpay-btn" data-pm-unpay="${r.job.id}" title="Revert PM fee to unpaid"><i class="ti ti-arrow-back-up"></i>Undo</button>` : ''}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -17910,6 +18020,10 @@ function renderPayrollPM(){
   body.querySelectorAll('[data-pm-pay]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     openPmPaidModal(b.dataset.pmPay);
+  }));
+  body.querySelectorAll('[data-pm-receipt]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    printPmFeeReceipt(b.dataset.pmReceipt);
   }));
   body.querySelectorAll('[data-pm-unpay]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
@@ -18308,6 +18422,7 @@ function saveCommPayment(){
     saveToStorage();
     closeCommPaidModal();
     toast(`Recorded ${fmtMoney(amount)} PM fee payment`);
+    printPmFeeReceipt(jobId);
     renderPayrollPage();
     return;
   }
