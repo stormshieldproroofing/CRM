@@ -9019,7 +9019,7 @@ function renderPipelineDrop(editingPipelineId=null){
   const drop=$('pipelineDrop');
   drop.innerHTML=`
     <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:4px 7px 7px">Switch Pipeline</div>
-    ${pipelines.map(p=>{
+    ${pipelines.map((p,pi)=>{
       const count=pipelineJobCount(p.id);
       if(editingPipelineId===p.id){
         return `<div style="display:flex;align-items:center;gap:5px;padding:4px">
@@ -9032,6 +9032,10 @@ function renderPipelineDrop(editingPipelineId=null){
         <i class="ti ${p.id===currentPipelineId?'ti-circle-check':'ti-layout-kanban'}" style="font-size:14px;flex-shrink:0" aria-hidden="true"></i>
         <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.name)}</span>
         <span style="font-size:10px;color:inherit;opacity:.7">${count}</span>
+        <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+          <button data-move-pipeline="${p.id}" data-dir="-1" title="Move up" aria-label="Move ${escapeHtml(p.name)} up" ${pi===0?'disabled':''} style="width:20px;height:11px;padding:0;border:none;border-radius:3px;background:rgba(255,255,255,0.06);color:inherit;cursor:${pi===0?'default':'pointer'};opacity:${pi===0?'.25':'.8'};display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">▲</button>
+          <button data-move-pipeline="${p.id}" data-dir="1" title="Move down" aria-label="Move ${escapeHtml(p.name)} down" ${pi===pipelines.length-1?'disabled':''} style="width:20px;height:11px;padding:0;border:none;border-radius:3px;background:rgba(255,255,255,0.06);color:inherit;cursor:${pi===pipelines.length-1?'default':'pointer'};opacity:${pi===pipelines.length-1?'.25':'.8'};display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">▼</button>
+        </span>
         <button data-edit-pipeline="${p.id}" title="Edit pipeline name" style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:12px" aria-hidden="true"></i></button>
         <button data-delete-pipeline="${p.id}" title="Delete pipeline" style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:12px" aria-hidden="true"></i></button>
       </div>`;
@@ -9050,6 +9054,10 @@ function renderPipelineDrop(editingPipelineId=null){
     renderPipelineDrop(btn.dataset.editPipeline);
     const input=$('editPipelineNameInput');
     if(input){input.focus();input.select();}
+  }));
+  drop.querySelectorAll('[data-move-pipeline]').forEach(btn=>btn.addEventListener('click',e=>{
+    e.stopPropagation();
+    movePipeline(btn.dataset.movePipeline, parseInt(btn.dataset.dir,10));
   }));
   drop.querySelectorAll('[data-delete-pipeline]').forEach(btn=>btn.addEventListener('click',e=>{
     e.stopPropagation();
@@ -9071,6 +9079,19 @@ function renderPipelineDrop(editingPipelineId=null){
   $('addPipelineBtn').addEventListener('click',createPipelineFromInput);
   $('newPipelineName').addEventListener('keydown',e=>{if(e.key==='Enter')createPipelineFromInput();});
 }
+
+// Reorder pipelines in the switcher (saved as each pipeline's position).
+function movePipeline(id, dir){
+  const i = pipelines.findIndex(x => x.id === id);
+  const j = i + dir;
+  if(i < 0 || j < 0 || j >= pipelines.length) return;
+  const [p] = pipelines.splice(i, 1);
+  pipelines.splice(j, 0, p);
+  saveToStorage();
+  renderBoard();
+  renderPipelineDrop();
+}
+window.movePipeline = movePipeline;
 
 function renamePipeline(id){
   const p=pipelines.find(x=>x.id===id);
