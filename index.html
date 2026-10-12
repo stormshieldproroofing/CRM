@@ -924,6 +924,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 /* Profits & Loss */
 .pl-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.pl-kpi-row.pl-kpi-row-3{grid-template-columns:repeat(3,1fr)}
+@media (max-width:760px){.pl-kpi-row{grid-template-columns:repeat(2,1fr)}.pl-kpi-row.pl-kpi-row-3{grid-template-columns:1fr}}
 .pl-kpi{background:#141927;border:1px solid var(--border);border-radius:9px;padding:14px 16px}
 .pl-kpi-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
 .pl-kpi-val{font-family:'Barlow',sans-serif;font-weight:700;font-size:22px;color:#fff;line-height:1.1}
@@ -11834,13 +11836,13 @@ function wireCalDragDrop(){
 })();
 
 // ── PROFITS & LOSS DASHBOARD (admin-only) ──
-// Cash-basis revenue: deposits collected (j.deposits[].amount with d.date)
-// Costs: j.expenses[].amount, by category. (Expenses have no date field — see below.)
-//
-// HONEST CAVEAT: Expenses in this CRM do NOT currently have a `date` field — they were
-// stored as {cat, desc, amount}. For date-range filtering of costs we treat ALL expenses
-// for any job that had a deposit in the range as in-range. This is a coarse approximation.
-// If you want precise expense timing, add a date field to the expense entry form.
+// Cash-basis revenue: deposits collected (j.deposits[].amount, dated by d.date).
+// Profit is matched per job: a job that collected money in the range counts ALL of
+// its costs (net of returns), so materials bought last month for a roof paid this
+// month land against that roof's revenue.
+// Jobs with spending but no money collected in the range are "work in progress":
+// shown separately, not counted as a loss.
+// Cash flow = money collected minus everything spent (by expense date) in the range.
 
 let plRangeKey = 'this-month';
 let plCustomFrom = null;   // 'yyyy-mm-dd'
@@ -11872,82 +11874,96 @@ function plComputeRange(){
   return { from, to };
 }
 
-// Parse a deposit's date string into 'yyyy-mm-dd' for comparison.
-// Deposits store `date` as 'M/D/YYYY' format from toLocaleDateString.
+// Deposit / expense dates -> 'yyyy-mm-dd'. Deposits are saved as 'Oct 9, 2026'
+// (older ones '10/9/2026'); expenses as '2026-10-09'. The old parser only knew
+// '10/9/2026', so every deposit was skipped and revenue read $0.
+function plDateKey(v){
+  return (window.crmProfit && window.crmProfit.dateKey) ? window.crmProfit.dateKey(v) : null;
+}
 function plDepositDateKey(d){
-  if(!d || !d.date) return null;
-  const m = d.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(!m) return null;
-  return `${m[3]}-${String(parseInt(m[1])).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+  return d ? plDateKey(d.date) : null;
+}
+function plExpenseDateKey(e){
+  return e ? (plDateKey(e.date) || plDateKey(e.paidDate)) : null;
+}
+function plSignedExpense(e){
+  return window.crmProfit.signedExpense(e);
 }
 
 function plAggregate(from, to){
-  // Build a map: month -> {rev, cost}
   const monthly = {};
   const byPipeline = {};
   const bySalesman = {};
   const byCategory = {};
-  const jobRows = [];   // per-job rollup
-
-  // Build a quick index: for each job, the deposits that fall in range
+  const jobRows = [];   // jobs that collected money in range (profit is counted here)
+  const wipRows = [];   // jobs with spending in range but nothing collected yet
+  const isAll = plRangeKey === 'all';
   const inRange = (key) => key && key >= from && key <= to;
+  let spent = 0;        // every dollar spent in range, all jobs (cash view)
+  let wip = 0;
 
   jobs.forEach(j => {
     const deposits = Array.isArray(j.deposits) ? j.deposits : [];
+    const expenses = Array.isArray(j.expenses) ? j.expenses : [];
     const inRangeDeposits = deposits.filter(d => inRange(plDepositDateKey(d)));
     const jobRevenue = inRangeDeposits.reduce((s,d) => s + (parseFloat(d.amount) || 0), 0);
-    if(jobRevenue === 0 && (!j.expenses || !j.expenses.length)) return;   // nothing to show
-    // Expenses: since they have no date, we attribute them to the job (not a date).
-    // Include them if the job had any in-range revenue, OR if the range is 'all'.
-    const expenses = Array.isArray(j.expenses) ? j.expenses : [];
-    const includeExpenses = jobRevenue > 0 || plRangeKey === 'all';
-    const jobCost = includeExpenses ? expenses.reduce((s,e) => s + (parseFloat(e.amount) || 0), 0) : 0;
+    // Spending dated in this range (undated lines count only for All Time)
+    const spentInRange = expenses
+      .filter(e => isAll || inRange(plExpenseDateKey(e)))
+      .reduce((s,e) => s + plSignedExpense(e), 0);
+    spent += spentInRange;
 
-    if(jobRevenue === 0 && jobCost === 0) return;
-    jobRows.push({
+    const base = {
       id: j.id, name: j.name || '—', address: (j.address||'').split(',')[0] || '—',
       pipeline: j.pipeline || 'insurance',
       salesman: j.user || null,
-      revenue: jobRevenue, cost: jobCost, profit: jobRevenue - jobCost,
-    });
-    // Monthly breakdown — by deposit date
+    };
+
+    if(jobRevenue === 0){
+      if(spentInRange !== 0){
+        wip += spentInRange;
+        wipRows.push(Object.assign({ cost: spentInRange, col: j.col }, base));
+      }
+      return;
+    }
+
+    // Matched profit: all of this job's costs, returns subtracted
+    const jobCost = expenses.reduce((s,e) => s + plSignedExpense(e), 0);
+    jobRows.push(Object.assign({ revenue: jobRevenue, cost: jobCost, profit: jobRevenue - jobCost }, base));
+
     inRangeDeposits.forEach(d => {
-      const k = plDepositDateKey(d).slice(0,7);   // 'yyyy-mm'
+      const k = plDepositDateKey(d).slice(0,7);
       if(!monthly[k]) monthly[k] = { rev: 0, cost: 0 };
       monthly[k].rev += parseFloat(d.amount) || 0;
     });
-    // For monthly costs: attribute to the month of the FIRST in-range deposit
-    if(includeExpenses && jobCost > 0){
-      const firstDep = inRangeDeposits.map(plDepositDateKey).filter(Boolean).sort()[0];
-      const k = firstDep ? firstDep.slice(0,7) : 'unknown';
+    if(jobCost !== 0){
+      const k = inRangeDeposits.map(plDepositDateKey).filter(Boolean).sort()[0].slice(0,7);
       if(!monthly[k]) monthly[k] = { rev: 0, cost: 0 };
       monthly[k].cost += jobCost;
     }
-    // By pipeline
-    const pk = j.pipeline || 'insurance';
+    const pk = base.pipeline;
     if(!byPipeline[pk]) byPipeline[pk] = { rev: 0, cost: 0 };
     byPipeline[pk].rev += jobRevenue;
     byPipeline[pk].cost += jobCost;
-    // By salesman
     const sk = j.user || 'unassigned';
     if(!bySalesman[sk]) bySalesman[sk] = { rev: 0, cost: 0 };
     bySalesman[sk].rev += jobRevenue;
     bySalesman[sk].cost += jobCost;
-    // By category (for costs only)
-    if(includeExpenses){
-      expenses.forEach(e => {
-        const c = e.cat || 'Uncategorized';
-        if(!byCategory[c]) byCategory[c] = 0;
-        byCategory[c] += parseFloat(e.amount) || 0;
-      });
-    }
+    expenses.forEach(e => {
+      const c = e.cat || 'Uncategorized';
+      if(!byCategory[c]) byCategory[c] = 0;
+      byCategory[c] += plSignedExpense(e);
+    });
   });
 
   const totals = jobRows.reduce((s, r) => {
     s.rev += r.revenue; s.cost += r.cost; s.profit += r.profit; return s;
   }, { rev: 0, cost: 0, profit: 0 });
+  totals.wip = wip;
+  totals.spent = spent;
+  totals.cashFlow = totals.rev - spent;
 
-  return { monthly, byPipeline, bySalesman, byCategory, jobRows, totals };
+  return { monthly, byPipeline, bySalesman, byCategory, jobRows, wipRows, totals };
 }
 
 function plFmt(n){
@@ -11979,7 +11995,7 @@ function renderProfitsPage(){
   if(toInput)   toInput.value   = to === '2999-12-31' ? '' : to;
 
   const data = plAggregate(from, to);
-  const { totals, jobRows, byPipeline, bySalesman, byCategory, monthly } = data;
+  const { totals, jobRows, wipRows, byPipeline, bySalesman, byCategory, monthly } = data;
   const margin = totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0;
 
   // Build trend chart — sort months ascending, show up to last 12
@@ -12068,11 +12084,31 @@ function renderProfitsPage(){
       </tbody></table>`
     : `<div class="pl-empty">No jobs in this range. Try a wider date range or All Time.</div>`;
 
+  // Work-in-progress jobs: money spent in range, nothing collected yet
+  wipRows.sort((a, b) => b.cost - a.cost);
+  const wipHtml = wipRows.length
+    ? `<table class="pl-table"><thead><tr><th>Job</th><th>Stage</th><th>Salesman</th><th class="num">Spent</th></tr></thead><tbody>
+        ${wipRows.map(r => {
+          const u = jobRep(r.salesman);
+          const col = (typeof columnsForPipeline === 'function' ? columnsForPipeline(r.pipeline) : []).find(c => c.id === r.col);
+          return `<tr class="clickable" data-pl-job="${r.id}">
+            <td>
+              <div style="font-weight:600">${escapeHtml(r.name)}</div>
+              <div class="muted" style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(r.address)}</div>
+            </td>
+            <td class="muted">${escapeHtml(col?.name || r.col || '—')}</td>
+            <td class="muted">${escapeHtml(u.name)}</td>
+            <td class="num" style="color:var(--warn)">${plFmt(r.cost)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">No unpaid jobs with spending in this range.</div>`;
+
   const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
   const toLabel   = to === '2999-12-31' ? 'Today' : to;
 
   document.getElementById('plBody').innerHTML = `
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Showing ${fromLabel} → ${toLabel} · cash basis (revenue = deposits collected)</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Showing ${fromLabel} → ${toLabel} · cash basis · Profit = money collected minus all costs on those same jobs (returns subtracted)</div>
     <div class="pl-kpi-row">
       <div class="pl-kpi kpi-rev">
         <div class="pl-kpi-label">Revenue</div>
@@ -12093,6 +12129,23 @@ function renderProfitsPage(){
         <div class="pl-kpi-label">Margin</div>
         <div class="pl-kpi-val">${margin.toFixed(1)}%</div>
         <div class="pl-kpi-sub">profit ÷ revenue</div>
+      </div>
+    </div>
+    <div class="pl-kpi-row pl-kpi-row-3">
+      <div class="pl-kpi">
+        <div class="pl-kpi-label">Work in Progress</div>
+        <div class="pl-kpi-val" style="color:var(--warn)">${plFmt(totals.wip)}</div>
+        <div class="pl-kpi-sub">spent on ${wipRows.length} ${wipRows.length === 1 ? 'job' : 'jobs'} not paid yet</div>
+      </div>
+      <div class="pl-kpi">
+        <div class="pl-kpi-label">Total Spent</div>
+        <div class="pl-kpi-val" style="color:var(--warn)">${plFmt(totals.spent)}</div>
+        <div class="pl-kpi-sub">all jobs, by expense date</div>
+      </div>
+      <div class="pl-kpi kpi-profit${totals.cashFlow < 0 ? ' neg' : ''}">
+        <div class="pl-kpi-label">Net Cash Flow</div>
+        <div class="pl-kpi-val">${plFmt(totals.cashFlow)}</div>
+        <div class="pl-kpi-sub">collected − total spent</div>
       </div>
     </div>
     <div class="pl-section">
@@ -12121,6 +12174,10 @@ function renderProfitsPage(){
     <div class="pl-section">
       <div class="pl-section-title"><i class="ti ti-list-details"></i>Per-Job Detail (${jobRows.length})</div>
       ${jobsHtml}
+    </div>
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-hammer"></i>Work in Progress — spent, not collected yet (${wipRows.length})</div>
+      ${wipHtml}
     </div>
   `;
 
@@ -12176,6 +12233,17 @@ function plExportCsv(){
   });
   rows.push([]);
   rows.push(['TOTALS','','','', data.totals.rev.toFixed(2), data.totals.cost.toFixed(2), data.totals.profit.toFixed(2), data.totals.rev > 0 ? (data.totals.profit / data.totals.rev * 100).toFixed(1) : '']);
+  rows.push([]);
+  rows.push(['WORK IN PROGRESS (spent, not collected yet)']);
+  data.wipRows.forEach(r => {
+    const u = jobRep(r.salesman);
+    const p = pipelines.find(x => x.id === r.pipeline);
+    rows.push([r.name, r.address, p?.name || r.pipeline, u.name, '', r.cost.toFixed(2), '', '']);
+  });
+  rows.push(['WIP TOTAL','','','','', data.totals.wip.toFixed(2), '', '']);
+  rows.push([]);
+  rows.push(['TOTAL SPENT (all jobs)','','','','', data.totals.spent.toFixed(2), '', '']);
+  rows.push(['NET CASH FLOW','','','', '', '', data.totals.cashFlow.toFixed(2), '']);
   // CSV escape
   const esc = v => {
     const s = String(v ?? '');

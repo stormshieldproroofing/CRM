@@ -51,4 +51,29 @@ test('the job panel net profit card uses the shared calculation', () => {
   assert.ok(!placeholder.includes('j.potVal'));
 });
 
+test('dateKey reads every date format the CRM stores', () => {
+  assert.strictEqual(profit.dateKey('Oct 9, 2026'), '2026-10-09');
+  assert.strictEqual(profit.dateKey('Sept 30, 2026'), '2026-09-30');
+  assert.strictEqual(profit.dateKey('10/9/2026'), '2026-10-09');
+  assert.strictEqual(profit.dateKey('2026-10-09'), '2026-10-09');
+  assert.strictEqual(profit.dateKey('2026-10-09T05:00:00Z'), '2026-10-09');
+  assert.strictEqual(profit.dateKey(''), null);
+  assert.strictEqual(profit.dateKey('soon'), null);
+});
+
+test('signedExpense treats returns as a credit', () => {
+  assert.strictEqual(profit.signedExpense({ cat: 'Materials', amount: '100' }), 100);
+  assert.strictEqual(profit.signedExpense({ cat: 'Returns', amount: '25' }), -25);
+  assert.strictEqual(profit.signedExpense({ cat: 'Returns', amount: '-25' }), -25);
+});
+
+test('P&L page uses the shared date parser and return credits', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const start = html.indexOf('function plAggregate');
+  const body = html.slice(start, html.indexOf('function plFmt', start));
+  assert.ok(body.includes('plSignedExpense'));
+  const keyFn = html.slice(html.indexOf('function plDateKey'), start);
+  assert.ok(keyFn.includes('dateKey'));
+});
+
 console.log(passed + ' tests passed');
