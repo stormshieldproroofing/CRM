@@ -1763,6 +1763,10 @@ const DEFAULT_COLUMNS=[
 function backfillDefaultStages(){
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   pipelines.forEach(p => {
+    // Only the Insurance pipeline follows the default stage list. Custom
+    // pipelines (Retail, Repairs, Denial / Appeals…) keep exactly the stages
+    // they were given — adding the defaults there also re-used Insurance's ids.
+    if(p.id !== 'insurance') return;
     if(!Array.isArray(p.columns)) return;
     DEFAULT_COLUMNS.forEach((def, di) => {
       const existing = p.columns.find(c => c.id === def.id);
@@ -1797,12 +1801,51 @@ var jobs=[];
 // ── Persistence ────────────────────────────────────────────────────────
 const STORAGE_KEY='stormshield_crm_v1';
 function cloneColumns(cols){return cols.map(c=>Object.assign({},c));}
+// Stage ids are unique across ALL pipelines (the database keys stages by id
+// alone). The Insurance pipeline owns the default ids (lead, denied, appeal…);
+// any other pipeline that starts from the defaults gets its own copies, e.g.
+// "repairs-1780115078149-lead". Re-using an id makes the database reject the
+// whole stage save, so no stage edits on any pipeline would stick.
+function columnsForNewPipeline(pipelineId){
+  const cols = cloneColumns(DEFAULT_COLUMNS);
+  if(pipelineId === 'insurance') return cols;
+  return cols.map(c => Object.assign(c, { id: `${pipelineId}-${c.id}` }));
+}
+// Safety net: if two pipelines share a stage id, keep it on the first pipeline
+// that has it and give the later one its own id, moving that pipeline's jobs
+// (and their checklist progress) to the new id. Returns true if anything changed.
+function ensureUniqueStageIds(){
+  const seen = new Set();
+  let changed = false;
+  (pipelines || []).forEach(p => {
+    (p.columns || []).forEach(c => {
+      if(!c || !c.id) return;
+      if(!seen.has(c.id)){ seen.add(c.id); return; }
+      const oldId = c.id;
+      let newId = `${p.id}-${oldId}`, n = 2;
+      while(seen.has(newId)) newId = `${p.id}-${oldId}-${n++}`;
+      c.id = newId; seen.add(newId); changed = true;
+      (jobs || []).forEach(j => {
+        if((j.pipeline || 'insurance') !== p.id || j.col !== oldId) return;
+        j.col = newId;
+        if(j.stageChecklistDone && j.stageChecklistDone[oldId] && !j.stageChecklistDone[newId]){
+          j.stageChecklistDone[newId] = j.stageChecklistDone[oldId];
+          delete j.stageChecklistDone[oldId];
+        }
+      });
+      console.warn(`[pipelines] stage id "${oldId}" was used twice — renamed to "${newId}" on pipeline "${p.name}"`);
+    });
+  });
+  return changed;
+}
+window.ensureUniqueStageIds = ensureUniqueStageIds;
 function currentPipeline(){return pipelines.find(p=>p.id===currentPipelineId)||pipelines[0];}
 function syncActivePipeline(){
-  if(!pipelines.length) pipelines=[{id:'insurance',name:'Insurance',columns:cloneColumns(DEFAULT_COLUMNS)}];
+  if(!pipelines.length) pipelines=[{id:'insurance',name:'Insurance',columns:columnsForNewPipeline('insurance')}];
   if(!pipelines.some(p=>p.id===currentPipelineId)) currentPipelineId=pipelines[0].id;
   const p=currentPipeline();
-  if(!Array.isArray(p.columns)||!p.columns.length) p.columns=cloneColumns(DEFAULT_COLUMNS);
+  if(!Array.isArray(p.columns)||!p.columns.length) p.columns=columnsForNewPipeline(p.id);
+  ensureUniqueStageIds();
   columns=p.columns;
   jobs.forEach(j=>{if(!j.pipeline) j.pipeline='insurance';});
 }
@@ -8976,7 +9019,7 @@ function renderPipelineDrop(editingPipelineId=null){
   const drop=$('pipelineDrop');
   drop.innerHTML=`
     <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:4px 7px 7px">Switch Pipeline</div>
-    ${pipelines.map(p=>{
+    ${pipelines.map((p,pi)=>{
       const count=pipelineJobCount(p.id);
       if(editingPipelineId===p.id){
         return `<div style="display:flex;align-items:center;gap:5px;padding:4px">
@@ -8989,6 +9032,10 @@ function renderPipelineDrop(editingPipelineId=null){
         <i class="ti ${p.id===currentPipelineId?'ti-circle-check':'ti-layout-kanban'}" style="font-size:14px;flex-shrink:0" aria-hidden="true"></i>
         <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.name)}</span>
         <span style="font-size:10px;color:inherit;opacity:.7">${count}</span>
+        <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+          <button data-move-pipeline="${p.id}" data-dir="-1" title="Move up" aria-label="Move ${escapeHtml(p.name)} up" ${pi===0?'disabled':''} style="width:20px;height:11px;padding:0;border:none;border-radius:3px;background:rgba(255,255,255,0.06);color:inherit;cursor:${pi===0?'default':'pointer'};opacity:${pi===0?'.25':'.8'};display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">▲</button>
+          <button data-move-pipeline="${p.id}" data-dir="1" title="Move down" aria-label="Move ${escapeHtml(p.name)} down" ${pi===pipelines.length-1?'disabled':''} style="width:20px;height:11px;padding:0;border:none;border-radius:3px;background:rgba(255,255,255,0.06);color:inherit;cursor:${pi===pipelines.length-1?'default':'pointer'};opacity:${pi===pipelines.length-1?'.25':'.8'};display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">▼</button>
+        </span>
         <button data-edit-pipeline="${p.id}" title="Edit pipeline name" style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:12px" aria-hidden="true"></i></button>
         <button data-delete-pipeline="${p.id}" title="Delete pipeline" style="width:24px;height:24px;border-radius:5px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-trash" style="font-size:12px" aria-hidden="true"></i></button>
       </div>`;
@@ -9007,6 +9054,10 @@ function renderPipelineDrop(editingPipelineId=null){
     renderPipelineDrop(btn.dataset.editPipeline);
     const input=$('editPipelineNameInput');
     if(input){input.focus();input.select();}
+  }));
+  drop.querySelectorAll('[data-move-pipeline]').forEach(btn=>btn.addEventListener('click',e=>{
+    e.stopPropagation();
+    movePipeline(btn.dataset.movePipeline, parseInt(btn.dataset.dir,10));
   }));
   drop.querySelectorAll('[data-delete-pipeline]').forEach(btn=>btn.addEventListener('click',e=>{
     e.stopPropagation();
@@ -9028,6 +9079,19 @@ function renderPipelineDrop(editingPipelineId=null){
   $('addPipelineBtn').addEventListener('click',createPipelineFromInput);
   $('newPipelineName').addEventListener('keydown',e=>{if(e.key==='Enter')createPipelineFromInput();});
 }
+
+// Reorder pipelines in the switcher (saved as each pipeline's position).
+function movePipeline(id, dir){
+  const i = pipelines.findIndex(x => x.id === id);
+  const j = i + dir;
+  if(i < 0 || j < 0 || j >= pipelines.length) return;
+  const [p] = pipelines.splice(i, 1);
+  pipelines.splice(j, 0, p);
+  saveToStorage();
+  renderBoard();
+  renderPipelineDrop();
+}
+window.movePipeline = movePipeline;
 
 function renamePipeline(id){
   const p=pipelines.find(x=>x.id===id);
@@ -9061,7 +9125,7 @@ function createPipelineFromInput(){
   const name=(input.value||'').trim();
   if(!name){toast('Pipeline name is required');return}
   const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+Date.now();
-  pipelines.push({id,name,columns:cloneColumns(DEFAULT_COLUMNS)});
+  pipelines.push({id,name,columns:columnsForNewPipeline(id)});
   currentPipelineId=id;
   filterUser=null;
   $('filterBtn').classList.remove('active');

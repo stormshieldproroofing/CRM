@@ -127,6 +127,8 @@ async function loadAllFromSupabase() {
     }
     __loadedPipelineIds = new Set(pipes.map(p => p.id));
     __loadedStageIds = new Set((stages || []).map(s => s.id));
+    __pipeFp.clear(); pipes.forEach(r => __pipeFp.set(r.id, __pipeRowFp(r)));
+    __stageFp.clear(); (stages || []).forEach(r => __stageFp.set(r.id, __stageRowFp(r)));
   }
 
   // Stages considered "closed" (completed / lost). These are NOT loaded on boot —
@@ -375,6 +377,20 @@ if (typeof document !== 'undefined') {
 let __loadedJobIds = null;
 let __loadedPipelineIds = null;
 let __loadedStageIds = null;
+// What each pipeline / stage row looked like when this session last loaded or
+// saved it. A save only sends rows that differ, so a tab or phone left open
+// with old data can't put back an old pipeline order, stage name or stage it
+// never touched.
+const __pipeFp = new Map();
+const __stageFp = new Map();
+const __pipeRowFp = r => window.crmSync.stableStringify({ id: r.id, name: r.name || '', position: r.position });
+const __stageRowFp = r => window.crmSync.stableStringify({
+  id: r.id, pipeline_id: r.pipeline_id, name: r.name || '', icon: r.icon || null, color: r.color || null,
+  locked: !!r.locked, position: r.position, checklist: Array.isArray(r.checklist) ? r.checklist : [],
+});
+function __boardSaveFailed(){
+  if (typeof toast === 'function') toast("Board changes didn't save — refresh the page and try again");
+}
 let __loadedTeamIds = null;
 
 function isPersistedJobId(id) {
@@ -897,17 +913,21 @@ async function pushAllToSupabase() {
         }
         const localPipelines = window.pipelines || [];
         if (localPipelines.length) {
+          // Only pipelines this session actually changed (new, renamed or moved).
           const pipeRows = localPipelines.map((p, i) => ({
             id: p.id, name: p.name, position: i,
-          }));
-          const { error: pipeErr } = await sb.from('pipelines').upsert(pipeRows);
-          if (pipeErr) console.error('[Supabase] pipelines upsert failed:', pipeErr);
+          })).filter(r => __pipeFp.get(r.id) !== __pipeRowFp(r));
+          if (pipeRows.length) {
+            const { error: pipeErr } = await sb.from('pipelines').upsert(pipeRows);
+            if (pipeErr) { console.error('[Supabase] pipelines upsert failed:', pipeErr); __boardSaveFailed(); }
+            else pipeRows.forEach(r => __pipeFp.set(r.id, __pipeRowFp(r)));
+          }
         }
         let pipeDeleteOk = true;
         if (plan.deleteIds.length) {
           const { error: pdErr } = await sb.from('pipelines').delete().in('id', plan.deleteIds);
-          if (pdErr) { pipeDeleteOk = false; console.error('[Supabase] pipelines delete failed:', pdErr); }
-          else plan.deleteIds.forEach(id => __loadedPipelineIds.delete(id));
+          if (pdErr) { pipeDeleteOk = false; console.error('[Supabase] pipelines delete failed:', pdErr); __boardSaveFailed(); }
+          else plan.deleteIds.forEach(id => { __loadedPipelineIds.delete(id); __pipeFp.delete(id); });
         }
         if (pipeDeleteOk) {
           (window.pipelines || []).forEach(p => { if (p && p.id) __loadedPipelineIds.add(p.id); });
@@ -915,6 +935,9 @@ async function pushAllToSupabase() {
       }
 
       if (__loadedStageIds) {
+        // Never send the same stage id twice — the database rejects the whole
+        // batch, so no stage edits on any pipeline would save.
+        if (typeof window.ensureUniqueStageIds === 'function') window.ensureUniqueStageIds();
         const { data: remoteStages, error: rsErr } = await selectAllIds('stages');
         if (rsErr) console.error('[Supabase] stages list failed — leaving stage rows untouched:', rsErr);
         else {
@@ -945,16 +968,19 @@ async function pushAllToSupabase() {
             });
             plan.dropLocalIds.forEach(id => __loadedStageIds.delete(id));
           }
-          const liveStageRows = stagePayload();
+          // Only stages this session actually changed (new, renamed, recolored,
+          // moved, checklist edited).
+          const liveStageRows = stagePayload().filter(r => __stageFp.get(r.id) !== __stageRowFp(r));
           if (liveStageRows.length) {
             const { error: stageErr } = await sb.from('stages').upsert(liveStageRows);
-            if (stageErr) console.error('[Supabase] stages upsert failed:', stageErr);
+            if (stageErr) { console.error('[Supabase] stages upsert failed:', stageErr); __boardSaveFailed(); }
+            else liveStageRows.forEach(r => __stageFp.set(r.id, __stageRowFp(r)));
           }
           let stageDeleteOk = true;
           if (plan.deleteIds.length) {
             const { error: sdErr } = await sb.from('stages').delete().in('id', plan.deleteIds);
-            if (sdErr) { stageDeleteOk = false; console.error('[Supabase] stages delete failed:', sdErr); }
-            else plan.deleteIds.forEach(id => __loadedStageIds.delete(id));
+            if (sdErr) { stageDeleteOk = false; console.error('[Supabase] stages delete failed:', sdErr); __boardSaveFailed(); }
+            else plan.deleteIds.forEach(id => { __loadedStageIds.delete(id); __stageFp.delete(id); });
           }
           if (stageDeleteOk) {
             (window.pipelines || []).forEach(p => {
