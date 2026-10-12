@@ -915,6 +915,9 @@ async function pushAllToSupabase() {
       }
 
       if (__loadedStageIds) {
+        // Never send the same stage id twice — the database rejects the whole
+        // batch, so no stage edits on any pipeline would save.
+        if (typeof window.ensureUniqueStageIds === 'function') window.ensureUniqueStageIds();
         const { data: remoteStages, error: rsErr } = await selectAllIds('stages');
         if (rsErr) console.error('[Supabase] stages list failed — leaving stage rows untouched:', rsErr);
         else {

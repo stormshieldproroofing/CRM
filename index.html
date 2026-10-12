@@ -1763,6 +1763,10 @@ const DEFAULT_COLUMNS=[
 function backfillDefaultStages(){
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   pipelines.forEach(p => {
+    // Only the Insurance pipeline follows the default stage list. Custom
+    // pipelines (Retail, Repairs, Denial / Appeals…) keep exactly the stages
+    // they were given — adding the defaults there also re-used Insurance's ids.
+    if(p.id !== 'insurance') return;
     if(!Array.isArray(p.columns)) return;
     DEFAULT_COLUMNS.forEach((def, di) => {
       const existing = p.columns.find(c => c.id === def.id);
@@ -1797,12 +1801,51 @@ var jobs=[];
 // ── Persistence ────────────────────────────────────────────────────────
 const STORAGE_KEY='stormshield_crm_v1';
 function cloneColumns(cols){return cols.map(c=>Object.assign({},c));}
+// Stage ids are unique across ALL pipelines (the database keys stages by id
+// alone). The Insurance pipeline owns the default ids (lead, denied, appeal…);
+// any other pipeline that starts from the defaults gets its own copies, e.g.
+// "repairs-1780115078149-lead". Re-using an id makes the database reject the
+// whole stage save, so no stage edits on any pipeline would stick.
+function columnsForNewPipeline(pipelineId){
+  const cols = cloneColumns(DEFAULT_COLUMNS);
+  if(pipelineId === 'insurance') return cols;
+  return cols.map(c => Object.assign(c, { id: `${pipelineId}-${c.id}` }));
+}
+// Safety net: if two pipelines share a stage id, keep it on the first pipeline
+// that has it and give the later one its own id, moving that pipeline's jobs
+// (and their checklist progress) to the new id. Returns true if anything changed.
+function ensureUniqueStageIds(){
+  const seen = new Set();
+  let changed = false;
+  (pipelines || []).forEach(p => {
+    (p.columns || []).forEach(c => {
+      if(!c || !c.id) return;
+      if(!seen.has(c.id)){ seen.add(c.id); return; }
+      const oldId = c.id;
+      let newId = `${p.id}-${oldId}`, n = 2;
+      while(seen.has(newId)) newId = `${p.id}-${oldId}-${n++}`;
+      c.id = newId; seen.add(newId); changed = true;
+      (jobs || []).forEach(j => {
+        if((j.pipeline || 'insurance') !== p.id || j.col !== oldId) return;
+        j.col = newId;
+        if(j.stageChecklistDone && j.stageChecklistDone[oldId] && !j.stageChecklistDone[newId]){
+          j.stageChecklistDone[newId] = j.stageChecklistDone[oldId];
+          delete j.stageChecklistDone[oldId];
+        }
+      });
+      console.warn(`[pipelines] stage id "${oldId}" was used twice — renamed to "${newId}" on pipeline "${p.name}"`);
+    });
+  });
+  return changed;
+}
+window.ensureUniqueStageIds = ensureUniqueStageIds;
 function currentPipeline(){return pipelines.find(p=>p.id===currentPipelineId)||pipelines[0];}
 function syncActivePipeline(){
-  if(!pipelines.length) pipelines=[{id:'insurance',name:'Insurance',columns:cloneColumns(DEFAULT_COLUMNS)}];
+  if(!pipelines.length) pipelines=[{id:'insurance',name:'Insurance',columns:columnsForNewPipeline('insurance')}];
   if(!pipelines.some(p=>p.id===currentPipelineId)) currentPipelineId=pipelines[0].id;
   const p=currentPipeline();
-  if(!Array.isArray(p.columns)||!p.columns.length) p.columns=cloneColumns(DEFAULT_COLUMNS);
+  if(!Array.isArray(p.columns)||!p.columns.length) p.columns=columnsForNewPipeline(p.id);
+  ensureUniqueStageIds();
   columns=p.columns;
   jobs.forEach(j=>{if(!j.pipeline) j.pipeline='insurance';});
 }
@@ -9061,7 +9104,7 @@ function createPipelineFromInput(){
   const name=(input.value||'').trim();
   if(!name){toast('Pipeline name is required');return}
   const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+Date.now();
-  pipelines.push({id,name,columns:cloneColumns(DEFAULT_COLUMNS)});
+  pipelines.push({id,name,columns:columnsForNewPipeline(id)});
   currentPipelineId=id;
   filterUser=null;
   $('filterBtn').classList.remove('active');
