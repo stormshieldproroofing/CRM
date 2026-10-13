@@ -2983,6 +2983,23 @@ function stageTemplateForJob(j){
 // Open the phone's Messages app pre-filled with a warm intro + a text business
 // card (salesman name/cell + company name/phone/address). The salesman can edit
 // before sending. SMS links can't attach files, so the card is plain text.
+// Who the business card / intro text is "from". Normally the signed-in rep,
+// but the shared Office login has no card of its own, so it sends Matthew
+// Trinh's (name, cell and card photos).
+const OFFICE_CARD_DEFAULT = { name: 'Matthew Trinh', phone: '(214) 493-0648' };
+function isOfficeLogin(m){
+  m = m || window.currentMember || {};
+  return m.id === 'oa' || /^office$/i.test((m.name || '').trim());
+}
+function cardRep(){
+  const me = window.currentMember || {};
+  if(!isOfficeLogin(me)) return me;
+  const team = window.TEAM || window.USERS || [];
+  const mt = team.find(u => /matthew\s+trinh/i.test(u.name || ''));
+  return { ...OFFICE_CARD_DEFAULT, ...(mt || {}) };
+}
+window.cardRep = cardRep;
+
 function textLeadWithCard(jobId){
   const j = (window.jobs || []).find(x => x.id === jobId);
   if(!j){ toast('Job not found'); return; }
@@ -2991,7 +3008,7 @@ function textLeadWithCard(jobId){
   const toNum = phoneRaw.replace(/[^\d+]/g, '');
 
   // Salesman (current signed-in user) for the business card.
-  const me = window.currentMember || {};
+  const me = cardRep();
   const repName = (me.name || '').trim();
   const repCell = (me.phone || '').trim();
 
@@ -3051,7 +3068,7 @@ const REP_CARD_IMAGES = {
 };
 
 function getRepCardImages(){
-  const name = ((window.currentMember || {}).name || '').toLowerCase();
+  const name = (cardRep().name || '').toLowerCase();
   if(!name) return null;
   for(const key in REP_CARD_IMAGES){
     const words = key.split(/\s+/);
@@ -3071,7 +3088,7 @@ function dataUriToFile(uri, filename){
 
 function generateBizCardImage(){
   return new Promise((resolve) => {
-    const me = window.currentMember || {};
+    const me = cardRep();
     const repName = (me.name || '').trim() || 'StormShield Pro';
     const repCell = (me.phone || '').trim();
     const co = (typeof getCompanyInfo === 'function') ? getCompanyInfo() : {};
@@ -3144,7 +3161,7 @@ function generateBizCardImage(){
 async function textLeadCardPhoto(jobId){
   const j = (window.jobs || []).find(x => x.id === jobId);
   if(!j){ toast('Job not found'); return; }
-  const me = window.currentMember || {};
+  const me = cardRep();
   const repName = (me.name || '').trim();
   const co = (typeof getCompanyInfo === 'function') ? getCompanyInfo() : {};
   const coName = co.name || 'StormShield Pro Roofing';
