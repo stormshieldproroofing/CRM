@@ -11851,8 +11851,8 @@ function wireCalDragDrop(){
 })();
 
 // ── PROFITS & LOSS DASHBOARD (admin-only) ──
-// Cash-basis revenue: deposits collected (j.deposits[].amount with d.date)
-// Costs: j.expenses[].amount, by category. (Expenses have no date field — see below.)
+// Contract-basis P&L: revenue = contract + approved supplements, costs =
+// expenses net of Returns, A/R = revenue − deposits collected.
 //
 // Costs follow the job: when a job has a deposit in the range, ALL of that job's
 // expenses (net of Returns) count, so each job's profit is revenue − its own costs.
@@ -11911,73 +11911,75 @@ function plExpenseNet(e){
   return (e && e.cat === 'Returns') ? -v : v;
 }
 
+// Contract basis: a job's revenue is its contract price + approved supplements
+// (the same number the job panel and commissions use), dated by its BUILD date
+// (falls back to first deposit, then the job's created date). Collected = all
+// deposits on the job; Accounts Receivable = revenue − collected. Jobs with a
+// build date still in the future are left out and totalled as "upcoming".
+function plJobRevenue(j){
+  if(typeof jobCommissionRevenue === 'function') return jobCommissionRevenue(j);
+  return parseFloat(j && j.potVal) || 0;
+}
+function plJobRevenueDate(j, deposits){
+  const b = plDateKey(j.buildDate);
+  if(b) return b;
+  const firstDep = deposits.map(plDepositDateKey).filter(Boolean).sort()[0];
+  return firstDep || plDateKey(j.created) || null;
+}
 function plAggregate(from, to){
-  // Build a map: month -> {rev, cost}
   const monthly = {};
   const byPipeline = {};
   const bySalesman = {};
   const byCategory = {};
-  const jobRows = [];   // per-job rollup
-
-  // Build a quick index: for each job, the deposits that fall in range
+  const jobRows = [];
+  const upcoming = { count: 0, rev: 0 };
   const inRange = (key) => key && key >= from && key <= to;
+  const t0 = new Date();
+  const todayKey = `${t0.getFullYear()}-${String(t0.getMonth()+1).padStart(2,'0')}-${String(t0.getDate()).padStart(2,'0')}`;
+  const add = (map, k, rev, cost, ar) => {
+    if(!map[k]) map[k] = { rev: 0, cost: 0, ar: 0 };
+    map[k].rev += rev; map[k].cost += cost; map[k].ar += ar;
+  };
 
   jobs.forEach(j => {
     const deposits = Array.isArray(j.deposits) ? j.deposits : [];
-    const inRangeDeposits = deposits.filter(d => inRange(plDepositDateKey(d)));
-    const jobRevenue = inRangeDeposits.reduce((s,d) => s + (parseFloat(d.amount) || 0), 0);
-    if(jobRevenue === 0 && (!j.expenses || !j.expenses.length)) return;   // nothing to show
-    // Expenses: since they have no date, we attribute them to the job (not a date).
-    // Include them if the job had any in-range revenue, OR if the range is 'all'.
     const expenses = Array.isArray(j.expenses) ? j.expenses : [];
-    const includeExpenses = jobRevenue > 0 || plRangeKey === 'all';
-    const jobCost = includeExpenses ? expenses.reduce((s,e) => s + plExpenseNet(e), 0) : 0;
+    const revenue   = plJobRevenue(j);
+    const collected = deposits.reduce((s,d) => s + (parseFloat(d.amount) || 0), 0);
+    const cost      = expenses.reduce((s,e) => s + plExpenseNet(e), 0);
+    if(revenue === 0 && collected === 0 && cost === 0) return;
 
-    if(jobRevenue === 0 && jobCost === 0) return;
+    const build = plDateKey(j.buildDate);
+    if(build && build > todayKey){            // signed, not built yet
+      if(inRange(build) || plRangeKey === 'all'){ upcoming.count++; upcoming.rev += revenue; }
+      return;
+    }
+    const dateKey = plJobRevenueDate(j, deposits);
+    if(!(inRange(dateKey) || plRangeKey === 'all')) return;
+
+    const ar = Math.max(0, revenue - collected);
     jobRows.push({
       id: j.id, name: j.name || '—', address: (j.address||'').split(',')[0] || '—',
       pipeline: j.pipeline || 'insurance',
       salesman: j.user || null,
-      revenue: jobRevenue, cost: jobCost, profit: jobRevenue - jobCost,
+      date: dateKey,
+      revenue, collected, ar, cost, profit: revenue - cost,
     });
-    // Monthly breakdown — by deposit date
-    inRangeDeposits.forEach(d => {
-      const k = plDepositDateKey(d).slice(0,7);   // 'yyyy-mm'
-      if(!monthly[k]) monthly[k] = { rev: 0, cost: 0 };
-      monthly[k].rev += parseFloat(d.amount) || 0;
+    add(monthly, dateKey ? dateKey.slice(0,7) : 'unknown', revenue, cost, ar);
+    add(byPipeline, j.pipeline || 'insurance', revenue, cost, ar);
+    add(bySalesman, j.user || 'unassigned', revenue, cost, ar);
+    expenses.forEach(e => {
+      const c = e.cat || 'Uncategorized';
+      byCategory[c] = (byCategory[c] || 0) + plExpenseNet(e);
     });
-    // For monthly costs: attribute to the month of the FIRST in-range deposit
-    if(includeExpenses && jobCost !== 0){
-      const firstDep = inRangeDeposits.map(plDepositDateKey).filter(Boolean).sort()[0];
-      const k = firstDep ? firstDep.slice(0,7) : 'unknown';
-      if(!monthly[k]) monthly[k] = { rev: 0, cost: 0 };
-      monthly[k].cost += jobCost;
-    }
-    // By pipeline
-    const pk = j.pipeline || 'insurance';
-    if(!byPipeline[pk]) byPipeline[pk] = { rev: 0, cost: 0 };
-    byPipeline[pk].rev += jobRevenue;
-    byPipeline[pk].cost += jobCost;
-    // By salesman
-    const sk = j.user || 'unassigned';
-    if(!bySalesman[sk]) bySalesman[sk] = { rev: 0, cost: 0 };
-    bySalesman[sk].rev += jobRevenue;
-    bySalesman[sk].cost += jobCost;
-    // By category (for costs only)
-    if(includeExpenses){
-      expenses.forEach(e => {
-        const c = e.cat || 'Uncategorized';
-        if(!byCategory[c]) byCategory[c] = 0;
-        byCategory[c] += plExpenseNet(e);
-      });
-    }
   });
 
   const totals = jobRows.reduce((s, r) => {
-    s.rev += r.revenue; s.cost += r.cost; s.profit += r.profit; return s;
-  }, { rev: 0, cost: 0, profit: 0 });
+    s.rev += r.revenue; s.cost += r.cost; s.profit += r.profit;
+    s.collected += r.collected; s.ar += r.ar; return s;
+  }, { rev: 0, cost: 0, profit: 0, collected: 0, ar: 0 });
 
-  return { monthly, byPipeline, bySalesman, byCategory, jobRows, totals };
+  return { monthly, byPipeline, bySalesman, byCategory, jobRows, totals, upcoming };
 }
 
 function plFmt(n){
@@ -12009,7 +12011,7 @@ function renderProfitsPage(){
   if(toInput)   toInput.value   = to === '2999-12-31' ? '' : to;
 
   const data = plAggregate(from, to);
-  const { totals, jobRows, byPipeline, bySalesman, byCategory, monthly } = data;
+  const { totals, jobRows, byPipeline, bySalesman, byCategory, monthly, upcoming } = data;
   const margin = totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0;
 
   // Build trend chart — sort months ascending, show up to last 12
@@ -12038,12 +12040,12 @@ function renderProfitsPage(){
   // Pipeline breakdown
   const pipelineRows = Object.entries(byPipeline).sort((a,b) => b[1].rev - a[1].rev);
   const pipelineHtml = pipelineRows.length
-    ? `<table class="pl-table"><thead><tr><th>Pipeline</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
+    ? `<table class="pl-table"><thead><tr><th>Pipeline</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">A/R</th></tr></thead><tbody>
         ${pipelineRows.map(([pid, v]) => {
           const p = pipelines.find(x => x.id === pid);
           const profit = v.rev - v.cost;
           const marg = v.rev > 0 ? (profit / v.rev * 100).toFixed(1) + '%' : '—';
-          return `<tr><td>${escapeHtml(p?.name || pid)}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td></tr>`;
+          return `<tr><td>${escapeHtml(p?.name || pid)}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td><td class="num" style="color:${v.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(v.ar)}</td></tr>`;
         }).join('')}
       </tbody></table>`
     : `<div class="pl-empty">No revenue in this range yet.</div>`;
@@ -12051,12 +12053,12 @@ function renderProfitsPage(){
   // Salesman breakdown
   const salesmanRows = Object.entries(bySalesman).sort((a,b) => b[1].rev - a[1].rev);
   const salesmanHtml = salesmanRows.length
-    ? `<table class="pl-table"><thead><tr><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
+    ? `<table class="pl-table"><thead><tr><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">A/R</th></tr></thead><tbody>
         ${salesmanRows.map(([uid, v]) => {
           const u = jobRep(uid);
           const profit = v.rev - v.cost;
           const marg = v.rev > 0 ? (profit / v.rev * 100).toFixed(1) + '%' : '—';
-          return `<tr><td>${escapeHtml(u?.name || 'Unassigned')}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td></tr>`;
+          return `<tr><td>${escapeHtml(u?.name || 'Unassigned')}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td><td class="num" style="color:${v.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(v.ar)}</td></tr>`;
         }).join('')}
       </tbody></table>`
     : `<div class="pl-empty">No salesman activity in this range.</div>`;
@@ -12076,7 +12078,7 @@ function renderProfitsPage(){
   // Per-job table (sorted by profit desc)
   jobRows.sort((a, b) => b.profit - a.profit);
   const jobsHtml = jobRows.length
-    ? `<table class="pl-table"><thead><tr><th>Job</th><th>Pipeline</th><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
+    ? `<table class="pl-table"><thead><tr><th>Job</th><th>Pipeline</th><th>Salesman</th><th class="num">Contract</th><th class="num">Collected</th><th class="num">A/R</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
         ${jobRows.map(r => {
           const u = jobRep(r.salesman);
           const p = pipelines.find(x => x.id === r.pipeline);
@@ -12090,6 +12092,8 @@ function renderProfitsPage(){
             <td class="muted">${escapeHtml(p?.name || r.pipeline)}</td>
             <td class="muted">${escapeHtml(u.name)}</td>
             <td class="num">${plFmt(r.revenue)}</td>
+            <td class="num">${plFmt(r.collected)}</td>
+            <td class="num" style="color:${r.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(r.ar)}</td>
             <td class="num">${plFmt(r.cost)}</td>
             <td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td>
             <td class="num muted">${marg}</td>
@@ -12098,16 +12102,37 @@ function renderProfitsPage(){
       </tbody></table>`
     : `<div class="pl-empty">No jobs in this range. Try a wider date range or All Time.</div>`;
 
+  // Accounts receivable — jobs still owed money, biggest balance first
+  const arRows = jobRows.filter(r => r.ar > 0.005).sort((a,b) => b.ar - a.ar);
+  const arHtml = arRows.length
+    ? `<table class="pl-table"><thead><tr><th>Job</th><th class="num">Contract</th><th class="num">Collected</th><th class="num">Balance Owed</th></tr></thead><tbody>
+        ${arRows.map(r => `<tr class="clickable" data-pl-job="${r.id}">
+            <td><div style="font-weight:600">${escapeHtml(r.name)}</div><div class="muted" style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(r.address)}</div></td>
+            <td class="num">${plFmt(r.revenue)}</td><td class="num">${plFmt(r.collected)}</td>
+            <td class="num" style="color:var(--warn);font-weight:700">${plFmt(r.ar)}</td></tr>`).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">Nothing owed — every job in this range is paid in full.</div>`;
+
   const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
   const toLabel   = to === '2999-12-31' ? 'Today' : to;
 
   document.getElementById('plBody').innerHTML = `
-    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Showing ${fromLabel} → ${toLabel} · cash basis (revenue = deposits collected)</div>
-    <div class="pl-kpi-row">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Showing ${fromLabel} → ${toLabel} · contract basis (revenue = contract + approved supplements, by build date)${upcoming.count ? ` · ${upcoming.count} upcoming ${upcoming.count===1?'build':'builds'} (${plFmt(upcoming.rev)}) not counted yet` : ''}</div>
+    <div class="pl-kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
       <div class="pl-kpi kpi-rev">
-        <div class="pl-kpi-label">Revenue</div>
+        <div class="pl-kpi-label">Contract Revenue</div>
         <div class="pl-kpi-val">${plFmt(totals.rev)}</div>
         <div class="pl-kpi-sub">${jobRows.length} ${jobRows.length === 1 ? 'job' : 'jobs'}</div>
+      </div>
+      <div class="pl-kpi">
+        <div class="pl-kpi-label">Collected</div>
+        <div class="pl-kpi-val">${plFmt(totals.collected)}</div>
+        <div class="pl-kpi-sub">deposits received</div>
+      </div>
+      <div class="pl-kpi kpi-cost">
+        <div class="pl-kpi-label">Accounts Receivable</div>
+        <div class="pl-kpi-val">${plFmt(totals.ar)}</div>
+        <div class="pl-kpi-sub">${arRows.length} ${arRows.length === 1 ? 'job owes' : 'jobs owe'}</div>
       </div>
       <div class="pl-kpi kpi-cost">
         <div class="pl-kpi-label">Costs</div>
@@ -12143,6 +12168,10 @@ function renderProfitsPage(){
         <div class="pl-section-title"><i class="ti ti-user"></i>By Salesman</div>
         ${salesmanHtml}
       </div>
+    </div>
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-receipt"></i>Accounts Receivable (${arRows.length})</div>
+      ${arHtml}
     </div>
     <div class="pl-section">
       <div class="pl-section-title"><i class="ti ti-tag"></i>Costs by Category</div>
@@ -12191,21 +12220,21 @@ function renderProfitsPage(){
 function plExportCsv(){
   const { from, to } = plComputeRange();
   const data = plAggregate(from, to);
-  const rows = [['Job','Address','Pipeline','Salesman','Revenue','Costs','Profit','Margin %']];
+  const rows = [['Job','Address','Build Date','Pipeline','Salesman','Contract','Collected','A/R','Costs','Profit','Margin %']];
   data.jobRows.forEach(r => {
     const u = jobRep(r.salesman);
     const p = pipelines.find(x => x.id === r.pipeline);
     const marg = r.revenue > 0 ? (r.profit / r.revenue * 100).toFixed(1) : '';
     rows.push([
-      r.name, r.address,
+      r.name, r.address, r.date || '',
       p?.name || r.pipeline,
       u.name,
-      r.revenue.toFixed(2), r.cost.toFixed(2), r.profit.toFixed(2),
+      r.revenue.toFixed(2), r.collected.toFixed(2), r.ar.toFixed(2), r.cost.toFixed(2), r.profit.toFixed(2),
       marg,
     ]);
   });
   rows.push([]);
-  rows.push(['TOTALS','','','', data.totals.rev.toFixed(2), data.totals.cost.toFixed(2), data.totals.profit.toFixed(2), data.totals.rev > 0 ? (data.totals.profit / data.totals.rev * 100).toFixed(1) : '']);
+  rows.push(['TOTALS','','','','', data.totals.rev.toFixed(2), data.totals.collected.toFixed(2), data.totals.ar.toFixed(2), data.totals.cost.toFixed(2), data.totals.profit.toFixed(2), data.totals.rev > 0 ? (data.totals.profit / data.totals.rev * 100).toFixed(1) : '']);
   // CSV escape
   const esc = v => {
     const s = String(v ?? '');
