@@ -11982,6 +11982,46 @@ function plAggregate(from, to){
   return { monthly, byPipeline, bySalesman, byCategory, jobRows, totals, upcoming };
 }
 
+// ── Cash flow ── actual money in and out, by the date it moved.
+// In  = deposits, dated by deposit date.
+// Out = PAID expenses, dated by paid date (else the expense date). Returns are
+//       money back, so they reduce Out.
+// Unpaid expenses haven't left the bank yet — they're Accounts Payable.
+function plCashFlow(from, to){
+  const inRange = k => k && k >= from && k <= to;
+  const months = {};
+  const bump = (k, field, v) => {
+    const m = k ? k.slice(0,7) : 'unknown';
+    if(!months[m]) months[m] = { cashIn: 0, cashOut: 0 };
+    months[m][field] += v;
+  };
+  let cashIn = 0, cashOut = 0, payable = 0, payableCount = 0, startBal = 0;
+  jobs.forEach(j => {
+    (Array.isArray(j.deposits) ? j.deposits : []).forEach(d => {
+      const k = plDepositDateKey(d), v = parseFloat(d.amount) || 0;
+      if(k && k < from) startBal += v;
+      if(!inRange(k)) return;
+      cashIn += v; bump(k, 'cashIn', v);
+    });
+    (Array.isArray(j.expenses) ? j.expenses : []).forEach(e => {
+      const v = plExpenseNet(e);
+      const isReturn = e.cat === 'Returns';
+      if(!e.paid && !isReturn){ payable += v; payableCount++; return; }
+      const k = plDateKey(e.paidDate) || plDateKey(e.date) || plDateKey(j.buildDate);
+      if(k && k < from) startBal -= v;
+      if(!inRange(k)) return;
+      cashOut += v; bump(k, 'cashOut', v);
+    });
+  });
+  // Running balance per month, starting from everything before the range.
+  let bal = (from === '1970-01-01') ? 0 : startBal;
+  const rows = Object.keys(months).sort().map(m => {
+    const r = months[m]; const net = r.cashIn - r.cashOut; bal += net;
+    return { month: m, cashIn: r.cashIn, cashOut: r.cashOut, net, balance: bal };
+  });
+  return { cashIn, cashOut, net: cashIn - cashOut, payable, payableCount, rows };
+}
+
 function plFmt(n){
   const sign = n < 0 ? '−' : '';
   return sign + '$' + Math.abs(Math.round(n)).toLocaleString();
@@ -12113,6 +12153,27 @@ function renderProfitsPage(){
       </tbody></table>`
     : `<div class="pl-empty">Nothing owed — every job in this range is paid in full.</div>`;
 
+  // Cash flow section
+  const cf = plCashFlow(from, to);
+  const monLbl = k => { if(k==='unknown') return 'No date'; const [y,m]=k.split('-'); return new Date(+y, +m-1, 1).toLocaleDateString('en-US',{month:'short', year:'numeric'}); };
+  const cfTable = cf.rows.length
+    ? `<table class="pl-table"><thead><tr><th>Month</th><th class="num">Cash In</th><th class="num">Cash Out</th><th class="num">Net</th><th class="num">Running Balance</th></tr></thead><tbody>
+        ${cf.rows.map(r => `<tr><td>${monLbl(r.month)}</td>
+          <td class="num" style="color:var(--success)">${plFmt(r.cashIn)}</td>
+          <td class="num" style="color:var(--warn)">${plFmt(r.cashOut)}</td>
+          <td class="num" style="font-weight:700;color:${r.net<0?'var(--danger)':'var(--success)'}">${plFmt(r.net)}</td>
+          <td class="num muted">${plFmt(r.balance)}</td></tr>`).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">No money moved in this range.</div>`;
+  const cfHtml = `
+    <div class="pl-kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:12px">
+      <div class="pl-kpi kpi-profit"><div class="pl-kpi-label">Cash In</div><div class="pl-kpi-val">${plFmt(cf.cashIn)}</div><div class="pl-kpi-sub">deposits received</div></div>
+      <div class="pl-kpi kpi-cost"><div class="pl-kpi-label">Cash Out</div><div class="pl-kpi-val">${plFmt(cf.cashOut)}</div><div class="pl-kpi-sub">paid expenses, less returns</div></div>
+      <div class="pl-kpi kpi-profit${cf.net < 0 ? ' neg' : ''}"><div class="pl-kpi-label">Net Cash Flow</div><div class="pl-kpi-val">${plFmt(cf.net)}</div><div class="pl-kpi-sub">${cf.net >= 0 ? 'more in than out' : 'more out than in'}</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Accounts Payable</div><div class="pl-kpi-val">${plFmt(cf.payable)}</div><div class="pl-kpi-sub">${cf.payableCount} unpaid ${cf.payableCount===1?'bill':'bills'} (all dates)</div></div>
+    </div>
+    ${cfTable}`;
+
   const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
   const toLabel   = to === '2999-12-31' ? 'Today' : to;
 
@@ -12168,6 +12229,10 @@ function renderProfitsPage(){
         <div class="pl-section-title"><i class="ti ti-user"></i>By Salesman</div>
         ${salesmanHtml}
       </div>
+    </div>
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-cash"></i>Cash Flow</div>
+      ${cfHtml}
     </div>
     <div class="pl-section">
       <div class="pl-section-title"><i class="ti ti-receipt"></i>Accounts Receivable (${arRows.length})</div>
@@ -12235,7 +12300,13 @@ function plExportCsv(){
   });
   rows.push([]);
   rows.push(['TOTALS','','','','', data.totals.rev.toFixed(2), data.totals.collected.toFixed(2), data.totals.ar.toFixed(2), data.totals.cost.toFixed(2), data.totals.profit.toFixed(2), data.totals.rev > 0 ? (data.totals.profit / data.totals.rev * 100).toFixed(1) : '']);
-  // CSV escape
+    const cf = plCashFlow(from, to);
+  rows.push([]);
+  rows.push(['CASH FLOW','Month','Cash In','Cash Out','Net','Running Balance']);
+  cf.rows.forEach(r => rows.push(['', r.month, r.cashIn.toFixed(2), r.cashOut.toFixed(2), r.net.toFixed(2), r.balance.toFixed(2)]));
+  rows.push(['', 'TOTAL', cf.cashIn.toFixed(2), cf.cashOut.toFixed(2), cf.net.toFixed(2), '']);
+  rows.push(['', 'Accounts Payable (unpaid bills)', cf.payable.toFixed(2)]);
+// CSV escape
   const esc = v => {
     const s = String(v ?? '');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
