@@ -4014,7 +4014,9 @@ function parseAbcInvoice(text){
   const money = s => { const m = (s||'').replace(/[^0-9.]/g,''); return m ? parseFloat(m) : null; };
 
   // ── Vendor auto-detection ──
-  const isAso = /ASO\s*ROOFING\s*SUPPLY/i.test(text);
+  // ASO's logo is an image on some documents (e.g. Cash Sale Refunds), so the
+  // name may only appear in the email address "orders@asoroofingsupply.com".
+  const isAso = /ASO\s*ROOFING\s*SUPPLY/i.test(text) || /asoroofingsupply\.com/i.test(text);
   const isHomeDepot = /HOME\s*DEPOT|PRO\s*XTRA|homedepot\.com/i.test(text) || /\bTHE\s*HOME\s*DEPOT\b/i.test(text);
   const isLowes = !isHomeDepot && (/lowes\.com/i.test(text) || /\bLOWE['’`]?S\b/i.test(text));
   if(isHomeDepot) out.vendor = 'Home Depot';
@@ -4097,12 +4099,14 @@ function parseAbcInvoice(text){
     return out;
   }
 
-  // ── ASO Roofing Supply CREDIT NOTE (returns) ──
+  // ── ASO Roofing Supply CREDIT NOTE / CASH SALE REFUND (returns) ──
   // Different layout from ASO invoices: amounts in parentheses "($512.02)",
   // "Total Credit" instead of TOTAL/BALANCE DUE, and "Credit Note No" / "CN-###".
-  if(isAso && /Credit\s*Note/i.test(text) && /Total\s*Credit/i.test(text)){
+  // A "Cash Sale Refund" (Refund No / Refund Date) uses the same layout.
+  const asoCashRefund = /Cash\s*Sale\s*Refund/i.test(text) || /Refund\s*No\b/i.test(text);
+  if(isAso && (/Credit\s*Note/i.test(text) || asoCashRefund) && /Total\s*Credit/i.test(text)){
     out.isReturn = true;
-    out.docType = 'Credit Note';
+    out.docType = asoCashRefund ? 'Cash Sale Refund' : 'Credit Note';
     const amt = re => { const m = text.match(re); return m ? money(m[1]) : null; };
     out.total = amt(/Total\s*Credit\s*\(?\s*-?\$?\s*([\d,]+\.\d{2})/i);
     out.subTotal = amt(/Total\s*Amount\s*\(?\s*-?\$?\s*([\d,]+\.\d{2})/i);
@@ -4116,7 +4120,7 @@ function parseAbcInvoice(text){
     if(ref) out.orderName = ref[1].trim();
     const ret = text.match(/Returns?\s*from\s*(\d{2,6}\s+[\s\S]{3,80}?\b\d{5})\b/i) || text.match(/Delivery\s*Address:\s*(\d{2,6}\s+[\s\S]{3,80}?\b\d{5})\b/i);
     if(ret) out.address = ret[1].replace(/\s+/g,' ').replace(/,?\s*Texas\b/i, ', TX').trim();
-    const dt = text.match(/Credit\s*Date\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i) || text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    const dt = text.match(/(?:Credit|Refund)\s*Date\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i) || text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if(dt){ let yr=parseInt(dt[3],10); if(yr<100) yr+=2000; out.date = `${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`; }
     return out;
   }
