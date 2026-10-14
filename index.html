@@ -11854,10 +11854,8 @@ function wireCalDragDrop(){
 // Cash-basis revenue: deposits collected (j.deposits[].amount with d.date)
 // Costs: j.expenses[].amount, by category. (Expenses have no date field — see below.)
 //
-// HONEST CAVEAT: Expenses in this CRM do NOT currently have a `date` field — they were
-// stored as {cat, desc, amount}. For date-range filtering of costs we treat ALL expenses
-// for any job that had a deposit in the range as in-range. This is a coarse approximation.
-// If you want precise expense timing, add a date field to the expense entry form.
+// Costs follow the job: when a job has a deposit in the range, ALL of that job's
+// expenses (net of Returns) count, so each job's profit is revenue − its own costs.
 
 let plRangeKey = 'this-month';
 let plCustomFrom = null;   // 'yyyy-mm-dd'
@@ -11890,12 +11888,27 @@ function plComputeRange(){
 }
 
 // Parse a deposit's date string into 'yyyy-mm-dd' for comparison.
-// Deposits store `date` as 'M/D/YYYY' format from toLocaleDateString.
-function plDepositDateKey(d){
-  if(!d || !d.date) return null;
-  const m = d.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(!m) return null;
-  return `${m[3]}-${String(parseInt(m[1])).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+// Deposits are saved as 'Oct 12, 2026' (toLocaleDateString with month:'short');
+// older ones may be 'M/D/YYYY' or ISO 'YYYY-MM-DD'. Accept all three — only
+// accepting M/D/YYYY made every current deposit count as $0 revenue.
+function plDateKey(str){
+  if(!str) return null;
+  str = String(str).trim();
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return `${m[3]}-${String(parseInt(m[1])).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+  const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  m = str.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/);
+  if(m && MON[m[1].toLowerCase()]) return `${m[3]}-${String(MON[m[1].toLowerCase()]).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+  return null;
+}
+function plDepositDateKey(d){ return d ? plDateKey(d.date) : null; }
+// Net cost of one expense line: Returns are stored as positive credits and
+// REDUCE costs (same rule as the job's net profit in crm-profit.js).
+function plExpenseNet(e){
+  const v = parseFloat(e && e.amount) || 0;
+  return (e && e.cat === 'Returns') ? -v : v;
 }
 
 function plAggregate(from, to){
@@ -11918,7 +11931,7 @@ function plAggregate(from, to){
     // Include them if the job had any in-range revenue, OR if the range is 'all'.
     const expenses = Array.isArray(j.expenses) ? j.expenses : [];
     const includeExpenses = jobRevenue > 0 || plRangeKey === 'all';
-    const jobCost = includeExpenses ? expenses.reduce((s,e) => s + (parseFloat(e.amount) || 0), 0) : 0;
+    const jobCost = includeExpenses ? expenses.reduce((s,e) => s + plExpenseNet(e), 0) : 0;
 
     if(jobRevenue === 0 && jobCost === 0) return;
     jobRows.push({
@@ -11934,7 +11947,7 @@ function plAggregate(from, to){
       monthly[k].rev += parseFloat(d.amount) || 0;
     });
     // For monthly costs: attribute to the month of the FIRST in-range deposit
-    if(includeExpenses && jobCost > 0){
+    if(includeExpenses && jobCost !== 0){
       const firstDep = inRangeDeposits.map(plDepositDateKey).filter(Boolean).sort()[0];
       const k = firstDep ? firstDep.slice(0,7) : 'unknown';
       if(!monthly[k]) monthly[k] = { rev: 0, cost: 0 };
@@ -11955,7 +11968,7 @@ function plAggregate(from, to){
       expenses.forEach(e => {
         const c = e.cat || 'Uncategorized';
         if(!byCategory[c]) byCategory[c] = 0;
-        byCategory[c] += parseFloat(e.amount) || 0;
+        byCategory[c] += plExpenseNet(e);
       });
     }
   });
