@@ -11936,9 +11936,9 @@ function plAggregate(from, to){
   const inRange = (key) => key && key >= from && key <= to;
   const t0 = new Date();
   const todayKey = `${t0.getFullYear()}-${String(t0.getMonth()+1).padStart(2,'0')}-${String(t0.getDate()).padStart(2,'0')}`;
-  const add = (map, k, rev, cost, ar) => {
-    if(!map[k]) map[k] = { rev: 0, cost: 0, ar: 0 };
-    map[k].rev += rev; map[k].cost += cost; map[k].ar += ar;
+  const add = (map, k, rev, cost, ar, comm) => {
+    if(!map[k]) map[k] = { rev: 0, cost: 0, ar: 0, comm: 0 };
+    map[k].rev += rev; map[k].cost += cost; map[k].ar += ar; map[k].comm += comm;
   };
 
   jobs.forEach(j => {
@@ -11958,16 +11958,21 @@ function plAggregate(from, to){
     if(!(inRange(dateKey) || plRangeKey === 'all')) return;
 
     const ar = Math.max(0, revenue - collected);
+    // Sales commission, same formula as the job panel / Commissions page:
+    // (profit − overhead) × (primary % + split %). Overhead stays with the company.
+    const comm = (typeof estimatedTotalCommission === 'function') ? estimatedTotalCommission(j) : 0;
+    const commPaid = (Array.isArray(j.commissionPayouts) ? j.commissionPayouts : []).reduce((s,p) => s + (parseFloat(p.amount) || 0), 0);
     jobRows.push({
       id: j.id, name: j.name || '—', address: (j.address||'').split(',')[0] || '—',
       pipeline: j.pipeline || 'insurance',
       salesman: j.user || null,
       date: dateKey,
       revenue, collected, ar, cost, profit: revenue - cost,
+      comm, commPaid, retained: revenue - cost - comm,
     });
-    add(monthly, dateKey ? dateKey.slice(0,7) : 'unknown', revenue, cost, ar);
-    add(byPipeline, j.pipeline || 'insurance', revenue, cost, ar);
-    add(bySalesman, j.user || 'unassigned', revenue, cost, ar);
+    add(monthly, dateKey ? dateKey.slice(0,7) : 'unknown', revenue, cost, ar, comm);
+    add(byPipeline, j.pipeline || 'insurance', revenue, cost, ar, comm);
+    add(bySalesman, j.user || 'unassigned', revenue, cost, ar, comm);
     expenses.forEach(e => {
       const c = e.cat || 'Uncategorized';
       byCategory[c] = (byCategory[c] || 0) + plExpenseNet(e);
@@ -11976,10 +11981,51 @@ function plAggregate(from, to){
 
   const totals = jobRows.reduce((s, r) => {
     s.rev += r.revenue; s.cost += r.cost; s.profit += r.profit;
-    s.collected += r.collected; s.ar += r.ar; return s;
-  }, { rev: 0, cost: 0, profit: 0, collected: 0, ar: 0 });
+    s.collected += r.collected; s.ar += r.ar;
+    s.comm += r.comm; s.commPaid += r.commPaid; s.retained += r.retained; return s;
+  }, { rev: 0, cost: 0, profit: 0, collected: 0, ar: 0, comm: 0, commPaid: 0, retained: 0 });
 
   return { monthly, byPipeline, bySalesman, byCategory, jobRows, totals, upcoming };
+}
+
+// ── Cash flow ── actual money in and out, by the date it moved.
+// In  = deposits, dated by deposit date.
+// Out = PAID expenses, dated by paid date (else the expense date). Returns are
+//       money back, so they reduce Out.
+// Unpaid expenses haven't left the bank yet — they're Accounts Payable.
+function plCashFlow(from, to){
+  const inRange = k => k && k >= from && k <= to;
+  const months = {};
+  const bump = (k, field, v) => {
+    const m = k ? k.slice(0,7) : 'unknown';
+    if(!months[m]) months[m] = { cashIn: 0, cashOut: 0 };
+    months[m][field] += v;
+  };
+  let cashIn = 0, cashOut = 0, payable = 0, payableCount = 0, startBal = 0;
+  jobs.forEach(j => {
+    (Array.isArray(j.deposits) ? j.deposits : []).forEach(d => {
+      const k = plDepositDateKey(d), v = parseFloat(d.amount) || 0;
+      if(k && k < from) startBal += v;
+      if(!inRange(k)) return;
+      cashIn += v; bump(k, 'cashIn', v);
+    });
+    (Array.isArray(j.expenses) ? j.expenses : []).forEach(e => {
+      const v = plExpenseNet(e);
+      const isReturn = e.cat === 'Returns';
+      if(!e.paid && !isReturn){ payable += v; payableCount++; return; }
+      const k = plDateKey(e.paidDate) || plDateKey(e.date) || plDateKey(j.buildDate);
+      if(k && k < from) startBal -= v;
+      if(!inRange(k)) return;
+      cashOut += v; bump(k, 'cashOut', v);
+    });
+  });
+  // Running balance per month, starting from everything before the range.
+  let bal = (from === '1970-01-01') ? 0 : startBal;
+  const rows = Object.keys(months).sort().map(m => {
+    const r = months[m]; const net = r.cashIn - r.cashOut; bal += net;
+    return { month: m, cashIn: r.cashIn, cashOut: r.cashOut, net, balance: bal };
+  });
+  return { cashIn, cashOut, net: cashIn - cashOut, payable, payableCount, rows };
 }
 
 function plFmt(n){
@@ -12012,24 +12058,24 @@ function renderProfitsPage(){
 
   const data = plAggregate(from, to);
   const { totals, jobRows, byPipeline, bySalesman, byCategory, monthly, upcoming } = data;
-  const margin = totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0;
+  const margin = totals.rev > 0 ? (totals.retained / totals.rev) * 100 : 0;
 
   // Build trend chart — sort months ascending, show up to last 12
   const sortedMonths = Object.keys(monthly).sort();
   const trendMonths  = sortedMonths.slice(-12);
-  const maxBar = Math.max(1, ...trendMonths.flatMap(k => [monthly[k].rev, monthly[k].cost, Math.abs(monthly[k].rev - monthly[k].cost)]));
+  const maxBar = Math.max(1, ...trendMonths.flatMap(k => [monthly[k].rev, monthly[k].cost + monthly[k].comm, Math.abs(monthly[k].rev - monthly[k].cost - monthly[k].comm)]));
 
   const trendHtml = trendMonths.length
     ? `<div class="pl-trend">${trendMonths.map(k => {
         const m = monthly[k];
-        const prof = m.rev - m.cost;
+        const prof = m.rev - m.cost - m.comm;
         const h = (v) => Math.max(2, Math.round((Math.abs(v) / maxBar) * 130));
         const [yr, mo] = k.split('-');
         const monLabel = new Date(parseInt(yr), parseInt(mo)-1, 1).toLocaleDateString('en-US', { month: 'short' });
-        return `<div class="pl-trend-col" title="${escapeHtml(k)} · Rev ${plFmt(m.rev)} · Cost ${plFmt(m.cost)} · Profit ${plFmt(prof)}">
+        return `<div class="pl-trend-col" title="${escapeHtml(k)} · Rev ${plFmt(m.rev)} · Cost ${plFmt(m.cost)} · Commission ${plFmt(m.comm)} · Retained ${plFmt(prof)}">
           <div class="pl-trend-bars">
             <div class="pl-trend-bar bar-rev"    style="height:${h(m.rev)}px"></div>
-            <div class="pl-trend-bar bar-cost"   style="height:${h(m.cost)}px"></div>
+            <div class="pl-trend-bar bar-cost"   style="height:${h(m.cost + m.comm)}px"></div>
             <div class="pl-trend-bar bar-profit" style="height:${h(prof)}px;${prof<0?'background:var(--danger)':''}"></div>
           </div>
           <div class="pl-trend-label">${monLabel} ${yr.slice(2)}</div>
@@ -12040,12 +12086,12 @@ function renderProfitsPage(){
   // Pipeline breakdown
   const pipelineRows = Object.entries(byPipeline).sort((a,b) => b[1].rev - a[1].rev);
   const pipelineHtml = pipelineRows.length
-    ? `<table class="pl-table"><thead><tr><th>Pipeline</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">A/R</th></tr></thead><tbody>
+    ? `<table class="pl-table"><thead><tr><th>Pipeline</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Commission</th><th class="num">Retained</th><th class="num">Margin</th><th class="num">A/R</th></tr></thead><tbody>
         ${pipelineRows.map(([pid, v]) => {
           const p = pipelines.find(x => x.id === pid);
-          const profit = v.rev - v.cost;
+          const profit = v.rev - v.cost - v.comm;
           const marg = v.rev > 0 ? (profit / v.rev * 100).toFixed(1) + '%' : '—';
-          return `<tr><td>${escapeHtml(p?.name || pid)}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td><td class="num" style="color:${v.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(v.ar)}</td></tr>`;
+          return `<tr><td>${escapeHtml(p?.name || pid)}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num">${plFmt(v.comm)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td><td class="num" style="color:${v.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(v.ar)}</td></tr>`;
         }).join('')}
       </tbody></table>`
     : `<div class="pl-empty">No revenue in this range yet.</div>`;
@@ -12053,12 +12099,12 @@ function renderProfitsPage(){
   // Salesman breakdown
   const salesmanRows = Object.entries(bySalesman).sort((a,b) => b[1].rev - a[1].rev);
   const salesmanHtml = salesmanRows.length
-    ? `<table class="pl-table"><thead><tr><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">A/R</th></tr></thead><tbody>
+    ? `<table class="pl-table"><thead><tr><th>Salesman</th><th class="num">Revenue</th><th class="num">Costs</th><th class="num">Commission</th><th class="num">Retained</th><th class="num">Margin</th><th class="num">A/R</th></tr></thead><tbody>
         ${salesmanRows.map(([uid, v]) => {
           const u = jobRep(uid);
-          const profit = v.rev - v.cost;
+          const profit = v.rev - v.cost - v.comm;
           const marg = v.rev > 0 ? (profit / v.rev * 100).toFixed(1) + '%' : '—';
-          return `<tr><td>${escapeHtml(u?.name || 'Unassigned')}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td><td class="num" style="color:${v.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(v.ar)}</td></tr>`;
+          return `<tr><td>${escapeHtml(u?.name || 'Unassigned')}</td><td class="num">${plFmt(v.rev)}</td><td class="num">${plFmt(v.cost)}</td><td class="num">${plFmt(v.comm)}</td><td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td><td class="num muted">${marg}</td><td class="num" style="color:${v.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(v.ar)}</td></tr>`;
         }).join('')}
       </tbody></table>`
     : `<div class="pl-empty">No salesman activity in this range.</div>`;
@@ -12076,13 +12122,13 @@ function renderProfitsPage(){
     : `<div class="pl-empty">No expenses logged in this range.</div>`;
 
   // Per-job table (sorted by profit desc)
-  jobRows.sort((a, b) => b.profit - a.profit);
+  jobRows.sort((a, b) => b.retained - a.retained);
   const jobsHtml = jobRows.length
-    ? `<table class="pl-table"><thead><tr><th>Job</th><th>Pipeline</th><th>Salesman</th><th class="num">Contract</th><th class="num">Collected</th><th class="num">A/R</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead><tbody>
+    ? `<table class="pl-table"><thead><tr><th>Job</th><th>Pipeline</th><th>Salesman</th><th class="num">Contract</th><th class="num">Collected</th><th class="num">A/R</th><th class="num">Costs</th><th class="num">Gross Profit</th><th class="num">Commission</th><th class="num">Retained</th><th class="num">Margin</th></tr></thead><tbody>
         ${jobRows.map(r => {
           const u = jobRep(r.salesman);
           const p = pipelines.find(x => x.id === r.pipeline);
-          const profit = r.profit;
+          const profit = r.retained;
           const marg = r.revenue > 0 ? (profit / r.revenue * 100).toFixed(1) + '%' : '—';
           return `<tr class="clickable" data-pl-job="${r.id}">
             <td>
@@ -12095,7 +12141,9 @@ function renderProfitsPage(){
             <td class="num">${plFmt(r.collected)}</td>
             <td class="num" style="color:${r.ar>0?'var(--warn)':'var(--muted)'}">${plFmt(r.ar)}</td>
             <td class="num">${plFmt(r.cost)}</td>
-            <td class="num" style="color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td>
+            <td class="num muted">${plFmt(r.profit)}</td>
+            <td class="num" title="${r.commPaid ? plFmt(r.commPaid)+' paid out' : 'not paid out yet'}">${plFmt(r.comm)}</td>
+            <td class="num" style="font-weight:700;color:${profit<0?'var(--danger)':'var(--success)'}">${plFmt(profit)}</td>
             <td class="num muted">${marg}</td>
           </tr>`;
         }).join('')}
@@ -12112,6 +12160,27 @@ function renderProfitsPage(){
             <td class="num" style="color:var(--warn);font-weight:700">${plFmt(r.ar)}</td></tr>`).join('')}
       </tbody></table>`
     : `<div class="pl-empty">Nothing owed — every job in this range is paid in full.</div>`;
+
+  // Cash flow section
+  const cf = plCashFlow(from, to);
+  const monLbl = k => { if(k==='unknown') return 'No date'; const [y,m]=k.split('-'); return new Date(+y, +m-1, 1).toLocaleDateString('en-US',{month:'short', year:'numeric'}); };
+  const cfTable = cf.rows.length
+    ? `<table class="pl-table"><thead><tr><th>Month</th><th class="num">Cash In</th><th class="num">Cash Out</th><th class="num">Net</th><th class="num">Running Balance</th></tr></thead><tbody>
+        ${cf.rows.map(r => `<tr><td>${monLbl(r.month)}</td>
+          <td class="num" style="color:var(--success)">${plFmt(r.cashIn)}</td>
+          <td class="num" style="color:var(--warn)">${plFmt(r.cashOut)}</td>
+          <td class="num" style="font-weight:700;color:${r.net<0?'var(--danger)':'var(--success)'}">${plFmt(r.net)}</td>
+          <td class="num muted">${plFmt(r.balance)}</td></tr>`).join('')}
+      </tbody></table>`
+    : `<div class="pl-empty">No money moved in this range.</div>`;
+  const cfHtml = `
+    <div class="pl-kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:12px">
+      <div class="pl-kpi kpi-profit"><div class="pl-kpi-label">Cash In</div><div class="pl-kpi-val">${plFmt(cf.cashIn)}</div><div class="pl-kpi-sub">deposits received</div></div>
+      <div class="pl-kpi kpi-cost"><div class="pl-kpi-label">Cash Out</div><div class="pl-kpi-val">${plFmt(cf.cashOut)}</div><div class="pl-kpi-sub">paid expenses, less returns</div></div>
+      <div class="pl-kpi kpi-profit${cf.net < 0 ? ' neg' : ''}"><div class="pl-kpi-label">Net Cash Flow</div><div class="pl-kpi-val">${plFmt(cf.net)}</div><div class="pl-kpi-sub">${cf.net >= 0 ? 'more in than out' : 'more out than in'}</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Accounts Payable</div><div class="pl-kpi-val">${plFmt(cf.payable)}</div><div class="pl-kpi-sub">${cf.payableCount} unpaid ${cf.payableCount===1?'bill':'bills'} (all dates)</div></div>
+    </div>
+    ${cfTable}`;
 
   const fromLabel = from === '1970-01-01' ? 'Beginning' : from;
   const toLabel   = to === '2999-12-31' ? 'Today' : to;
@@ -12139,15 +12208,25 @@ function renderProfitsPage(){
         <div class="pl-kpi-val">${plFmt(totals.cost)}</div>
         <div class="pl-kpi-sub">${catRows.length} ${catRows.length === 1 ? 'category' : 'categories'}</div>
       </div>
-      <div class="pl-kpi kpi-profit${totals.profit < 0 ? ' neg' : ''}">
-        <div class="pl-kpi-label">Profit</div>
+      <div class="pl-kpi">
+        <div class="pl-kpi-label">Gross Profit</div>
         <div class="pl-kpi-val">${plFmt(totals.profit)}</div>
-        <div class="pl-kpi-sub">${totals.profit >= 0 ? 'Net positive' : 'Net loss'}</div>
+        <div class="pl-kpi-sub">revenue − costs</div>
+      </div>
+      <div class="pl-kpi kpi-cost">
+        <div class="pl-kpi-label">Sales Commissions</div>
+        <div class="pl-kpi-val">${plFmt(totals.comm)}</div>
+        <div class="pl-kpi-sub">${plFmt(totals.commPaid)} paid · ${plFmt(Math.max(0, totals.comm - totals.commPaid))} still to pay</div>
+      </div>
+      <div class="pl-kpi kpi-profit${totals.retained < 0 ? ' neg' : ''}">
+        <div class="pl-kpi-label">Company Retained</div>
+        <div class="pl-kpi-val">${plFmt(totals.retained)}</div>
+        <div class="pl-kpi-sub">profit after commissions</div>
       </div>
       <div class="pl-kpi kpi-profit${margin < 0 ? ' neg' : ''}">
-        <div class="pl-kpi-label">Margin</div>
+        <div class="pl-kpi-label">Retained Margin</div>
         <div class="pl-kpi-val">${margin.toFixed(1)}%</div>
-        <div class="pl-kpi-sub">profit ÷ revenue</div>
+        <div class="pl-kpi-sub">retained ÷ revenue</div>
       </div>
     </div>
     <div class="pl-section">
@@ -12155,8 +12234,8 @@ function renderProfitsPage(){
       ${trendHtml}
       <div style="display:flex;gap:14px;font-size:10px;color:var(--muted);margin-top:8px;justify-content:center">
         <span><span style="display:inline-block;width:8px;height:8px;background:var(--brand-light);border-radius:1px;margin-right:4px"></span>Revenue</span>
-        <span><span style="display:inline-block;width:8px;height:8px;background:var(--warn);border-radius:1px;margin-right:4px"></span>Costs</span>
-        <span><span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:1px;margin-right:4px"></span>Profit</span>
+        <span><span style="display:inline-block;width:8px;height:8px;background:var(--warn);border-radius:1px;margin-right:4px"></span>Costs + Commission</span>
+        <span><span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:1px;margin-right:4px"></span>Retained</span>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -12168,6 +12247,10 @@ function renderProfitsPage(){
         <div class="pl-section-title"><i class="ti ti-user"></i>By Salesman</div>
         ${salesmanHtml}
       </div>
+    </div>
+    <div class="pl-section">
+      <div class="pl-section-title"><i class="ti ti-cash"></i>Cash Flow</div>
+      ${cfHtml}
     </div>
     <div class="pl-section">
       <div class="pl-section-title"><i class="ti ti-receipt"></i>Accounts Receivable (${arRows.length})</div>
@@ -12220,22 +12303,28 @@ function renderProfitsPage(){
 function plExportCsv(){
   const { from, to } = plComputeRange();
   const data = plAggregate(from, to);
-  const rows = [['Job','Address','Build Date','Pipeline','Salesman','Contract','Collected','A/R','Costs','Profit','Margin %']];
+  const rows = [['Job','Address','Build Date','Pipeline','Salesman','Contract','Collected','A/R','Costs','Gross Profit','Commission','Retained','Retained Margin %']];
   data.jobRows.forEach(r => {
     const u = jobRep(r.salesman);
     const p = pipelines.find(x => x.id === r.pipeline);
-    const marg = r.revenue > 0 ? (r.profit / r.revenue * 100).toFixed(1) : '';
+    const marg = r.revenue > 0 ? (r.retained / r.revenue * 100).toFixed(1) : '';
     rows.push([
       r.name, r.address, r.date || '',
       p?.name || r.pipeline,
       u.name,
-      r.revenue.toFixed(2), r.collected.toFixed(2), r.ar.toFixed(2), r.cost.toFixed(2), r.profit.toFixed(2),
+      r.revenue.toFixed(2), r.collected.toFixed(2), r.ar.toFixed(2), r.cost.toFixed(2), r.profit.toFixed(2), r.comm.toFixed(2), r.retained.toFixed(2),
       marg,
     ]);
   });
   rows.push([]);
-  rows.push(['TOTALS','','','','', data.totals.rev.toFixed(2), data.totals.collected.toFixed(2), data.totals.ar.toFixed(2), data.totals.cost.toFixed(2), data.totals.profit.toFixed(2), data.totals.rev > 0 ? (data.totals.profit / data.totals.rev * 100).toFixed(1) : '']);
-  // CSV escape
+  rows.push(['TOTALS','','','','', data.totals.rev.toFixed(2), data.totals.collected.toFixed(2), data.totals.ar.toFixed(2), data.totals.cost.toFixed(2), data.totals.profit.toFixed(2), data.totals.comm.toFixed(2), data.totals.retained.toFixed(2), data.totals.rev > 0 ? (data.totals.retained / data.totals.rev * 100).toFixed(1) : '']);
+    const cf = plCashFlow(from, to);
+  rows.push([]);
+  rows.push(['CASH FLOW','Month','Cash In','Cash Out','Net','Running Balance']);
+  cf.rows.forEach(r => rows.push(['', r.month, r.cashIn.toFixed(2), r.cashOut.toFixed(2), r.net.toFixed(2), r.balance.toFixed(2)]));
+  rows.push(['', 'TOTAL', cf.cashIn.toFixed(2), cf.cashOut.toFixed(2), cf.net.toFixed(2), '']);
+  rows.push(['', 'Accounts Payable (unpaid bills)', cf.payable.toFixed(2)]);
+// CSV escape
   const esc = v => {
     const s = String(v ?? '');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
