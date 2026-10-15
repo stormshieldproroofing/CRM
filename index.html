@@ -15661,6 +15661,7 @@ function quoteDefaults(j){
     scope: '',
     scopeExclude: [],
     shingleBrand: '', shingleModel: '', shingleColor: '',
+    features: '',       // selling points, one per line (Good/Better/Best cards)
     contractAmount: '', depositAmount: '', deductible: '',
     terms: '', repName: '', quoteDate: '',
     sectionPrices: {}, lumpSumOnly: false,
@@ -15827,6 +15828,7 @@ function buildQuoteSelector(j, q){
   const delBtn = list.length>1 ? '<button onclick="quoteDelete(\''+j.id+'\',\''+q._qid+'\')" title="Delete this quote" style="background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;padding:7px 9px;border-radius:6px" onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--muted)\'"><i class="ti ti-trash" style="font-size:14px"></i></button>' : '';
   return '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;align-items:center">'
     + tabs
+    + '<button onclick="quoteMakeTiers(\''+j.id+'\')" title="Create Good / Better / Best shingle options" style="flex-shrink:0;background:rgba(184,149,90,0.14);border:1px solid rgba(184,149,90,0.5);color:#E8D3AE;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;white-space:nowrap"><i class="ti ti-stack-2" style="font-size:12px;margin-right:3px"></i>Good / Better / Best</button>'
     + '<button onclick="quoteAdd(\''+j.id+'\',false)" title="New blank quote" style="flex-shrink:0;background:rgba(52,211,153,0.1);border:1px dashed rgba(52,211,153,0.4);color:#34D399;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-plus" style="font-size:12px"></i>New</button>'
     + '<button onclick="quoteAdd(\''+j.id+'\',true)" title="Duplicate this quote" style="flex-shrink:0;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-copy" style="font-size:12px"></i>Duplicate</button>'
     + '</div>'
@@ -15907,6 +15909,7 @@ function renderQuoteTab(j){
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Shingle Brand</label><input id="qShingleBrand" value="${escapeHtml(q.shingleBrand||'')}" placeholder="e.g. GAF" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Model</label><input id="qShingleModel" value="${escapeHtml(q.shingleModel||'')}" placeholder="e.g. Timberline HDZ" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
           <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Color</label><input id="qShingleColor" value="${escapeHtml(q.shingleColor||'')}" placeholder="e.g. Weathered Wood" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
+          <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Features <span style="text-transform:none;letter-spacing:0;opacity:0.8">— one per line, shown as checkmarks when the estimate has 2+ options</span></label><textarea id="qFeatures" rows="4" placeholder="e.g. Class 4 impact rating&#10;Lifetime limited warranty" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;resize:vertical">${escapeHtml(q.features||'')}</textarea></div>
         </div>
       </div>
 
@@ -15994,6 +15997,7 @@ function renderQuoteTab(j){
     qq.shingleBrand = $('qShingleBrand').value;
     qq.shingleModel = $('qShingleModel').value;
     qq.shingleColor = $('qShingleColor').value;
+    if($('qFeatures')) qq.features = $('qFeatures').value;
     qq.scope = $('qScope').value;
     qq.contractAmount = (qq.mode === 'cash') ? String(sumSectionPrices(j) || '') : $('qContract').value;
     qq.deductible = $('qDeductible')?.value || '';
@@ -17153,6 +17157,7 @@ function switchQuoteMode(j, newMode){
     q.shingleBrand = $('qShingleBrand').value;
     q.shingleModel = $('qShingleModel').value;
     q.shingleColor = $('qShingleColor').value;
+    if($('qFeatures')) q.features = $('qFeatures').value;
     q.scope = $('qScope').value;
     q.contractAmount = $('qContract').value;
     if($('qDeductible')) q.deductible = $('qDeductible').value;
@@ -17178,68 +17183,244 @@ function switchQuoteMode(j, newMode){
   renderQuoteTab(j);
 }
 
-// Open a clean printable quote in a new window for browser print → PDF
-function openQuotePreview(j){
+// Estimate design. Heritage: serif headings, charcoal and warm gold on white.
+// Kept as a named theme so more designs can be added and picked later.
+const EST_THEMES = {
+  heritage: {
+    ribbon: 'Recommended',
+    fonts: '<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">',
+    css: `
+      body{font-family:'Source Sans 3',Georgia,serif;color:#2A2622;font-size:10.5pt}
+      body,.q-cover,.q-page{font-variant-numeric:lining-nums}
+      .q-band,.q-cover-band{border-bottom:none;position:relative}
+      .q-band::after,.q-cover-band::after{content:'';position:absolute;left:0;right:0;bottom:-6px;border-top:1px solid #B8955A;border-bottom:1px solid #B8955A;height:3px}
+      .q-logo-chip{background:transparent}
+      .q-band-name,.q-cover-company{font-family:'Playfair Display',serif;font-weight:700;color:#2A2622;letter-spacing:0}
+      .q-band-title{font-family:'Playfair Display',serif;font-weight:700;text-transform:none;letter-spacing:0;color:#2A2622;font-size:22pt}
+      .q-band-title em{font-style:italic;color:#7A5A26;font-weight:600}
+      .q-band-meta b,.q-band-detail{color:#2A2622}
+      .q-cover-band{flex-direction:column;text-align:center;justify-content:center;padding-top:.5in}
+      .q-cover-tag{color:#7A5A26;letter-spacing:.3em}
+      .q-cover-kicker{color:#7A5A26;font-family:'Source Sans 3';letter-spacing:.3em;font-size:10pt}
+      .q-cover-title{font-family:'Playfair Display',serif;font-style:italic;font-weight:600;text-transform:none;font-size:48pt;color:#2A2622;margin-top:8px}
+      .q-cover-sub strong,.q-cover-addr{color:#2A2622}
+      .q-cover-addr{font-family:'Playfair Display',serif;font-weight:600}
+      .q-cover-img,.q-cover-imgfallback{border-radius:2px;border:1px solid #B8955A;box-shadow:none;padding:6px;background:#fff}
+      .q-cover-meta span{background:transparent;border:none;border-right:1px solid #D9CDB8;border-radius:0}
+      .q-cover-meta span:last-child{border-right:none}
+      .q-cover>.q-trust{border-top:1px solid #D9CDB8}
+      .q-cover-foot{color:#2A2622;border-top:1px solid #D9CDB8}
+      .q-trust-ic{background:transparent;color:#7A5A26;border:1px solid #B8955A}
+      .q-trust-item strong{color:#2A2622}
+      .q-wrap .q-trust{background:transparent;border-top:1px solid #D9CDB8;border-bottom:1px solid #D9CDB8;border-radius:0}
+      .q-card{background:transparent;border:none;border-left:2px solid #B8955A;border-radius:0;padding:4px 14px}
+      .q-card-label{color:#7A5A26;font-family:'Source Sans 3';letter-spacing:.2em}
+      .q-card-main{color:#2A2622;font-family:'Playfair Display',serif}
+      .q-section-title{font-family:'Playfair Display',serif;text-transform:none;letter-spacing:0;font-size:16pt;color:#2A2622;font-weight:700}
+      .q-section-title::before{width:22px;height:1px;background:#B8955A}
+      .q-section-title::after{background:#D9CDB8}
+      .q-options{gap:0;border-top:1px solid #D9CDB8;border-bottom:1px solid #D9CDB8}
+      .q-opt{border:none;border-radius:0;border-right:1px solid #D9CDB8;background:transparent;padding:22px 16px 14px}
+      .q-opt:last-child{border-right:none}
+      .q-opt-featured{border:none;border-right:1px solid #D9CDB8;box-shadow:none;background:#F4ECDD}
+      .q-opt-featured::before{content:'';position:absolute;top:-1px;left:0;right:0;height:4px;background:#B8955A}
+      .q-opt-ribbon{background:transparent;color:#7A5A26;top:8px;font-family:'Source Sans 3';letter-spacing:.25em;font-size:8pt;padding:0}
+      .q-opt-tier{font-family:'Playfair Display',serif;text-transform:none;font-style:italic;font-weight:600;color:#2A2622;font-size:24pt;margin-top:6px}
+      .q-opt-feats li::before{color:#7A5A26}
+      .q-opt-price,.q-opt-featured .q-opt-price{background:transparent;border-top:1px solid #D9CDB8;border-radius:0}
+      .q-opt-amt,.q-opt-featured .q-opt-amt{font-family:'Playfair Display',serif;color:#2A2622;font-weight:700;font-variant-numeric:lining-nums tabular-nums;letter-spacing:.01em}
+      .q-opt-sub,.q-opt-featured .q-opt-sub{color:#5C544A}
+      .q-box{border-color:#2A2622;border-radius:0}
+      .q-opt-pick{color:#2A2622}
+      .q-mat-chip{background:transparent;border:none;border-left:2px solid #B8955A;border-radius:0}
+      .q-mat-chip span{color:#7A5A26}.q-mat-chip b{color:#2A2622}
+      .q-scope li::before{background:#B8955A;border-radius:0;width:5px;height:5px;transform:rotate(45deg)}
+      .q-scope-sec-title{color:#2A2622}
+      .q-warranty{background:transparent;color:#2A2622;border:1px solid #B8955A;border-radius:0}
+      .q-warranty .q-card-label{color:#7A5A26}
+      .q-warranty li{color:#2A2622}.q-warranty li::before{color:#7A5A26}
+      .q-price-card{border-radius:0;border-color:#D9CDB8}
+      .q-price-table tr.total td{background:transparent;color:#2A2622;border-top:3px double #B8955A;font-family:'Playfair Display',serif;text-transform:none}
+      .q-price-table tr.total td.val{color:#2A2622}
+      .q-price-table tr.due td{background:#F4ECDD}
+      .q-sig-line{border-color:#2A2622}
+      .q-sig-block strong{color:#2A2622}
+      .q-mat-chip span{font-family:'Source Sans 3',sans-serif}
+    `
+  },
+};
+window.EST_THEMES = EST_THEMES;
+
+// ── GOOD / BETTER / BEST shingle tiers ──
+// Starting points for a three-option estimate. Brand, model and the feature
+// bullets are all editable per quote afterwards; prices are left blank.
+const SHINGLE_TIER_PRESETS = [
+  { tier: 'Good',   label: 'Good — Owens Corning Oakridge',
+    brand: 'Owens Corning', model: 'Oakridge',
+    features: ['Architectural laminated shingle', 'Limited lifetime manufacturer warranty', 'StreakGuard algae resistance', 'Full tear-off and new underlayment'] },
+  { tier: 'Better', label: 'Better — Owens Corning Duration',
+    brand: 'Owens Corning', model: 'Duration',
+    features: ['SureNail technology for superior nail grip', 'Deeper, richer TruDefinition colors', 'Limited lifetime manufacturer warranty', 'StreakGuard algae resistance'] },
+  { tier: 'Best',   label: 'Best — Owens Corning Duration FLEX',
+    brand: 'Owens Corning', model: 'Duration FLEX',
+    features: ['Class 4 impact rating (UL 2218) — top hail rating', 'SBS polymer-modified for flexibility', 'May qualify for a homeowners insurance discount', 'SureNail technology + lifetime limited warranty'] },
+];
+window.SHINGLE_TIER_PRESETS = SHINGLE_TIER_PRESETS;
+
+// Tier name for each quote in display order. A label that starts with
+// Good / Better / Best wins; otherwise options are ranked by price.
+function quoteTiers(list){
+  const named = q => { const m = String(q.label||'').match(/^\s*(good|better|best)\b/i); return m ? m[1][0].toUpperCase()+m[1].slice(1).toLowerCase() : null; };
+  const order = { Good: 0, Better: 1, Best: 2 };
+  const rows = list.map((q, i) => ({ q, i, price: parseFloat(q.contractAmount) || 0, tier: named(q) }));
+  if(rows.every(r => r.tier)) return rows.sort((a,b) => order[a.tier] - order[b.tier]);
+  rows.sort((a,b) => a.price - b.price);
+  const names = rows.length === 2 ? ['Better','Best'] : ['Good','Better','Best'];
+  rows.forEach((r, k) => { if(!r.tier) r.tier = names[k] || ('Option ' + String.fromCharCode(65+k)); });
+  return rows;
+}
+
+// Replace the job's quotes with Good / Better / Best, carrying over the
+// active quote's scope, terms, mode, rep and color.
+function quoteMakeTiers(jobId){
+  const j = jobs.find(x=>x.id===jobId); if(!j) return;
+  const list = getJobQuotes(j);
+  const src = list[j.activeQuote] || list[0] || {};
+  const hasPrices = list.some(q => parseFloat(q.contractAmount) > 0);
+  if(list.length > 1 || hasPrices){
+    if(!confirm('Create Good / Better / Best options? They are added after your current quote options.')) return;
+  } else {
+    list.length = 0;   // a single blank quote is simply replaced
+  }
+  SHINGLE_TIER_PRESETS.forEach(p => {
+    const nq = quoteDefaults(j);
+    Object.assign(nq, {
+      label: p.label, shingleBrand: p.brand, shingleModel: p.model, shingleColor: src.shingleColor || '',
+      features: p.features.join('\n'),
+      scope: src.scope || '', scopeExclude: (src.scopeExclude||[]).slice(), terms: src.terms || '',
+      mode: src.mode || nq.mode, repName: src.repName || '', quoteDate: src.quoteDate || '',
+      deductible: src.deductible || '', lumpSumOnly: true,
+    });
+    list.push(nq);
+  });
+  j.activeQuote = list.length - 3;
+  saveToStorage();
+  if(typeof renderDetailPanel==='function') renderDetailPanel();
+  toast('Good / Better / Best added — enter a price for each option');
+}
+window.quoteMakeTiers = quoteMakeTiers;
+
+// Open a clean printable quote in a new window for browser print → PDF.
+// With 2+ quote options on the job, every option prints side by side as
+// Good / Better / Best cards; with one option it prints a single estimate.
+function openQuotePreview(j, opts){
+  opts = opts || {};
+  const themeKey = opts.theme || 'heritage';
+  const theme = (typeof EST_THEMES !== 'undefined' && EST_THEMES[themeKey]) || {};
   const q = getJobQuote(j);
   const ci = getCompanyInfo();
   const isCash = q.mode === 'cash';
   const fmt = (n) => '$' + (parseFloat(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmt0 = (n) => '$' + Math.round(parseFloat(n)||0).toLocaleString('en-US');
   const dateText = q.quoteDate ? new Date(q.quoteDate + 'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   const quoteNo = `Q-${(j.id || '').slice(-6).toUpperCase()}-${(q.quoteDate||'').replace(/-/g,'').slice(2,8)}`;
+
+  const allQuotes = getJobQuotes(j);
+  const tiered = allQuotes.length > 1 ? quoteTiers(allQuotes) : null;
 
   const contract = parseFloat(q.contractAmount) || 0;
   const deductible = parseFloat(q.deductible) || 0;
   const deposit = parseFloat(q.depositAmount) || 0;
   const insurance = Math.max(0, contract - deductible);
-  const balanceDue = isCash ? Math.max(0, contract - deposit) : 0;
 
   // Parse + filter by exclusion list. Sections that become empty are dropped.
   const excludeSet = new Set(q.scopeExclude || []);
-  const showItemizedPrices = isCash && !q.lumpSumOnly;
+  const showItemizedPrices = isCash && !q.lumpSumOnly && !tiered;
   const scopeSections = parseScopeSections(q.scope).map(sec => ({
     title: sec.title,
-    items: sec.items.filter(it => !excludeSet.has(it)),
+    items: sec.items.filter(i => !excludeSet.has(i)),
     price: parseFloat(q.sectionPrices?.[sec.title || ''] || 0) || 0,
   })).filter(sec => sec.items.length > 0);
-  const scopeHtml = scopeSections.length
-    ? scopeSections.map(sec => `
-        ${sec.title ? `<div class="q-scope-sec-title" style="display:flex;justify-content:space-between;align-items:baseline">${escapeHtml(sec.title)}${showItemizedPrices && sec.price > 0 ? `<span style="font-weight:700;color:#1a3a6a">${fmt(sec.price)}</span>` : ''}</div>` : ''}
-        <ul class="q-scope">${sec.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
-      `).join('')
+  // Warranty section is pulled out of the scope into its own highlight card.
+  const isWarranty = s => /warrant/i.test(s.title || '');
+  const warrantySec = scopeSections.find(isWarranty);
+  const workSections = scopeSections.filter(s => !isWarranty(s));
+  const scopeHtml = workSections.length
+    ? workSections.map(sec => `
+        <div class="q-scope-sec">
+          ${sec.title && !/^scope of work$/i.test(sec.title.trim()) ? `<div class="q-scope-sec-title"><span>${escapeHtml(sec.title)}</span>${showItemizedPrices && sec.price > 0 ? `<span class="q-scope-sec-price">${fmt(sec.price)}</span>` : ''}</div>` : ''}
+          <ul class="q-scope">${sec.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+        </div>`).join('')
     : `<ul class="q-scope"><li>—</li></ul>`;
   const termsHtml = (q.terms || '').split('\n\n').filter(s => s.trim()).map(p => `<p>${escapeHtml(p.trim())}</p>`).join('');
 
   const customerAddr = j.address || '—';
   const customerLine2 = [j.phone, j.email].filter(x => x && x !== '—').join(' · ');
+  const hasCarrier = !isCash && j.carrier;
 
-  // Mode-specific pricing table
-  let pricingTable;
-  if(isCash){
-    // Itemized section prices live here under Pricing (moved out of Scope of Work).
-    // The Total Contract / Deposit / Balance summary rows were removed — TOTAL DUE
-    // is the single total line.
-    const sectionPriceRows = (showItemizedPrices)
-      ? scopeSections.filter(s => s.price > 0).map(s =>
-          `<tr><td class="label">${escapeHtml(s.title || 'Section')}</td><td class="val">${fmt(s.price)}</td></tr>`
-        ).join('')
-      : '';
-    pricingTable = `
-      ${sectionPriceRows}
-      <tr class="total"><td>TOTAL DUE</td><td class="val">${fmt(contract)}</td></tr>
-    `;
-  } else {
-    pricingTable = `
-      <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
-      ${j.carrier?`
-      <tr><td class="label">Less: Estimated Insurance Coverage</td><td class="val">−${fmt(insurance).replace('$','$')}</td></tr>
-      <tr class="due"><td class="label">Customer Responsibility (Deductible)</td><td class="val">${fmt(deductible)}</td></tr>`:''}
-      ${deposit>0?`<tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>`:''}
-      <tr class="total"><td>TOTAL DUE</td><td class="val">${fmt(j.carrier?deductible:contract)}</td></tr>
-    `;
+  // ── Good / Better / Best cards ──
+  let optionsHtml = '';
+  if(tiered){
+    const base = Math.min(...tiered.map(r => r.price).filter(p => p > 0).concat([Infinity]));
+    const featured = tiered.length >= 3 ? 1 : tiered.length - 1;   // "Most Popular" = middle option
+    optionsHtml = `
+    <div class="q-section">
+      <div class="q-section-title"><span>Choose Your Roof</span></div>
+      <div class="q-options q-options-${tiered.length}">
+        ${tiered.map((r, k) => {
+          const oq = r.q;
+          const feats = String(oq.features || '').split('\n').map(s => s.trim()).filter(Boolean);
+          const upgrade = (base !== Infinity && r.price > base) ? r.price - base : 0;
+          return `
+          <div class="q-opt q-opt-t${k}${k === featured ? ' q-opt-featured' : ''}">
+            ${k === featured ? `<div class="q-opt-ribbon">${escapeHtml(theme.ribbon || 'Most Popular')}</div>` : ''}
+            <div class="q-opt-tier">${escapeHtml(r.tier)}</div>
+            <div class="q-opt-name">${escapeHtml([oq.shingleBrand, oq.shingleModel].filter(Boolean).join(' ') || oq.label || '')}</div>
+            ${oq.shingleColor ? `<div class="q-opt-color">Color: ${escapeHtml(oq.shingleColor)}</div>` : ''}
+            <ul class="q-opt-feats">${feats.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+            <div class="q-opt-price">
+              <div class="q-opt-amt">${r.price > 0 ? fmt0(r.price) : '—'}</div>
+              <div class="q-opt-sub">${upgrade > 0 ? `+${fmt0(upgrade)} upgrade` : (r.price > 0 ? 'total installed price' : '&nbsp;')}</div>
+            </div>
+            <div class="q-opt-pick"><span class="q-box"></span> I choose this option</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${hasCarrier ? `<div class="q-opt-note">Your insurance claim with <strong>${escapeHtml(j.carrier)}</strong> covers the approved scope. Your out-of-pocket cost is your deductible${deductible>0?` of <strong>${fmt(deductible)}</strong>`:''}, plus the upgrade amount for any option above the base.</div>` : ''}
+    </div>`;
   }
 
-  // Both modes use the same blue/black palette (navy for headers, black for body text)
-  const accent = '#1a3a6a';
+  // Mode-specific pricing table (single-option estimates)
+  let pricingTable = '';
+  if(!tiered){
+    if(isCash){
+      const sectionPriceRows = showItemizedPrices
+        ? workSections.filter(s => s.price > 0).map(s =>
+            `<tr><td class="label">${escapeHtml(s.title || 'Section')}</td><td class="val">${fmt(s.price)}</td></tr>`).join('')
+        : '';
+      pricingTable = `${sectionPriceRows}
+        ${deposit>0?`<tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>`:''}
+        <tr class="total"><td>Total Investment</td><td class="val">${fmt(contract)}</td></tr>`;
+    } else {
+      pricingTable = `
+        <tr><td class="label">Total Contract Amount</td><td class="val">${fmt(contract)}</td></tr>
+        ${j.carrier?`
+        <tr><td class="label">Less: Estimated Insurance Coverage</td><td class="val">−${fmt(insurance)}</td></tr>
+        <tr class="due"><td class="label">Your Responsibility (Deductible)</td><td class="val">${fmt(deductible)}</td></tr>`:''}
+        ${deposit>0?`<tr><td class="label">Deposit Due at Signing</td><td class="val">${fmt(deposit)}</td></tr>`:''}
+        <tr class="total"><td>Total Due From You</td><td class="val">${fmt(j.carrier?deductible:contract)}</td></tr>`;
+    }
+  }
+
+  const navy = '#0F2A4A', navy2 = '#16395F', orange = '#F97316', orangeDk = '#C2410C', ink = '#1B2430', soft = '#F3F6FA', line = '#DCE3EC', onNavy = '#DCE6F2';
+  const logoChip = ci.logoDataUrl ? `<div class="q-logo-chip"><img src="${ci.logoDataUrl}" alt="${escapeHtml(ci.name||'')}"></div>` : '';
+  const trustHtml = `
+    <div class="q-trust">
+      <div class="q-trust-item"><div class="q-trust-ic">✓</div><div><strong>Licensed &amp; Fully Insured</strong><span>COI available on request</span></div></div>
+      <div class="q-trust-item"><div class="q-trust-ic">★</div><div><strong>Certified Installers</strong><span>Manufacturer-certified crews</span></div></div>
+      <div class="q-trust-item"><div class="q-trust-ic">⛨</div><div><strong>Storm Damage Experts</strong><span>We work with your insurance</span></div></div>
+      <div class="q-trust-item"><div class="q-trust-ic">⟲</div><div><strong>Workmanship Warranty</strong><span>We stand behind every roof</span></div></div>
+    </div>`;
 
   // Satellite cover page — uses the job's geocoded coordinates via Mapbox Static Images API.
   const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
@@ -17247,180 +17428,260 @@ function openQuotePreview(j){
   let coverHtml = '';
   if(hasCoords){
     const lon = j.longitude, lat = j.latitude;
-    // zoom 19 ≈ individual house; satellite-v9 = pure imagery; @2x for crisp print; marker pin on the home
-    const satUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/`
+    const satUrl = opts.satUrl || (`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/`
       + `pin-l+f97316(${lon},${lat})/`
       + `${lon},${lat},19,0/640x440@2x`
-      + `?access_token=${MAPBOX_TOKEN}`;
+      + `?access_token=${MAPBOX_TOKEN}`);
     coverHtml = `
       <div class="q-cover">
-        <div class="q-cover-top">
-          ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="q-cover-logo" alt="${escapeHtml(ci.name)}">`:''}
-          <div class="q-cover-company">${escapeHtml(ci.name||'')}</div>
+        <div class="q-cover-band">
+          ${logoChip}
+          <div>
+            <div class="q-cover-company">${escapeHtml(ci.name||'')}</div>
+            <div class="q-cover-tag">Storm Damage Experts</div>
+          </div>
         </div>
-        <div class="q-cover-title">Roofing Estimate</div>
-        <div class="q-cover-sub">Prepared for ${escapeHtml(j.name||'')}</div>
-        <img src="${satUrl}" class="q-cover-img" alt="Satellite view of property"
-             onerror="this.style.display='none';document.getElementById('qCoverImgFallback').style.display='block';">
-        <div id="qCoverImgFallback" style="display:none;padding:40px;color:#888;font-size:11pt;text-align:center;border:1px dashed #ccc;border-radius:8px">Satellite image unavailable</div>
-        <div class="q-cover-addr">${escapeHtml(j.address||'')}</div>
-        <div class="q-cover-meta">${escapeHtml(quoteNo)} · ${escapeHtml(dateText)}</div>
-        <div class="q-cover-footer">
-          ${ci.phone?escapeHtml(ci.phone):''}${ci.phone&&ci.email?'  ·  ':''}${ci.email?escapeHtml(ci.email):''}
+        <div class="q-cover-body">
+          <div class="q-cover-kicker">${tiered ? 'Roofing Proposal · ' + tiered.length + ' Options' : 'Roofing Estimate'}</div>
+          <div class="q-cover-title">Your New Roof</div>
+          <div class="q-cover-sub">Prepared for <strong>${escapeHtml(j.name||'')}</strong></div>
+          <div class="q-cover-imgwrap">
+            <img src="${satUrl}" class="q-cover-img" alt="Satellite view of property"
+                 onerror="this.style.display='none';document.getElementById('qCoverImgFallback').style.display='flex';">
+            <div id="qCoverImgFallback" class="q-cover-imgfallback" style="display:none">Satellite image unavailable</div>
+          </div>
+          <div class="q-cover-addr">${escapeHtml(j.address||'')}</div>
+          <div class="q-cover-meta"><span>${escapeHtml(quoteNo)}</span><span>${escapeHtml(dateText)}</span>${q.repName?`<span>Prepared by ${escapeHtml(q.repName)}</span>`:''}</div>
+        </div>
+        ${trustHtml}
+        <div class="q-cover-foot">
+          <span>${escapeHtml(ci.phone||'')}</span><span>${escapeHtml(ci.email||'')}</span>${ci.website?`<span>${escapeHtml(ci.website)}</span>`:''}
         </div>
       </div>`;
   }
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Roofing Estimate${j.name?' - '+escapeHtml(j.name):''}${j.address&&j.address!=='—'?' - '+escapeHtml((j.address||'').split(',')[0].trim()):''}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <style>
-  @page { size: letter; margin: 0; }
-  * { box-sizing: border-box; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11pt; color: #000000; margin: 0; padding: 0; line-height: 1.45; }
-  .q-wrap { max-width: 7.5in; margin: 0 auto; padding: 0.5in; }
-  .q-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${accent}; padding-bottom: 14px; margin-bottom: 18px; }
-  .q-head-left { flex: 1; }
-  .q-head-right { text-align: right; }
-  .q-logo { height: 72px; width: auto; max-width: 110px; flex-shrink: 0; object-fit: contain; }
-  .q-company-block { display: flex; align-items: center; gap: 12px; }
-  .q-company-text { display: flex; flex-direction: column; }
-  .q-company-name { font-size: 14pt; font-weight: 800; color: ${accent}; margin: 0 0 4px; letter-spacing: -0.02em; white-space: nowrap; }
-  .q-company-detail { font-size: 9pt; color: #000000; line-height: 1.5; }
-  .q-title { font-size: 15pt; font-weight: 900; color: ${accent}; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.02em; }
-  .q-mode-pill { display: inline-block; background: ${accent}; color: white; font-size: 9pt; font-weight: 700; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.06em; margin-bottom: 6px; }
-  .q-meta { font-size: 9pt; color: #000000; line-height: 1.6; }
-  .q-meta strong { color: ${accent}; }
-  .q-section { margin-bottom: 18px; }
-  .q-section-title { font-size: 10pt; font-weight: 800; color: ${accent}; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 8px; }
-  .q-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  .q-customer { font-size: 10pt; line-height: 1.55; color: #000000; }
-  .q-customer strong { font-size: 11pt; color: ${accent}; }
-  .q-property { font-size: 10pt; line-height: 1.55; color: #000000; }
-  .q-scope { font-size: 10pt; line-height: 1.55; padding-left: 18px; margin: 0; color: #000000; }
-  .q-scope li { margin-bottom: 4px; }
-  .q-scope-sec-title { font-size: 10.5pt; font-weight: 700; color: ${accent}; margin-top: 10px; margin-bottom: 4px; letter-spacing: 0.01em; }
-  .q-scope-sec-title:first-child { margin-top: 0; }
-  .q-scope-wrap > .q-scope-sec-title:first-of-type { margin-top: 0; }
-  .q-materials { font-size: 10pt; line-height: 1.7; color: #000000; }
-  .q-materials .label { font-weight: 600; color: ${accent}; }
-  .q-price-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  .q-price-table td { padding: 7px 10px; font-size: 10pt; border-bottom: 1px solid #eee; color: #000000; }
-  .q-price-table td.label { color: #000000; }
+  @page { size: letter; margin: 0.4in 0 0.4in; }
+  @page :first { margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: 'Barlow', 'Helvetica Neue', Arial, sans-serif; font-size: 10.5pt; color: ${ink}; margin: 0; padding: 0; line-height: 1.45; background: #fff; }
+  .hd { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+  .q-page { width: 8.5in; margin: 0 auto; }
+  .q-wrap { padding: 0 0.5in 0.45in; }
+
+  /* Header band */
+  .q-band { background: #fff; color: ${navy}; margin: 0 0.5in; padding: 0.3in 0 0.16in; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid ${orange}; }
+  .q-band-left { display: flex; align-items: center; gap: 14px; }
+  .q-logo-chip { background: #fff; border-radius: 10px; padding: 0; display: flex; align-items: center; justify-content: center; }
+  .q-logo-chip img { height: 58px; width: auto; max-width: 120px; object-fit: contain; display: block; }
+  .q-band-name { font-family: 'Barlow Condensed', sans-serif; font-size: 20pt; font-weight: 800; letter-spacing: 0.01em; line-height: 1; }
+  .q-band-detail { font-size: 8.5pt; color: #4A5668; margin-top: 5px; line-height: 1.5; }
+  .q-band-right { text-align: right; }
+  .q-band-title { font-family: 'Barlow Condensed', sans-serif; font-size: 22pt; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; }
+  .q-band-title em { color: ${navy}; font-style: normal; font-weight: 600; }
+  .q-band-meta { font-size: 8.5pt; color: #4A5668; margin-top: 6px; line-height: 1.55; }
+  .q-band-meta b { color: ${navy}; font-weight: 700; }
+
+  /* Info cards */
+  .q-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 16px; }
+  .q-card { background: ${soft}; border: 1px solid ${line}; border-radius: 10px; padding: 11px 14px; }
+  .q-card-label { font-family: 'Barlow Condensed', sans-serif; font-size: 9pt; font-weight: 700; color: #4A5668; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 3px; }
+  .q-card-main { font-size: 12pt; font-weight: 700; color: ${navy}; }
+  .q-card-sub { font-size: 9pt; color: #4A5668; margin-top: 2px; }
+
+  .q-section { margin-bottom: 16px; }
+  .q-section-title { break-after: avoid; font-family: 'Barlow Condensed', sans-serif; font-size: 13pt; font-weight: 800; color: ${navy}; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 9px; display: flex; align-items: center; gap: 10px; }
+  .q-section-title::before { content: ''; width: 5px; height: 17px; background: ${orange}; border-radius: 2px; }
+  .q-section-title::after { content: ''; flex: 1; height: 1px; background: ${line}; }
+
+  /* Good / Better / Best */
+  .q-options { display: grid; gap: 12px; align-items: stretch; }
+  .q-options-2 { grid-template-columns: 1fr 1fr; }
+  .q-options-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .q-opt { position: relative; border: 1.5px solid ${line}; border-radius: 12px; padding: 16px 14px 12px; display: flex; flex-direction: column; background: #fff; page-break-inside: avoid; }
+  .q-opt-featured { border: 2.5px solid ${orange}; box-shadow: 0 6px 18px rgba(249,115,22,0.18); }
+  .q-opt-ribbon { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); background: ${orangeDk}; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 9pt; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 3px 12px; border-radius: 20px; white-space: nowrap; }
+  .q-opt-tier { font-family: 'Barlow Condensed', sans-serif; font-size: 20pt; font-weight: 800; color: ${navy}; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1; text-align: center; }
+  .q-opt-name { font-size: 10pt; font-weight: 700; color: ${ink}; text-align: center; margin-top: 5px; min-height: 2.6em; }
+  .q-opt-color { font-size: 8.5pt; color: #4A5668; text-align: center; margin-top: -4px; margin-bottom: 4px; }
+  .q-opt-feats { list-style: none; padding: 9px 0 0; margin: 4px 0 10px; border-top: 1px dashed ${line}; flex: 1; }
+  .q-opt-feats li { font-size: 8.8pt; line-height: 1.4; padding-left: 17px; position: relative; margin-bottom: 5px; color: ${ink}; }
+  .q-opt-feats li::before { content: '✓'; position: absolute; left: 0; top: 0; color: ${orangeDk}; font-weight: 800; }
+  .q-opt-price { background: ${soft}; border-radius: 8px; padding: 8px; text-align: center; }
+  .q-opt-featured .q-opt-price { background: ${navy}; }
+  .q-opt-amt { font-family: 'Barlow Condensed', sans-serif; font-size: 22pt; font-weight: 800; color: ${navy}; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .q-opt-featured .q-opt-amt { color: #fff; }
+  .q-opt-sub { font-size: 8pt; color: #4A5668; }
+  .q-opt-featured .q-opt-sub { color: ${onNavy}; font-weight: 600; }
+  .q-opt-pick { margin-top: 9px; font-size: 8.8pt; font-weight: 600; color: ${navy}; display: flex; align-items: center; justify-content: center; gap: 7px; }
+  .q-box { width: 13px; height: 13px; border: 1.5px solid ${navy}; border-radius: 3px; display: inline-block; }
+  .q-opt-note { margin-top: 10px; font-size: 9pt; color: #4A5668; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; padding: 8px 12px; }
+
+  /* Materials (single option) */
+  .q-mat { display: flex; gap: 10px; flex-wrap: wrap; }
+  .q-mat-chip { background: ${soft}; border: 1px solid ${line}; border-radius: 8px; padding: 7px 12px; font-size: 9.5pt; }
+  .q-mat-chip span { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 8pt; font-weight: 700; color: #4A5668; text-transform: uppercase; letter-spacing: 0.1em; }
+  .q-mat-chip b { color: ${navy}; }
+
+  /* Scope */
+  .q-scope-sec { margin-bottom: 10px; }
+  .q-scope-sec-title { font-weight: 700; font-size: 10pt; color: ${navy}; display: flex; justify-content: space-between; border-bottom: 1px solid ${line}; padding-bottom: 3px; margin-bottom: 5px; }
+  .q-scope-sec-price { color: ${navy}; font-variant-numeric: tabular-nums; }
+  .q-scope { list-style: none; padding: 0; margin: 0; column-count: 2; column-gap: 22px; }
+  .q-scope li { break-inside: avoid; font-size: 9.3pt; line-height: 1.4; padding-left: 15px; position: relative; margin-bottom: 3px; }
+  .q-scope li::before { content: ''; position: absolute; left: 2px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: ${orange}; }
+
+  /* Warranty + pricing row */
+  .q-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; page-break-inside: avoid; }
+  .q-warranty { background: ${navy}; color: #fff; border-radius: 12px; padding: 14px 16px; }
+  .q-warranty .q-card-label { color: #fff; }
+  .q-warranty ul { list-style: none; padding: 0; margin: 6px 0 0; }
+  .q-warranty li { font-size: 9.5pt; padding-left: 18px; position: relative; margin-bottom: 5px; color: #fff; }
+  .q-warranty li::before { content: '✓'; position: absolute; left: 0; color: #fff; font-weight: 800; }
+  .q-price-card { border: 1.5px solid ${line}; border-radius: 12px; overflow: hidden; }
+  .q-price-table { width: 100%; border-collapse: collapse; }
+  .q-price-table td { padding: 8px 14px; font-size: 9.8pt; border-bottom: 1px solid ${line}; }
   .q-price-table td.val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .q-price-table tr.total td { font-size: 12pt; font-weight: 800; color: ${accent}; border-top: 2px solid ${accent}; border-bottom: none; padding-top: 9px; }
-  .q-price-table tr.due td { background: #fef3c7; font-weight: 700; color: #000000; }
-  .q-terms { font-size: 9pt; line-height: 1.55; color: #000000; }
-  .q-terms p { margin: 0 0 7px; }
-  .q-signature { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; page-break-inside: avoid; }
-  .q-sig-block { font-size: 9pt; color: #000000; }
-  .q-sig-line { border-bottom: 1px solid #000; height: 36px; margin-bottom: 4px; }
-  .q-footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 8pt; color: #000000; text-align: center; }
-  .q-print-btn { position: fixed; top: 12px; right: 12px; background: ${accent}; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
-  /* Satellite cover page */
-  .q-cover { max-width: 7.5in; margin: 0 auto; padding: 0.7in 0.5in; text-align: center; page-break-after: always; display: flex; flex-direction: column; align-items: center; min-height: 9.5in; }
-  .q-cover-top { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .q-cover-logo { height: 110px; width: auto; max-width: 220px; object-fit: contain; }
-  .q-cover-company { font-size: 16pt; font-weight: 800; color: ${accent}; letter-spacing: -0.01em; }
-  .q-cover-title { font-size: 30pt; font-weight: 900; color: ${accent}; text-transform: uppercase; letter-spacing: 0.03em; margin-top: 24px; }
-  .q-cover-sub { font-size: 13pt; color: #000; margin-top: 4px; margin-bottom: 22px; }
-  .q-cover-img { width: 100%; max-width: 6.4in; border-radius: 10px; border: 3px solid ${accent}; box-shadow: 0 4px 14px rgba(0,0,0,0.2); }
-  .q-cover-addr { font-size: 13pt; font-weight: 700; color: #000; margin-top: 18px; }
-  .q-cover-meta { font-size: 10pt; color: #555; margin-top: 6px; }
-  .q-cover-footer { margin-top: auto; padding-top: 24px; font-size: 10pt; color: ${accent}; font-weight: 600; }
-  @media print { .q-print-btn { display: none; } body { background: white; } .q-cover { page-break-after: always; } }
+  .q-price-table tr.due td { background: #FFF7ED; font-weight: 700; }
+  .q-price-table tr.total td { background: ${navy}; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 15pt; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; border: none; padding: 11px 14px; }
+  .q-price-table tr.total td.val { color: #fff; }
+
+  /* Trust strip */
+  .q-trust { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .q-trust-item { display: flex; gap: 8px; align-items: flex-start; font-size: 8.3pt; line-height: 1.3; }
+  .q-trust-item strong { display: block; color: ${navy}; font-size: 8.8pt; }
+  .q-trust-item span { color: #4A5668; }
+  .q-trust-ic { width: 24px; height: 24px; border-radius: 50%; background: ${navy}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11pt; flex-shrink: 0; }
+  .q-wrap .q-trust { background: ${soft}; border-radius: 10px; padding: 11px 12px; margin-bottom: 16px; }
+
+  .q-terms { font-size: 8.3pt; line-height: 1.5; color: #3A4555; column-count: 2; column-gap: 22px; }
+  .q-terms p { margin: 0 0 6px; break-inside: avoid; }
+  .q-signature { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; page-break-inside: avoid; }
+  .q-sig-block { font-size: 8.8pt; color: #3A4555; }
+  .q-sig-line { border-bottom: 1.5px solid ${navy}; height: 38px; margin-bottom: 5px; }
+  .q-sig-block strong { color: ${navy}; }
+  .q-footer { margin-top: 16px; padding-top: 9px; border-top: 1px solid ${line}; font-size: 7.8pt; color: #6B7686; text-align: center; }
+  .q-print-btn { position: fixed; top: 12px; right: 12px; background: ${orange}; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.25); font-family: 'Barlow', sans-serif; z-index: 10; }
+
+  /* Cover page */
+  .q-cover { width: 8.5in; height: 11in; margin: 0 auto; display: flex; flex-direction: column; page-break-after: always; overflow: hidden; }
+  .q-cover-band { background: #fff; color: ${navy}; display: flex; align-items: center; gap: 16px; margin: 0 0.6in; padding: 0.4in 0 0.2in; border-bottom: 2px solid ${orange}; }
+  .q-cover-band .q-logo-chip img { height: 74px; max-width: 150px; }
+  .q-cover-company { font-family: 'Barlow Condensed', sans-serif; font-size: 26pt; font-weight: 800; line-height: 1; }
+  .q-cover-tag { font-size: 10pt; color: #4A5668; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 5px; }
+  .q-cover-body { flex: 1; padding: 0.42in 0.6in 0.2in; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .q-cover-kicker { font-family: 'Barlow Condensed', sans-serif; font-size: 12pt; font-weight: 700; color: #4A5668; letter-spacing: 0.22em; text-transform: uppercase; }
+  .q-cover-title { font-family: 'Barlow Condensed', sans-serif; font-size: 46pt; font-weight: 800; color: ${navy}; text-transform: uppercase; line-height: 1; margin-top: 4px; }
+  .q-cover-sub { font-size: 13pt; color: #3A4555; margin: 8px 0 20px; }
+  .q-cover-sub strong { color: ${navy}; }
+  .q-cover-imgwrap { width: 100%; position: relative; }
+  .q-cover-img, .q-cover-imgfallback { width: 100%; height: 4.3in; object-fit: cover; border-radius: 14px; border: 4px solid #fff; box-shadow: 0 0 0 2px ${navy}, 0 10px 26px rgba(15,42,74,0.28); display: block; }
+  .q-cover-imgfallback { align-items: center; justify-content: center; background: ${soft}; color: #888; }
+  .q-cover-addr { font-size: 15pt; font-weight: 700; color: ${navy}; margin-top: 20px; }
+  .q-cover-meta { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+  .q-cover-meta span { background: ${soft}; border: 1px solid ${line}; border-radius: 20px; padding: 3px 12px; font-size: 9pt; color: #3A4555; }
+  .q-cover > .q-trust { padding: 0.18in 0.6in; border-top: 1px solid ${line}; }
+  .q-cover-foot { background: #fff; color: ${navy}; display: flex; justify-content: center; gap: 26px; margin: 0 0.6in; padding: 0.14in 0 0.3in; border-top: 1px solid ${line}; font-size: 10pt; font-weight: 600; letter-spacing: 0.02em; }
+
+  @media screen { body { background: #E9EDF2; } .q-cover, .q-page { background: #fff; box-shadow: 0 2px 18px rgba(0,0,0,0.12); margin: 18px auto; } }
+  @media print { .q-print-btn { display: none; } }
 </style>
-</head><body>
+${theme.fonts || ''}${theme.css ? '<style>' + theme.css + '</style>' : ''}
+</head><body class="theme-${escapeHtml(themeKey)}">
 <button class="q-print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
 ${coverHtml}
-<div class="q-wrap">
-  <div class="q-head">
-    <div class="q-head-left">
-      <div class="q-company-block">
-        ${ci.logoDataUrl?`<img src="${ci.logoDataUrl}" class="q-logo" alt="${escapeHtml(ci.name)}">`:''}
-        <div class="q-company-text">
-          <div class="q-company-name">${escapeHtml(ci.name||'')}</div>
-          <div class="q-company-detail">
-            ${ci.address?escapeHtml(ci.address)+'<br>':''}
-            ${ci.cityStateZip?escapeHtml(ci.cityStateZip)+'<br>':''}
-            ${ci.phone?escapeHtml(ci.phone):''}${ci.email?' · '+escapeHtml(ci.email):''}
-            ${ci.website?'<br>'+escapeHtml(ci.website):''}
-            ${ci.license?'<br>'+escapeHtml(ci.license):''}
-          </div>
+<div class="q-page">
+  <div class="q-band">
+    <div class="q-band-left">
+      ${logoChip}
+      <div>
+        <div class="q-band-name">${escapeHtml(ci.name||'')}</div>
+        <div class="q-band-detail">
+          ${[ci.address, ci.cityStateZip].filter(Boolean).map(escapeHtml).join(', ')}<br>
+          ${[ci.phone, ci.email, ci.website].filter(Boolean).map(escapeHtml).join(' · ')}
+          ${ci.license?'<br>'+escapeHtml(ci.license):''}
         </div>
       </div>
     </div>
-    <div class="q-head-right">
-      <div class="q-title">Roofing Estimate</div>
-      <div class="q-meta">
-        <strong>Quote #:</strong> ${escapeHtml(quoteNo)}<br>
-        <strong>Date:</strong> ${escapeHtml(dateText)}<br>
-        <strong>Prepared by:</strong> ${escapeHtml(q.repName||'—')}
+    <div class="q-band-right">
+      <div class="q-band-title">Roofing <em>${tiered ? 'Proposal' : 'Estimate'}</em></div>
+      <div class="q-band-meta">
+        <b>Quote #</b> ${escapeHtml(quoteNo)}<br>
+        <b>Date</b> ${escapeHtml(dateText)}<br>
+        <b>Prepared by</b> ${escapeHtml(q.repName||'—')}
       </div>
     </div>
   </div>
 
-  <div class="q-section q-two-col">
-    <div>
-      <div class="q-section-title">Customer</div>
-      <div class="q-customer">
-        <strong>${escapeHtml(j.name||'—')}</strong><br>
-        ${customerLine2?escapeHtml(customerLine2):''}
+  <div class="q-wrap">
+    <div class="q-info">
+      <div class="q-card">
+        <div class="q-card-label">Prepared For</div>
+        <div class="q-card-main">${escapeHtml(j.name||'—')}</div>
+        ${customerLine2?`<div class="q-card-sub">${escapeHtml(customerLine2)}</div>`:''}
+      </div>
+      <div class="q-card">
+        <div class="q-card-label">Property</div>
+        <div class="q-card-main" style="font-size:10.5pt">${escapeHtml(customerAddr)}</div>
+        ${hasCarrier?`<div class="q-card-sub"><b>Insurance:</b> ${escapeHtml(j.carrier)}${j.claimNum?' · Claim #'+escapeHtml(j.claimNum):''}</div>`:''}
       </div>
     </div>
-    <div>
-      <div class="q-section-title">Property Address</div>
-      <div class="q-property">${escapeHtml(customerAddr)}</div>
-      ${!isCash && j.carrier?`<div style="margin-top:8px;font-size:9pt;color:#000000"><strong style="color:${accent}">Insurance:</strong> ${escapeHtml(j.carrier)}${j.claimNum?' · Claim #'+escapeHtml(j.claimNum):''}</div>`:''}
+
+    ${optionsHtml}
+
+    ${!tiered && (q.shingleBrand||q.shingleModel||q.shingleColor)?`
+    <div class="q-section">
+      <div class="q-section-title"><span>Your Roofing System</span></div>
+      <div class="q-mat">
+        ${q.shingleBrand?`<div class="q-mat-chip"><span>Brand</span><b>${escapeHtml(q.shingleBrand)}</b></div>`:''}
+        ${q.shingleModel?`<div class="q-mat-chip"><span>Shingle</span><b>${escapeHtml(q.shingleModel)}</b></div>`:''}
+        ${q.shingleColor?`<div class="q-mat-chip"><span>Color</span><b>${escapeHtml(q.shingleColor)}</b></div>`:''}
+      </div>
+    </div>`:''}
+
+    <div class="q-section">
+      <div class="q-section-title"><span>Scope of Work${tiered?' · Included With Every Option':''}</span></div>
+      <div class="q-scope-grid">${scopeHtml}</div>
     </div>
-  </div>
 
-  ${(q.shingleBrand||q.shingleModel||q.shingleColor)?`
-  <div class="q-section">
-    <div class="q-section-title">Materials</div>
-    <div class="q-materials">
-      <div>${[
-        q.shingleBrand?`<span class="label">Brand:</span> ${escapeHtml(q.shingleBrand)}`:'',
-        q.shingleModel?`<span class="label">Model:</span> ${escapeHtml(q.shingleModel)}`:'',
-        q.shingleColor?`<span class="label">Color:</span> ${escapeHtml(q.shingleColor)}`:''
-      ].filter(Boolean).join('&nbsp;&nbsp;&nbsp;&nbsp;')}</div>
+    ${(warrantySec || !tiered) ? `
+    <div class="q-row2" style="${tiered || !warrantySec ? 'grid-template-columns:1fr' : ''}">
+      ${warrantySec ? `<div class="q-warranty"><div class="q-card-label">Your Warranty</div><ul>${warrantySec.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></div>` : ''}
+      ${!tiered ? `<div class="q-price-card"><table class="q-price-table">${pricingTable}</table></div>` : ''}
+    </div>` : ''}
+
+    ${trustHtml}
+
+    <div class="q-section">
+      <div class="q-section-title"><span>Terms &amp; Conditions</span></div>
+      <div class="q-terms">${termsHtml}</div>
     </div>
-  </div>`:''}
 
-  <div class="q-section">
-    <div class="q-section-title">Scope of Work</div>
-    <div class="q-scope-wrap">${scopeHtml}</div>
-  </div>
-
-  <div class="q-section">
-    <div class="q-section-title">Pricing</div>
-    <table class="q-price-table">${pricingTable}</table>
-  </div>
-
-  <div class="q-section">
-    <div class="q-section-title">Terms &amp; Conditions</div>
-    <div class="q-terms">${termsHtml}</div>
-  </div>
-
-  <div class="q-signature">
-    <div class="q-sig-block">
-      <div class="q-sig-line"></div>
-      <div><strong>Customer Signature</strong></div>
-      <div style="margin-top:4px">Date: _________________</div>
+    <div class="q-signature">
+      <div class="q-sig-block">
+        <div class="q-sig-line"></div>
+        <div><strong>Customer Signature</strong>${tiered ? ' · Option selected above' : ''}</div>
+        <div style="margin-top:4px">Date: _________________</div>
+      </div>
+      <div class="q-sig-block">
+        <div class="q-sig-line"></div>
+        <div><strong>${escapeHtml(ci.name||'Contractor')} Representative</strong></div>
+        <div style="margin-top:4px">${escapeHtml(q.repName||'')} · Date: _________________</div>
+      </div>
     </div>
-    <div class="q-sig-block">
-      <div class="q-sig-line"></div>
-      <div><strong>${escapeHtml(ci.name||'Contractor')} Representative</strong></div>
-      <div style="margin-top:4px">${escapeHtml(q.repName||'')} · Date: _________________</div>
-    </div>
-  </div>
 
-  <div class="q-footer">
-    By signing above, customer agrees to the scope of work, pricing, and terms set forth in this document.
-    ${ci.license?'<br>'+escapeHtml(ci.license):''}
+    <div class="q-footer">
+      By signing above, customer agrees to the scope of work, pricing, and terms set forth in this document.
+      ${ci.license?'<br>'+escapeHtml(ci.license):''}
+    </div>
   </div>
 </div>
 </body></html>`;
 
+  if(opts.returnHtml) return html;
   const w = window.open('', '_blank');
   if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
   w.document.open();
