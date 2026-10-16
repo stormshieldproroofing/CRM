@@ -15906,6 +15906,7 @@ function renderQuoteTab(j){
           <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Materials</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Shingle System <span style="text-transform:none;letter-spacing:0;opacity:0.8">— fills brand, model &amp; features</span></label><select id="qSystem" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif">${shingleSystemOptions((shingleSystemFor(q)||{}).key)}</select></div>
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Shingle Brand</label><input id="qShingleBrand" value="${escapeHtml(q.shingleBrand||'')}" placeholder="e.g. GAF" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
           <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Model</label><input id="qShingleModel" value="${escapeHtml(q.shingleModel||'')}" placeholder="e.g. Timberline HDZ" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
           <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Color</label><input id="qShingleColor" value="${escapeHtml(q.shingleColor||'')}" placeholder="e.g. Weathered Wood" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
@@ -15998,6 +15999,7 @@ function renderQuoteTab(j){
     qq.shingleModel = $('qShingleModel').value;
     qq.shingleColor = $('qShingleColor').value;
     if($('qFeatures')) qq.features = $('qFeatures').value;
+    if($('qSystem')) qq.systemKey = $('qSystem').value;
     qq.scope = $('qScope').value;
     qq.contractAmount = (qq.mode === 'cash') ? String(sumSectionPrices(j) || '') : $('qContract').value;
     qq.deductible = $('qDeductible')?.value || '';
@@ -16012,6 +16014,22 @@ function renderQuoteTab(j){
     saveToStorage();
     if(typeof logActivity === 'function') logActivity(j, 'quote', `${q.mode === 'cash' ? 'Cash' : 'Insurance'} quote saved`, `Contract: $${parseFloat($('qContract').value||0).toLocaleString()}`);
     toast('Quote saved');
+  });
+  // Shingle System dropdown → fill brand, model and features; keep a
+  // Good/Better/Best label in step with the new shingle.
+  if($('qSystem')) $('qSystem').addEventListener('change', () => {
+    const sys = SHINGLE_CATALOG.find(x => x.key === $('qSystem').value);
+    const qq = getJobQuote(j);
+    qq.systemKey = sys ? sys.key : '';
+    if(!sys){ saveToStorage(); return; }
+    $('qShingleBrand').value = qq.shingleBrand = sys.brand;
+    $('qShingleModel').value = qq.shingleModel = sys.model;
+    if($('qFeatures')) $('qFeatures').value = qq.features = sys.features.join('\n');
+    const tm = String(qq.label||'').match(/^\s*(good|better|best)\b/i);
+    if(tm){ qq.label = tm[1][0].toUpperCase() + tm[1].slice(1).toLowerCase() + ' — ' + sys.brand + ' ' + sys.model; }
+    saveToStorage();
+    if(tm && typeof renderDetailPanel === 'function') renderDetailPanel();
+    else toast(sys.brand + ' ' + sys.model + ' features filled in');
   });
   $('quotePreviewBtn').addEventListener('click', () => {
     collectQuote();
@@ -17251,20 +17269,94 @@ const EST_THEMES = {
 };
 window.EST_THEMES = EST_THEMES;
 
-// ── GOOD / BETTER / BEST shingle tiers ──
-// Starting points for a three-option estimate. Brand, model and the feature
-// bullets are all editable per quote afterwards; prices are left blank.
-const SHINGLE_TIER_PRESETS = [
-  { tier: 'Good',   label: 'Good — Owens Corning Oakridge',
-    brand: 'Owens Corning', model: 'Oakridge',
-    features: ['Architectural laminated shingle', 'Limited lifetime manufacturer warranty', 'StreakGuard algae resistance', 'Full tear-off and new underlayment'] },
-  { tier: 'Better', label: 'Better — Owens Corning Duration',
-    brand: 'Owens Corning', model: 'Duration',
-    features: ['SureNail technology for superior nail grip', 'Deeper, richer TruDefinition colors', 'Limited lifetime manufacturer warranty', 'StreakGuard algae resistance'] },
-  { tier: 'Best',   label: 'Best — Owens Corning Duration FLEX',
-    brand: 'Owens Corning', model: 'Duration FLEX',
-    features: ['Class 4 impact rating (UL 2218) — top hail rating', 'SBS polymer-modified for flexibility', 'May qualify for a homeowners insurance discount', 'SureNail technology + lifetime limited warranty'] },
+// ── SHINGLE SYSTEM CATALOG ──
+// Picking a system in the quote editor fills in brand, model and these
+// selling points. Specs are taken from each manufacturer's product
+// literature (checked Oct 2026); wind / algae terms often need the maker's
+// starter + ridge products or a high-wind install, so the wording keeps
+// those conditions. Edit the Features box per quote if anything differs.
+const SHINGLE_CATALOG = [
+  // TAMKO
+  { key: 'tamko-heritage', brand: 'TAMKO', model: 'Heritage', tier: 'Good', features: [
+    'Laminated wood-shake look with Shadowtone depth',
+    '110 mph wind warranty (130 mph with high-wind install)',
+    '10-year Full Start non-prorated coverage',
+    '10-year algae cleaning limited warranty',
+    'Limited lifetime warranty · Class A fire rating' ] },
+  { key: 'tamko-titan-xt', brand: 'TAMKO', model: 'Titan XT', tier: 'Better', features: [
+    'WindGUARD 160 mph wind warranty (with TAMKO starter + ridge)',
+    'Class 3 impact rating (UL 2218)',
+    'AnchorLock reinforced nailing zone, 5× larger than Heritage',
+    'Advanced sealants that grip even in cool weather',
+    'Limited lifetime warranty · Class A fire rating' ] },
+  { key: 'tamko-stormfighter-ir', brand: 'TAMKO', model: 'StormFighter IR', tier: 'Best', features: [
+    'Class 4 impact rating (UL 2218) — highest hail rating',
+    'May qualify for a homeowners insurance discount',
+    '160 mph wind warranty (with TAMKO starter, high-wind install)',
+    'AnchorLock reinforced nailing zone',
+    '10-year algae cleaning · limited lifetime warranty' ] },
+  // Owens Corning
+  { key: 'oc-oakridge', brand: 'Owens Corning', model: 'Oakridge', tier: 'Good', features: [
+    'TruDefinition color with rich depth and shadowing',
+    '110 mph wind warranty (130 mph with 6 nails + OC starter)',
+    'StreakGuard 10-year algae resistance',
+    '10-year TRU PROtection non-prorated coverage',
+    'Limited lifetime warranty for as long as you own your home' ] },
+  { key: 'oc-duration', brand: 'Owens Corning', model: 'Duration', tier: 'Better', features: [
+    'Patented SureNail reinforced nailing strip',
+    '130 mph wind warranty with just 4 nails',
+    'StreakGuard 10-year algae resistance',
+    'TruDefinition color with bold contrast',
+    'Limited lifetime warranty · Class A fire rating' ] },
+  { key: 'oc-duration-flex', brand: 'Owens Corning', model: 'Duration FLEX', tier: 'Best', features: [
+    'Class 4 impact rating (UL 2218) — highest hail rating',
+    'SBS polymer-modified asphalt for flexibility',
+    'May qualify for a homeowners insurance discount',
+    '130 mph wind warranty · patented SureNail strip',
+    'StreakGuard 10-year algae · limited lifetime warranty' ] },
+  // CertainTeed
+  { key: 'ct-landmark', brand: 'CertainTeed', model: 'Landmark', tier: 'Good', features: [
+    'Dual-layer laminated shingle, wood or slate look',
+    '110 mph wind warranty (130 mph with CertainTeed starter + ridge)',
+    '10-year StreakFighter algae resistance',
+    '10-year SureStart protection',
+    'Lifetime limited transferable warranty' ] },
+  { key: 'ct-landmark-climateflex', brand: 'CertainTeed', model: 'Landmark ClimateFlex', tier: 'Best', features: [
+    'Class 4 impact rating (UL 2218) — highest hail rating',
+    'Polymer-modified asphalt with rubber-like flexibility',
+    '110 mph wind warranty (130 mph with CertainTeed starter + ridge)',
+    '25-year StreakFighter algae resistance',
+    'Lifetime limited transferable warranty' ] },
+  // GAF
+  { key: 'gaf-timberline-hdz', brand: 'GAF', model: 'Timberline HDZ', tier: 'Better', features: [
+    'LayerLock technology with the widest StrikeZone nailing area',
+    'WindProven wind warranty — no maximum wind speed (with GAF accessories)',
+    '25-year StainGuard Plus algae warranty',
+    'DuraGrip adhesive against wind-driven rain',
+    'Lifetime limited warranty' ] },
 ];
+window.SHINGLE_CATALOG = SHINGLE_CATALOG;
+function shingleSystemFor(q){
+  if(!q) return null;
+  if(q.systemKey){ const s = SHINGLE_CATALOG.find(x => x.key === q.systemKey); if(s) return s; }
+  const b = String(q.shingleBrand||'').trim().toLowerCase(), m = String(q.shingleModel||'').trim().toLowerCase();
+  return SHINGLE_CATALOG.find(x => x.brand.toLowerCase() === b && x.model.toLowerCase() === m) || null;
+}
+function shingleSystemOptions(selectedKey){
+  const brands = [...new Set(SHINGLE_CATALOG.map(s => s.brand))];
+  return '<option value="">Custom / other (type below)</option>' + brands.map(b =>
+    '<optgroup label="' + escapeHtml(b) + '">' + SHINGLE_CATALOG.filter(s => s.brand === b).map(s =>
+      '<option value="' + s.key + '"' + (s.key === selectedKey ? ' selected' : '') + '>' + escapeHtml(s.brand + ' ' + s.model) + '  (' + s.tier + ')</option>'
+    ).join('') + '</optgroup>').join('');
+}
+
+// ── GOOD / BETTER / BEST shingle tiers ──
+// Starting systems for a three-option estimate (from SHINGLE_CATALOG). Each
+// option's system can be switched with the Shingle System dropdown.
+const SHINGLE_TIER_PRESETS = [
+  ['Good', 'tamko-heritage'], ['Better', 'tamko-titan-xt'], ['Best', 'tamko-stormfighter-ir'],
+].map(([tier, key]) => { const c = SHINGLE_CATALOG.find(x => x.key === key);
+  return { tier, key, label: tier + ' — ' + c.brand + ' ' + c.model, brand: c.brand, model: c.model, features: c.features }; });
 window.SHINGLE_TIER_PRESETS = SHINGLE_TIER_PRESETS;
 
 // Tier name for each quote in display order. A label that starts with
@@ -17295,7 +17387,7 @@ function quoteMakeTiers(jobId){
   SHINGLE_TIER_PRESETS.forEach(p => {
     const nq = quoteDefaults(j);
     Object.assign(nq, {
-      label: p.label, shingleBrand: p.brand, shingleModel: p.model, shingleColor: src.shingleColor || '',
+      label: p.label, systemKey: p.key, shingleBrand: p.brand, shingleModel: p.model, shingleColor: src.shingleColor || '',
       features: p.features.join('\n'),
       scope: src.scope || '', scopeExclude: (src.scopeExclude||[]).slice(), terms: src.terms || '',
       mode: src.mode || nq.mode, repName: src.repName || '', quoteDate: src.quoteDate || '',
