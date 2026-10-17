@@ -12756,10 +12756,11 @@ async function loadCompanyInfo(){
 // then prints a one-page voucher to attach to the sub's check.
 // Expense categories, shared by the Expense Tracker and the Payment Breakdown
 // voucher so a permit/inspection payment files under its own category.
-const EXPENSE_CATEGORIES = ['Materials','Roofing Labor','Additional Labor','Project Manager','Measurements','Permits','Inspections','Appraisals','Returns'];
+// Rebates = money given back to a homeowner (referral, review, etc.); counts as a job cost.
+const EXPENSE_CATEGORIES = ['Materials','Roofing Labor','Additional Labor','Project Manager','Measurements','Permits','Inspections','Appraisals','Rebates','Returns'];
 const EXPENSE_CATEGORY_COLORS = {
   'Materials':'#4D9DE0','Project Manager':'#E879F9','Roofing Labor':'#F59E0B','Additional Labor':'#FB923C',
-  'Measurements':'#A78BFA','Permits':'#38BDF8','Inspections':'#22D3EE','Appraisals':'#34D399','Returns':'#F87171'
+  'Measurements':'#A78BFA','Permits':'#38BDF8','Inspections':'#22D3EE','Appraisals':'#34D399','Rebates':'#FACC15','Returns':'#F87171'
 };
 
 // ── Project Manager fee as an expense line ─────────────────────────
@@ -13970,7 +13971,7 @@ async function openSubVoucherEditor(jobId, editVid){
           <div style="grid-column:1 / -1">
             <label class="ie-lbl">Expense Category</label>
             <select id="svExpCat" class="ie-inp" style="cursor:pointer">
-              ${EXPENSE_CATEGORIES.filter(c=>c!=='Returns').map(c=>`<option value="${c}" ${savedExpCat===c?'selected':''}>${c}</option>`).join('')}
+              ${EXPENSE_CATEGORIES.filter(c=>c!=='Returns'&&c!=='Rebates').map(c=>`<option value="${c}" ${savedExpCat===c?'selected':''}>${c}</option>`).join('')}
             </select>
             <div style="font-size:9px;color:var(--muted);margin-top:3px">Where this payment files under the job's Expenses. Follows the payment type unless you change it.</div>
           </div>
