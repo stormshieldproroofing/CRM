@@ -1052,7 +1052,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 @media (max-width:760px){
   /* Phone: stack the week into a single scrollable column, one day per row,
      instead of 7 unusable side-by-side columns. */
-  .cal-week-grid{grid-template-columns:1fr !important;overflow-y:auto;overflow-x:hidden}
+  .cal-week-grid:not(.cal-month){grid-template-columns:1fr !important;overflow-y:auto;overflow-x:hidden}
   .cal-week-grid .cal-day{min-height:0}
   .cal-week-grid .cal-day-header{position:sticky;top:0;z-index:2;background:#141927;padding:8px 14px}
   .cal-week-grid .cal-day.cal-today .cal-day-header{background:#181F30}
@@ -1069,7 +1069,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
   /* Phone MONTH view: keep the 7-column month shape but shrink cells to be
      legible and tappable. Job cards collapse to compact chips. */
-  #calWeekGrid.cal-month{grid-auto-rows:minmax(52px,auto) !important;font-size:10px}
+  #calWeekGrid.cal-month{grid-template-columns:repeat(7,minmax(0,1fr)) !important;grid-auto-rows:auto !important;font-size:10px}
+  #calWeekGrid.cal-month .cal-mday{min-width:0}
   .cal-month-dow{padding:4px 0;font-size:8px}
   .cal-mday{padding:3px 3px;gap:1px;min-height:52px}
   .cal-mday .cal-mday-num{font-size:11px;font-weight:700}
