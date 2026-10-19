@@ -857,7 +857,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- COMPANY DOCUMENTS (OneNote-style, admin only) -->
 <div id="companyDocsPage" style="display:none">
-  <div style="display:flex;height:calc(100vh - 64px)">
+  <div id="cdocLayout" style="display:flex;height:calc(100vh - 64px)">
     <!-- Section sidebar -->
     <div id="cdocSidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);background:#11141F;display:flex;flex-direction:column;overflow:hidden">
       <div style="padding:14px 14px 10px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
@@ -1151,6 +1151,23 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .cal-rd-card .cal-rd-lbl{font-size:8px !important}
   .cal-day-popup{width:100% !important;max-width:none !important;max-height:85vh !important;border-radius:16px 16px 0 0 !important;align-self:flex-end}
   .cal-day-popup-bg{align-items:flex-end !important}
+}
+/* Company Docs on phones: list screen, then a full-width doc screen. */
+.cdoc-mobile-bar{display:none}
+.cdoc-row-chev{display:none}
+@media (max-width:760px){
+  #cdocSidebar{width:100% !important;border-right:none !important}
+  #cdocMain{display:none;padding:12px 14px 28px !important}
+  #cdocLayout.cdoc-doc-open #cdocSidebar{display:none !important}
+  #cdocLayout.cdoc-doc-open #cdocMain{display:block}
+  #cdocSectionList > div{padding:13px 12px !important;margin-bottom:2px !important}
+  #cdocSectionList > div > span:first-of-type{font-size:15px !important}
+  .cdoc-row-chev{display:inline-block;font-size:16px;color:var(--muted);flex-shrink:0}
+  .cdoc-mobile-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;position:sticky;top:-12px;z-index:3;background:var(--bg);padding:8px 0}
+  .cdoc-back{display:flex;align-items:center;gap:4px;background:none;border:none;color:var(--brand-light);font-size:14px;font-weight:600;padding:6px 2px;cursor:pointer;font-family:'Barlow',sans-serif}
+  #cdocMain .cdoc-titleinput{font-size:22px !important}
+  #cdocMain .cdoc-notes{min-height:140px !important;font-size:15px !important;padding:12px !important;overflow:visible !important;overflow-x:auto !important}
+  #cdocMain .cdoc-rt-toolbar{position:sticky;top:44px;z-index:2}
 }
 /* Month view */
 #calWeekGrid.cal-month{grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(96px,1fr)}
@@ -17986,6 +18003,7 @@ function cdocRenderSidebar(){
       <span style="flex:1;font-size:12px;font-weight:${active?'700':'500'};color:${active?'var(--brand)':'rgba(255,255,255,0.75)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sec.title)}</span>
       ${count?`<span style="font-size:9px;color:var(--muted);background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:8px;flex-shrink:0">${count}</span>`:''}
       ${moveBtns}
+      ${cdocEditMode ? '' : '<i class="ti ti-chevron-right cdoc-row-chev"></i>'}
     </div>`;
   }).join('');
 }
@@ -18037,6 +18055,10 @@ function cdocRenderMain(){
       .cdoc-upl{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
       .cdoc-upl.primary{background:var(--brand-light);border-color:var(--brand-light);color:#0F1117}
     </style>
+    <div class="cdoc-mobile-bar">
+      <button class="cdoc-back" onclick="cdocBackToList()"><i class="ti ti-chevron-left" style="font-size:18px"></i>All docs</button>
+      ${isAdmin() ? `<button onclick="cdocToggleEdit()" style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:7px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif;${cdocEditMode?'background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.4);color:#34D399':'background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.35);color:var(--brand-light)'}"><i class="ti ${cdocEditMode?'ti-check':'ti-pencil'}" style="font-size:13px"></i>${cdocEditMode?'Done':'Edit'}</button>` : ''}
+    </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
       ${cdocEditMode
         ? `<input class="cdoc-titleinput" value="${esc(sec.title)}" onchange="cdocRenameSection('${sec.id}', this.value)">
@@ -18244,7 +18266,20 @@ function cdocSelect(id){
   // Save the current editor before switching away.
   if(cdocActiveId && cdocActiveId !== id) cdocFlushNotes(cdocActiveId);
   cdocActiveId = id; cdocRenderSidebar(); cdocRenderMain();
+  // Phones: show the doc full width instead of beside the list.
+  const lay = document.getElementById('cdocLayout');
+  if(lay) lay.classList.add('cdoc-doc-open');
+  const main = document.getElementById('cdocMain');
+  if(main) main.scrollTop = 0;
 }
+
+// Phones: leave the doc and return to the section list.
+function cdocBackToList(){
+  if(cdocActiveId) cdocFlushNotes(cdocActiveId);
+  const lay = document.getElementById('cdocLayout');
+  if(lay) lay.classList.remove('cdoc-doc-open');
+}
+window.cdocBackToList = cdocBackToList;
 
 function cdocAddSection(){
   if(!isAdmin()||!cdocEditMode) return;
