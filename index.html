@@ -2609,6 +2609,36 @@ function suppDelete(jobId, sid){
 }
 window.suppDelete = suppDelete;
 
+// Edit an existing supplement's status or amount (e.g. Submitted → Approved).
+function suppUpdate(jobId, sid, field, value){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  const s = getSupplements(j).find(x=>x._sid===sid);
+  if(!s) return;
+  const wasPending = supplementsRollupStatus(j)==='Submitted';
+  const before = field==='amount' ? `$${(parseFloat(s.amount)||0).toLocaleString()}` : s.status;
+  if(field==='status'){
+    if(!['Submitted','Approved','Partial','Denied'].includes(value)) return;
+    s.status = value;
+  } else if(field==='amount'){
+    const amt = moneyNum(value);
+    if(!(amt>=0)) return;
+    s.amount = amt.toFixed(2);
+  } else return;
+  const after = field==='amount' ? `$${(parseFloat(s.amount)||0).toLocaleString()}` : s.status;
+  if(before===after) return;
+  syncSupplementMirrors(j);
+  // Last pending supplement just settled on a completed job → fire invoice-ready.
+  const nowApproved = supplementsRollupStatus(j)==='Approved';
+  if(wasPending && nowApproved && /complet|invoic/i.test((columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name)||'')){
+    j.invoiceReadyNotified=false; notifyInvoiceReady(j);
+  }
+  if(typeof logActivity==='function') logActivity(j,'accounting','Supplement updated',`${before} → ${after}${s.note?' · '+s.note:''}`);
+  saveToStorage();
+  if(typeof renderDetailPanel==='function') renderDetailPanel();
+}
+window.suppUpdate = suppUpdate;
+
 // ── READY-TO-INVOICE ALERT — gated on supplement status ──
 function invoiceReadyState(j){
   const st = j.supplementStatus || 'Not needed';
@@ -5923,19 +5953,27 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 const approved = supplementsApprovedTotal(j);
                 const pending = list.some(s=>s.status==='Submitted'||s.status==='Partial');
                 const badge = pending ? ['Pending','#FBBF24'] : (approved>0 ? ['Approved','#34D399'] : (list.length?['—','var(--muted)']:['','var(--muted)']));
-                return `<div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');if(b){b.style.display=b.style.display==='block'?'none':'block';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
+                return `<div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');if(b){b.style.display=b.style.display==='block'?'none':'block';window._suppOpen=b.style.display==='block';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
                   <span style="font-size:11px;color:var(--muted)">Supplements${list.length?` <span style="opacity:0.6">(${list.length})</span>`:''}</span>
                   <div style="display:flex;align-items:center;gap:7px">
                     <span style="font-size:13px;font-weight:700;color:#fff">$${approved.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
                   </div>
                 </div>
-                <div id="suppBody" style="display:none;padding:2px 0 12px">
+                <div id="suppBody" style="display:${window._suppOpen?'block':'none'};padding:2px 0 12px">
                   ${list.length ? list.map(s => {
                     const stColor = { 'Submitted':'#FBBF24','Approved':'#34D399','Partial':'#FBBF24','Denied':'#F87171' }[s.status] || 'var(--muted)';
                     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
                       <span style="width:7px;height:7px;border-radius:50%;background:${stColor};flex-shrink:0"></span>
                       <div style="flex:1;min-width:0">
-                        <div style="font-size:12px;font-weight:600;color:#fff">$${(parseFloat(s.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:10px;font-weight:600;color:${stColor}">· ${s.status}</span></div>
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                          <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:4px 6px;gap:2px;width:96px">
+                            <span style="font-size:11px;color:var(--muted)">$</span>
+                            <input type="number" step="0.01" min="0" value="${(parseFloat(s.amount)||0).toFixed(2)}" onchange="suppUpdate('${j.id}','${s._sid}','amount',this.value)" title="Edit amount" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#fff;font-weight:600;width:100%;background:none">
+                          </div>
+                          <select onchange="suppUpdate('${j.id}','${s._sid}','status',this.value)" title="Change status" style="background:#1E253A;border:1px solid ${stColor};border-radius:6px;padding:4px 6px;font-size:11px;font-weight:600;color:${stColor};font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+                            ${['Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}"${o===s.status?' selected':''}>${o}</option>`).join('')}
+                          </select>
+                        </div>
                         ${s.note?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(s.note)}</div>`:''}
                       </div>
                       <button onclick="suppDelete('${j.id}','${s._sid}')" title="Remove" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;flex-shrink:0" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:13px"></i></button>
