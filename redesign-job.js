@@ -11,6 +11,7 @@
   const CHEVRON = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>';
   let toolsOpen = false;     // "More tools" starts closed for every job
   let calcOpen = false;      // min. contract calculator starts closed
+  let docsOpen = false, linksOpen = false, infoOpen = false;   // lower sections start closed
   let lastJobId = null;
 
   function currentJob() {
@@ -299,9 +300,7 @@
     L.supp = line({ label: 'Supplements', header: $id('suppHeader'), body: $id('suppBody'), parts: [$id('suppBody')] });
     L.checks = line({ label: 'Checks collected', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
     // Expenses: the per-type breakdown only shows once the line is opened
-    const cats = document.createElement('div');
-    cats.className = 'rd-fin-cats';
-    L.exp = line({ label: 'Expenses', header: $id('expAccHeader'), body: $id('expBody'), parts: [cats, $id('expBody')], cls: 'cost' });
+    L.exp = line({ label: 'Expenses', header: $id('expAccHeader'), body: $id('expBody'), parts: [$id('expBody')], cls: 'cost' });
     // Net profit: opening it shows overhead, commission and the P&L print
     L.net = line({ label: 'Net profit', header: $id('profitHeader'), body: $id('profitPrintBtn'), cls: 'net' });
     const ovEditable = !!$id('ovChev');
@@ -329,27 +328,6 @@
         total += c === 'Returns' ? -Math.abs(v) : Math.abs(v);
       });
       set(L.exp.value, total ? usd(total, '-') : '$0');
-      let order = [];
-      try { order = EXPENSE_CATEGORIES.slice(); } catch (e) {}
-      Object.keys(byCat).forEach(c => { if (order.indexOf(c) < 0) order.push(c); });
-      let colors = {};
-      try { colors = EXPENSE_CATEGORY_COLORS; } catch (e) {}
-      const parts = order.filter(c => byCat[c]).map(c => c + '|' + (c === 'Returns' ? usd(Math.abs(byCat[c]), '+') : usd(Math.abs(byCat[c]), '-')) + '|' + (colors[c] || '#8B94A7'));
-      const key = parts.join(';');
-      if (cats.dataset.key !== key) {
-        cats.dataset.key = key;
-        cats.innerHTML = '';
-        parts.forEach(p => {
-          const [name, val, color] = p.split('|');
-          const r = document.createElement('div');
-          r.className = 'rd-fin-cat';
-          r.innerHTML = '<span class="rd-fin-catl"><span class="rd-fin-dot"></span><span></span></span><span></span>';
-          r.querySelector('.rd-fin-dot').style.background = color;
-          r.querySelector('.rd-fin-catl span:last-child').textContent = name;
-          r.lastChild.textContent = val;
-          cats.appendChild(r);
-        });
-      }
       const n = num($id('profitNet') && $id('profitNet').textContent);
       set(L.net.value, n == null ? '—' : usd(n));
       L.net.value.classList.toggle('neg', n != null && n < 0);
@@ -504,27 +482,29 @@
     const DOC_BTN = /openInsuranceEstimator|activeTab='quote'|activeTab='contract'|openAbcMaterialCalc|openSubVoucher|openCommVoucher|openFinalInvoice/;
     const docBtns = calc ? Array.from(calc.querySelectorAll('button[onclick]')).filter(b => DOC_BTN.test(b.getAttribute('onclick') || '')) : [];
     if (docBtns.length) {
-      const docs = section(ov, 'Estimates, orders & invoices');
+      const docs = collapsible(ov, 'Estimates, orders & invoices', 'Quote · Contract · Material order · Final invoice', docsOpen, open => { docsOpen = open; });
       const dgrid = document.createElement('div');
       dgrid.className = 'rd-links rd-docs';
       docBtns.forEach(b => dgrid.appendChild(b));
-      docs.appendChild(dgrid);
+      docs.body.appendChild(dgrid);
     }
 
     // 6. Quick links
-    const links = section(ov, 'Quick links');
+    const links = collapsible(ov, 'Quick links', 'Customer portal · Inspection · COC · Weather DOL · Schedule', linksOpen, open => { linksOpen = open; });
     const grid = document.createElement('div');
     grid.className = 'rd-links';
     if (jobBar) jobBar.querySelectorAll('.ap-pill').forEach(p => grid.appendChild(p));
-    links.appendChild(grid);
+    links.body.appendChild(grid);
 
     // 7. More tools (closed)
     const tools = collapsible(ov, 'More tools', 'Roofr import · Demand Estimate · Weather', toolsOpen, open => { toolsOpen = open; });
     [measure, wx].forEach(el => el && tools.body.appendChild(el));
 
     // 8. Job info
-    const info = section(ov, 'Job info');
-    if (meta) info.appendChild(meta);
+    if (meta) {
+      const info = collapsible(ov, 'Job info', 'Created by · Assigned to · Date · Source', infoOpen, open => { infoOpen = open; });
+      info.body.appendChild(meta);
+    }
 
     // Anything not placed above (e.g. a card added to the CRM later) still shows
     const leftovers = Array.from(twoCol.children).flatMap(c => Array.from(c.children)).filter(el => el !== btnRow && el !== actions);
@@ -562,17 +542,30 @@
     const panel = $id('detailPanel');
     const j = currentJob();
     if (!panel || !j) return;
-    if (j.id !== lastJobId) { toolsOpen = false; calcOpen = false; lastJobId = j.id; }
     closeMenu();
     panel.classList.add('rd-job');
     decorateHeader(panel, j);
     if (currentTab() === 'overview') rebuildOverview(panel, j);
   }
 
+  // Expense groups (Materials, Labor...) start closed; the CRM opens a group
+  // unless it is marked false, so unknown groups read as closed here.
+  function closedGroups() {
+    return new Proxy({}, { get: (t, k) => (k in t ? t[k] : false) });
+  }
+  function resetForNewJob() {
+    const j = currentJob();
+    if (!j || j.id === lastJobId) return;
+    lastJobId = j.id;
+    toolsOpen = calcOpen = docsOpen = linksOpen = infoOpen = false;
+    window._expCatOpen = closedGroups();
+  }
+
   function init() {
     if (typeof window.renderDetailPanel !== 'function' || window.renderDetailPanel.__rd) return;
     const original = window.renderDetailPanel;
     const wrapped = function () {
+      try { resetForNewJob(); } catch (e) {}
       const r = original.apply(this, arguments);
       try { decorate(); } catch (e) { console.warn('job screen redesign skipped', e); }
       return r;

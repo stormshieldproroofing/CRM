@@ -545,3 +545,6 @@ html.ui-new .rd-fin-item.open > .rd-fin-row .rd-fin-r svg{transform:rotate(180de
 html.ui-new .rd-fin-item.net .rd-fin-item.nested .rd-fin-name{font-weight:500;color:var(--text-2)}
 html.ui-new .rd-fin-item.net .rd-fin-item.nested.open > .rd-fin-row .rd-fin-name{color:var(--brand)}
 html.ui-new .rd-fin-item.net .rd-fin-item.nested .rd-fin-v{font-size:14px;font-weight:600;color:var(--brand)}
+/* no extra divider at the top of an opened money line */
+html.ui-new .rd-fin-slot .acc-body{margin-top:0!important;padding-top:0!important;border-top:none!important}
+html.ui-new .rd-fin-slot #expCatSummary{display:none!important}
