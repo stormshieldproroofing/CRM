@@ -529,6 +529,81 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   #quickMeasureModal #qmTotalRange{font-size:10px!important;margin-top:3px!important}
   #quickMeasureModal .qm-done{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:8px;height:40px;border:none;border-radius:10px;background:var(--brand-light);color:#fff;font-weight:600;cursor:pointer;font-family:inherit}
 }
+
+/* ── CALENDAR on phones (both looks) ── */
+.cal-unsched-toggle,.cal-mdots,.cal-mrain{display:none}
+#calAgenda:empty{display:none}
+@media (min-width:761px){ #calAgenda{display:none} }
+@media (max-width:760px){
+  #calendarPage{padding-bottom:24px}
+  #calTopBar{display:grid !important;grid-template-columns:44px 1fr 44px auto;align-items:center;gap:8px !important;padding:10px 12px !important}
+  #calTitle,#calTopBar .cal-spacer{display:none !important}
+  #calPrev,#calNext{width:44px;height:44px;border-radius:12px}
+  #calWeekLabel{font-size:17px !important;font-weight:700 !important;white-space:nowrap}
+  #calToday{height:44px;padding:0 14px !important;font-size:14px !important;border-radius:12px !important}
+  #calViewToggle{grid-column:1/-1;margin-left:0 !important;border-radius:12px !important;padding:3px;gap:3px}
+  #calViewToggle .cal-view-btn{flex:1;height:38px;font-size:14px !important;border-radius:9px !important}
+  #calTools{grid-column:1/-1;display:flex !important;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -12px;padding:0 12px}
+  #calTools::-webkit-scrollbar{display:none}
+  #calTools > *{flex:0 0 auto;white-space:nowrap;height:38px;border-radius:999px !important;font-size:13px !important}
+  /* unscheduled: one tap-to-open bar */
+  #calUnschedHead{padding:8px 12px !important;border-bottom:none !important}
+  #calUnschedHead .cal-unsched-title,#calUnschedCount{display:none}
+  .cal-unsched-toggle{display:flex;align-items:center;gap:10px;width:100%;height:50px;padding:0 14px;border-radius:12px;border:1px solid rgba(77,157,224,.35);background:rgba(77,157,224,.10);color:var(--brand-light);font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+  .cal-unsched-toggle .ti{font-size:18px}
+  .cal-unsched-tlabel{flex:1;text-align:left;color:#fff}
+  .cal-unsched-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;background:var(--brand-light);color:#fff;font-size:13px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+  .cal-unsched-chev{transition:transform .2s;color:var(--muted)}
+  #calSidebar.cal-unsched-open .cal-unsched-chev{transform:rotate(180deg)}
+  #calSidebar:not(.cal-unsched-open) .cal-unsched-search-wrap,#calSidebar:not(.cal-unsched-open) #calUnschedList{display:none !important}
+  #calSidebar .cal-unsched-search-wrap{margin-top:10px}
+  #calSidebar .cal-unsched-search{height:44px;font-size:15px;border-radius:10px}
+  #calSidebar{border-bottom:none !important;background:transparent !important}
+  #calUnschedHead{background:transparent !important}
+  /* readiness: one slim row */
+  #calReadinessBar{gap:6px !important;padding:4px 12px 10px !important;border-bottom:none !important}
+  .cal-rd-card{padding:6px 2px !important;min-height:0 !important}
+  .cal-rd-card .cal-rd-n{font-size:17px !important;line-height:1.1 !important}
+  .cal-rd-card .cal-rd-lbl{font-size:9px !important;letter-spacing:.02em !important;white-space:nowrap}
+  /* month grid: number + dots; details go in the list below */
+  #calWeekGrid.cal-month{gap:0 !important;background:transparent !important;padding:0 8px}
+  #calWeekGrid.cal-month .cal-month-dow{background:transparent;font-size:11px;padding:6px 0;color:var(--muted)}
+  #calWeekGrid.cal-month .cal-mday{min-height:54px !important;padding:4px 0 6px !important;align-items:center;gap:4px;background:transparent !important;box-shadow:none !important;border-radius:12px;cursor:pointer;overflow:visible}
+  #calWeekGrid.cal-month .cal-mday .cal-mchip,#calWeekGrid.cal-month .cal-mmore,#calWeekGrid.cal-month .cal-mday-wx-corner,#calWeekGrid.cal-month .cal-mday-cap{display:none !important}
+  #calWeekGrid.cal-month .cal-mday-head{justify-content:center}
+  #calWeekGrid.cal-month .cal-mday-num{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px !important;font-weight:600 !important}
+  #calWeekGrid.cal-month .cal-mday-today .cal-mday-num{box-shadow:inset 0 0 0 2px var(--brand-light);color:var(--brand-light)}
+  #calWeekGrid.cal-month .cal-mday-sel .cal-mday-num{background:var(--brand-light);color:#fff;box-shadow:none}
+  #calWeekGrid.cal-month .cal-mday-other{opacity:.35}
+  #calWeekGrid.cal-month .cal-mday-full .cal-mdots span{box-shadow:0 0 0 1.5px #EF4444}
+  .cal-mdots{display:flex;gap:3px;height:7px;align-items:center;justify-content:center}
+  .cal-mdots span{width:7px;height:7px;border-radius:50%}
+  .cal-mdots b{font-size:10px;line-height:7px;color:var(--muted)}
+  .cal-mrain{display:block;position:absolute;top:2px;right:3px;font-size:11px;color:#EF4444}
+  /* the selected day's jobs */
+  #calAgenda{padding:12px 12px 8px;border-top:1px solid var(--border);margin-top:8px}
+  .cal-ag-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+  .cal-ag-date{font-size:17px;font-weight:700;color:#fff}
+  .cal-ag-cap{font-size:13px;color:var(--muted);margin-top:2px}
+  .cal-ag-cap.full{color:#F87171}
+  .cal-ag-wx{flex-shrink:0;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+  .cal-ag-card{background:#1A2030;border:1px solid var(--border);border-left:4px solid;border-radius:12px;padding:12px;margin-bottom:10px}
+  .cal-ag-top{display:flex;gap:10px;align-items:flex-start}
+  .cal-ag-main{flex:1;min-width:0}
+  .cal-ag-name{font-size:16px;font-weight:600;color:#fff}
+  .cal-ag-addr{font-size:13px;color:var(--muted);margin-top:2px}
+  .cal-ag-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .cal-ag-tag{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:600;background:rgba(255,255,255,.06);color:var(--muted)}
+  .cal-ag-tag.yes{background:rgba(52,211,153,.14);color:#6EE7B7}
+  .cal-ag-tag.no{background:rgba(251,191,36,.14);color:#FBBF24}
+  .cal-ag-tag.carrier{background:rgba(77,157,224,.14);color:#8FB4FF}
+  .cal-ag-tag[data-cal-confirm]{cursor:pointer}
+  .cal-ag-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .cal-ag-acts button,.cal-ag-add{height:44px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:#141927;color:#E8ECF3;font-size:14px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+  .cal-ag-acts .ti{color:var(--brand-light)}
+  .cal-ag-add{width:100%;border-style:dashed;background:transparent;color:var(--brand-light)}
+  .cal-ag-empty{padding:18px 8px;text-align:center;color:var(--muted);font-size:14px}
+}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
@@ -755,11 +830,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     <button id="calNext" class="icon-btn" title="Next"><i class="ti ti-chevron-right"></i></button>
     <button id="calToday" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'Barlow',sans-serif">Today</button>
     <!-- Week / Month toggle -->
-    <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-left:6px">
+    <div id="calViewToggle" style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-left:6px">
       <button id="calViewMonth" class="cal-view-btn" data-view="month" style="background:rgba(77,157,224,0.15);color:var(--brand-light);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">Month</button>
       <button id="calViewWeek"  class="cal-view-btn" data-view="week"  style="background:transparent;color:var(--muted);border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif">Week</button>
     </div>
-    <div style="flex:1"></div>
+    <div class="cal-spacer" style="flex:1"></div>
+    <div id="calTools" style="display:contents">
     <button onclick="syncAllBuildsToZoho()" title="Push all scheduled build dates to Zoho Calendar" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted);cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-calendar-up" style="font-size:13px;color:var(--brand-light)"></i>Sync to Zoho</button>
     <div id="calWeatherBadge" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--muted);cursor:pointer" title="Weather forecast (click to refresh / change location)">
       <i id="calWeatherIcon" class="ti ti-cloud" style="font-size:13px;color:var(--brand-light)"></i>
@@ -770,12 +846,14 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       <span><span id="calCrewCount" style="color:#fff;font-weight:600">3</span> crews/day</span>
       <button id="calEditCrews" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:4px;font-size:11px" title="Edit crew count"><i class="ti ti-edit" style="font-size:12px"></i></button>
     </div>
+    </div>
   </div>
   <div id="calLayout" style="display:flex;height:calc(100vh - 110px);overflow:hidden">
     <!-- Unscheduled jobs sidebar -->
     <div id="calSidebar" style="width:260px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:#161B2A">
-      <div style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
+      <div id="calUnschedHead" style="padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#161B2A;z-index:2">
+        <button type="button" class="cal-unsched-toggle" onclick="calToggleUnsched()" aria-label="Show or hide unscheduled jobs"><i class="ti ti-calendar-plus"></i><span class="cal-unsched-tlabel">To schedule</span><span id="calUnschedBadge" class="cal-unsched-badge">0</span><i class="ti ti-chevron-down cal-unsched-chev"></i></button>
+        <div class="cal-unsched-title" style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.06em;color:var(--brand);text-transform:uppercase">Unscheduled</div>
         <div id="calUnschedCount" style="font-size:10px;color:var(--muted);margin-top:2px">0 jobs awaiting build date</div>
         <div class="cal-unsched-search-wrap">
           <i class="ti ti-search" aria-hidden="true"></i>
@@ -809,6 +887,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
       </div>
     </div>
       <div id="calWeekGrid" class="cal-week-grid" style="flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);overflow:auto"></div>
+      <div id="calAgenda"></div>
     </div>
   </div>
 </div>
@@ -11242,6 +11321,7 @@ function renderCalendarWeek(){
   if(!grid) return;
   grid.classList.remove('cal-month');
   grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
+  const ag = document.getElementById('calAgenda'); if(ag) ag.innerHTML = '';
   grid.style.gridAutoRows = '';
   // calAnchor in week view is the Sunday
   const weekStart = calStartOfWeek(calAnchor);
@@ -11253,7 +11333,7 @@ function renderCalendarWeek(){
   const fmt = (d,opts) => d.toLocaleDateString('en-US', opts);
   const sameMonth = days[0].getMonth() === days[6].getMonth();
   label.textContent = sameMonth
-    ? `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[6],{day:'numeric',year:'numeric'})}`
+    ? `${fmt(days[0],{month:'short',day:'numeric'})} – ${days[6].getDate()}, ${days[6].getFullYear()}`
     : `${fmt(days[0],{month:'short',day:'numeric'})} – ${fmt(days[6],{month:'short',day:'numeric',year:'numeric'})}`;
   const today = new Date(); today.setHours(0,0,0,0);
 
@@ -11279,9 +11359,7 @@ function renderCalendarWeek(){
           </div>
           <div class="cal-day-cap ${capCls}">${dayJobs.length} / ${calCrewsPerDay}</div>
         </div>
-        <div class="cal-day-body" data-cal-body="${key}">
-          ${dayJobs.map(j => renderCalJobCard(j, true)).join('')}
-        </div>
+        <div class="cal-day-body" data-cal-body="${key}">${dayJobs.map(j => renderCalJobCard(j, true)).join('')}</div>
         ${wxBadge ? `<div class="cal-day-wx-corner">${wxBadge}</div>` : ''}
       </div>`;
   }).join('');
@@ -11353,12 +11431,15 @@ function renderCalendarMonth(){
         ${chipsHtml}
         ${moreHtml}
         ${wxBadge ? `<div class="cal-mday-wx-corner">${wxBadge}</div>` : ''}
+        <div class="cal-mdots" aria-hidden="true">${dayJobs.slice(0,3).map(j=>`<span style="background:${calReadinessColor(calReadinessBucket(j))}"></span>`).join('')}${dayJobs.length>3?'<b>+</b>':''}</div>
+        ${isBadWeatherDay(key) ? '<i class="ti ti-cloud-rain cal-mrain" aria-hidden="true"></i>' : ''}
       </div>`;
   }).join('');
 
   grid.innerHTML = dowHtml + cellHtml;
   wireCalDragDrop();
   wireCalMonthInteractions();
+  calRenderAgenda();
 }
 
 function renderCalendarSidebar(){
@@ -11369,6 +11450,8 @@ function renderCalendarSidebar(){
   const searchEl = document.getElementById('calUnschedSearch');
   if(searchEl && searchEl.value !== calUnschedSearch) searchEl.value = calUnschedSearch;
   if(countEl) countEl.textContent = `${unsched.length} ${unsched.length === 1 ? 'job' : 'jobs'} after approval`;
+  const badgeEl = document.getElementById('calUnschedBadge');
+  if(badgeEl) badgeEl.textContent = unsched.length;
   if(list){
     list.innerHTML = unsched.length
       ? unsched.map(j => renderCalJobCard(j)).join('')
@@ -11673,6 +11756,7 @@ function wireCalMonthInteractions(){
   });
   document.querySelectorAll('.cal-mday').forEach(cell => {
     cell.addEventListener('click', e => {
+      if(calIsPhone()){ e.stopPropagation(); calSelectDay(cell.dataset.calDay); return; }
       // Click on empty cell area (not on chip/more) opens the day popup
       const touch = window.matchMedia && window.matchMedia('(max-width:760px),(pointer:coarse)').matches;
       if(touch || e.target.classList.contains('cal-mday') || e.target.classList.contains('cal-mday-head') || e.target.classList.contains('cal-mday-num') || e.target.classList.contains('cal-mday-cap')){
@@ -11681,6 +11765,78 @@ function wireCalMonthInteractions(){
     });
   });
 }
+
+
+// ── PHONE CALENDAR: tap a day, see its jobs listed below the month ──
+function calIsPhone(){ return !!(window.matchMedia && window.matchMedia('(max-width:760px)').matches); }
+function calToggleUnsched(force){
+  const sb = document.getElementById('calSidebar'); if(!sb) return;
+  sb.classList.toggle('cal-unsched-open', force===undefined ? !sb.classList.contains('cal-unsched-open') : !!force);
+}
+window.calToggleUnsched = calToggleUnsched;
+function calSelectDay(key){
+  window._calSelKey = key;
+  document.querySelectorAll('.cal-mday').forEach(c => c.classList.toggle('cal-mday-sel', c.dataset.calDay === key));
+  calRenderAgenda();
+}
+window.calSelectDay = calSelectDay;
+function calRenderAgenda(){
+  const box = document.getElementById('calAgenda');
+  if(!box) return;
+  if(calView !== 'month' || !calAnchor){ box.innerHTML = ''; return; }
+  // default selection: today if it's in this month, else the 1st
+  const m = calAnchor.getMonth(), y = calAnchor.getFullYear();
+  let sel = window._calSelKey ? calParseKey(window._calSelKey) : null;
+  if(!sel || sel.getMonth() !== m || sel.getFullYear() !== y){
+    const t = new Date(); t.setHours(0,0,0,0);
+    sel = (t.getMonth() === m && t.getFullYear() === y) ? t : new Date(y, m, 1);
+    window._calSelKey = calDateKey(sel);
+  }
+  const key = window._calSelKey;
+  document.querySelectorAll('.cal-mday').forEach(c => c.classList.toggle('cal-mday-sel', c.dataset.calDay === key));
+  const dayJobs = calJobsOnDay(key);
+  const t0 = new Date(); t0.setHours(0,0,0,0);
+  const isPast = sel < t0;
+  const full = !calCanScheduleOnDay(key);
+  const wx = renderWeatherBadgeFor(key);
+  const admin = isAdmin();
+  const cards = dayJobs.map(j => {
+    const rc = calReadinessColor(calReadinessBucket(j));
+    const confirmed = !!j.buildConfirmed;
+    const bad = isBadWeatherDay(j.buildDate);
+    return `<div class="cal-ag-card" style="border-left-color:${rc}">
+      <div class="cal-ag-top">
+        ${calSalesAvatarHtml(j)}
+        <div class="cal-ag-main">
+          <div class="cal-ag-name">${escapeHtml(j.name||'Job')}${bad?' <i class="ti ti-alert-triangle" style="color:#EF4444"></i>':''}</div>
+          <div class="cal-ag-addr">${escapeHtml(calJobAddressFull(j)||'No address')}</div>
+          <div class="cal-ag-tags">
+            <span class="cal-ag-tag ${confirmed?'yes':'no'}" ${admin?`data-cal-confirm="${j.id}" role="button" title="${confirmed?'Tap to mark unconfirmed':'Tap to confirm with crew'}"`:''}><i class="ti ${confirmed?'ti-circle-check-filled':'ti-clock-question'}"></i>${confirmed?'Confirmed':'Unconfirmed'}</span>
+            ${j.carrier?`<span class="cal-ag-tag carrier">${escapeHtml(j.carrier)}</span>`:''}
+          </div>
+        </div>
+      </div>
+      <div class="cal-ag-acts">
+        <button type="button" data-cal-ag-resched="${j.id}"><i class="ti ti-calendar-repeat"></i>Reschedule</button>
+        <button type="button" data-cal-ag-open="${j.id}"><i class="ti ti-external-link"></i>Open job</button>
+      </div>
+    </div>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="cal-ag-head">
+      <div>
+        <div class="cal-ag-date">${sel.toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric'})}</div>
+        <div class="cal-ag-cap ${full?'full':''}">${dayJobs.length} of ${calCrewsPerDay} crews booked${full?' · full':''}</div>
+      </div>
+      ${wx ? `<div class="cal-ag-wx">${wx}</div>` : ''}
+    </div>
+    ${cards || `<div class="cal-ag-empty">No builds on this day.</div>`}
+    ${(!isPast && !full) ? `<button type="button" class="cal-ag-add" onclick="openCalDayPopup('${key}')"><i class="ti ti-plus"></i>Schedule a job on this day</button>` : ''}`;
+  box.querySelectorAll('[data-cal-ag-resched]').forEach(b => b.addEventListener('click', () => openScheduleSheet(b.dataset.calAgResched)));
+  box.querySelectorAll('[data-cal-ag-open]').forEach(b => b.addEventListener('click', () => { if(typeof openDetail === 'function') openDetail(b.dataset.calAgOpen); }));
+  wireCalDragDrop();   // binds the confirm tags (guarded against double-binding)
+}
+window.calRenderAgenda = calRenderAgenda;
 
 function openCalDayPopup(dateKey){
   const date = calParseKey(dateKey);
@@ -11938,6 +12094,7 @@ function wireCalDragDrop(){
     calAnchor = calView === 'month'
       ? new Date(t.getFullYear(), t.getMonth(), 1)
       : calStartOfWeek(t);
+    window._calSelKey = calDateKey(t);
     renderCalendarPage();
   });
 
@@ -11950,9 +12107,20 @@ function wireCalDragDrop(){
       if(newView === calView) return;
       const t = new Date(); t.setHours(0,0,0,0);
       // Convert anchor between views (keep "today" anchored)
+      // phone: go to the week of the day you picked (or back to its month)
+      let base = calAnchor;
+      if(calIsPhone() && window._calSelKey){
+        const sd = calParseKey(window._calSelKey);
+        if(sd && newView === 'week' && sd.getMonth() === calAnchor.getMonth()) base = sd;
+      }
+      if(calIsPhone() && newView === 'month' && calView === 'week'){
+        // pick the week day that's in the majority month (Wed), and select it
+        const mid = new Date(calAnchor); mid.setDate(mid.getDate() + 3); base = mid;
+        if(!window._calSelKey || calStartOfWeek(calParseKey(window._calSelKey)).getTime() !== calAnchor.getTime()) window._calSelKey = calDateKey(mid);
+      }
       calAnchor = newView === 'month'
-        ? new Date(calAnchor.getFullYear(), calAnchor.getMonth(), 1)
-        : calStartOfWeek(calAnchor);
+        ? new Date(base.getFullYear(), base.getMonth(), 1)
+        : calStartOfWeek(base);
       calView = newView;
       localStorage.setItem('stormshield_cal_view', calView);
       renderCalendarPage();
