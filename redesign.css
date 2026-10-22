@@ -421,3 +421,59 @@ html.ui-new .rd-actionbar #dpMove i{font-size:18px}
   html.ui-new .rd-actionbar{margin:0 -14px -20px!important;padding:12px 14px calc(14px + env(safe-area-inset-bottom))!important}
   html.ui-new .rd-tabmenu{right:12px}
 }
+
+/* ── Job screen v2: upload sheet, clean money list, roof tiles ───────── */
+html.ui-new .rd-qa-btn.primary .rd-qa-ic{background:var(--blue);border-color:var(--blue);color:#fff}
+html.ui-new .rd-qa-btn.primary{color:var(--brand);font-weight:600}
+
+/* Save to phone contacts, inside the customer card */
+html.ui-new .rd-save-contact{display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important;width:100%!important;min-height:44px!important;margin:12px 0 0!important;padding:0 12px!important;border-radius:12px!important;font-size:14px!important;font-weight:600!important;flex:none!important;min-width:0!important}
+
+/* Sheet extras */
+html.ui-new .rd-menu-title{font-size:17px;font-weight:700;color:var(--brand);padding:2px 10px 0}
+html.ui-new .rd-menu-sub{font-size:13px;color:var(--muted);padding:2px 10px 8px}
+html.ui-new .rd-menu-head{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 10px 6px}
+html.ui-new .rd-menu-l{flex:1}
+html.ui-new .rd-menu-note{font-size:13px;color:var(--muted)}
+html.ui-new .rd-menu-note.ok{color:#6EE7B7}
+html.ui-new .rd-up-photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 4px 4px}
+html.ui-new .rd-up-photo{min-height:66px;border-radius:14px;border:1px solid var(--line);background:var(--panel);color:var(--brand);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;font-size:14px;font-weight:600}
+html.ui-new .rd-up-photo:hover{background:#171C26}
+html.ui-new .rd-up-dot{width:8px;height:8px;border-radius:50%}
+html.ui-new .rd-up-n{font-size:11px;font-weight:500;color:var(--muted)}
+@media (min-width:761px){
+  html.ui-new .rd-menu{max-height:calc(100vh - 100px);overflow-y:auto}
+}
+
+/* Clean money list */
+html.ui-new .rd-fin{background:#0E1219;border:1px solid var(--line);border-radius:14px;padding:4px 16px}
+html.ui-new .rd-fin-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:15px}
+html.ui-new .rd-fin-l{display:flex;align-items:center;gap:10px;color:var(--text-2);min-width:0}
+html.ui-new .rd-fin-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+html.ui-new .rd-fin-v{font-weight:600;color:var(--brand);white-space:nowrap}
+html.ui-new .rd-fin-row.cost .rd-fin-v{color:var(--text-2)}
+html.ui-new .rd-fin-row.credit .rd-fin-v{color:#6EE7B7}
+html.ui-new .rd-fin-net{display:flex;align-items:center;justify-content:space-between;padding:14px 0 12px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:15px;font-weight:700;color:var(--brand)}
+html.ui-new .rd-fin-netv{font-size:24px;color:#6EE7B7}
+html.ui-new .rd-fin-net.neg .rd-fin-netv{color:#FCA5A5}
+html.ui-new .rd-fin-row.sub{font-size:14px;padding:10px 0;border-bottom:none}
+html.ui-new .rd-fin-row.sub .rd-fin-l{color:var(--muted)}
+html.ui-new .rd-fin-row.sub .rd-fin-v{color:var(--text-2)}
+html.ui-new .rd-fin-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+html.ui-new .rd-fin-btn{min-height:44px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:var(--panel-2);color:var(--brand);font-size:13px;font-weight:600;cursor:pointer}
+html.ui-new .rd-fin-btn:hover{background:#1F2533}
+html.ui-new .rd-details{display:flex;flex-direction:column;gap:10px}
+html.ui-new .rd-details > *{margin:0!important}
+@media (min-width:761px){ html.ui-new .rd-fin-actions{grid-template-columns:repeat(4,minmax(0,1fr))} }
+
+/* Roof & min. contract tiles */
+html.ui-new .rd-roof{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+html.ui-new .rd-roof-tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px;border-radius:14px;border:1px solid var(--line);background:#0E1219;color:var(--brand);cursor:pointer;text-align:left;min-width:0}
+html.ui-new .rd-roof-tile.accent{border-color:#263A66}
+html.ui-new .rd-roof-tile:hover{background:#121823}
+html.ui-new .rd-roof-l{font-size:12px;font-weight:600;color:var(--muted)}
+html.ui-new .rd-roof-tile.accent .rd-roof-l{color:#8FB4FF}
+html.ui-new .rd-roof-v{font-size:17px;font-weight:700}
+html.ui-new .rd-roof-s{font-size:12px;color:var(--muted)}
+html.ui-new .rd-sec > #contractCalcCard{margin:0!important}
+html.ui-new .rd-docs > *{white-space:normal!important;text-align:left!important;line-height:1.25!important;padding:8px 12px!important}
