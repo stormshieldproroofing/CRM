@@ -482,3 +482,32 @@ html.ui-new .rd-job .dp-tab{flex-shrink:0}
 @media (max-width:760px){
   html.ui-new .rd-qa-bar{margin:0 -14px -20px;padding:8px 14px calc(10px + env(safe-area-inset-bottom))}
 }
+
+/* ── Money list: tap a line to open its form underneath ─────────────── */
+html.ui-new .rd-fin{padding:4px 12px}
+html.ui-new .rd-fin-item{border-bottom:1px solid rgba(255,255,255,0.06)}
+html.ui-new .rd-fin-item:last-child{border-bottom:none}
+html.ui-new .rd-fin-item .rd-fin-row{width:100%;border:none;background:transparent;color:inherit;font:inherit;text-align:left;padding:12px 4px;border-bottom:none;cursor:default}
+html.ui-new button.rd-fin-row{cursor:pointer;border-radius:10px}
+html.ui-new button.rd-fin-row:hover{background:rgba(255,255,255,0.03)}
+html.ui-new .rd-fin-r{display:flex;align-items:center;gap:8px}
+html.ui-new .rd-fin-r svg{width:14px;height:14px;color:var(--muted);transition:transform .15s}
+html.ui-new .rd-fin-item.open .rd-fin-r svg{transform:rotate(180deg)}
+html.ui-new .rd-fin-item.cost .rd-fin-v{color:var(--text-2)}
+html.ui-new .rd-fin-item.net .rd-fin-name{font-weight:700;color:var(--brand)}
+html.ui-new .rd-fin-item.net .rd-fin-l{gap:0}
+html.ui-new .rd-fin-item.net .rd-fin-dot{display:none}
+html.ui-new .rd-fin-item.net .rd-fin-v{font-size:24px;font-weight:700;color:#6EE7B7}
+html.ui-new .rd-fin-item.net .rd-fin-v.neg{color:#FCA5A5}
+html.ui-new .rd-fin-item.sub .rd-fin-row{font-size:14px}
+html.ui-new .rd-fin-item.sub .rd-fin-name{color:var(--muted)}
+html.ui-new .rd-fin-item.sub .rd-fin-v{color:var(--text-2)}
+html.ui-new .rd-fin-extra:empty{display:none}
+html.ui-new .rd-fin-extra{padding:0 4px 10px 21px;display:flex;flex-direction:column;gap:6px}
+html.ui-new .rd-fin-cat{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--muted)}
+html.ui-new .rd-fin-cat .rd-fin-l{color:var(--muted);gap:8px}
+html.ui-new .rd-fin-cat .rd-fin-dot{width:6px;height:6px}
+html.ui-new .rd-fin-slot{padding:0 4px}
+html.ui-new .rd-fin-slot > *{margin-bottom:10px}
+html.ui-new .rd-fin-slot:empty{display:none}
+html.ui-new .rd-fin-slot #profitPrintBtn{margin-top:0!important}
