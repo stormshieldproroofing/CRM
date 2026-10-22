@@ -316,8 +316,6 @@ html.ui-new .rd-more-btn:hover{background:#1F2533}
 
 /* Tabs: four + More */
 html.ui-new .rd-job .dp-tab.rd-tab-hidden{display:none!important}
-html.ui-new .rd-job .dp-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:visible}
-html.ui-new .rd-job .dp-tab{justify-content:center;padding:9px 6px}
 html.ui-new .rd-tab-more{gap:4px;position:relative}
 html.ui-new .rd-tab-more span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html.ui-new .rd-tab-more.has-badge::after{content:'';position:absolute;top:7px;right:8px;width:6px;height:6px;border-radius:50%;background:#34D399}
@@ -391,7 +389,7 @@ html.ui-new .rd-tools-body{display:none;flex-direction:column;gap:10px;padding:0
 html.ui-new .rd-tools.open .rd-tools-body{display:flex}
 
 /* Sticky bottom action */
-html.ui-new .rd-actionbar{position:sticky;bottom:0;z-index:6;margin:0 -18px -20px!important;padding:12px 18px calc(14px + env(safe-area-inset-bottom))!important;background:var(--panel);border-top:1px solid var(--line)}
+html.ui-new .rd-actionbar{margin:0!important;padding:0!important}
 html.ui-new .rd-actionbar #dpDelete{display:none}
 html.ui-new .rd-actionbar #dpMove{height:50px;border-radius:14px;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;border:none;background:var(--blue);color:#fff}
 html.ui-new .rd-actionbar #dpMove i{font-size:18px}
@@ -416,9 +414,7 @@ html.ui-new .rd-actionbar #dpMove i{font-size:18px}
   html.ui-new .rd-job .dp-name{font-size:20px}
   html.ui-new .rd-job .dp-status-group{margin-left:-44px;margin-top:4px}
   html.ui-new .rd-job .dp-tabs{margin:12px 0}
-  html.ui-new .rd-job .dp-tab{font-size:13px;padding:9px 2px}
   html.ui-new .rd-job .dp-body{padding:16px 14px 20px}
-  html.ui-new .rd-actionbar{margin:0 -14px -20px!important;padding:12px 14px calc(14px + env(safe-area-inset-bottom))!important}
   html.ui-new .rd-tabmenu{right:12px}
 }
 
@@ -477,3 +473,12 @@ html.ui-new .rd-roof-v{font-size:17px;font-weight:700}
 html.ui-new .rd-roof-s{font-size:12px;color:var(--muted)}
 html.ui-new .rd-sec > #contractCalcCard{margin:0!important}
 html.ui-new .rd-docs > *{white-space:normal!important;text-align:left!important;line-height:1.25!important;padding:8px 12px!important}
+
+/* Quick actions pinned to the bottom of the job screen */
+html.ui-new .rd-qa-bar{position:sticky;bottom:0;z-index:6;margin:0 -18px -20px;padding:10px 18px calc(12px + env(safe-area-inset-bottom));background:rgba(18,22,30,0.97);border-top:1px solid var(--line);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+html.ui-new .rd-qa-bar .rd-qa-ic{width:46px;height:46px;border-radius:14px;font-size:20px}
+html.ui-new .rd-qa-bar .rd-qa-btn{gap:4px;font-size:11px}
+html.ui-new .rd-job .dp-tab{flex-shrink:0}
+@media (max-width:760px){
+  html.ui-new .rd-qa-bar{margin:0 -14px -20px;padding:8px 14px calc(10px + env(safe-area-inset-bottom))}
+}
