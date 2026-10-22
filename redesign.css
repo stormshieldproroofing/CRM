@@ -492,7 +492,6 @@ html.ui-new button.rd-fin-row{cursor:pointer;border-radius:10px}
 html.ui-new button.rd-fin-row:hover{background:rgba(255,255,255,0.03)}
 html.ui-new .rd-fin-r{display:flex;align-items:center;gap:8px}
 html.ui-new .rd-fin-r svg{width:14px;height:14px;color:var(--muted);transition:transform .15s}
-html.ui-new .rd-fin-item.open .rd-fin-r svg{transform:rotate(180deg)}
 html.ui-new .rd-fin-item.cost .rd-fin-v{color:var(--text-2)}
 html.ui-new .rd-fin-item.net .rd-fin-name{font-weight:700;color:var(--brand)}
 html.ui-new .rd-fin-item.net .rd-fin-l{gap:0}
@@ -511,3 +510,38 @@ html.ui-new .rd-fin-slot{padding:0 4px}
 html.ui-new .rd-fin-slot > *{margin-bottom:10px}
 html.ui-new .rd-fin-slot:empty{display:none}
 html.ui-new .rd-fin-slot #profitPrintBtn{margin-top:0!important}
+
+/* ── Money list, minimized: five lines, details only when opened ────── */
+html.ui-new .rd-fin{padding:2px 14px}
+html.ui-new .rd-fin-item .rd-fin-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:50px;padding:0 2px;font-size:15px}
+html.ui-new .rd-fin-name{color:var(--text-2);font-weight:500}
+html.ui-new .rd-fin-v{color:var(--brand);font-weight:600}
+html.ui-new .rd-fin-v.zero{color:var(--muted);font-weight:500}
+html.ui-new .rd-fin-item.cost .rd-fin-v{color:var(--brand)}
+html.ui-new .rd-fin-item.open > .rd-fin-row .rd-fin-name{color:var(--brand)}
+html.ui-new .rd-fin-item:not(.open) > .rd-fin-slot{display:none}
+html.ui-new .rd-fin-slot{margin:0 0 12px;padding:12px;border-radius:12px;background:#151A23;border:1px solid var(--line)}
+html.ui-new .rd-fin-slot > *:last-child{margin-bottom:0}
+/* Net profit: bold, with overhead / commission / P&L tucked inside */
+html.ui-new .rd-fin-item.net{border-bottom:none}
+html.ui-new .rd-fin-item.net > .rd-fin-row{min-height:58px}
+html.ui-new .rd-fin-item.net > .rd-fin-row .rd-fin-name{color:var(--brand);font-weight:700}
+html.ui-new .rd-fin-item.net > .rd-fin-row .rd-fin-v{font-size:22px;font-weight:700;color:#6EE7B7}
+html.ui-new .rd-fin-item.net > .rd-fin-row .rd-fin-v.neg{color:#FCA5A5}
+html.ui-new .rd-fin-item.net > .rd-fin-slot{padding:4px 12px 12px}
+html.ui-new .rd-fin-item.nested{border-bottom:1px solid rgba(255,255,255,0.06)}
+html.ui-new .rd-fin-item.nested > .rd-fin-row{min-height:46px;font-size:14px}
+html.ui-new .rd-fin-item.nested > .rd-fin-slot{background:#0E1219}
+html.ui-new .rd-fin-item.net > .rd-fin-slot > #profitPrintBtn{margin-top:12px!important}
+/* Expense breakdown (inside the opened Expenses line) */
+html.ui-new .rd-fin-cats{display:flex;flex-direction:column;gap:8px;padding:0 2px 12px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+html.ui-new .rd-fin-cats:empty{display:none}
+html.ui-new .rd-fin-cat{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--text-2)}
+html.ui-new .rd-fin-catl{display:flex;align-items:center;gap:8px}
+html.ui-new .rd-fin-cats .rd-fin-dot{width:7px;height:7px;border-radius:50%}
+/* nested lines inside Net profit keep normal sizing; arrows follow their own line */
+html.ui-new .rd-fin-item .rd-fin-r svg{transform:none}
+html.ui-new .rd-fin-item.open > .rd-fin-row .rd-fin-r svg{transform:rotate(180deg)}
+html.ui-new .rd-fin-item.net .rd-fin-item.nested .rd-fin-name{font-weight:500;color:var(--text-2)}
+html.ui-new .rd-fin-item.net .rd-fin-item.nested.open > .rd-fin-row .rd-fin-name{color:var(--brand)}
+html.ui-new .rd-fin-item.net .rd-fin-item.nested .rd-fin-v{font-size:14px;font-weight:600;color:var(--brand)}
