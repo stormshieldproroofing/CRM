@@ -245,11 +245,10 @@
     return wrap;
   }
 
-  // Money list: one clean list where every line opens its own CRM form right
-  // underneath (contract breakdown, supplements, checks, expenses, overhead,
-  // commission). The original cards stay in the page, hidden, so every form,
-  // save and calculation runs exactly as before; only their open/close parts
-  // are moved under the matching line.
+  // Money list: five short lines, everything minimized. Tapping a line opens
+  // its breakdown and the CRM's own form right underneath; tapping again closes
+  // it. Overhead and Commission sit inside Net profit. The original cards stay
+  // in the page, hidden, so every form, save and total runs exactly as before.
   function moneyList(j, holder) {
     const box = document.createElement('div');
     box.className = 'rd-fin';
@@ -260,23 +259,19 @@
       return el.isConnected ? getComputedStyle(el).display !== 'none' : false;
     };
 
-    function line(opts) {
+    function line(opts, parent) {
       const wrap = document.createElement('div');
       wrap.className = 'rd-fin-item' + (opts.cls ? ' ' + opts.cls : '');
       const head = document.createElement(opts.header ? 'button' : 'div');
       head.className = 'rd-fin-row';
       if (opts.header) head.type = 'button';
-      head.innerHTML = '<span class="rd-fin-l"><span class="rd-fin-dot"></span><span class="rd-fin-name"></span></span><span class="rd-fin-r"><span class="rd-fin-v"></span></span>';
-      head.querySelector('.rd-fin-dot').style.background = opts.dot || '#8B94A7';
+      head.innerHTML = '<span class="rd-fin-name"></span><span class="rd-fin-r"><span class="rd-fin-v"></span></span>';
       head.querySelector('.rd-fin-name').textContent = opts.label;
       if (opts.header) {
         head.querySelector('.rd-fin-r').insertAdjacentHTML('beforeend', CHEVRON);
         head.setAttribute('aria-expanded', 'false');
       }
       wrap.appendChild(head);
-      const extra = document.createElement('div');
-      extra.className = 'rd-fin-extra';
-      wrap.appendChild(extra);
       const slot = document.createElement('div');
       slot.className = 'rd-fin-slot';
       wrap.appendChild(slot);
@@ -294,21 +289,25 @@
         });
       }
       sync();
-      box.appendChild(wrap);
-      return { value: head.querySelector('.rd-fin-v'), extra, sync };
+      (parent || box).appendChild(wrap);
+      return { value: head.querySelector('.rd-fin-v'), name: head.querySelector('.rd-fin-name'), slot, sync };
     }
 
     const L = {};
-    L.contract = line({ label: 'Contract price', dot: '#7AA2FF', header: $id('cpAccHeader'), body: $id('cpEditRow'),
+    L.contract = line({ label: 'Contract price', header: $id('cpAccHeader'), body: $id('cpEditRow'),
                         parts: [$id('cpBreakdownSummary'), $id('cpEditRow')] });
-    const suppHead = $id('suppHeader'), suppBody = $id('suppBody');
-    L.supp = line({ label: 'Supplements', dot: '#7AA2FF', header: suppHead, body: suppBody, parts: [suppBody] });
-    L.checks = line({ label: 'Checks collected', dot: '#34D399', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
-    L.exp = line({ label: 'Expenses', dot: '#F87171', header: $id('expAccHeader'), body: $id('expBody'), parts: [$id('expBody')], cls: 'cost' });
-    L.net = line({ label: 'Net profit', dot: 'transparent', header: $id('profitHeader'), body: $id('profitPrintBtn'), parts: [$id('profitPrintBtn')], cls: 'net' });
+    L.supp = line({ label: 'Supplements', header: $id('suppHeader'), body: $id('suppBody'), parts: [$id('suppBody')] });
+    L.checks = line({ label: 'Checks collected', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
+    // Expenses: the per-type breakdown only shows once the line is opened
+    const cats = document.createElement('div');
+    cats.className = 'rd-fin-cats';
+    L.exp = line({ label: 'Expenses', header: $id('expAccHeader'), body: $id('expBody'), parts: [cats, $id('expBody')], cls: 'cost' });
+    // Net profit: opening it shows overhead, commission and the P&L print
+    L.net = line({ label: 'Net profit', header: $id('profitHeader'), body: $id('profitPrintBtn'), cls: 'net' });
     const ovEditable = !!$id('ovChev');
-    L.over = line({ label: 'Overhead', dot: '#8B94A7', header: ovEditable ? $id('ovHeader') : null, body: $id('ovBody'), parts: [$id('ovBody')], cls: 'sub' });
-    L.comm = line({ label: 'Commission', dot: '#E879F9', header: $id('commAccHeader'), body: $id('jobCommBody'), parts: [$id('jobCommBody')], cls: 'sub' });
+    L.over = line({ label: 'Overhead', header: ovEditable ? $id('ovHeader') : null, body: $id('ovBody'), parts: [$id('ovBody')], cls: 'nested' }, L.net.slot);
+    L.comm = line({ label: 'Commission', header: $id('commAccHeader'), body: $id('jobCommBody'), parts: [$id('jobCommBody')], cls: 'nested' }, L.net.slot);
+    if ($id('profitPrintBtn')) L.net.slot.appendChild($id('profitPrintBtn'));
 
     const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
     const draw = () => {
@@ -317,8 +316,8 @@
       let supp = 0;
       try { supp = supplementsApprovedTotal(job) || 0; } catch (e) {}
       set(L.supp.value, supp ? usd(supp, '+') : '$0');
+      L.supp.value.classList.toggle('zero', !supp);
       set(L.checks.value, cleanUsd($id('summaryDeposits') && $id('summaryDeposits').textContent));
-      // expense total and a short per-type breakdown under the Expenses line
       const byCat = {};
       let total = 0;
       (job.expenses || []).forEach(e => {
@@ -337,18 +336,18 @@
       try { colors = EXPENSE_CATEGORY_COLORS; } catch (e) {}
       const parts = order.filter(c => byCat[c]).map(c => c + '|' + (c === 'Returns' ? usd(Math.abs(byCat[c]), '+') : usd(Math.abs(byCat[c]), '-')) + '|' + (colors[c] || '#8B94A7'));
       const key = parts.join(';');
-      if (L.exp.extra.dataset.key !== key) {
-        L.exp.extra.dataset.key = key;
-        L.exp.extra.innerHTML = '';
+      if (cats.dataset.key !== key) {
+        cats.dataset.key = key;
+        cats.innerHTML = '';
         parts.forEach(p => {
           const [name, val, color] = p.split('|');
           const r = document.createElement('div');
           r.className = 'rd-fin-cat';
-          r.innerHTML = '<span class="rd-fin-l"><span class="rd-fin-dot"></span><span></span></span><span></span>';
+          r.innerHTML = '<span class="rd-fin-catl"><span class="rd-fin-dot"></span><span></span></span><span></span>';
           r.querySelector('.rd-fin-dot').style.background = color;
-          r.querySelector('.rd-fin-l span:last-child').textContent = name;
+          r.querySelector('.rd-fin-catl span:last-child').textContent = name;
           r.lastChild.textContent = val;
-          L.exp.extra.appendChild(r);
+          cats.appendChild(r);
         });
       }
       const n = num($id('profitNet') && $id('profitNet').textContent);
@@ -356,8 +355,7 @@
       L.net.value.classList.toggle('neg', n != null && n < 0);
       const pct = $id('overheadPctLabel');
       set(L.over.value, cleanUsd($id('overheadAmt') && $id('overheadAmt').textContent));
-      const ovName = L.over.value.closest('.rd-fin-item').querySelector('.rd-fin-name');
-      set(ovName, 'Overhead' + (pct && pct.textContent ? ' (' + pct.textContent.trim() + ')' : ''));
+      set(L.over.name, 'Overhead' + (pct && pct.textContent ? ' (' + pct.textContent.trim() + ')' : ''));
       set(L.comm.value, cleanUsd($id('commAccTotal') && $id('commAccTotal').textContent));
       Object.values(L).forEach(l => l.sync());
     };
