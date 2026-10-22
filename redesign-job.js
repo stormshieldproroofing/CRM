@@ -246,6 +246,199 @@
     return wrap;
   }
 
+  // ── Money rows: one ⋯ menu per row instead of loose edit / delete buttons ──
+  // Each entry: which CRM button (by its onclick) goes into the menu, and how it is labelled.
+  const ROW_ACTIONS = [
+    { re: /^depEditOpen\(/, label: 'Edit', icon: 'ti-pencil' },
+    { re: /^openDepositCheck\(/, label: 'View check photo', icon: 'ti-photo' },
+    { re: /^depDelete\(/, label: 'Delete', icon: 'ti-trash', danger: true },
+    { re: /^openExpenseInvoice\(/, label: 'View receipt / invoice', icon: 'ti-paperclip' },
+    { re: /^printPmFeeReceipt\(/, label: 'Print PM fee receipt', icon: 'ti-printer' },
+    { re: /^expDelete\(/, label: 'Delete', icon: 'ti-trash', danger: true },
+    { re: /^suppDelete\(/, label: 'Delete', icon: 'ti-trash', danger: true },
+    { re: /^commDeleteSplit\(/, label: 'Delete split', icon: 'ti-trash', danger: true }
+  ];
+  const actionFor = el => ROW_ACTIONS.find(a => a.re.test((el.getAttribute('onclick') || '').trim()));
+  function rowMenus(root) {
+    const groups = new Map();
+    root.querySelectorAll('button[onclick]').forEach(b => {
+      if (b.classList.contains('rd-in-menu')) return;
+      const a = actionFor(b);
+      if (!a) return;
+      const parent = b.parentElement;
+      if (!groups.has(parent)) groups.set(parent, []);
+      groups.get(parent).push({ el: b, a });
+    });
+    groups.forEach((items, parent) => {
+      items.forEach(it => it.el.classList.add('rd-in-menu'));
+      // put the ⋯ where the buttons were; keep it if the row already has one
+      let more = parent.querySelector(':scope > .rd-row-more');
+      if (!more) {
+        more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'rd-row-more';
+        more.setAttribute('aria-label', 'More options');
+        more.innerHTML = ICON('ti-dots');
+        parent.appendChild(more);
+        more.addEventListener('click', e => {
+          e.stopPropagation();
+          const menu = sheet('Options');
+          if (!menu) return;
+          // expense rows edit by tapping their description; offer it here too
+          const view = parent.closest('[id^="exp-view-"]');
+          const editSpan = view && view.querySelector('[onclick^="expEditOpen"]');
+          if (editSpan) sheetItem(menu, 'ti-pencil', 'Edit', () => editSpan.click());
+          // read the row's buttons fresh each time (the CRM may redraw them)
+          Array.from(parent.querySelectorAll(':scope > button.rd-in-menu')).forEach(btn => {
+            const act = actionFor(btn);
+            if (!act) return;
+            if (act.danger && menu.querySelector('.rd-menu-item') && !menu.querySelector('.rd-menu-sep')) {
+              const sep = document.createElement('div'); sep.className = 'rd-menu-sep'; menu.appendChild(sep);
+            }
+            sheetItem(menu, act.icon, act.label, () => btn.click(), { cls: act.danger ? 'danger' : '' });
+          });
+          sheetCancel(menu);
+        });
+      }
+    });
+    // deposits: a small money icon tile at the start of each row
+    root.querySelectorAll('[id^="dep-view-"] > div:first-child').forEach(row => {
+      if (row.querySelector(':scope > .rd-row-ic')) return;
+      const ic = document.createElement('span');
+      ic.className = 'rd-row-ic';
+      ic.setAttribute('aria-hidden', 'true');
+      ic.innerHTML = ICON('ti-cash');
+      row.insertBefore(ic, row.firstChild);
+    });
+  }
+
+  // One math hint per form instead of "(try 800+1200)" in every box
+  function amountHints(root) {
+    root.querySelectorAll('input[placeholder*="try"]').forEach(inp => {
+      inp.placeholder = inp.placeholder.replace(/\s*\(try[^)]*\)/i, '').trim() || '0.00';
+    });
+    ['cpNetClaim', 'depAmtInput', 'expAmtInput', 'suppAddAmt'].forEach(id => {
+      const inp = $id(id);
+      if (!inp || !root.contains(inp)) return;
+      let box = inp.closest('[style*="background:#1E253A"]') || inp;
+      // if the field sits in a row with other controls, put the tip under the whole row
+      const row = box.parentElement;
+      if (row && row.children.length > 1) {
+        const cs = getComputedStyle(row);
+        if (cs.display.indexOf('flex') >= 0 && cs.flexDirection.indexOf('row') === 0) box = row;
+      }
+      if (box.nextElementSibling && box.nextElementSibling.classList.contains('rd-hint')) return;
+      const h = document.createElement('div');
+      h.className = 'rd-hint';
+      h.textContent = 'Tip: you can type math, like 800+1200';
+      box.insertAdjacentElement('afterend', h);
+    });
+  }
+
+  // Overhead: a Percent / Flat amount switch showing one field at a time.
+  // Typing still saves through the CRM's own ovSetPct / ovSetFlat.
+  function overheadSwitch(root, j) {
+    const body = $id('ovBody'), pctBox = $id('ovPctBox'), flat = $id('ovFlatInput');
+    if (!body || !root.contains(body) || !pctBox || !flat || body.querySelector('.rd-ov-switch')) return;
+    const flatBox = flat.closest('div');
+    const orText = Array.from(pctBox.parentElement.children).find(el => el.tagName === 'SPAN' && /^\s*or\s*$/i.test(el.textContent));
+    let flatMode = false;
+    try { flatMode = jobOverheadFlat(currentJob() || j) != null; } catch (e) { flatMode = !!flat.value; }
+    const sw = document.createElement('div');
+    sw.className = 'rd-ov-switch';
+    sw.setAttribute('role', 'group');
+    sw.setAttribute('aria-label', 'Overhead type');
+    sw.innerHTML = '<button type="button" data-m="pct">Percent</button><button type="button" data-m="flat">Flat amount</button>';
+    const show = () => {
+      sw.querySelectorAll('button').forEach(b => {
+        const on = (b.dataset.m === 'flat') === flatMode;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      });
+      // toggle a class (not inline display) so the field keeps its own styling
+      pctBox.classList.toggle('rd-hidden', flatMode);
+      if (flatBox) flatBox.classList.toggle('rd-hidden', !flatMode);
+      if (orText) orText.classList.add('rd-hidden');
+    };
+    sw.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      e.stopPropagation();
+      const toFlat = b.dataset.m === 'flat';
+      if (toFlat === flatMode) return;
+      flatMode = toFlat;
+      // back to percent: clear the flat amount the CRM's own way
+      if (!flatMode && flat.value !== '' && typeof ovSetPct === 'function') ovSetPct(($id('ovPctInput') || {}).value || '');
+      show();
+      const f = flatMode ? flat : $id('ovPctInput');
+      if (f) f.focus();
+    });
+    body.insertBefore(sw, body.firstChild);
+    const reset = body.querySelector('button[onclick^="ovReset"]');
+    if (reset) { reset.classList.add('rd-ov-reset'); reset.setAttribute('aria-label', reset.title || 'Reset'); }
+    show();
+  }
+
+  // Contract price opens to a short statement; "Edit breakdown" opens the CRM's form
+  function contractStatement(j) {
+    const wrap = document.createElement('div');
+    wrap.className = 'rd-stmt';
+    wrap.style.display = 'none';
+    const rows = document.createElement('div');
+    wrap.appendChild(rows);
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'rd-stmt-edit';
+    wrap.appendChild(edit);
+    edit.addEventListener('click', e => {
+      e.stopPropagation();
+      const h = $id('cpAccHeader'), row = $id('cpEditRow');
+      if (h && row && row.style.display === 'none') h.click();
+      edit.style.display = 'none';
+    });
+    const draw = () => {
+      const job = currentJob() || j;
+      // "Edit breakdown" shows whenever the CRM's edit form is closed
+      const row = $id('cpEditRow');
+      edit.style.display = (row && row.style.display !== 'none') ? 'none' : '';
+      const parts = [['Net claim', job.cpNetClaim], ['Deductible', job.cpDeductible], ['Depreciation', job.cpDepreciation]]
+        .filter(p => p[1] != null && p[1] !== '' && !isNaN(parseFloat(p[1])));
+      const key = parts.map(p => p.join(':')).join('|') + '|' + job.potVal;
+      if (rows.dataset.key === key) return;
+      rows.dataset.key = key;
+      rows.innerHTML = '';
+      const add = (label, val, cls) => {
+        const r = document.createElement('div');
+        r.className = 'rd-stmt-row' + (cls ? ' ' + cls : '');
+        r.innerHTML = '<span></span><span></span>';
+        r.firstChild.textContent = label;
+        r.lastChild.textContent = val;
+        rows.appendChild(r);
+      };
+      if (parts.length) {
+        parts.forEach(p => add(p[0], usd(parseFloat(p[1]))));
+        add('Total', usd(parseFloat(job.potVal) || 0), 'total');
+      } else {
+        const n = document.createElement('div');
+        n.className = 'rd-stmt-empty';
+        n.textContent = 'No breakdown yet: net claim, deductible and depreciation.';
+        rows.appendChild(n);
+      }
+      edit.textContent = parts.length ? 'Edit breakdown' : 'Add breakdown';
+    };
+    // opening the line shows the statement; closing also closes the edit form
+    const fakeHeader = {
+      click() {
+        const open = wrap.style.display !== 'none';
+        wrap.style.display = open ? 'none' : 'block';
+        if (!open) draw();
+        const row = $id('cpEditRow'), h = $id('cpAccHeader');
+        if (open && row && row.style.display !== 'none' && h) h.click();
+      }
+    };
+    return { wrap, draw, fakeHeader };
+  }
+
   // Money list: short lines, everything minimized. Tapping a line opens its
   // breakdown and the CRM's own form right underneath; tapping again closes it. The original cards stay
   // in the page, hidden, so every form, save and total runs exactly as before.
@@ -294,8 +487,9 @@
     }
 
     const L = {};
-    L.contract = line({ label: 'Contract price', header: $id('cpAccHeader'), body: $id('cpEditRow'),
-                        parts: [$id('cpBreakdownSummary'), $id('cpEditRow')] });
+    const stmt = contractStatement(j);
+    if ($id('cpBreakdownSummary')) $id('cpBreakdownSummary').classList.add('rd-hidden');   // the statement replaces it
+    L.contract = line({ label: 'Contract price', header: stmt.fakeHeader, body: stmt.wrap, parts: [stmt.wrap, $id('cpEditRow')] });
     L.supp = line({ label: 'Supplements', header: $id('suppHeader'), body: $id('suppBody'), parts: [$id('suppBody')] });
     L.checks = line({ label: 'Checks collected', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
     // Expenses: the per-type breakdown only shows once the line is opened
@@ -334,6 +528,10 @@
       set(L.over.name, 'Overhead' + (pct && pct.textContent ? ' (' + pct.textContent.trim() + ')' : ''));
       set(L.comm.value, cleanUsd($id('commAccTotal') && $id('commAccTotal').textContent));
       Object.values(L).forEach(l => l.sync());
+      if (stmt.wrap.style.display !== 'none') stmt.draw();   // also brings back "Edit breakdown" after a save
+      rowMenus(box);
+      amountHints(box);
+      overheadSwitch(box, job);
     };
     watch([holder, box], draw);
     requestAnimationFrame(draw);   // once more after the list is on screen
