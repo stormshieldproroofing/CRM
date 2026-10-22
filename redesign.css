@@ -135,3 +135,163 @@ html.ui-new #forkBoardLabel{color:var(--muted)!important;font-size:11px!importan
   html.ui-new .card-meta i{font-size:13px}
   html.ui-new .user-dot{width:26px;height:26px;font-size:10px}
 }
+
+/* ==========================================================================
+   Part 3: job detail panel
+   ========================================================================== */
+html.ui-new .detail-overlay{background:rgba(5,7,11,0.62);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+html.ui-new .detail-panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,0.55)}
+
+/* Header: name, pipeline + stage tags, close / edit */
+html.ui-new .dp-header-area{background:var(--panel);border-bottom:1px solid var(--line);border-radius:18px 18px 0 0;padding:0 18px}
+html.ui-new .dp-name-row{padding-top:16px}
+html.ui-new .dp-name{color:var(--brand);font-weight:700;font-size:22px;letter-spacing:-0.015em}
+html.ui-new .dp-pipe-tag{border-color:var(--line);background:var(--panel-2);border-radius:8px;padding:4px 9px;letter-spacing:.06em;color:var(--text-2)}
+html.ui-new .dp-stage-tag{border-radius:8px;padding:4px 10px;font-weight:600;background:var(--panel-2)}
+html.ui-new .dp-stage-dot{width:8px;height:8px}
+html.ui-new .dp-close{width:36px;height:36px;border-radius:10px;border-color:var(--line);background:transparent;color:var(--text-2)}
+html.ui-new .dp-close:hover{background:var(--panel-2);color:#fff}
+html.ui-new .dp-edit-btn{height:36px;border-radius:10px;border:none;background:var(--blue);color:#fff;padding:0 14px}
+html.ui-new .dp-edit-btn:hover{background:#3B7BF0}
+
+/* Tabs become a segmented control like the Map / Chart switch */
+html.ui-new .dp-tabs{border-top:none;margin:12px 0 14px;padding:4px;gap:4px;background:#0E1219;border:1px solid var(--line);border-radius:12px;scrollbar-width:none}
+html.ui-new .dp-tabs::-webkit-scrollbar{display:none}
+html.ui-new .dp-tab{border-bottom:none;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-2)}
+html.ui-new .dp-tab:hover{color:#fff;background:rgba(255,255,255,0.04)}
+html.ui-new .dp-tab.active{background:var(--blue);color:#fff;font-weight:600;border-bottom:none}
+html.ui-new .dp-tab.active .dp-tab-badge.ok{color:#D1FAE5}
+
+/* Body */
+html.ui-new .dp-body{padding:16px 18px 20px}
+html.ui-new .ap-pill{border-radius:10px;padding:6px 11px;font-weight:500}
+html.ui-new .stage-badge{border-radius:10px}
+html.ui-new .dp-card,
+html.ui-new .accordion,
+html.ui-new .checklist-box,
+html.ui-new .weather-box{background:#0E1219;border:1px solid var(--line);border-radius:14px}
+html.ui-new .dp-card{padding:14px 16px}
+html.ui-new .dp-card-title{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+html.ui-new .dp-card-title i{color:var(--muted)!important}
+html.ui-new .info-row{font-size:13px;margin-bottom:8px}
+html.ui-new .info-row i{color:var(--muted)}
+html.ui-new .meta-table{font-size:13px}
+html.ui-new .meta-table td{border-bottom-color:var(--line);padding:8px 0}
+html.ui-new .acc-icon{width:34px;height:34px;border-radius:10px}
+html.ui-new .acc-body{border-top-color:var(--line)}
+html.ui-new .val-input{background:var(--panel-2);border-color:var(--line);border-radius:10px;padding:8px 11px}
+html.ui-new .save-btn{border-radius:10px;border-color:var(--line);background:var(--panel-2);padding:8px 13px}
+html.ui-new .dep-badge{border-radius:8px}
+
+/* The panel's sections are drawn with inline colors; map the old navy shades
+   onto the new palette inside the panel only. */
+html.ui-new .detail-panel [style*="background:#141927"],
+html.ui-new .detail-panel [style*="background: #141927"]{background:#0E1219!important}
+html.ui-new .detail-panel [style*="background:#1E253A"],
+html.ui-new .detail-panel [style*="background: #1E253A"],
+html.ui-new .detail-panel [style*="background:#1A1F2E"],
+html.ui-new .detail-panel [style*="background: #1A1F2E"]{background:var(--panel-2)!important}
+
+/* Desktop: open as a full-height panel on the right instead of a centered pop-up */
+@media (min-width:1181px){
+  html.ui-new .detail-overlay{justify-content:flex-end;align-items:stretch;padding:12px}
+  html.ui-new .detail-panel{width:740px;max-height:none;height:100%;animation:rdSlideIn .2s ease}
+}
+@keyframes rdSlideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+
+/* Phone: keep the header compact so Edit Job never covers the stage tag */
+@media (max-width:760px){
+  html.ui-new .dp-header-area{padding:0 14px}
+  html.ui-new .dp-name-row{align-items:flex-start;gap:8px}
+  html.ui-new .dp-title-group{min-width:0}
+  html.ui-new .dp-status-group{flex-wrap:wrap;flex-shrink:1;min-width:0;row-gap:6px}
+  html.ui-new .dp-edit-btn{height:34px;padding:0 10px;font-size:12px;flex-shrink:0}
+  html.ui-new .dp-close{width:34px;height:34px;flex-shrink:0}
+  html.ui-new .dp-tab{padding:8px 12px}
+  html.ui-new .dp-body{padding:14px}
+}
+
+/* ==========================================================================
+   Part 4: phone board — stage picker, compact toolbar, bottom tab bar
+   ========================================================================== */
+html.ui-new .rd-stagebar,html.ui-new .rd-tabbar{display:none}
+
+@media (max-width:760px){
+  /* Bottom tab bar replaces the hamburger */
+  html.ui-new .mobile-menu-btn{display:none!important}
+  html.ui-new .rd-tabbar{
+    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;
+    position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:160;
+    background:rgba(18,22,30,0.96);border:1px solid var(--line);border-radius:18px;padding:6px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)
+  }
+  html.ui-new .rd-tabbar button{
+    height:52px;border:none;border-radius:12px;background:transparent;color:#9AA3B5;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:500
+  }
+  html.ui-new .rd-tabbar button i{font-size:20px}
+  html.ui-new .rd-tabbar button.active{background:#1B2230;color:#fff;font-weight:600}
+  html.ui-new .rd-tabbar button.active i{color:#7AA2FF}
+  html.ui-new body{padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+  /* Full-height pages leave room for the tab bar */
+  html.ui-new [style*="height:calc(100vh - 110px)"]{height:calc(100vh - 196px)!important}
+  html.ui-new [style*="height:calc(100vh - 190px)"]{height:calc(100vh - 276px)!important}
+  html.ui-new [style*="height:calc(100vh - 64px)"]{height:calc(100vh - 150px)!important}
+  /* The menu drawer opens above the tab bar */
+  html.ui-new .mobile-drawer{bottom:0;z-index:180}
+
+  /* Board toolbar: icon buttons in one row, Add Job keeps its label */
+  html.ui-new #boardsPage .subbar{gap:8px;padding:10px 12px}
+  html.ui-new #boardsPage .subbar .pill-btn{font-size:0;gap:0;width:42px;height:42px;padding:0;justify-content:center;border-radius:12px}
+  html.ui-new #boardsPage .subbar .pill-btn i{font-size:19px}
+  html.ui-new #boardsPage .subbar .icon-btn{width:42px;height:42px;border-radius:12px}
+  html.ui-new #boardsPage .subbar .icon-btn i{font-size:18px}
+  html.ui-new #boardsPage .add-btn{height:42px;border-radius:12px;padding:0 14px;font-size:14px;margin-left:auto}
+  html.ui-new #boardsPage .filter-drop{left:auto;right:0}
+}
+
+/* Stage picker: phone widths where the board shows one stage per screen */
+@media (max-width:640px){
+  html.ui-new .rd-stagebar{display:block;position:relative;padding:10px 10px 4px}
+  html.ui-new .rd-sb-row{display:flex;gap:8px;align-items:stretch}
+  html.ui-new .rd-sb-prev,html.ui-new .rd-sb-next{
+    width:44px;flex-shrink:0;border-radius:12px;border:1px solid var(--line);background:var(--panel);
+    color:var(--text-2);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer
+  }
+  html.ui-new .rd-sb-prev:disabled,html.ui-new .rd-sb-next:disabled{opacity:.35;cursor:default}
+  html.ui-new .rd-sb-cur{
+    flex:1;min-width:0;height:48px;display:flex;align-items:center;gap:9px;padding:0 14px;
+    border-radius:12px;border:1px solid rgba(255,255,255,0.09);background:var(--panel);color:var(--brand);
+    font-size:15px;font-weight:600;cursor:pointer;text-align:left
+  }
+  html.ui-new .rd-sb-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  html.ui-new .rd-sb-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  html.ui-new .rd-sb-count{font-size:12px;font-weight:600;background:var(--tile);color:var(--text-2);border-radius:6px;padding:1px 7px;flex-shrink:0}
+  html.ui-new .rd-sb-pos{margin-left:auto;font-size:13px;font-weight:500;color:var(--muted);white-space:nowrap}
+  html.ui-new .rd-sb-cur > i{color:var(--muted);font-size:16px}
+  html.ui-new .rd-sb-segs{display:flex;gap:4px;margin-top:10px}
+  html.ui-new .rd-sb-segs span{flex:1;height:4px;border-radius:2px}
+  html.ui-new .rd-sb-menu{
+    display:none;position:absolute;left:62px;right:62px;top:62px;z-index:120;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:6px;
+    box-shadow:0 16px 40px rgba(0,0,0,0.5);max-height:60vh;overflow-y:auto
+  }
+  html.ui-new .rd-stagebar.menu-open .rd-sb-menu{display:block}
+  html.ui-new .rd-sb-item{
+    width:100%;display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:none;border-radius:10px;
+    background:transparent;color:var(--text-2);font-size:14px;font-weight:500;cursor:pointer;text-align:left
+  }
+  html.ui-new .rd-sb-item.active{background:#1B2230;color:#fff;font-weight:600}
+  html.ui-new .rd-sb-iname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Stage name now lives in the picker; keep the column header compact */
+  html.ui-new #board .col-header{padding:8px 10px 4px}
+}
+
+/* Phone: fit the whole toolbar on one row — Add Job becomes a blue + button */
+@media (max-width:640px){
+  html.ui-new #boardsPage .subbar{gap:5px}
+  html.ui-new #boardsPage .subbar .pill-btn,
+  html.ui-new #boardsPage .subbar .icon-btn{width:40px;height:40px}
+  html.ui-new #boardsPage .add-btn{width:40px;height:40px;padding:0;justify-content:center;font-size:0;gap:0}
+  html.ui-new #boardsPage .add-btn i{font-size:20px}
+}

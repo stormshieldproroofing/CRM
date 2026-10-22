@@ -100,8 +100,171 @@
     new MutationObserver(() => decorateBoard(el)).observe(el, { childList: true, subtree: true });
   }
 
+  // ── Part 4: phone board ──────────────────────────────────────────────
+  // A stage picker above the board ("Approved · 3 of 6", arrows, progress bar)
+  // that follows the swipe position, plus a bottom tab bar. Both are hidden
+  // by CSS outside phone widths.
+  let stageBar = null;
+  function boardWrap() { return document.querySelector('#boardsPage .board-wrap'); }
+  function boardCols() { return Array.from(document.querySelectorAll('#board > .col')); }
+  function colLeft(col, wrap) {
+    return col.getBoundingClientRect().left - wrap.getBoundingClientRect().left + wrap.scrollLeft;
+  }
+  function currentStageIndex() {
+    const wrap = boardWrap(), cols = boardCols();
+    if (!wrap || !cols.length) return 0;
+    let best = 0, bestD = Infinity;
+    cols.forEach((c, i) => { const d = Math.abs(colLeft(c, wrap) - 10 - wrap.scrollLeft); if (d < bestD) { bestD = d; best = i; } });
+    return best;
+  }
+  // While a smooth scroll is still moving, quick repeated taps on the arrows
+  // count from the stage being scrolled to, not the one still on screen.
+  let pendingStage = null, pendingUntil = 0;
+  function targetStageIndex() {
+    return (pendingStage !== null && Date.now() < pendingUntil) ? pendingStage : currentStageIndex();
+  }
+  function goToStage(i) {
+    const wrap = boardWrap(), cols = boardCols();
+    if (!wrap || !cols[i]) return;
+    pendingStage = i; pendingUntil = Date.now() + 700;
+    wrap.scrollTo({ left: Math.max(0, colLeft(cols[i], wrap) - 10), behavior: 'smooth' });
+    closeStageMenu();
+  }
+  function colInfo(col) {
+    const t = col.querySelector('.col-title');
+    const dot = t && t.querySelector('span');
+    return {
+      name: t ? t.textContent.trim() : '',
+      color: dot ? dot.style.background : '',
+      count: (col.querySelector('.col-count') || {}).textContent || '0'
+    };
+  }
+  function closeStageMenu() { if (stageBar) stageBar.classList.remove('menu-open'); }
+  function updateStageBar() {
+    if (!stageBar) return;
+    const cols = boardCols();
+    stageBar.style.display = cols.length ? '' : 'none';
+    if (!cols.length) return;
+    const i = Math.min(currentStageIndex(), cols.length - 1), info = colInfo(cols[i]);
+    stageBar.querySelector('.rd-sb-dot').style.background = info.color;
+    stageBar.querySelector('.rd-sb-name').textContent = info.name;
+    stageBar.querySelector('.rd-sb-count').textContent = info.count;
+    stageBar.querySelector('.rd-sb-pos').textContent = (i + 1) + ' of ' + cols.length;
+    stageBar.querySelector('.rd-sb-prev').disabled = i === 0;
+    stageBar.querySelector('.rd-sb-next').disabled = i === cols.length - 1;
+    const segs = stageBar.querySelector('.rd-sb-segs');
+    segs.innerHTML = '';
+    cols.forEach((c, k) => {
+      const s = document.createElement('span');
+      s.style.background = colInfo(c).color || 'var(--muted)';
+      if (k !== i) s.style.opacity = '0.3';
+      segs.appendChild(s);
+    });
+    const menu = stageBar.querySelector('.rd-sb-menu');
+    menu.innerHTML = '';
+    cols.forEach((c, k) => {
+      const ci = colInfo(c);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rd-sb-item' + (k === i ? ' active' : '');
+      b.innerHTML = '<span class="rd-sb-dot"></span><span class="rd-sb-iname"></span><span class="rd-sb-count"></span>';
+      b.querySelector('.rd-sb-dot').style.background = ci.color;
+      b.querySelector('.rd-sb-iname').textContent = ci.name;
+      b.querySelector('.rd-sb-count').textContent = ci.count;
+      b.addEventListener('click', () => goToStage(k));
+      menu.appendChild(b);
+    });
+  }
+  function buildStageBar() {
+    const wrap = boardWrap();
+    if (!wrap || stageBar) return;
+    stageBar = document.createElement('div');
+    stageBar.className = 'rd-stagebar';
+    stageBar.innerHTML =
+      '<div class="rd-sb-row">' +
+        '<button type="button" class="rd-sb-prev" aria-label="Previous stage"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>' +
+        '<button type="button" class="rd-sb-cur" aria-haspopup="true">' +
+          '<span class="rd-sb-dot"></span><span class="rd-sb-name"></span><span class="rd-sb-count"></span>' +
+          '<span class="rd-sb-pos"></span><i class="ti ti-chevron-down" aria-hidden="true"></i>' +
+        '</button>' +
+        '<button type="button" class="rd-sb-next" aria-label="Next stage"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>' +
+      '</div>' +
+      '<div class="rd-sb-segs" aria-hidden="true"></div>' +
+      '<div class="rd-sb-menu"></div>';
+    wrap.parentNode.insertBefore(stageBar, wrap);
+    stageBar.querySelector('.rd-sb-prev').addEventListener('click', () => goToStage(targetStageIndex() - 1));
+    stageBar.querySelector('.rd-sb-next').addEventListener('click', () => goToStage(targetStageIndex() + 1));
+    stageBar.querySelector('.rd-sb-cur').addEventListener('click', e => {
+      e.stopPropagation();
+      stageBar.classList.toggle('menu-open');
+    });
+    document.addEventListener('click', e => { if (stageBar && !stageBar.contains(e.target)) closeStageMenu(); });
+    let ticking = false;
+    wrap.addEventListener('scroll', () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => { ticking = false; updateStageBar(); });
+    }, { passive: true });
+    window.addEventListener('resize', updateStageBar);
+    const board = document.getElementById('board');
+    if (board) new MutationObserver(() => requestAnimationFrame(updateStageBar)).observe(board, { childList: true });
+    updateStageBar();
+  }
+
+  // Bottom tab bar (phone): the four most-used pages plus More (opens the menu).
+  const TABS = [['boards', 'Boards', 'ti-layout-kanban'], ['calendar', 'Calendar', 'ti-calendar'],
+                ['todo', 'To-Do', 'ti-checkbox'], ['map', 'Map', 'ti-map']];
+  let tabBar = null;
+  function activePage() {
+    const a = document.querySelector('.topnav .nav-link.active');
+    return a ? a.dataset.page : '';
+  }
+  function updateTabBar() {
+    if (!tabBar) return;
+    const p = activePage();
+    tabBar.querySelectorAll('[data-tab]').forEach(b => {
+      const on = b.dataset.tab === p || (b.dataset.tab === 'more' && !TABS.some(t => t[0] === p));
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+  }
+  function buildTabBar() {
+    if (tabBar) return;
+    tabBar = document.createElement('nav');
+    tabBar.className = 'rd-tabbar';
+    tabBar.setAttribute('aria-label', 'Main');
+    TABS.concat([['more', 'More', 'ti-dots']]).forEach(([page, label, icon]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.tab = page;
+      b.innerHTML = '<i class="ti ' + icon + '" aria-hidden="true"></i><span></span>';
+      b.querySelector('span').textContent = label;
+      b.addEventListener('click', () => {
+        if (page === 'more') { const m = document.getElementById('mobileMenuBtn'); if (m) m.click(); return; }
+        if (typeof switchPage === 'function') switchPage(page);
+      });
+      tabBar.appendChild(b);
+    });
+    document.body.appendChild(tabBar);
+    const nav = document.querySelector('.topnav');
+    if (nav) new MutationObserver(updateTabBar).observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    updateTabBar();
+  }
+
+  // Phone sub-bar: the board's text buttons become icon buttons (text hidden
+  // visually by CSS); add a tooltip so the label still shows on long-press.
+  function labelSubbarButtons() {
+    document.querySelectorAll('#boardsPage .subbar .pill-btn, #boardsPage .subbar .add-btn').forEach(b => {
+      const t = b.textContent.trim();
+      if (t && !b.title) b.title = t;   // the text stays in the button for screen readers
+    });
+  }
+
   function init() {
     buildSidebar();
+    buildStageBar();
+    buildTabBar();
+    labelSubbarButtons();
     watchBoard('board');
     watchBoard('forkBoard');
     const drawer = document.getElementById('mobileDrawer');
