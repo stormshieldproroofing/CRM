@@ -1010,7 +1010,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- COMPANY DOCUMENTS (OneNote-style, admin only) -->
 <div id="companyDocsPage" style="display:none">
-  <div style="display:flex;height:calc(100vh - 64px)">
+  <div id="cdocWrap" style="display:flex;height:calc(100vh - 64px)">
     <!-- Section sidebar -->
     <div id="cdocSidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);background:#11141F;display:flex;flex-direction:column;overflow:hidden">
       <div style="padding:14px 14px 10px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
@@ -1363,6 +1363,46 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .map-popup .mp-row{font-size:11px;color:#475569;margin-top:2px}
 .map-popup .mp-stage{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:11px;color:#fff;margin-top:5px;text-transform:uppercase;letter-spacing:.3px}
 .mapboxgl-popup-content{padding:10px 12px !important;border-radius:8px !important}
+
+/* ── COMPANY DOCS on phones: list of sections, tap one to read it ── */
+.cdoc-backbar{display:none}
+@media (max-width:760px){
+  #cdocWrap{display:block !important;height:auto !important}
+  #cdocSidebar{width:100% !important;border-right:none !important;background:transparent !important;overflow:visible !important}
+  #cdocSidebar > div:first-child{padding:14px 16px 12px !important;align-items:center !important}
+  #cdocSidebar > div:first-child > div > div:first-child{font-size:20px !important}
+  #cdocSidebar > div:first-child > div > div:last-child{font-size:13px !important}
+  #cdocEditToggle{height:40px;padding:0 14px !important;font-size:14px !important;border-radius:10px !important}
+  #cdocSectionList{padding:10px 12px !important;overflow:visible !important}
+  #cdocSectionList > div{min-height:56px;padding:0 14px !important;border-radius:12px !important;margin-bottom:8px !important;background:#161B2A !important;border:1px solid var(--border) !important}
+  #cdocSectionList > div > span:first-of-type{font-size:15px !important;font-weight:600 !important;color:#E8ECF3 !important}
+  #cdocSectionList > div > i{font-size:18px !important}
+  #cdocSectionList > div::after{content:"\ea61";font-family:'tabler-icons';color:var(--muted);font-size:18px}
+  #cdocSectionList > div > span:nth-of-type(2){font-size:12px !important;padding:2px 8px !important}
+  #cdocSectionList button{width:34px !important;height:22px !important}
+  #cdocAddSectionFooter{padding:4px 12px 12px !important;border-top:none !important}
+  #cdocAddSectionFooter button{height:48px;font-size:14px !important;border-radius:12px !important}
+  #cdocMain{display:none;padding:12px 16px 24px !important;overflow:visible !important}
+  #companyDocsPage.cdoc-reading #cdocSidebar{display:none !important}
+  #companyDocsPage.cdoc-reading #cdocMain{display:block}
+  .cdoc-backbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 -4px 10px}
+  .cdoc-back,.cdoc-mini-edit{height:42px;display:flex;align-items:center;gap:4px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:#161B2A;color:var(--brand-light);font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+  .cdoc-back{border-color:transparent;background:transparent;padding-left:4px}
+  .cdoc-back .ti{font-size:20px}
+  .cdoc-mini-edit.on{color:#34D399;border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
+  #cdocMain .cdoc-titleinput{font-size:24px !important}
+  #cdocMain .cdoc-notes{font-size:15px !important;line-height:1.6 !important;padding:14px !important;min-height:160px !important;overflow-x:auto !important}
+  #cdocMain .cdoc-notes td,#cdocMain .cdoc-notes th{font-size:14px !important}
+  #cdocMain .cdoc-rt-toolbar{flex-wrap:nowrap !important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  #cdocMain .cdoc-rt-toolbar::-webkit-scrollbar{display:none}
+  #cdocMain .cdoc-rt-btn{min-width:38px !important;height:38px !important;flex-shrink:0;font-size:16px !important}
+  #cdocMain .cdoc-upl{height:46px;padding:0 18px !important;font-size:14px !important;border-radius:10px !important}
+  #cdocMain .cdoc-zone{padding:16px !important}
+  #cdocMain [onclick^="cdocOpenFile"]{height:38px;padding:0 14px !important;font-size:13px !important;border-radius:9px !important}
+  #cdocMain [onclick^="cdocDeleteFile"]{width:38px !important;height:38px !important;border-radius:9px !important}
+  #cdocMain div:has(> [onclick^="cdocOpenFile"]){padding:12px !important;border-radius:12px !important}
+  #cdocMain div:has(> [onclick^="cdocOpenFile"]) > span{font-size:14px !important}
+}
 </style>
 
 <!-- TEAM MEMBER MODAL (Add / Edit) -->
@@ -18242,6 +18282,7 @@ async function renderCompanyDocs(){
   }
   if(!cdocData) cdocData = cdocDefault();
   if(!cdocActiveId && cdocData.sections.length) cdocActiveId = cdocData.sections[0].id;
+  const pg = document.getElementById('companyDocsPage'); if(pg) pg.classList.remove('cdoc-reading');
   cdocRenderSidebar();
   cdocRenderMain();
 }
@@ -18338,6 +18379,10 @@ function cdocRenderMain(){
       .cdoc-upl{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
       .cdoc-upl.primary{background:var(--brand-light);border-color:var(--brand-light);color:#0F1117}
     </style>
+    <div class="cdoc-backbar">
+      <button type="button" class="cdoc-back" onclick="cdocBackToList()"><i class="ti ti-chevron-left"></i>All docs</button>
+      <button type="button" class="cdoc-mini-edit${cdocEditMode?' on':''}" onclick="cdocToggleEdit()"><i class="ti ${cdocEditMode?'ti-check':'ti-pencil'}"></i>${cdocEditMode?'Done':'Edit'}</button>
+    </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
       ${cdocEditMode
         ? `<input class="cdoc-titleinput" value="${esc(sec.title)}" onchange="cdocRenameSection('${sec.id}', this.value)">
@@ -18545,7 +18590,16 @@ function cdocSelect(id){
   // Save the current editor before switching away.
   if(cdocActiveId && cdocActiveId !== id) cdocFlushNotes(cdocActiveId);
   cdocActiveId = id; cdocRenderSidebar(); cdocRenderMain();
+  // phone: open the section full screen
+  if(cdocIsPhone()){ document.getElementById('companyDocsPage').classList.add('cdoc-reading'); window.scrollTo(0,0); const m=document.getElementById('cdocMain'); if(m) m.scrollTop=0; }
 }
+function cdocIsPhone(){ return !!(window.matchMedia && window.matchMedia('(max-width:760px)').matches); }
+function cdocBackToList(){
+  if(cdocActiveId) cdocFlushNotes(cdocActiveId);
+  document.getElementById('companyDocsPage').classList.remove('cdoc-reading');
+  window.scrollTo(0,0);
+}
+window.cdocBackToList = cdocBackToList;
 
 function cdocAddSection(){
   if(!isAdmin()||!cdocEditMode) return;
