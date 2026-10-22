@@ -635,3 +635,57 @@ html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input
   background:transparent!important;border:none!important;min-height:0!important;padding:0!important;flex:1;min-width:0;border-radius:0!important
 }
 html.ui-new .rd-fin-slot :is(#expRcptSnapBtn, #depCheckSnapBtn){white-space:nowrap}
+
+/* ==========================================================================
+   Money section redesign: row menus, calm buttons, tags, statement, switch
+   ========================================================================== */
+/* Row ⋯ menus replace the loose edit / delete / view buttons */
+html.ui-new .rd-fin-slot .rd-in-menu{display:none!important}
+html.ui-new .rd-row-more{width:36px!important;height:36px!important;min-height:0!important;padding:0!important;flex-shrink:0;border:none!important;background:transparent!important;color:var(--muted)!important;font-size:20px!important;display:flex!important;align-items:center;justify-content:center;border-radius:10px!important}
+html.ui-new .rd-row-more:hover{background:rgba(255,255,255,0.05)!important;color:var(--brand)!important}
+/* Deposit rows: icon tile + amount / what / date */
+html.ui-new .rd-row-ic{width:36px;height:36px;flex-shrink:0;border-radius:10px;background:#1A1F29;display:flex;align-items:center;justify-content:center;color:#6EE7B7;font-size:18px}
+html.ui-new .rd-fin-slot [id^="dep-view-"] > div:first-child{gap:12px!important}
+html.ui-new .rd-fin-slot [id^="dep-card-"]{border:none!important;border-bottom:1px solid rgba(255,255,255,0.06)!important;border-radius:0!important;background:transparent!important;margin:0!important}
+html.ui-new .rd-fin-slot [id^="dep-view-"]{padding:10px 0!important}
+html.ui-new .rd-fin-slot [id^="dep-view-"] span[style*="font-size:13px"]{font-size:15px!important}
+/* Expense item rows */
+html.ui-new .rd-fin-slot [id^="exp-view-"]{padding:10px 4px 10px 14px!important;min-height:52px}
+html.ui-new .rd-fin-slot [id^="exp-view-"] > span:first-child{font-size:14px!important;color:var(--brand)!important;font-weight:500}
+html.ui-new .rd-fin-slot [id^="exp-view-"] > div span[style*="font-weight:600"]{font-size:14px!important}
+
+/* One status tag style (Paid / Unpaid keep their color) */
+html.ui-new .rd-fin-slot [onclick^="expTogglePaid"]{font-size:11px!important;font-weight:600!important;letter-spacing:.02em!important;padding:4px 9px!important;border-radius:999px!important;cursor:pointer}
+
+/* Calm action buttons: dark, color only in the icon */
+html.ui-new .rd-fin-slot :is(#payrollNotifyBtn, #invoiceReadyBtn, #profitPrintBtn, #abcImportBtn, #expBreakdownBtn, button[onclick*="openCommVoucher"]){
+  background:#1A1F29!important;border:1px solid rgba(255,255,255,0.08)!important;color:var(--brand)!important;
+  min-height:46px!important;justify-content:center!important;gap:10px!important
+}
+html.ui-new .rd-fin-slot #payrollNotifyBtn :is(i,svg){color:#6EE7B7!important}
+html.ui-new .rd-fin-slot :is(#invoiceReadyBtn, #profitPrintBtn, button[onclick*="openCommVoucher"]) :is(i,svg){color:#8FB4FF!important}
+html.ui-new .rd-fin-slot #abcImportBtn :is(i,svg){color:#F5B26B!important}
+html.ui-new .rd-fin-slot #expBreakdownBtn :is(i,svg){color:#6EE7B7!important}
+html.ui-new .rd-fin-slot :is(#payrollNotifyBtn, #invoiceReadyBtn, #profitPrintBtn, #abcImportBtn, #expBreakdownBtn, button[onclick*="openCommVoucher"]):hover{background:#1F2533!important}
+
+/* One math hint per form */
+html.ui-new .rd-hint{font-size:12px;color:var(--muted);margin:6px 2px 0}
+
+/* Contract statement */
+html.ui-new .rd-stmt-row{display:flex;justify-content:space-between;align-items:center;min-height:40px;font-size:14px;color:var(--text-2);border-bottom:1px solid rgba(255,255,255,0.06)}
+html.ui-new .rd-stmt-row span:last-child{color:var(--brand);font-weight:600}
+html.ui-new .rd-stmt-row.total{border-bottom:none;min-height:46px;font-size:15px;font-weight:600;color:var(--brand)}
+html.ui-new .rd-stmt-row.total span:last-child{color:#8FB4FF;font-weight:700}
+html.ui-new .rd-stmt-empty{font-size:13px;color:var(--muted);padding:4px 0 10px}
+html.ui-new .rd-stmt-edit{width:100%;min-height:44px;margin-top:6px;border-radius:10px!important;border:1px solid rgba(255,255,255,0.08);background:#1A1F29;color:var(--brand);font-size:14px!important;font-weight:600}
+html.ui-new .rd-fin-slot #cpEditRow{margin-top:12px}
+
+/* Overhead: Percent / Flat amount switch */
+html.ui-new .rd-ov-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;background:#0E1219;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:4px;margin-bottom:10px}
+html.ui-new .rd-ov-switch button{min-height:36px!important;border:none!important;border-radius:8px!important;background:transparent!important;color:var(--text-2)!important;font-size:13px!important;font-weight:500!important}
+html.ui-new .rd-ov-switch button.on{background:var(--blue)!important;color:#fff!important;font-weight:600!important}
+html.ui-new .rd-fin-slot #ovBody > div[style*="display:flex"]{gap:8px!important}
+html.ui-new .rd-fin-slot .rd-ov-reset{width:46px!important;height:46px!important;min-height:46px!important;flex-shrink:0;background:#1A1F29!important;border:1px solid rgba(255,255,255,0.10)!important}
+
+/* Commission: agent rows read like the other rows */
+html.ui-new .rd-fin-slot #jobCommBody .user-dot{width:32px!important;height:32px!important;font-size:11px!important}
