@@ -533,6 +533,14 @@
     qa.classList.add('rd-qa-bar');
     ov.appendChild(qa);
 
+    // Shorter label so Add Expense and Upload invoice fit side by side on a phone
+    const abc = $id('abcImportBtn');
+    if (abc) {
+      const t = Array.from(abc.childNodes).find(n => n.nodeType === 3 && /Upload Invoice/i.test(n.textContent));
+      if (t) t.textContent = 'Upload invoice';
+      abc.title = 'Upload a supplier invoice (PDF)';
+    }
+
     twoCol.remove();
     if (jobBar && !jobBar.querySelector('.ap-pill')) jobBar.remove();
   }
