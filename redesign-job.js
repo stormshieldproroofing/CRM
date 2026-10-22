@@ -255,6 +255,7 @@
     { re: /^openExpenseInvoice\(/, label: 'View receipt / invoice', icon: 'ti-paperclip' },
     { re: /^printPmFeeReceipt\(/, label: 'Print PM fee receipt', icon: 'ti-printer' },
     { re: /^expDelete\(/, label: 'Delete', icon: 'ti-trash', danger: true },
+    { re: /^suppEditOpen\(/, label: 'Edit', icon: 'ti-pencil' },
     { re: /^suppDelete\(/, label: 'Delete', icon: 'ti-trash', danger: true },
     { re: /^commDeleteSplit\(/, label: 'Delete split', icon: 'ti-trash', danger: true }
   ];

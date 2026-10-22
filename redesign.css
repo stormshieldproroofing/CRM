@@ -607,11 +607,11 @@ html.ui-new .rd-fin-slot :is(button[style*="width:100%"], button[style*="flex:1"
   min-height:46px!important;padding:0 16px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important
 }
 /* main action: solid blue */
-html.ui-new .rd-fin-slot :is(.btn-primary, #cpSaveBtn, #depSaveNew, #expSaveNew){
+html.ui-new .rd-fin-slot :is(.btn-primary, #cpSaveBtn, #depSaveNew, #expSaveNew, .supp-edit-save){
   background:var(--blue)!important;border:none!important;color:#fff!important;flex:1 1 auto!important
 }
 /* cancel: plain */
-html.ui-new .rd-fin-slot :is(.btn-cancel, #cpCancelBtn, #depCancelNew, #expCancelNew){
+html.ui-new .rd-fin-slot :is(.btn-cancel, #cpCancelBtn, #depCancelNew, #expCancelNew, .supp-edit-cancel){
   background:var(--panel-2)!important;border:1px solid rgba(255,255,255,0.10)!important;color:var(--text-2)!important;flex:0 0 auto!important;min-width:96px
 }
 /* "+ Add" buttons: dashed */
@@ -626,7 +626,11 @@ html.ui-new .rd-fin-slot :is(#depCheckSnapBtn, #depCheckUploadBtn, #expRcptSnapB
 /* colored action buttons keep their color, share the size */
 html.ui-new .rd-fin-slot :is(#payrollNotifyBtn, #invoiceReadyBtn, #profitPrintBtn, #abcImportBtn, #expBreakdownBtn){min-height:46px!important}
 /* the row holding Save / Cancel or Add / Cancel */
-html.ui-new .rd-fin-slot div:has(> :is(#cpSaveBtn, #depSaveNew, #expSaveNew)){display:flex!important;gap:8px!important}
+html.ui-new .rd-fin-slot div:has(> :is(#cpSaveBtn, #depSaveNew, #expSaveNew, .supp-edit-save)){display:flex!important;gap:8px!important}
+/* supplement edit form: room between fields */
+html.ui-new .rd-fin-slot [id^="supp-edit-"]{padding:12px 0 14px!important}
+html.ui-new .rd-fin-slot [id^="supp-edit-"] > *{margin-top:10px!important}
+html.ui-new .rd-fin-slot [id^="supp-edit-"] > *:first-child{margin-top:0!important}
 /* spacing between stacked fields */
 html.ui-new .rd-fin-slot :is(#cpEditRow, #depAddForm, #expAddForm) > div{margin-bottom:12px}
 /* inputs inside a $ / % box: no second box (matches the stand-alone rule's strength) */
