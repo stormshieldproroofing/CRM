@@ -561,3 +561,77 @@ html.ui-new .rd-fin-item.net.open > .rd-fin-row .rd-fin-name{color:var(--brand)}
 html.ui-new .rd-fin-item.net > .rd-fin-row .rd-fin-v{font-size:15px;font-weight:600;color:#6EE7B7}
 html.ui-new .rd-fin-item.net > .rd-fin-slot{padding:12px}
 html.ui-new .rd-fin-item.net > .rd-fin-slot > #profitPrintBtn{margin-top:0!important}
+
+/* ==========================================================================
+   Uniform forms inside the opened money lines
+   ========================================================================== */
+html.ui-new .rd-fin-slot{font-size:14px;color:var(--text-2)}
+/* Small helper text: readable on a phone */
+html.ui-new .rd-fin-slot [style*="font-size:9px"],
+html.ui-new .rd-fin-slot [style*="font-size:10px"],
+html.ui-new .rd-fin-slot [style*="font-size:11px"]{font-size:13px!important}
+/* Field labels: one style everywhere */
+html.ui-new .rd-fin-slot [style*="text-transform:uppercase"]{font-size:11px!important;letter-spacing:.08em!important;font-weight:600!important;color:var(--muted)!important}
+
+/* Fields: boxes that hold an input ($ / % boxes) and stand-alone inputs and dropdowns */
+html.ui-new .rd-fin-slot input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=hidden]),
+html.ui-new .rd-fin-slot select,
+html.ui-new .rd-fin-slot textarea,
+html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input, > select, > textarea){
+  background:#0E1219!important;border:1px solid rgba(255,255,255,0.10)!important;border-radius:10px!important;
+  min-height:46px!important;padding:0 12px!important;box-sizing:border-box!important;
+  font-size:16px!important;color:var(--brand)!important;font-weight:500!important
+}
+html.ui-new .rd-fin-slot textarea{padding:10px 12px!important;min-height:80px!important}
+html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input, > select, > textarea){display:flex!important;align-items:center!important;gap:6px!important}
+/* inputs inside a $ / % box: the box is the field */
+html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input, > select, > textarea) > :is(input, select, textarea){
+  background:transparent!important;border:none!important;min-height:0!important;padding:0!important;flex:1;min-width:0
+}
+html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input) > span{font-size:15px!important;color:var(--muted)!important}
+html.ui-new .rd-fin-slot :is(input, select, textarea):focus{outline:none;border-color:#3B7BF0!important}
+html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input:focus, > select:focus){border-color:#3B7BF0!important}
+html.ui-new .rd-fin-slot ::placeholder{color:#5F6878}
+
+/* Cards and list rows inside an opened line */
+html.ui-new .rd-fin-slot [style*="background:#141927"],
+html.ui-new .rd-fin-slot [style*="background:#1A1F2E"],
+html.ui-new .rd-fin-slot [style*="background:#1E253A"]:not(:has(> input, > select, > textarea)){
+  background:#0E1219!important;border-color:rgba(255,255,255,0.08)!important;border-radius:10px!important
+}
+
+/* Buttons: one size and shape */
+html.ui-new .rd-fin-slot button{border-radius:10px!important;font-size:14px!important;font-weight:600!important;font-family:inherit!important}
+html.ui-new .rd-fin-slot :is(button[style*="width:100%"], button[style*="flex:1"], .btn-primary, .btn-cancel, .save-btn,
+  #cpSaveBtn, #cpCancelBtn, #depSaveNew, #depCancelNew, #expSaveNew, #expCancelNew){
+  min-height:46px!important;padding:0 16px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important
+}
+/* main action: solid blue */
+html.ui-new .rd-fin-slot :is(.btn-primary, #cpSaveBtn, #depSaveNew, #expSaveNew){
+  background:var(--blue)!important;border:none!important;color:#fff!important;flex:1 1 auto!important
+}
+/* cancel: plain */
+html.ui-new .rd-fin-slot :is(.btn-cancel, #cpCancelBtn, #depCancelNew, #expCancelNew){
+  background:var(--panel-2)!important;border:1px solid rgba(255,255,255,0.10)!important;color:var(--text-2)!important;flex:0 0 auto!important;min-width:96px
+}
+/* "+ Add" buttons: dashed */
+html.ui-new .rd-fin-slot :is(#depAddToggle, #expAddToggle, #commAddSplit){
+  background:transparent!important;border:1px dashed rgba(255,255,255,0.18)!important;color:#8FB4FF!important
+}
+/* photo / upload buttons */
+html.ui-new .rd-fin-slot :is(#depCheckSnapBtn, #depCheckUploadBtn, #expRcptSnapBtn, #expRcptUploadBtn){
+  min-height:42px!important;background:var(--panel-2)!important;border:1px solid rgba(255,255,255,0.10)!important;color:#8FB4FF!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important
+}
+/* colored action buttons keep their color, share the size */
+html.ui-new .rd-fin-slot :is(#payrollNotifyBtn, #invoiceReadyBtn, #profitPrintBtn, #abcImportBtn, #expBreakdownBtn){min-height:46px!important}
+/* the row holding Save / Cancel or Add / Cancel */
+html.ui-new .rd-fin-slot div:has(> :is(#cpSaveBtn, #depSaveNew, #expSaveNew)){display:flex!important;gap:8px!important}
+/* spacing between stacked fields */
+html.ui-new .rd-fin-slot :is(#cpEditRow, #depAddForm, #expAddForm) > div{margin-bottom:12px}
+/* inputs inside a $ / % box: no second box (matches the stand-alone rule's strength) */
+html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input, > select, > textarea) > input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=hidden]),
+html.ui-new .rd-fin-slot :is(div,label)[style*="background:#1E253A"]:has(> input, > select, > textarea) > select{
+  background:transparent!important;border:none!important;min-height:0!important;padding:0!important;flex:1;min-width:0;border-radius:0!important
+}
+html.ui-new .rd-fin-slot :is(#expRcptSnapBtn, #depCheckSnapBtn){white-space:nowrap}
