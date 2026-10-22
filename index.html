@@ -5841,7 +5841,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <!-- Breakdown -->
                 <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
                   <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
-                    <span style="font-size:11px;color:var(--muted)">Job Cost (${(j.roofEstimate.totalSquares * 1.15).toFixed(1)} sq × $280, incl. 15% waste)</span>
+                    <span style="font-size:11px;color:var(--muted)">Job Cost (${(j.roofEstimate.totalSquares * 1.15).toFixed(1)} sq × $260, incl. 15% waste)</span>
                     <span id="ccCost" style="font-size:12px;font-weight:600;color:var(--brand)">—</span>
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(255,255,255,0.02);border-radius:5px">
@@ -6250,7 +6250,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const slider = document.getElementById('ccProfitSlider');
       if(slider){
         const squares = j.roofEstimate?.totalSquares || 0;
-        const cost = squares * 1.15 * 280;
+        const cost = squares * 1.15 * 260;
         const overheadRate = 0.10;
         const FLOOR = 4000;
         const ABS_MAX = 25000;
