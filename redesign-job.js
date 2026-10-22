@@ -10,7 +10,6 @@
   const ICON = n => '<i class="ti ' + n + '" aria-hidden="true"></i>';
   const CHEVRON = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>';
   let toolsOpen = false;     // "More tools" starts closed for every job
-  let detailsOpen = false;   // full money details start closed
   let calcOpen = false;      // min. contract calculator starts closed
   let lastJobId = null;
 
@@ -246,94 +245,125 @@
     return wrap;
   }
 
-  // Clean one-list summary: contract, supplements, checks, each expense type, net profit,
-  // then overhead and commission (which the CRM figures from net profit).
-  function finList(j, details) {
+  // Money list: one clean list where every line opens its own CRM form right
+  // underneath (contract breakdown, supplements, checks, expenses, overhead,
+  // commission). The original cards stay in the page, hidden, so every form,
+  // save and calculation runs exactly as before; only their open/close parts
+  // are moved under the matching line.
+  function moneyList(j, holder) {
     const box = document.createElement('div');
     box.className = 'rd-fin';
+    // open = the CRM has shown that part (it toggles inline display); fall back to the computed style
+    const isOpen = el => {
+      if (!el) return false;
+      if (el.style.display) return el.style.display !== 'none';
+      return el.isConnected ? getComputedStyle(el).display !== 'none' : false;
+    };
+
+    function line(opts) {
+      const wrap = document.createElement('div');
+      wrap.className = 'rd-fin-item' + (opts.cls ? ' ' + opts.cls : '');
+      const head = document.createElement(opts.header ? 'button' : 'div');
+      head.className = 'rd-fin-row';
+      if (opts.header) head.type = 'button';
+      head.innerHTML = '<span class="rd-fin-l"><span class="rd-fin-dot"></span><span class="rd-fin-name"></span></span><span class="rd-fin-r"><span class="rd-fin-v"></span></span>';
+      head.querySelector('.rd-fin-dot').style.background = opts.dot || '#8B94A7';
+      head.querySelector('.rd-fin-name').textContent = opts.label;
+      if (opts.header) {
+        head.querySelector('.rd-fin-r').insertAdjacentHTML('beforeend', CHEVRON);
+        head.setAttribute('aria-expanded', 'false');
+      }
+      wrap.appendChild(head);
+      const extra = document.createElement('div');
+      extra.className = 'rd-fin-extra';
+      wrap.appendChild(extra);
+      const slot = document.createElement('div');
+      slot.className = 'rd-fin-slot';
+      wrap.appendChild(slot);
+      (opts.parts || []).forEach(p => { if (p) slot.appendChild(p); });
+      const sync = () => {
+        const open = isOpen(opts.body);
+        wrap.classList.toggle('open', open);
+        if (opts.header) head.setAttribute('aria-expanded', String(open));
+      };
+      if (opts.header) {
+        head.addEventListener('click', e => {
+          e.stopPropagation();
+          opts.header.click();               // the CRM's own open/close (fills the form as before)
+          requestAnimationFrame(sync);
+        });
+      }
+      sync();
+      box.appendChild(wrap);
+      return { value: head.querySelector('.rd-fin-v'), extra, sync };
+    }
+
+    const L = {};
+    L.contract = line({ label: 'Contract price', dot: '#7AA2FF', header: $id('cpAccHeader'), body: $id('cpEditRow'),
+                        parts: [$id('cpBreakdownSummary'), $id('cpEditRow')] });
+    const suppHead = $id('suppHeader'), suppBody = $id('suppBody');
+    L.supp = line({ label: 'Supplements', dot: '#7AA2FF', header: suppHead, body: suppBody, parts: [suppBody] });
+    L.checks = line({ label: 'Checks collected', dot: '#34D399', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
+    L.exp = line({ label: 'Expenses', dot: '#F87171', header: $id('expAccHeader'), body: $id('expBody'), parts: [$id('expBody')], cls: 'cost' });
+    L.net = line({ label: 'Net profit', dot: 'transparent', header: $id('profitHeader'), body: $id('profitPrintBtn'), parts: [$id('profitPrintBtn')], cls: 'net' });
+    const ovEditable = !!$id('ovChev');
+    L.over = line({ label: 'Overhead', dot: '#8B94A7', header: ovEditable ? $id('ovHeader') : null, body: $id('ovBody'), parts: [$id('ovBody')], cls: 'sub' });
+    L.comm = line({ label: 'Commission', dot: '#E879F9', header: $id('commAccHeader'), body: $id('jobCommBody'), parts: [$id('jobCommBody')], cls: 'sub' });
+
+    const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
     const draw = () => {
       const job = currentJob() || j;
-      const rows = [];
-      const row = (label, value, dot, cls) => rows.push({ label, value, dot, cls });
-      row('Contract price', cleanUsd($id('cpDisplay') && $id('cpDisplay').textContent), '#7AA2FF');
+      set(L.contract.value, cleanUsd($id('cpDisplay') && $id('cpDisplay').textContent));
       let supp = 0;
       try { supp = supplementsApprovedTotal(job) || 0; } catch (e) {}
-      if (supp) row('Supplements', usd(supp, '+'), '#7AA2FF');
-      row('Checks collected', cleanUsd($id('summaryDeposits') && $id('summaryDeposits').textContent), '#34D399');
+      set(L.supp.value, supp ? usd(supp, '+') : '$0');
+      set(L.checks.value, cleanUsd($id('summaryDeposits') && $id('summaryDeposits').textContent));
+      // expense total and a short per-type breakdown under the Expenses line
       const byCat = {};
+      let total = 0;
       (job.expenses || []).forEach(e => {
         let v = 0;
         try { v = moneyValue(e.amount); } catch (err) { v = parseFloat(e.amount) || 0; }
         if (!v) return;
         const c = e.cat || 'Other';
         byCat[c] = (byCat[c] || 0) + v;
+        total += c === 'Returns' ? -Math.abs(v) : Math.abs(v);
       });
+      set(L.exp.value, total ? usd(total, '-') : '$0');
       let order = [];
       try { order = EXPENSE_CATEGORIES.slice(); } catch (e) {}
       Object.keys(byCat).forEach(c => { if (order.indexOf(c) < 0) order.push(c); });
       let colors = {};
       try { colors = EXPENSE_CATEGORY_COLORS; } catch (e) {}
-      order.forEach(c => {
-        if (!byCat[c]) return;
-        if (c === 'Returns') row('Returns (credit)', usd(Math.abs(byCat[c]), '+'), colors[c] || '#F87171', 'credit');
-        else row(c, usd(Math.abs(byCat[c]), '-'), colors[c] || '#8B94A7', 'cost');
-      });
-      const net = num($id('profitNet') && $id('profitNet').textContent);
-      const over = $id('overheadAmt'), comm = $id('commAccTotal');
-
-      box.innerHTML = '';
-      rows.forEach(r => {
-        const el = document.createElement('div');
-        el.className = 'rd-fin-row' + (r.cls ? ' ' + r.cls : '');
-        el.innerHTML = '<span class="rd-fin-l"><span class="rd-fin-dot"></span><span></span></span><span class="rd-fin-v"></span>';
-        el.querySelector('.rd-fin-dot').style.background = r.dot;
-        el.querySelector('.rd-fin-l span:last-child').textContent = r.label;
-        el.querySelector('.rd-fin-v').textContent = r.value;
-        box.appendChild(el);
-      });
-      const n = document.createElement('div');
-      n.className = 'rd-fin-net' + (net != null && net < 0 ? ' neg' : '');
-      n.innerHTML = '<span>Net profit</span><span class="rd-fin-netv"></span>';
-      n.lastChild.textContent = net == null ? '—' : usd(net);
-      box.appendChild(n);
-      [['Overhead', over, '#8B94A7', $id('overheadPctLabel')], ['Commission', comm, '#E879F9']].forEach(([label, src, dot, pct]) => {
-        if (!src) return;
-        const el = document.createElement('div');
-        el.className = 'rd-fin-row sub';
-        el.innerHTML = '<span class="rd-fin-l"><span class="rd-fin-dot"></span><span></span></span><span class="rd-fin-v"></span>';
-        el.querySelector('.rd-fin-dot').style.background = dot;
-        el.querySelector('.rd-fin-l span:last-child').textContent = label + (pct && pct.textContent ? ' (' + pct.textContent.trim() + ')' : '');
-        el.querySelector('.rd-fin-v').textContent = cleanUsd(src.textContent);
-        box.appendChild(el);
-      });
+      const parts = order.filter(c => byCat[c]).map(c => c + '|' + (c === 'Returns' ? usd(Math.abs(byCat[c]), '+') : usd(Math.abs(byCat[c]), '-')) + '|' + (colors[c] || '#8B94A7'));
+      const key = parts.join(';');
+      if (L.exp.extra.dataset.key !== key) {
+        L.exp.extra.dataset.key = key;
+        L.exp.extra.innerHTML = '';
+        parts.forEach(p => {
+          const [name, val, color] = p.split('|');
+          const r = document.createElement('div');
+          r.className = 'rd-fin-cat';
+          r.innerHTML = '<span class="rd-fin-l"><span class="rd-fin-dot"></span><span></span></span><span></span>';
+          r.querySelector('.rd-fin-dot').style.background = color;
+          r.querySelector('.rd-fin-l span:last-child').textContent = name;
+          r.lastChild.textContent = val;
+          L.exp.extra.appendChild(r);
+        });
+      }
+      const n = num($id('profitNet') && $id('profitNet').textContent);
+      set(L.net.value, n == null ? '—' : usd(n));
+      L.net.value.classList.toggle('neg', n != null && n < 0);
+      const pct = $id('overheadPctLabel');
+      set(L.over.value, cleanUsd($id('overheadAmt') && $id('overheadAmt').textContent));
+      const ovName = L.over.value.closest('.rd-fin-item').querySelector('.rd-fin-name');
+      set(ovName, 'Overhead' + (pct && pct.textContent ? ' (' + pct.textContent.trim() + ')' : ''));
+      set(L.comm.value, cleanUsd($id('commAccTotal') && $id('commAccTotal').textContent));
+      Object.values(L).forEach(l => l.sync());
     };
-    watch([details], draw);
+    watch([holder, box], draw);
+    requestAnimationFrame(draw);   // once more after the list is on screen
     return box;
-  }
-
-  // Buttons under the summary open the CRM's own forms (inside the details area)
-  function finActions(details, toggle) {
-    const wrap = document.createElement('div');
-    wrap.className = 'rd-fin-actions';
-    const isHidden = el => !el || getComputedStyle(el).display === 'none';
-    const openDetails = () => { if (!detailsOpen) toggle(true); };
-    const ensure = (headerId, bodyId) => { const h = $id(headerId), b = $id(bodyId); if (h && isHidden(b)) h.click(); };
-    const focus = id => { const el = $id(id); if (el) later(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' })); };
-    const acts = [
-      ['Edit contract', () => { ensure('cpAccHeader', 'cpEditRow'); focus('contractSummaryCard'); }],
-      ['Add check', () => { ensure('depAccHeader', 'depBody'); const t = $id('depAddToggle'); if (t && !isHidden(t)) t.click(); focus('depAccHeader'); }],
-      ['Add expense', () => { ensure('expAccHeader', 'expBody'); const t = $id('expAddToggle'); if (t && !isHidden(t)) t.click(); focus('expAcc'); }],
-      ['Commission', () => { ensure('commAccHeader', 'jobCommBody'); focus('commAcc'); }]
-    ];
-    acts.forEach(([label, fn]) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'rd-fin-btn';
-      b.textContent = label;
-      b.addEventListener('click', e => { e.stopPropagation(); openDetails(); fn(); });
-      wrap.appendChild(b);
-    });
-    return wrap;
   }
 
   function roofTiles(j, calc) {
@@ -442,6 +472,7 @@
 
     const ov = document.createElement('div');
     ov.className = 'rd-ov';
+    body.insertBefore(ov, body.firstChild);   // in the page from the start, so lookups by id keep working
 
 
     // 2. Customer & claim (+ Save to phone contacts)
@@ -455,22 +486,15 @@
     const next = section(ov, 'Next step');
     [checklist, lastContact].forEach(el => el && next.appendChild(el));
 
-    // 4. Money: tiles, clean list, edit buttons, full details (closed)
+    // 4. Money: tiles + one list where each line opens its own form
     const mon = section(ov, 'Money');
     mon.appendChild(moneyTiles(j));
-    const detailsHolder = document.createElement('div');   // filled below, after the list is placed
-    const list = finList(j, detailsHolder);
-    mon.appendChild(list);
-    let setDetails = () => {};
-    mon.appendChild(finActions(detailsHolder, open => setDetails(open)));
-    const det = collapsible(mon, 'All money details', 'Contract, supplements, checks, expenses, overhead, commission', detailsOpen, open => { detailsOpen = open; });
-    setDetails = det.set;
-    det.body.appendChild(detailsHolder);
-    detailsHolder.className = 'rd-details';
-    moneyCards.forEach(el => detailsHolder.appendChild(el));
-    if (zoho) detailsHolder.appendChild(zoho);
-    // the list was drawn before the cards moved in; draw again now they are in place
-    detailsHolder.appendChild(document.createComment('rd'));
+    const holder = document.createElement('div');      // the CRM's own money cards, kept but hidden
+    holder.className = 'rd-hidden rd-money-src';
+    moneyCards.forEach(el => holder.appendChild(el));
+    mon.appendChild(holder);                            // in the page first, so the list can find the forms
+    mon.insertBefore(moneyList(j, holder), holder);
+    if (zoho) mon.insertBefore(zoho, holder);
 
     // 5. Roof & min. contract (always visible)
     const roof = section(ov, 'Roof & min. contract');
@@ -531,7 +555,6 @@
     qa.classList.add('rd-qa-bar');
     ov.appendChild(qa);
 
-    body.insertBefore(ov, body.firstChild);
     twoCol.remove();
     if (jobBar && !jobBar.querySelector('.ap-pill')) jobBar.remove();
   }
@@ -541,7 +564,7 @@
     const panel = $id('detailPanel');
     const j = currentJob();
     if (!panel || !j) return;
-    if (j.id !== lastJobId) { toolsOpen = false; detailsOpen = false; calcOpen = false; lastJobId = j.id; }
+    if (j.id !== lastJobId) { toolsOpen = false; calcOpen = false; lastJobId = j.id; }
     closeMenu();
     panel.classList.add('rd-job');
     decorateHeader(panel, j);
