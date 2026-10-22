@@ -90,3 +90,48 @@ html.ui-new .mobile-drawer .md-section:first-child{padding-top:2px}
   html.ui-new .nav-link.active .nav-ico{background:var(--tile-active)}
   html.ui-new .nav-link.active .nav-ico i{color:#7AA2FF}
 }
+
+/* ==========================================================================
+   Part 2: pipeline board and job cards
+   ========================================================================== */
+html.ui-new .board{gap:14px}
+html.ui-new .col{background:var(--col-bg);padding:4px}
+html.ui-new .col-header{border-bottom:none;padding:10px 10px 6px}
+html.ui-new .col-title{color:var(--brand)!important;font-weight:600;letter-spacing:0}
+html.ui-new .col-title > span:first-child{width:9px!important;height:9px!important;margin-right:4px!important}
+html.ui-new .col-count{border:none!important;background:var(--tile)!important;color:var(--text-2)!important;font-weight:600}
+html.ui-new .col-menu-btn{border-radius:8px;width:28px;height:28px}
+html.ui-new .col-body{padding:6px 6px 8px;display:flex;flex-direction:column;gap:8px}
+html.ui-new .col-body.drag-over{background:rgba(59,123,240,0.10);border-radius:12px}
+
+html.ui-new .job-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:0;transition:border-color .12s,background .12s}
+html.ui-new .job-card:hover{border-color:rgba(59,123,240,0.55);background:#18202C}
+html.ui-new .job-card.card-closed{background:#12161E}
+html.ui-new .card-name{color:var(--brand);font-weight:600;letter-spacing:-0.01em}
+html.ui-new .card-sub,html.ui-new .card-phone{color:var(--muted)}
+html.ui-new .card-ins{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+html.ui-new .card-ins > div:first-child{color:var(--text-2)!important;font-weight:500!important;background:#1E2430;border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+html.ui-new .card-footer{border-top:none;padding-top:0;flex-wrap:wrap}
+html.ui-new .card-meta{color:var(--muted)}
+html.ui-new .card-meta.warn{color:#F2C46B}
+html.ui-new .card-meta.stage-stale{color:#F2C46B;background:var(--accent-light);border:1px solid #5A4719;border-radius:6px;padding:1px 6px;font-weight:600}
+html.ui-new .user-dot{box-shadow:0 0 0 2px var(--surface)}
+html.ui-new .card-move-btn{border-radius:8px;border-color:var(--line);background:var(--panel-2)}
+html.ui-new .add-col-btn{border-radius:14px;border:1px dashed rgba(255,255,255,0.14);background:transparent}
+html.ui-new #forkBoardLabel{color:var(--muted)!important;font-size:11px!important;letter-spacing:.1em!important}
+
+/* Desktop: wider columns and a roomier card */
+@media (min-width:1181px){
+  html.ui-new .board-wrap{padding:16px 16px 30px}
+  html.ui-new .col{width:264px}
+  html.ui-new .col-title{font-size:13px}
+  html.ui-new .col-count{font-size:12px;padding:1px 7px}
+  html.ui-new .job-card{padding:12px}
+  html.ui-new .card-name{font-size:14px}
+  html.ui-new .card-sub,html.ui-new .card-phone{font-size:12px}
+  html.ui-new .card-ins > div{font-size:11px!important}
+  html.ui-new .card-footer{margin-top:10px;gap:8px}
+  html.ui-new .card-meta{font-size:12px;gap:4px}
+  html.ui-new .card-meta i{font-size:13px}
+  html.ui-new .user-dot{width:26px;height:26px;font-size:10px}
+}

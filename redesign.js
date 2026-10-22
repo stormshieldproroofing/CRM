@@ -73,8 +73,37 @@
     delete drawer.dataset.decorating;
   }
 
+  // Board: show stage names as written ("Contract Signed", not "CONTRACT SIGNED")
+  // and tag the carrier / claim # block so the stylesheet can turn it into a chip.
+  function stageName(id) {
+    try { const c = (typeof columns !== 'undefined' ? columns : []).find(x => x.id === id); return c && c.name; }
+    catch (e) { return null; }
+  }
+  function decorateBoard(root) {
+    root.querySelectorAll('.col').forEach(col => {
+      const t = col.querySelector('.col-title');
+      if (!t || t.dataset.rd) return;
+      t.dataset.rd = '1';
+      const name = stageName(col.dataset.col);
+      const txt = Array.from(t.childNodes).find(n => n.nodeType === 3 && n.textContent.trim());
+      if (txt) txt.textContent = name || txt.textContent.toLowerCase().replace(/\b\w/g, m => m.toUpperCase());
+    });
+    root.querySelectorAll('.job-card .card-name').forEach(n => {
+      const ins = n.parentElement && n.parentElement.nextElementSibling;
+      if (ins && !ins.classList.contains('card-ins')) ins.classList.add('card-ins');
+    });
+  }
+  function watchBoard(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    decorateBoard(el);
+    new MutationObserver(() => decorateBoard(el)).observe(el, { childList: true, subtree: true });
+  }
+
   function init() {
     buildSidebar();
+    watchBoard('board');
+    watchBoard('forkBoard');
     const drawer = document.getElementById('mobileDrawer');
     if (drawer) {
       new MutationObserver(() => {
