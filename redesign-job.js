@@ -246,9 +246,8 @@
     return wrap;
   }
 
-  // Money list: five short lines, everything minimized. Tapping a line opens
-  // its breakdown and the CRM's own form right underneath; tapping again closes
-  // it. Overhead and Commission sit inside Net profit. The original cards stay
+  // Money list: short lines, everything minimized. Tapping a line opens its
+  // breakdown and the CRM's own form right underneath; tapping again closes it. The original cards stay
   // in the page, hidden, so every form, save and total runs exactly as before.
   function moneyList(j, holder) {
     const box = document.createElement('div');
@@ -301,12 +300,11 @@
     L.checks = line({ label: 'Checks collected', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
     // Expenses: the per-type breakdown only shows once the line is opened
     L.exp = line({ label: 'Expenses', header: $id('expAccHeader'), body: $id('expBody'), parts: [$id('expBody')], cls: 'cost' });
-    // Net profit: opening it shows overhead, commission and the P&L print
-    L.net = line({ label: 'Net profit', header: $id('profitHeader'), body: $id('profitPrintBtn'), cls: 'net' });
+    // Net profit, Overhead and Commission are regular lines like the rest
+    L.net = line({ label: 'Net profit', header: $id('profitHeader'), body: $id('profitPrintBtn'), parts: [$id('profitPrintBtn')], cls: 'net' });
     const ovEditable = !!$id('ovChev');
-    L.over = line({ label: 'Overhead', header: ovEditable ? $id('ovHeader') : null, body: $id('ovBody'), parts: [$id('ovBody')], cls: 'nested' }, L.net.slot);
-    L.comm = line({ label: 'Commission', header: $id('commAccHeader'), body: $id('jobCommBody'), parts: [$id('jobCommBody')], cls: 'nested' }, L.net.slot);
-    if ($id('profitPrintBtn')) L.net.slot.appendChild($id('profitPrintBtn'));
+    L.over = line({ label: 'Overhead', header: ovEditable ? $id('ovHeader') : null, body: $id('ovBody'), parts: [$id('ovBody')] });
+    L.comm = line({ label: 'Commission', header: $id('commAccHeader'), body: $id('jobCommBody'), parts: [$id('jobCommBody')] });
 
     const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
     const draw = () => {

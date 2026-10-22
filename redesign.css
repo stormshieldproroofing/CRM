@@ -552,3 +552,12 @@ html.ui-new .rd-fin-slot #expCatSummary{display:none!important}
 html.ui-new div:has(> #expAddToggle){display:flex;flex-wrap:wrap;gap:8px}
 html.ui-new #expAddToggle,html.ui-new #abcImportBtn{flex:1 1 0;width:auto!important;min-width:0;min-height:44px;margin:0!important;border-radius:10px!important;font-size:13px!important;white-space:nowrap}
 html.ui-new div:has(> #expAddToggle) > #expAddForm{flex:1 1 100%}
+
+/* Net profit as a regular line (same size as the others), value in green */
+html.ui-new .rd-fin-item.net{border-bottom:1px solid rgba(255,255,255,0.06)}
+html.ui-new .rd-fin-item.net > .rd-fin-row{min-height:50px}
+html.ui-new .rd-fin-item.net > .rd-fin-row .rd-fin-name{color:var(--text-2);font-weight:500}
+html.ui-new .rd-fin-item.net.open > .rd-fin-row .rd-fin-name{color:var(--brand)}
+html.ui-new .rd-fin-item.net > .rd-fin-row .rd-fin-v{font-size:15px;font-weight:600;color:#6EE7B7}
+html.ui-new .rd-fin-item.net > .rd-fin-slot{padding:12px}
+html.ui-new .rd-fin-item.net > .rd-fin-slot > #profitPrintBtn{margin-top:0!important}
