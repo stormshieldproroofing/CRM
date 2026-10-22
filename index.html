@@ -483,9 +483,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   if(localStorage.getItem('ssUI')!=='new') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=25">'
+    +'<link rel="stylesheet" href="redesign.css?v=26">'
     +'<script src="redesign.js?v=5"><\/script>'
-    +'<script src="redesign-job.js?v=12"><\/script>');
+    +'<script src="redesign-job.js?v=13"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2608,6 +2608,7 @@ function suppAdd(jobId){
   if(wasPending && nowApproved && /complet|invoic/i.test((columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name)||'')){
     j.invoiceReadyNotified=false; notifyInvoiceReady(j);
   }
+  window._suppKeepOpen = jobId;
   if(typeof logActivity==='function') logActivity(j,'accounting','Supplement added',`$${amt.toLocaleString()} · ${status}${note?' · '+note:''}`);
   saveToStorage();
   if(typeof renderDetailPanel==='function') renderDetailPanel();
@@ -2618,11 +2619,49 @@ function suppDelete(jobId, sid){
   const j = jobs.find(x=>x.id===jobId);
   if(!j) return;
   j.supplements = getSupplements(j).filter(s=>s._sid!==sid);
+  window._suppKeepOpen = jobId;
   syncSupplementMirrors(j);
   saveToStorage();
   if(typeof renderDetailPanel==='function') renderDetailPanel();
 }
 window.suppDelete = suppDelete;
+
+// Edit an existing supplement in place (amount, status, note).
+function suppEditOpen(sid){
+  const v=document.getElementById('supp-view-'+sid), e=document.getElementById('supp-edit-'+sid);
+  if(!v||!e) return;
+  v.style.display='none'; e.style.display='block';
+  const a=document.getElementById('suppEditAmt-'+sid); if(a) a.focus();
+}
+function suppEditCancel(sid){
+  const v=document.getElementById('supp-view-'+sid), e=document.getElementById('supp-edit-'+sid);
+  if(v) v.style.display='flex'; if(e) e.style.display='none';
+}
+function suppEditSave(jobId, sid){
+  const j = jobs.find(x=>x.id===jobId);
+  if(!j) return;
+  const s = getSupplements(j).find(x=>x._sid===sid);
+  if(!s) return;
+  const amt = moneyNum((document.getElementById('suppEditAmt-'+sid)||{}).value);
+  const status = (document.getElementById('suppEditStatus-'+sid)||{}).value || s.status;
+  const note = ((document.getElementById('suppEditNote-'+sid)||{}).value||'').trim();
+  if(amt<=0 && status!=='Submitted' && status!=='Denied'){ toast('Enter a supplement amount'); return; }
+  const wasPending = supplementsRollupStatus(j)==='Submitted';
+  const before = `$${(parseFloat(s.amount)||0).toLocaleString()} · ${s.status}`;
+  s.amount = amt.toFixed(2); s.status = status; s.note = note;
+  syncSupplementMirrors(j);
+  const nowApproved = supplementsRollupStatus(j)==='Approved';
+  if(wasPending && nowApproved && /complet|invoic/i.test((columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name)||'')){
+    j.invoiceReadyNotified=false; notifyInvoiceReady(j);
+  }
+  window._suppKeepOpen = jobId;
+  if(typeof logActivity==='function') logActivity(j,'accounting','Supplement updated',`${before} → $${amt.toLocaleString()} · ${status}${note?' · '+note:''}`);
+  saveToStorage();
+  if(typeof renderDetailPanel==='function') renderDetailPanel();
+}
+window.suppEditOpen = suppEditOpen;
+window.suppEditCancel = suppEditCancel;
+window.suppEditSave = suppEditSave;
 
 // ── READY-TO-INVOICE ALERT — gated on supplement status ──
 function invoiceReadyState(j){
@@ -5938,22 +5977,39 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 const approved = supplementsApprovedTotal(j);
                 const pending = list.some(s=>s.status==='Submitted'||s.status==='Partial');
                 const badge = pending ? ['Pending','#FBBF24'] : (approved>0 ? ['Approved','#34D399'] : (list.length?['—','var(--muted)']:['','var(--muted)']));
-                return `<div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');if(b){b.style.display=b.style.display==='block'?'none':'block';}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
+                return `<div id="suppHeader" onclick="(function(){const b=document.getElementById('suppBody');if(b){b.style.display=b.style.display==='block'?'none':'block';window._suppKeepOpen=b.style.display==='block'?'${j.id}':null;}})()" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;cursor:pointer;user-select:none">
                   <span style="font-size:11px;color:var(--muted)">Supplements${list.length?` <span style="opacity:0.6">(${list.length})</span>`:''}</span>
                   <div style="display:flex;align-items:center;gap:7px">
                     <span style="font-size:13px;font-weight:700;color:#fff">$${approved.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
                   </div>
                 </div>
-                <div id="suppBody" style="display:none;padding:2px 0 12px">
+                <div id="suppBody" style="display:${window._suppKeepOpen===j.id?'block':'none'};padding:2px 0 12px">
                   ${list.length ? list.map(s => {
                     const stColor = { 'Submitted':'#FBBF24','Approved':'#34D399','Partial':'#FBBF24','Denied':'#F87171' }[s.status] || 'var(--muted)';
-                    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+                    return `<div id="supp-view-${s._sid}" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
                       <span style="width:7px;height:7px;border-radius:50%;background:${stColor};flex-shrink:0"></span>
                       <div style="flex:1;min-width:0">
                         <div style="font-size:12px;font-weight:600;color:#fff">$${(parseFloat(s.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:10px;font-weight:600;color:${stColor}">· ${s.status}</span></div>
                         ${s.note?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(s.note)}</div>`:''}
                       </div>
+                      <button onclick="suppEditOpen('${s._sid}')" title="Edit" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;flex-shrink:0" onmouseover="this.style.color='var(--brand-light)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-pencil" style="font-size:13px"></i></button>
                       <button onclick="suppDelete('${j.id}','${s._sid}')" title="Remove" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;flex-shrink:0" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-trash" style="font-size:13px"></i></button>
+                    </div>
+                    <div id="supp-edit-${s._sid}" style="display:none;padding:8px 0 10px;border-bottom:1px solid rgba(255,255,255,0.04)">
+                      <div style="display:flex;gap:6px;align-items:center">
+                        <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;gap:3px;width:100px">
+                          <span style="font-size:11px;color:var(--muted)">$</span>
+                          <input id="suppEditAmt-${s._sid}" type="text" inputmode="decimal" value="${parseFloat(s.amount)||0}" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none">
+                        </div>
+                        <select id="suppEditStatus-${s._sid}" style="flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 6px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
+                          ${['Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}"${o===s.status?' selected':''}>${o}</option>`).join('')}
+                        </select>
+                      </div>
+                      <input id="suppEditNote-${s._sid}" type="text" data-no-calc="true" value="${escapeHtml(s.note||'')}" placeholder="Description / note" style="width:100%;margin-top:6px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
+                      <div style="display:flex;gap:6px;margin-top:6px">
+                        <button class="supp-edit-save" onclick="suppEditSave('${j.id}','${s._sid}')" style="flex:1;padding:7px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif">Save</button>
+                        <button class="supp-edit-cancel" onclick="suppEditCancel('${s._sid}')" style="padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);font-size:11px;color:var(--muted);cursor:pointer;font-family:'Barlow',sans-serif">Cancel</button>
+                      </div>
                     </div>`;
                   }).join('') : `<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No supplements yet</div>`}
                   <!-- Add form -->
