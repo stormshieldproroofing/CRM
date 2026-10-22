@@ -473,6 +473,20 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<script>
+// Redesign preview: open the CRM with ?ui=new to try the new look (remembered on
+// this device), ?ui=old to switch back. Without it nothing below loads.
+(function(){try{
+  var q=new URLSearchParams(location.search).get('ui');
+  if(q==='new') localStorage.setItem('ssUI','new');
+  if(q==='old') localStorage.removeItem('ssUI');
+  if(localStorage.getItem('ssUI')!=='new') return;
+  document.documentElement.classList.add('ui-new');
+  document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
+    +'<link rel="stylesheet" href="redesign.css?v=1">'
+    +'<script src="redesign.js?v=1"><\/script>');
+}catch(e){}})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
