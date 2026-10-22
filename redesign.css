@@ -1,0 +1,92 @@
+/* ==========================================================================
+   StormShield CRM redesign — Part 1: colors, type, sidebar navigation.
+   Loaded only when the CRM is opened with ?ui=new (see loader in index.html).
+   Every rule is scoped to html.ui-new so the current look is untouched.
+   ========================================================================== */
+
+/* ---- Palette ---------------------------------------------------------- */
+html.ui-new{
+  --brand:#E8ECF3;--brand-mid:#9DB8F5;--brand-light:#3B7BF0;
+  --accent:#F2C46B;--accent-light:#3A2E12;
+  --surface:#161B24;--border:#252B38;--bg:#0A0D13;
+  --muted:#8B94A7;--success-bg:#0D2918;--success:#34D399;
+  --warn:#F59E0B;--danger:#F87171;--col-bg:#0F131A;
+  --panel:#12161E;--panel-2:#181D27;--tile:#1A1F29;--tile-active:#233150;
+  --text-2:#C4CBD8;--blue:#2F6FEB;--line:rgba(255,255,255,0.07);
+}
+
+/* ---- Type: Inter everywhere except the icon font ----------------------- */
+html.ui-new body,
+html.ui-new body *:not(.ti):not([class^="ti-"]):not([class*=" ti-"]){
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif!important;
+}
+html.ui-new body{background:var(--bg);-webkit-font-smoothing:antialiased;letter-spacing:-0.005em}
+
+/* ---- Shared chrome: bars, panels, buttons ----------------------------- */
+html.ui-new .subbar{background:var(--bg);border-bottom:1px solid var(--line)}
+html.ui-new .icon-btn{width:34px;height:34px;border-radius:10px;border-color:var(--line);background:var(--panel);color:var(--text-2)}
+html.ui-new .icon-btn:hover{background:var(--panel-2);color:#fff}
+html.ui-new .pill-btn{border-radius:10px;border-color:var(--line);background:var(--panel);color:var(--text-2);padding:7px 12px;font-weight:500}
+html.ui-new .pill-btn:hover{background:var(--panel-2);color:#fff}
+html.ui-new .summary-head,
+html.ui-new .summary-panel{background:var(--panel);border-color:var(--line);border-radius:16px}
+html.ui-new .summary-card{background:var(--panel-2);border-color:var(--line);border-radius:12px}
+html.ui-new .summary-label{color:var(--muted);letter-spacing:.08em}
+html.ui-new .filter-drop,
+html.ui-new .agent-view-drop{background:var(--panel-2);border-color:var(--line);border-radius:12px}
+
+/* Board columns and cards: softer, rounder (full card redesign is part 2) */
+html.ui-new .col{border-radius:16px;border-color:rgba(255,255,255,0.06)}
+html.ui-new .col-header{border-bottom-color:var(--line)}
+html.ui-new .col-count{background:var(--tile);border-color:transparent;color:var(--text-2);border-radius:6px}
+
+/* Inputs */
+html.ui-new input,html.ui-new select,html.ui-new textarea{border-radius:10px}
+
+/* ---- Top bar (tablet and phone) ---------------------------------------- */
+html.ui-new .topnav{background:var(--panel);border-bottom:1px solid var(--line)}
+html.ui-new .nav-link{color:var(--text-2);border-radius:8px}
+html.ui-new .nav-link:hover,html.ui-new .nav-link.active{color:#fff;background:#1B2230}
+html.ui-new .nav-search{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+html.ui-new .nav-search::placeholder{color:var(--muted)}
+html.ui-new .nav-avatar{background:var(--tile-active);color:#BFD2FF}
+html.ui-new .nav-section{display:none}
+html.ui-new .nav-ico{display:none}
+
+/* Phone drawer */
+html.ui-new .mobile-drawer{background:var(--panel);border-right:1px solid var(--line);padding:14px 10px}
+html.ui-new .mobile-drawer .md-link{color:var(--text-2);border-radius:12px;font-weight:500}
+html.ui-new .mobile-drawer .md-link.active{color:#fff;background:#1B2230;font-weight:600}
+html.ui-new .mobile-drawer .md-link i{width:34px;height:34px;border-radius:10px;background:var(--tile);display:inline-flex;align-items:center;justify-content:center;font-size:17px;color:#9AA3B5}
+html.ui-new .mobile-drawer .md-link.active i{background:var(--tile-active);color:#7AA2FF}
+html.ui-new .mobile-drawer .md-section{font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--muted);padding:14px 14px 6px}
+html.ui-new .mobile-drawer .md-section:first-child{padding-top:2px}
+
+/* ---- Desktop: sidebar navigation -------------------------------------- */
+@media (min-width:1181px){
+  html.ui-new body{padding-left:260px}
+  html.ui-new .topnav{
+    position:fixed;top:12px;left:12px;bottom:12px;width:236px;height:auto;z-index:150;
+    flex-direction:column;align-items:stretch;gap:2px;padding:18px 12px 12px;
+    background:var(--panel);border:1px solid var(--line);border-radius:18px;
+    overflow-y:auto;overflow-x:hidden;scrollbar-width:none;
+  }
+  html.ui-new .topnav::-webkit-scrollbar{display:none}
+  html.ui-new .topnav > *{order:3}
+  html.ui-new .topnav .logo{order:0;margin:0 4px 14px;justify-content:flex-start}
+  html.ui-new .topnav .logo img{max-width:100%;max-height:42px;object-fit:contain}
+  html.ui-new .topnav .nav-search{order:1;width:100%;margin-bottom:8px;font-size:13px}
+  html.ui-new .topnav > div[style*="flex:1"]{order:4;flex:1 0 12px!important}
+  html.ui-new .topnav .agent-view-wrap{order:5;display:flex;align-items:center;gap:10px;padding:12px 4px 2px;border-top:1px solid var(--line)}
+  html.ui-new .topnav .agent-view-wrap::after{content:'Viewing as';font-size:12px;color:var(--muted)}
+  html.ui-new .agent-view-drop{top:auto;bottom:46px;left:0;right:auto}
+
+  html.ui-new .nav-section{display:block;font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--muted);padding:14px 8px 6px}
+  html.ui-new .nav-link{display:flex;align-items:center;gap:12px;padding:6px 8px;border-radius:12px;font-size:14px;font-weight:500;color:var(--text-2)}
+  html.ui-new .nav-link.active{background:#1B2230;color:#fff;font-weight:600}
+  html.ui-new .nav-link:hover:not(.active){background:rgba(255,255,255,0.04)}
+  html.ui-new .nav-ico{display:inline-flex;width:34px;height:34px;flex-shrink:0;border-radius:10px;background:var(--tile);align-items:center;justify-content:center}
+  html.ui-new .nav-ico i{font-size:17px;color:#9AA3B5}
+  html.ui-new .nav-link.active .nav-ico{background:var(--tile-active)}
+  html.ui-new .nav-link.active .nav-ico i{color:#7AA2FF}
+}
