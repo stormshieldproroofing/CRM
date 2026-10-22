@@ -180,57 +180,6 @@
     sheetCancel(menu);
   }
 
-  // ── Tabs: Overview, Photos, Contract + "Files" for the rest ──────────
-  const KEEP_TABS = 3;
-  function tabLabel(t) {
-    return Array.from(t.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim();
-  }
-  function decorateTabs(panel) {
-    const bar = panel.querySelector('.dp-tabs');
-    if (!bar || bar.dataset.rd) return;
-    bar.dataset.rd = '1';
-    const tabs = Array.from(bar.querySelectorAll('.dp-tab'));
-    if (tabs.length <= KEEP_TABS + 1) return;
-    const extra = tabs.slice(KEEP_TABS);
-    const activeExtra = extra.find(t => t.classList.contains('active'));
-    extra.forEach(t => t.classList.add('rd-tab-hidden'));
-
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'dp-tab rd-tab-more' + (activeExtra ? ' active' : '');
-    more.setAttribute('aria-haspopup', 'true');
-    more.innerHTML = '<span></span>' + CHEVRON;
-    more.firstChild.textContent = activeExtra ? tabLabel(activeExtra) : 'Files';
-    if (extra.some(t => t.querySelector('.dp-tab-badge'))) more.classList.add('has-badge');
-    bar.appendChild(more);
-
-    more.addEventListener('click', e => {
-      e.stopPropagation();
-      const open = panel.querySelector('.rd-tabmenu');
-      if (open) { open.remove(); return; }
-      const header = panel.querySelector('.dp-header-area');
-      const menu = document.createElement('div');
-      menu.className = 'rd-tabmenu';
-      menu.setAttribute('role', 'menu');
-      extra.forEach(t => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.setAttribute('role', 'menuitem');
-        b.className = 'rd-tabmenu-item' + (t.classList.contains('active') ? ' active' : '');
-        b.innerHTML = '<span></span>';
-        b.firstChild.textContent = tabLabel(t);
-        const badge = t.querySelector('.dp-tab-badge-slot');
-        if (badge) b.insertAdjacentHTML('beforeend', badge.innerHTML);
-        b.addEventListener('click', ev => { ev.stopPropagation(); menu.remove(); t.click(); });
-        menu.appendChild(b);
-      });
-      menu.style.top = (bar.offsetTop + bar.offsetHeight + 6) + 'px';
-      header.appendChild(menu);
-      const away = ev => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', away, true); } };
-      document.addEventListener('click', away, true);
-    });
-  }
-
   // ── Overview pieces ──────────────────────────────────────────────────
   function quickActions(j) {
     const phone = String(j.phone || '').replace(/[^\d+]/g, '');
@@ -494,8 +443,6 @@
     const ov = document.createElement('div');
     ov.className = 'rd-ov';
 
-    // 1. Quick actions
-    ov.appendChild(quickActions(j));
 
     // 2. Customer & claim (+ Save to phone contacts)
     const cust = section(ov, 'Customer & claim');
@@ -579,6 +526,11 @@
       ov.appendChild(actions);
     }
 
+    // Quick actions stay pinned at the bottom of the screen while scrolling
+    const qa = quickActions(j);
+    qa.classList.add('rd-qa-bar');
+    ov.appendChild(qa);
+
     body.insertBefore(ov, body.firstChild);
     twoCol.remove();
     if (jobBar && !jobBar.querySelector('.ap-pill')) jobBar.remove();
@@ -593,7 +545,6 @@
     closeMenu();
     panel.classList.add('rd-job');
     decorateHeader(panel, j);
-    decorateTabs(panel);
     if (currentTab() === 'overview') rebuildOverview(panel, j);
   }
 
