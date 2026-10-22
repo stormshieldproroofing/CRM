@@ -301,3 +301,123 @@ html.ui-new .rd-stagebar,html.ui-new .rd-tabbar{display:none}
 html.ui-new body:has(.detail-overlay.open) .rd-tabbar,
 html.ui-new body:has(.m-overlay.open) .rd-tabbar,
 html.ui-new body:has(.ph-overlay.open) .rd-tabbar{display:none}
+
+/* ==========================================================================
+   Job screen clean-up (redesign-job.js): header, tabs, ⋯ menu, new Overview
+   ========================================================================== */
+/* Header */
+html.ui-new .rd-job .dp-name-row{align-items:flex-start;gap:12px}
+html.ui-new .rd-job .dp-title-group{flex-direction:column;align-items:flex-start;gap:8px}
+html.ui-new .rd-job .dp-title-group .dp-name{max-width:100%}
+html.ui-new .rd-sub{font-size:13px;color:var(--muted);margin-top:-6px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.ui-new .rd-days{font-size:12px;color:var(--muted);white-space:nowrap}
+html.ui-new .rd-more-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);color:var(--brand);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0}
+html.ui-new .rd-more-btn:hover{background:#1F2533}
+
+/* Tabs: four + More */
+html.ui-new .rd-job .dp-tab.rd-tab-hidden{display:none!important}
+html.ui-new .rd-job .dp-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:visible}
+html.ui-new .rd-job .dp-tab{justify-content:center;padding:9px 6px}
+html.ui-new .rd-tab-more{gap:4px;position:relative}
+html.ui-new .rd-tab-more span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.ui-new .rd-tab-more.has-badge::after{content:'';position:absolute;top:7px;right:8px;width:6px;height:6px;border-radius:50%;background:#34D399}
+html.ui-new .rd-tabmenu{position:absolute;right:18px;z-index:30;min-width:220px;background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,0.5)}
+html.ui-new .rd-tabmenu-item{width:100%;min-height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;border:none;border-radius:10px;background:transparent;color:var(--text-2);font-size:14px;font-weight:500;cursor:pointer;text-align:left}
+html.ui-new .rd-tabmenu-item span:first-child{flex:1}
+html.ui-new .rd-tabmenu-item:hover{background:rgba(255,255,255,0.04);color:#fff}
+html.ui-new .rd-tabmenu-item.active{background:#1B2230;color:#fff;font-weight:600}
+
+/* ⋯ menu: bottom sheet on phones, small panel on larger screens */
+html.ui-new .rd-menu-wrap{position:fixed;inset:0;z-index:400}
+html.ui-new .rd-menu-bg{position:absolute;inset:0;background:rgba(5,7,11,0.55)}
+html.ui-new .rd-menu{position:absolute;left:0;right:0;bottom:0;background:var(--panel-2);border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:10px 12px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:2px;animation:rdSheetUp .18s ease}
+html.ui-new .rd-menu-handle{width:40px;height:5px;border-radius:3px;background:#3A4150;align-self:center;margin:0 0 10px}
+html.ui-new .rd-menu-item{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 10px;border:none;border-radius:12px;background:transparent;color:var(--brand);font-size:15px;font-weight:500;cursor:pointer;text-align:left}
+html.ui-new .rd-menu-item:hover,html.ui-new .rd-menu-item:focus-visible{background:rgba(255,255,255,0.05);outline:none}
+html.ui-new .rd-menu-ic{width:36px;height:36px;border-radius:10px;background:#222836;display:flex;align-items:center;justify-content:center;font-size:18px;color:#9AA3B5}
+html.ui-new .rd-menu-item.danger{color:#FCA5A5;font-weight:600}
+html.ui-new .rd-menu-item.danger .rd-menu-ic{background:#3A1A1D;color:#FCA5A5}
+html.ui-new .rd-menu-sep{height:1px;background:var(--line);margin:6px 4px}
+html.ui-new .rd-menu-cancel{height:50px;margin-top:8px;border-radius:14px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--brand);font-size:15px;font-weight:600;cursor:pointer}
+@keyframes rdSheetUp{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+@media (min-width:761px){
+  html.ui-new .rd-menu{left:auto;right:28px;bottom:auto;top:76px;width:300px;border-radius:16px;border:1px solid var(--line);padding:8px;box-shadow:0 20px 50px rgba(0,0,0,0.5)}
+  html.ui-new .rd-menu-handle,html.ui-new .rd-menu-cancel{display:none}
+  html.ui-new .rd-menu-bg{background:transparent}
+}
+
+/* Overview sections */
+html.ui-new .rd-ov{display:flex;flex-direction:column;gap:22px}
+html.ui-new .rd-sec{display:flex;flex-direction:column;gap:10px;min-width:0}
+html.ui-new .rd-sec-title{margin:0;padding:0 2px;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+html.ui-new .rd-sec > .dp-card,html.ui-new .rd-sec > .accordion,html.ui-new .rd-sec > .checklist-box,
+html.ui-new .rd-tools-body > *{margin:0!important}
+html.ui-new .rd-hidden{display:none!important}
+html.ui-new .rd-sec .meta-table{width:100%!important}
+
+/* Quick actions */
+html.ui-new .rd-qa{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+html.ui-new .rd-qa-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;border:none;background:transparent;color:var(--text-2);font-size:12px;font-weight:500;text-decoration:none;cursor:pointer;min-width:0}
+html.ui-new .rd-qa-l{white-space:nowrap}
+html.ui-new .rd-qa-ic{width:54px;height:54px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:22px;background:var(--tile);border:1px solid rgba(255,255,255,0.08);color:var(--text-2)}
+html.ui-new .rd-qa-btn.green .rd-qa-ic{background:#0D2918;border-color:#1E4D33;color:#6EE7B7}
+html.ui-new .rd-qa-btn.blue .rd-qa-ic{background:#172443;border-color:#263A66;color:#8FB4FF}
+html.ui-new .rd-qa-btn.orange .rd-qa-ic{background:#2E2212;border-color:#4E3818;color:#F5B26B}
+html.ui-new .rd-qa-btn:hover .rd-qa-ic{filter:brightness(1.2)}
+html.ui-new .rd-qa-btn.off{opacity:.4;cursor:default}
+
+/* Money tiles */
+html.ui-new .rd-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+html.ui-new .rd-tile{background:#0E1219;border:1px solid var(--line);border-radius:14px;padding:12px;min-width:0}
+html.ui-new .rd-tile-l{font-size:12px;color:var(--muted)}
+html.ui-new .rd-tile-v{font-size:17px;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.ui-new .rd-tile.pos .rd-tile-v{color:#6EE7B7}
+html.ui-new .rd-tile.due .rd-tile-v{color:#FBBF77}
+
+/* Quick links grid (the CRM's own link buttons, reshaped) */
+html.ui-new .rd-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+html.ui-new .rd-links > *{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:10px!important;min-height:48px!important;margin:0!important;padding:0 12px!important;border-radius:12px!important;font-size:14px!important;font-weight:500!important;min-width:0!important;width:auto!important;flex:none!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box}
+html.ui-new .rd-links > * i{font-size:16px!important}
+
+/* Tools (collapsible) */
+html.ui-new .rd-tools{background:#0E1219;border:1px solid var(--line);border-radius:14px;gap:0}
+html.ui-new .rd-tools-head{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px 14px;border:none;background:transparent;color:var(--muted);cursor:pointer;text-align:left}
+html.ui-new .rd-tools-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+html.ui-new .rd-tools-t .rd-sec-title{padding:0}
+html.ui-new .rd-tools-sub{font-size:13px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.ui-new .rd-tools-head svg{width:16px;height:16px;transition:transform .15s}
+html.ui-new .rd-tools.open .rd-tools-head svg{transform:rotate(180deg)}
+html.ui-new .rd-tools-body{display:none;flex-direction:column;gap:10px;padding:0 10px 10px}
+html.ui-new .rd-tools.open .rd-tools-body{display:flex}
+
+/* Sticky bottom action */
+html.ui-new .rd-actionbar{position:sticky;bottom:0;z-index:6;margin:0 -18px -20px!important;padding:12px 18px calc(14px + env(safe-area-inset-bottom))!important;background:var(--panel);border-top:1px solid var(--line)}
+html.ui-new .rd-actionbar #dpDelete{display:none}
+html.ui-new .rd-actionbar #dpMove{height:50px;border-radius:14px;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;border:none;background:var(--blue);color:#fff}
+html.ui-new .rd-actionbar #dpMove i{font-size:18px}
+
+/* Computer: links three across */
+@media (min-width:761px){
+  html.ui-new .rd-links{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+/* Phone: full-screen job, back arrow on the left, ⋯ on the right */
+@media (max-width:760px){
+  html.ui-new .detail-overlay:has(.rd-job){padding:0!important}
+  html.ui-new .detail-panel.rd-job{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;border:none}
+  html.ui-new .rd-job .dp-header-area{border-radius:0;padding:10px 12px 0}
+  html.ui-new .rd-job .dp-name-row{align-items:flex-start;gap:6px;padding-top:4px}
+  html.ui-new .rd-job .dp-name-row > div:last-child{display:contents!important}
+  html.ui-new .rd-job #dpClose{order:-1;width:44px;height:44px;margin:-6px 0 0 -6px;border:none;background:transparent;color:var(--text-2);font-size:24px}
+  html.ui-new .rd-job #dpClose i::before{content:"\ea60"}
+  html.ui-new .rd-job .dp-title-group{order:0;flex:1;min-width:0}
+  html.ui-new .rd-job .rd-more-btn{order:1;width:44px;height:44px;border-radius:12px}
+  html.ui-new .rd-job #dpEdit{display:none}
+  html.ui-new .rd-job .dp-name{font-size:20px}
+  html.ui-new .rd-job .dp-status-group{margin-left:-44px;margin-top:4px}
+  html.ui-new .rd-job .dp-tabs{margin:12px 0}
+  html.ui-new .rd-job .dp-tab{font-size:13px;padding:9px 2px}
+  html.ui-new .rd-job .dp-body{padding:16px 14px 20px}
+  html.ui-new .rd-actionbar{margin:0 -14px -20px!important;padding:12px 14px calc(14px + env(safe-area-inset-bottom))!important}
+  html.ui-new .rd-tabmenu{right:12px}
+}
