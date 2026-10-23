@@ -713,7 +713,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     <span class="subbar-title">Jobs</span>
     <button class="icon-btn" title="Refresh" onclick="renderJobsPage()"><i class="ti ti-refresh" aria-hidden="true"></i></button>
     <div style="flex:1"></div>
-    <button class="add-btn" onclick="openAddJobModal()"><i class="ti ti-plus" aria-hidden="true"></i>Add Job</button>
+    <button class="add-btn" onclick="openNewJobEntry()"><i class="ti ti-plus" aria-hidden="true"></i>Add Job</button>
   </div>
   <div class="jobs-wrap">
     <div class="jobs-toolbar">
@@ -1613,6 +1613,44 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .sm-ag-name{flex:1;min-width:0;font-size:15px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sm-ag-jobs{font-size:13px;color:var(--muted);white-space:nowrap}
 .sm-ag-val{font-size:15px;color:#fff;white-space:nowrap;min-width:84px;text-align:right}
+
+/* ── QUICK LEAD sheet (phones) ── */
+#qlOverlay{display:none}
+#qlOverlay.open{display:block;position:fixed;inset:0;z-index:520}
+html.ql-lock,html.ql-lock body{overflow:hidden}
+.ql-bg{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+.ql-sheet{position:absolute;left:0;right:0;bottom:0;max-height:92vh;overflow-y:auto;background:#12161E;border-radius:22px 22px 0 0;border-top:1px solid #2A3142;padding:10px 16px calc(22px + env(safe-area-inset-bottom));box-shadow:0 -14px 40px rgba(0,0,0,.5);font-family:Inter,system-ui,sans-serif;color:#E8ECF3}
+.ql-grab{width:40px;height:5px;border-radius:3px;background:#3a4152;margin:0 auto 10px}
+.ql-x{position:absolute;top:10px;right:12px;width:34px;height:34px;border-radius:50%;border:none;background:#1A1F29;color:#8B94A7;font-size:16px;display:none}
+.ql-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ql-hd b{font-size:19px;font-weight:700}
+.ql-link{border:none;background:none;color:#8FB4FF;font-size:14px;font-weight:600;font-family:inherit;padding:6px 0;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.ql-back{margin-top:6px}
+.ql-sub{font-size:13px;color:#8B94A7;margin:-4px 0 12px}
+.ql-loc{width:100%;display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;background:rgba(77,157,224,.10);border:1px solid rgba(77,157,224,.35);color:inherit;font-family:inherit;text-align:left;cursor:pointer}
+.ql-pin{width:40px;height:40px;border-radius:12px;background:#2F6FEB;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.ql-spin{animation:qlspin 1s linear infinite}@keyframes qlspin{to{transform:rotate(360deg)}}
+.ql-lt{flex:1;min-width:0}.ql-lt b{display:block;font-size:15px}.ql-lt span{display:block;font-size:12.5px;color:#9AA3B5;margin-top:2px}
+.ql-ch{font-size:13px;font-weight:600;color:#8FB4FF;flex-shrink:0}
+.ql-own,.ql-dup{width:100%;display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:#161B26;border:1px dashed rgba(255,255,255,.16);font-size:13px;color:#C4CBD8;font-family:inherit;text-align:left;cursor:pointer}
+.ql-own span,.ql-dup span{flex:1;min-width:0}.ql-own b,.ql-dup b{color:#fff}.ql-own em{font-style:normal;color:#6EE7B7;font-weight:700}
+.ql-dup{border:1px solid rgba(245,158,11,.4);background:rgba(245,158,11,.10);color:#F7D58A}.ql-dup .ti{color:#F59E0B;font-size:17px}
+.ql-f{margin-top:12px}.ql-f label{display:block;font-size:12px;font-weight:600;color:#8B94A7;margin-bottom:6px}
+.ql-in{width:100%;box-sizing:border-box;height:52px;border-radius:12px;background:#151A23;border:1px solid rgba(255,255,255,.1);padding:0 14px;font-size:17px;color:#fff;font-family:inherit;outline:none}
+.ql-in:focus{border-color:#4D9DE0;box-shadow:0 0 0 3px rgba(77,157,224,.18)}
+.ql-save{width:100%;margin-top:16px;height:54px;border-radius:14px;border:none;background:#2F6FEB;color:#fff;font-size:17px;font-weight:700;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+.ql-save:disabled{opacity:.7}
+.ql-note{text-align:center;margin-top:10px;font-size:12.5px;color:#8B94A7}
+.ql-home{width:100%;display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;border:1px solid #232A38;margin-bottom:8px;background:#161B26;color:inherit;font-family:inherit;text-align:left;cursor:pointer}
+.ql-home.on{border-color:#4D9DE0;background:rgba(77,157,224,.10)}
+.ql-d{width:48px;text-align:center;font-size:12px;color:#8B94A7;flex-shrink:0}.ql-d b{display:block;font-size:15px;color:#fff}
+.ql-ht{flex:1;min-width:0}.ql-ht b{display:block;font-size:14.5px}.ql-ht span{display:block;font-size:12px;color:#9AA3B5;margin-top:2px}
+.ql-ht em{font-style:normal;font-weight:700;color:#F7B955}
+.ql-chk{color:#4D9DE0;font-size:22px}
+.ql-act{width:100%;height:52px;border-radius:14px;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:15.5px;font-weight:600;margin-top:10px;background:#1A1F29;border:1px solid rgba(255,255,255,.08);color:#E8ECF3;font-family:inherit;cursor:pointer}
+.ql-act .ti{font-size:20px;color:#8FB4FF}.ql-act.pri{background:#2F6FEB;border:none}.ql-act.pri .ti{color:#fff}
+.ql-ok{text-align:center;padding:6px 0 4px}.ql-okc{width:64px;height:64px;border-radius:50%;background:rgba(52,211,153,.15);color:#34D399;font-size:34px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.ql-ok b{display:block;font-size:20px}.ql-ok span{display:block;font-size:13.5px;color:#9AA3B5;margin-top:6px;line-height:1.45}.ql-ok strong{color:#fff}
 </style>
 
 <!-- TEAM MEMBER MODAL (Add / Edit) -->
@@ -10013,7 +10051,193 @@ function openAddJobModal(){
   $('addJobModal').classList.add('open');
   setTimeout(() => { __ajSnapshot = snapshotAddJobForm(); }, 30);
 }
-$('addJobBtn').onclick=openAddJobModal;
+
+// ── QUICK LEAD (phones): name + phone, address from GPS, saved in seconds ──
+// For door knocking. Everything else is filled in later with Edit Job.
+const QL = { lat:null, lng:null, homes:[], pick:null, typed:false, savedId:null };
+function qlIsPhone(){ return !!(window.matchMedia && window.matchMedia('(max-width:760px)').matches); }
+function openNewJobEntry(){ if(qlIsPhone()) openQuickLead(); else openAddJobModal(); }
+window.openNewJobEntry = openNewJobEntry;
+function qlEl(id){ return document.getElementById(id); }
+function qlFmtPhone(v){
+  const d = String(v||'').replace(/\D/g,'').replace(/^1(?=\d{10})/,'').slice(0,10);
+  if(d.length < 4) return d;
+  if(d.length < 7) return `(${d.slice(0,3)}) ${d.slice(3)}`;
+  return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+}
+function qlDist(a,b,c,d){ const R=6371000, t=x=>x*Math.PI/180; const dl=t(c-a), dg=t(d-b); const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dg/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+function qlTitle(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()).replace(/\b(Ln|St|Dr|Ct|Rd|Ave|Blvd|Pkwy|Cir|Way|Tx)\b/gi, m=>m[0].toUpperCase()+m.slice(1).toLowerCase()).replace(/\bTx\b/,'TX'); }
+function qlOwnerName(s){
+  // property records are "LAST FIRST" or "LAST FIRST & FIRST"; show it readable
+  const raw = String(s||'').trim(); if(!raw) return '';
+  if(/\b(LLC|INC|TRUST|ESTATE|CORP|LTD|LP)\b/i.test(raw)) return raw;   // companies: leave as is
+  const cap = w => w.length>2 && w===w.toUpperCase() ? w[0]+w.slice(1).toLowerCase() : w;
+  const t = raw.split(/\s+/).map(cap);
+  return t.length > 1 ? [...t.slice(1), t[0]].join(' ') : t[0];   // "VILLAGOMEZ PATRICIA" → "Patricia Villagomez"
+}
+function qlRender(){
+  const box = qlEl('qlBody'); if(!box) return;
+  if(QL.savedId){
+    const j = jobs.find(x=>x.id===QL.savedId);
+    const tel = j && j.phone && j.phone!=='—';
+    box.innerHTML = `<div class="ql-ok"><div class="ql-okc"><i class="ti ti-check"></i></div><b>Lead added</b>
+      <span>${escapeHtml(j?.name||'')}${j?.address&&j.address!=='—'?' · '+escapeHtml(j.address.split(',')[0]):''}<br>Saved to <strong>${escapeHtml(columnsForPipeline(j?.pipeline).find(c=>c.id===j?.col)?.name||'Lead')}</strong>${j?.user?' and assigned to '+escapeHtml(jobRep(j).name||'you'):''}</span></div>
+      ${tel?`<button type="button" class="ql-act pri" onclick="textLeadWithCard('${QL.savedId}')"><i class="ti ti-message-2"></i>Text my business card</button>`:''}
+      <button type="button" class="ql-act" onclick="closeQuickLead();openDetail('${QL.savedId}')"><i class="ti ti-pencil"></i>Open the job</button>
+      <button type="button" class="ql-act" onclick="qlReset()"><i class="ti ti-user-plus"></i>Add the next house</button>`;
+    return;
+  }
+  if(QL.choosing){
+    box.innerHTML = `<div class="ql-hd"><b>Which house?</b><button type="button" class="ql-link" onclick="QL.choosing=false;qlRender()">Done</button></div>
+      <div class="ql-sub">${QL.homes.length?'Closest homes to where you\'re standing, from property records':'No property records found nearby.'}</div>
+      ${QL.homes.slice(0,6).map((h,i)=>`<button type="button" class="ql-home${QL.pick===h?' on':''}" onclick="qlPickHome(${i})"><span class="ql-d"><b>${Math.round(h.dist)} m</b>away</span><span class="ql-ht"><b>${escapeHtml(h.street)}</b><span>${escapeHtml(h.owner||'Owner unknown')}${h.year?' · built '+h.year:''}${h.age?` · <em>roof ${h.age} yr</em>`:''}</span></span>${QL.pick===h?'<i class="ti ti-circle-check-filled ql-chk"></i>':''}</button>`).join('')}
+      <button type="button" class="ql-act" onclick="QL.typed=true;QL.choosing=false;qlRender();setTimeout(()=>qlEl('qlStreet')&&qlEl('qlStreet').focus(),50)"><i class="ti ti-keyboard"></i>Type an address instead</button>
+      <button type="button" class="ql-act" onclick="QL.choosing=false;qlLocate()"><i class="ti ti-refresh"></i>Find my location again</button>`;
+    return;
+  }
+  const a = QL.addr;
+  const locCard = QL.typed
+    ? `<div class="ql-f"><label>Street address</label><input id="qlStreet" class="ql-in" autocomplete="off" placeholder="2707 Arrowhead Creek Ln" value="${escapeHtml(QL.street||'')}" oninput="QL.street=this.value"></div>
+       <div class="ql-f"><label>City, state ZIP</label><input id="qlCity" class="ql-in" autocomplete="off" placeholder="Pearland, TX 77581" value="${escapeHtml(QL.cityLine||'')}" oninput="QL.cityLine=this.value"></div>
+       <button type="button" class="ql-link ql-back" onclick="QL.typed=false;qlLocate()"><i class="ti ti-current-location"></i>Use my location instead</button>`
+    : `<button type="button" class="ql-loc" onclick="${QL.homes.length?'QL.choosing=true;qlRender()':'qlLocate()'}">
+        <span class="ql-pin"><i class="ti ${QL.locating?'ti-loader-2 ql-spin':'ti-current-location'}"></i></span>
+        <span class="ql-lt"><b>${QL.locating?'Finding this house…':(a?escapeHtml(a.street):'Location not found')}</b><span>${QL.locating?'Using your location':(a?escapeHtml(a.cityLine)+' · from your location':(QL.err||'Tap to try again, or type it'))}</span></span>
+        <span class="ql-ch">${QL.locating?'':(QL.homes.length?'Change':'Retry')}</span></button>
+       ${(!QL.locating && !a) ? `<button type="button" class="ql-link ql-back" onclick="QL.typed=true;qlRender()"><i class="ti ti-keyboard"></i>Type the address</button>` : ''}`;
+  const owner = (!QL.typed && QL.pick && QL.pick.owner) ? QL.pick.owner : '';
+  const dup = qlDuplicate();
+  box.innerHTML = `<div class="ql-hd"><b>New lead</b><button type="button" class="ql-link" onclick="qlFullForm()">Full form</button></div>
+    ${locCard}
+    ${dup?`<button type="button" class="ql-dup" onclick="closeQuickLead();openDetail('${dup.id}')"><i class="ti ti-alert-triangle"></i><span>Already in the CRM: <b>${escapeHtml(dup.name||'')}</b> — tap to open</span></button>`:''}
+    ${owner?`<button type="button" class="ql-own" onclick="qlEl('qlName').value=${escapeHtml(JSON.stringify(owner))};QL.name=qlEl('qlName').value;qlEl('qlPhone').focus()"><i class="ti ti-id"></i><span>Owner on record: <b>${escapeHtml(owner)}</b></span><em>Use</em></button>`:''}
+    <div class="ql-f"><label>Name</label><input id="qlName" class="ql-in" autocomplete="off" autocapitalize="words" placeholder="Homeowner's name" value="${escapeHtml(QL.name||'')}" oninput="QL.name=this.value"></div>
+    <div class="ql-f"><label>Phone</label><input id="qlPhone" class="ql-in" type="tel" inputmode="tel" autocomplete="off" placeholder="(281) 555-0100" value="${escapeHtml(QL.phone||'')}" oninput="this.value=qlFmtPhone(this.value);QL.phone=this.value"></div>
+    <button type="button" id="qlSave" class="ql-save" onclick="qlSave()"><i class="ti ti-user-plus"></i>Save lead</button>
+    <div class="ql-note">Everything else can be added later in Edit Job.</div>`;
+}
+function qlDuplicate(){
+  const a = QL.typed ? (QL.street||'') : (QL.addr?.street||'');
+  const k = String(a).toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(k.length < 6) return null;
+  return (jobs||[]).find(j => String(j.address||'').toLowerCase().replace(/[^a-z0-9]/g,'').startsWith(k)) || null;
+}
+function qlPickHome(i){
+  const h = QL.homes[i]; if(!h) return;
+  QL.pick = h; QL.addr = { street:h.street, cityLine:h.cityLine }; QL.lat = h.lat; QL.lng = h.lng; QL.choosing = false; qlRender();
+}
+async function qlLocate(){
+  QL.locating = true; QL.err = ''; QL.addr = null; QL.homes = []; QL.pick = null; qlRender();
+  if(!navigator.geolocation){ QL.locating=false; QL.err='Location not supported on this phone'; qlRender(); return; }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const { latitude:lat, longitude:lng } = pos.coords;
+    QL.lat = lat; QL.lng = lng;
+    // 1) homes from property records within ~100 m (owner + year built)
+    try{
+      if(window.sb && window.sb.rpc){
+        const dLat = 0.0009, dLng = 0.0011;
+        const { data } = await window.sb.rpc('roof_leads_in_view', { min_lng:lng-dLng, min_lat:lat-dLat, max_lng:lng+dLng, max_lat:lat+dLat, min_age:0, max_age:200, max_rows:60, name_query:null, only_vietnamese:false, min_vietnamese_score:80 });
+        QL.homes = (data||[]).filter(h=>h.situs_address).map(h => ({
+          street: qlTitle(h.situs_address), cityLine: [qlTitle(h.city||''), 'TX'].filter(Boolean).join(', ') + (h.zip?' '+h.zip:''),
+          owner: qlOwnerName(h.owner_name), year: h.year_built||null, age: h.age||null,
+          lat: h.latitude, lng: h.longitude, dist: qlDist(lat,lng,h.latitude,h.longitude),
+        })).sort((x,y)=>x.dist-y.dist);
+      }
+    }catch(e){ console.warn('quick lead: property records', e); }
+    // 2) street address from the map service (used when no record is close)
+    let mb = null;
+    try{
+      if(typeof ensureMapboxToken==='function') ensureMapboxToken();
+      const token = (typeof mapboxgl!=='undefined' && mapboxgl.accessToken) ? mapboxgl.accessToken : null;
+      if(token){
+        const r = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&types=address&limit=1`);
+        const f = (await r.json())?.features?.[0];
+        if(f){
+          let city='',st='',zip='';
+          (f.context||[]).forEach(c=>{ const id=c.id||''; if(id.startsWith('place')) city=c.text; else if(id.startsWith('region')) st=(c.short_code||'').replace(/^US-/,'')||c.text; else if(id.startsWith('postcode')) zip=c.text; });
+          mb = { street:[f.address,f.text].filter(Boolean).join(' '), cityLine:[city,st].filter(Boolean).join(', ')+(zip?' '+zip:'') };
+        }
+      }
+    }catch(e){ console.warn('quick lead: reverse geocode', e); }
+    const near = QL.homes[0];
+    if(near && near.dist <= 45){ QL.pick = near; QL.addr = { street:near.street, cityLine:near.cityLine }; QL.lat = near.lat; QL.lng = near.lng; }
+    else if(mb){ QL.addr = mb; }
+    else if(near){ QL.pick = near; QL.addr = { street:near.street, cityLine:near.cityLine }; }
+    else QL.err = 'Could not find an address here';
+    QL.locating = false; qlRender();
+  }, err => {
+    QL.locating = false;
+    QL.err = err && err.code===1 ? 'Location is turned off for this site' : (err && err.code===3 ? 'Location timed out' : 'Location unavailable');
+    qlRender();
+  }, { enableHighAccuracy:true, timeout:12000, maximumAge:0 });
+}
+function qlAddressText(){
+  if(QL.typed) return [String(QL.street||'').trim(), String(QL.cityLine||'').trim()].filter(Boolean).join(', ');
+  return QL.addr ? [QL.addr.street, QL.addr.cityLine].filter(Boolean).join(', ') : '';
+}
+async function qlSave(){
+  const name = (qlEl('qlName')?.value||'').trim().replace(/\s+/g,' ');
+  const phone = (qlEl('qlPhone')?.value||'').trim();
+  if(!name){ toast('Add the homeowner\'s name'); qlEl('qlName')?.focus(); return; }
+  const address = qlAddressText() || '—';
+  let lat = QL.typed ? null : QL.lat, lng = QL.typed ? null : QL.lng;
+  const btn = qlEl('qlSave'); if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
+  if(QL.typed && address !== '—' && typeof geocodeAddress==='function'){
+    try{ const g = await geocodeAddress(address); if(g){ lat = g.lat; lng = g.lng; } }catch(e){}
+  }
+  const me = window.currentMember;
+  const agent = (typeof currentAgentView==='function') ? currentAgentView() : null;
+  const userId = (me && (USERS||[]).some(u=>u.id===me.id)) ? me.id : (agent?.id || null);
+  const cols = columnsForPipeline(currentPipelineId);
+  const leadCol = (cols.find(c=>c.id==='lead' || /^lead$/i.test(c.name||'')) || cols[0] || {}).id;
+  const newJob = { id:'j'+Date.now(), name, priority:'low', docs:0, notes:0, tasks:0, tasksDone:0, potVal:'0.00', paidVal:'0.00',
+    created:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+    phone: phone || '—', email:'—', address, user:userId, col:leadCol, pipeline:currentPipelineId,
+    projectManager:null, pmFee:250, latitude:lat, longitude:lng, source:'Door Knocking / Canvassing',
+    carrier:'', claimNum:'', policyNum:'', claimType:'', claimStatus:'', dateOfLoss:'', rcv:'', deductible:'', recoverableDep:'', nonRecoverableDep:'', netClaim:'', acv:'', adjName:'', adjPhone:'', insEmail:'', inspDate:'', claimNotes:'' };
+  if(QL.pick && QL.pick.year && !QL.typed) newJob.yearBuilt = QL.pick.year;
+  newJob.timeline = [];
+  jobs.push(newJob);
+  logActivity(newJob, 'created', 'Job created', `Quick lead at the door · Stage: ${cols.find(c=>c.id===leadCol)?.name || leadCol}`);
+  saveToStorage();
+  renderBoard();
+  if(qlEl('jobsPage') && qlEl('jobsPage').style.display!=='none' && typeof renderJobsPage==='function') renderJobsPage();
+  QL.savedId = newJob.id; qlRender();
+  if(navigator.vibrate) try{ navigator.vibrate(30); }catch(e){}
+}
+function qlReset(){ Object.assign(QL, { savedId:null, name:'', phone:'', street:'', cityLine:'', typed:false, choosing:false }); qlLocate(); setTimeout(()=>qlEl('qlName')?.focus(), 80); }
+function qlFullForm(){
+  const name = (qlEl('qlName')?.value||'').trim(), phone = (qlEl('qlPhone')?.value||'').trim();
+  closeQuickLead();
+  openAddJobModal();
+  const parts = name.split(/\s+/);
+  if(name){ $('f-firstname').value = parts.shift(); $('f-lastname').value = parts.join(' '); }
+  if(phone) $('f-phone').value = phone;
+  const street = QL.typed ? QL.street : QL.addr?.street;
+  if(street){
+    $('f-street').value = street;
+    const m = String(QL.typed ? QL.cityLine : QL.addr?.cityLine || '').match(/^\s*([^,]+),\s*([A-Za-z]{2})\s*(\d{5})?/);
+    if(m){ $('f-city').value = m[1].trim(); $('f-state').value = m[2].toUpperCase(); if(m[3]) $('f-zip').value = m[3]; }
+    if(!QL.typed && QL.lat!=null){ window.__pickedLngLat = { lat:QL.lat, lng:QL.lng, address:street }; }
+  }
+  const src = $('f-source'); if(src) src.value = 'Door Knocking / Canvassing';
+}
+function openQuickLead(){
+  let o = qlEl('qlOverlay');
+  if(!o){
+    o = document.createElement('div'); o.id = 'qlOverlay';
+    o.innerHTML = `<div class="ql-bg" onclick="closeQuickLead()"></div><div class="ql-sheet" role="dialog" aria-label="New lead"><div class="ql-grab"></div><button type="button" class="ql-x" onclick="closeQuickLead()" aria-label="Close"><i class="ti ti-x"></i></button><div id="qlBody"></div></div>`;
+    document.body.appendChild(o);
+  }
+  Object.assign(QL, { savedId:null, name:'', phone:'', street:'', cityLine:'', typed:false, choosing:false });
+  o.classList.add('open'); document.documentElement.classList.add('ql-lock');
+  qlLocate();
+  setTimeout(()=>qlEl('qlName')?.focus(), 120);
+}
+function closeQuickLead(){ const o = qlEl('qlOverlay'); if(o) o.classList.remove('open'); document.documentElement.classList.remove('ql-lock'); }
+Object.assign(window, { qlEl, qlDuplicate, openQuickLead, closeQuickLead, qlSave, qlPickHome, qlLocate, qlReset, qlFullForm, qlFmtPhone, qlRender, QL });
+
+$('addJobBtn').onclick=openNewJobEntry;
 $('cancelAdd').onclick=closeJobModal;
 
 // Auto-save the New Job form to a draft on every keystroke (new jobs only).
