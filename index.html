@@ -2166,6 +2166,19 @@ const DEFAULT_COLUMNS=[
   {id:'closed-denied',name:'Closed – Denied',icon:'ti-folder-off',locked:false,color:'#6B7280',closed:true},
 ];
 
+// Stages deliberately deleted from a pipeline, so the default-stage backfill
+// below doesn't put them back on the next load.
+const REMOVED_STAGES_KEY='stormshield_removed_stages_v1';
+function removedStageIds(pipelineId){
+  try{ const all=JSON.parse(localStorage.getItem(REMOVED_STAGES_KEY)||'{}'); return new Set(all[pipelineId]||[]); }catch(e){ return new Set(); }
+}
+function rememberRemovedStage(pipelineId, stageId){
+  try{
+    const all=JSON.parse(localStorage.getItem(REMOVED_STAGES_KEY)||'{}');
+    const list=new Set(all[pipelineId]||[]); list.add(stageId); all[pipelineId]=[...list];
+    localStorage.setItem(REMOVED_STAGES_KEY, JSON.stringify(all));
+  }catch(e){}
+}
 // Backfill: when loading a stored pipeline, make sure newer default stages exist + closed flags are applied.
 function backfillDefaultStages(){
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -2175,9 +2188,12 @@ function backfillDefaultStages(){
     // they were given — adding the defaults there also re-used Insurance's ids.
     if(p.id !== 'insurance') return;
     if(!Array.isArray(p.columns)) return;
+    const removed = removedStageIds(p.id);
     DEFAULT_COLUMNS.forEach((def, di) => {
       const existing = p.columns.find(c => c.id === def.id);
       if(!existing){
+        // A default stage you deleted on purpose stays deleted.
+        if(removed.has(def.id)) return;
         // If a same-named column already exists (e.g. a "Claim Filed" stage the
         // user added manually via Edit Boards, which gets an auto-generated id),
         // leave it alone — jobs already reference that id.
@@ -9358,8 +9374,13 @@ function addStageChecklistItem(){
   saveToStorage();renderStageChecklistItems();renderBoard();if($('detailOverlay').classList.contains('open'))renderDetailPanel();
 }
 
-function openDeleteColModal(id){
+async function openDeleteColModal(id){
   const c=columns.find(x=>x.id===id);if(!c)return;
+  // Completed / Closed-Denied jobs aren't loaded at startup — load them first so
+  // a stage that still holds jobs can't be deleted out from under them.
+  if((window.CLOSED_STAGE_IDS||[]).includes(id) && typeof window.loadClosedJobs==='function'){
+    try{ await window.loadClosedJobs(); }catch(e){}
+  }
   if(jobs.some(j=>(j.pipeline||'insurance')===currentPipelineId&&j.col===id)){toast(`Move jobs out of "${c.name}" first`);return}
   pendingDeleteColId=id;
   $('deleteColName').textContent=`"${c.name}"`;
@@ -10295,8 +10316,16 @@ $('newStageChecklistItem').addEventListener('keydown',e=>{if(e.key==='Enter')add
 $('cancelDeleteCol').onclick=()=>{$('deleteColModal').classList.remove('open');pendingDeleteColId=null};
 $('confirmDeleteCol').onclick=()=>{
   if(!pendingDeleteColId)return;
-  const c=columns.find(x=>x.id===pendingDeleteColId);
-  columns=columns.filter(x=>x.id!==pendingDeleteColId);
+  const id=pendingDeleteColId;
+  const p=currentPipeline();
+  const c=(p.columns||[]).find(x=>x.id===id);
+  // Remove it from the pipeline itself. Before, only the board's working copy
+  // was filtered, so the next edit (or any re-sync) brought the stage back,
+  // and nothing was saved.
+  p.columns=(p.columns||[]).filter(x=>x.id!==id);
+  columns=p.columns;
+  rememberRemovedStage(p.id, id);
+  saveToStorage();
   if(c)toast(`Deleted "${c.name}"`);
   pendingDeleteColId=null;
   $('deleteColModal').classList.remove('open');
