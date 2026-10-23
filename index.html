@@ -15146,12 +15146,12 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
 
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Receipt${sub?' - '+escapeHtml(sub.name):''}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
   <style>
-    @page { size: letter; margin: 0.5in 0; }
+    @page { size: letter; margin: 0.4in 0.3in; }
     *{box-sizing:border-box}
     body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10.5pt}
-    .v-page{position:relative;height:10in;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
+    .v-page{position:relative;height:9.6in;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
     .v-page-last{page-break-after:auto}
-    .v-panel{height:3.3333in;padding:0.3in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-panel{height:3.2in;padding:0.3in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
     .v-page .v-panel:last-child{border-bottom:none}
     .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
     .v-page .v-panel:last-child::after{content:none}
@@ -15537,12 +15537,12 @@ window.openCommVoucherEditor = openCommVoucherEditor;
 // Stylesheet for the tri-fold payment receipts (commission statement, PM fee receipt).
 function paymentVoucherCss(accent){
   return `
-    @page { size: letter; margin: 0.5in 0; }
+    @page { size: letter; margin: 0.4in 0.3in; }
     *{box-sizing:border-box}
     body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10pt}
-    .v-page{position:relative;height:10in;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
+    .v-page{position:relative;height:9.6in;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
     .v-page-last{page-break-after:auto}
-    .v-panel{height:3.3333in;padding:0.26in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-panel{height:3.2in;padding:0.26in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
     .v-page .v-panel:last-child{border-bottom:none}
     .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
     .v-page .v-panel:last-child::after{content:none}
