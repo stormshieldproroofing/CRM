@@ -149,15 +149,30 @@
     stageBar.querySelector('.rd-sb-dot').style.background = info.color;
     stageBar.querySelector('.rd-sb-name').textContent = info.name;
     stageBar.querySelector('.rd-sb-count').textContent = info.count;
-    stageBar.querySelector('.rd-sb-pos').textContent = (i + 1) + ' of ' + cols.length;
-    stageBar.querySelector('.rd-sb-prev').disabled = i === 0;
-    stageBar.querySelector('.rd-sb-next').disabled = i === cols.length - 1;
+    stageBar.querySelector('.rd-sb-cur').setAttribute('aria-label', info.name + ', ' + info.count + ' jobs, stage ' + (i + 1) + ' of ' + cols.length + '. Show all stages');
+    // the stages before and after, with their job counts
+    [['.rd-sb-prev', i - 1], ['.rd-sb-next', i + 1]].forEach(([sel, k]) => {
+      const btn = stageBar.querySelector(sel);
+      const c = cols[k];
+      btn.classList.toggle('empty', !c);
+      btn.disabled = !c;
+      if (c) {
+        const ci = colInfo(c);
+        btn.querySelector('.rd-sb-nname').textContent = ci.name;
+        btn.querySelector('.rd-sb-ncount').textContent = ci.count;
+        btn.setAttribute('aria-label', (k < i ? 'Previous stage: ' : 'Next stage: ') + ci.name);
+      }
+    });
     const segs = stageBar.querySelector('.rd-sb-segs');
     segs.innerHTML = '';
     cols.forEach((c, k) => {
-      const s = document.createElement('span');
-      s.style.background = colInfo(c).color || 'var(--muted)';
-      if (k !== i) s.style.opacity = '0.3';
+      const s = document.createElement('button');
+      s.type = 'button';
+      s.className = 'rd-sb-seg' + (k === i ? ' on' : '');
+      s.setAttribute('aria-label', colInfo(c).name);
+      s.innerHTML = '<span></span>';
+      s.firstChild.style.background = colInfo(c).color || 'var(--muted)';
+      s.addEventListener('click', () => goToStage(k));
       segs.appendChild(s);
     });
     const menu = stageBar.querySelector('.rd-sb-menu');
@@ -175,6 +190,9 @@
       menu.appendChild(b);
     });
   }
+  // Phone board header: the stage name is the title (tap it for every stage),
+  // the checklist sits beside it, the color dashes show where you are, and the
+  // stages before and after are small buttons with their job counts.
   function buildStageBar() {
     const wrap = boardWrap();
     if (!wrap || stageBar) return;
@@ -182,18 +200,27 @@
     stageBar.className = 'rd-stagebar';
     stageBar.innerHTML =
       '<div class="rd-sb-row">' +
-        '<button type="button" class="rd-sb-prev" aria-label="Previous stage"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>' +
         '<button type="button" class="rd-sb-cur" aria-haspopup="true">' +
-          '<span class="rd-sb-dot"></span><span class="rd-sb-name"></span><span class="rd-sb-count"></span>' +
-          '<span class="rd-sb-pos"></span><i class="ti ti-chevron-down" aria-hidden="true"></i>' +
+          '<span class="rd-sb-dot"></span><span class="rd-sb-name"></span>' +
+          '<i class="ti ti-chevron-down rd-sb-caret" aria-hidden="true"></i><span class="rd-sb-count"></span>' +
         '</button>' +
-        '<button type="button" class="rd-sb-next" aria-label="Next stage"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>' +
+        '<button type="button" class="rd-sb-check" aria-label="Stage checklist"><i class="ti ti-list-check" aria-hidden="true"></i></button>' +
       '</div>' +
-      '<div class="rd-sb-segs" aria-hidden="true"></div>' +
+      '<div class="rd-sb-segs"></div>' +
+      '<div class="rd-sb-nav">' +
+        '<button type="button" class="rd-sb-prev"><i class="ti ti-chevron-left" aria-hidden="true"></i><span class="rd-sb-nname"></span><span class="rd-sb-ncount"></span></button>' +
+        '<button type="button" class="rd-sb-next"><span class="rd-sb-nname"></span><span class="rd-sb-ncount"></span><i class="ti ti-chevron-right" aria-hidden="true"></i></button>' +
+      '</div>' +
       '<div class="rd-sb-menu"></div>';
     wrap.parentNode.insertBefore(stageBar, wrap);
     stageBar.querySelector('.rd-sb-prev').addEventListener('click', () => goToStage(targetStageIndex() - 1));
     stageBar.querySelector('.rd-sb-next').addEventListener('click', () => goToStage(targetStageIndex() + 1));
+    stageBar.querySelector('.rd-sb-check').addEventListener('click', e => {
+      e.stopPropagation();
+      const col = boardCols()[Math.min(targetStageIndex(), boardCols().length - 1)];
+      const btn = col && col.querySelector('.col-menu-btn');
+      if (btn) btn.click();
+    });
     stageBar.querySelector('.rd-sb-cur').addEventListener('click', e => {
       e.stopPropagation();
       stageBar.classList.toggle('menu-open');
