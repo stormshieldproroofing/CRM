@@ -775,8 +775,18 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 
 <!-- MAP PAGE -->
 <div id="mapPage" style="display:none">
-  <div style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Jobs Map</div>
+  <!-- phone only: floating buttons over the map; Filters and Layers open as bottom sheets -->
+  <div id="mapFab" aria-label="Map controls">
+    <button type="button" id="mapFiltersBtn" onclick="mapOpenSheet('filters')"><i class="ti ti-adjustments-horizontal"></i>Filters<span id="mapFilterCount" class="map-fab-n" style="display:none"></span></button>
+    <button type="button" id="mapLayersBtn" onclick="mapOpenSheet('layers')"><i class="ti ti-stack-2"></i>Layers<span id="mapLayerCount" class="map-fab-n" style="display:none"></span></button>
+    <button type="button" id="mapFabStyle" class="ic" onclick="toggleMapStyle();mapSyncFab()" aria-label="Switch satellite / map"><i class="ti ti-satellite"></i></button>
+    <button type="button" class="ic" onclick="window.__mapDidInitialFit=false; renderMapPage()" aria-label="Refresh and fit to pins"><i class="ti ti-refresh"></i></button>
+  </div>
+  <div id="mapFabCount"></div>
+  <div id="mapSheetBg" onclick="mapCloseSheet()"></div>
+  <div id="mapBarFilters" style="padding:14px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+    <div class="map-sheet-head"><span>Filters</span><button type="button" onclick="mapCloseSheet()">Done</button></div>
+    <div class="map-title" style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Jobs Map</div>
     <select id="map-filter-salesman" class="map-filter">
       <option value="all">All salesmen</option>
     </select>
@@ -790,8 +800,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
     <button id="mapStyleBtn" class="btn-ghost" onclick="toggleMapStyle()" style="font-size:11px;padding:5px 11px;border:1px solid var(--border);border-radius:6px;background:#1E253A;color:var(--brand);cursor:pointer">🛰️ Satellite</button>
     <button class="icon-btn" onclick="window.__mapDidInitialFit=false; renderMapPage()" title="Refresh &amp; fit to pins"><i class="ti ti-refresh"></i></button>
     <div id="map-count" style="font-size:11px;color:var(--muted);padding:0 6px"></div>
+    <button type="button" class="map-reset" onclick="mapResetFilters()">Clear filters</button>
   </div>
-  <div style="padding:8px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);background:#11151f">
+  <div id="mapBarLayers" style="padding:8px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);background:#11151f">
+    <div class="map-sheet-head"><span>Map layers</span><button type="button" onclick="mapCloseSheet()">Done</button></div>
     <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--brand);cursor:pointer;font-weight:600">
       <input type="checkbox" id="roofLayerToggle" onchange="toggleRoofLayer(this.checked)" style="width:15px;height:15px;accent-color:#F97316;cursor:pointer">
       <i class="ti ti-home-search" style="color:#F97316"></i> Roof-Age Prospecting
@@ -1402,6 +1414,49 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   #cdocMain [onclick^="cdocDeleteFile"]{width:38px !important;height:38px !important;border-radius:9px !important}
   #cdocMain div:has(> [onclick^="cdocOpenFile"]){padding:12px !important;border-radius:12px !important}
   #cdocMain div:has(> [onclick^="cdocOpenFile"]) > span{font-size:14px !important}
+}
+
+/* ── JOBS MAP on phones: full-screen map, floating buttons, bottom sheets ── */
+#mapFab,#mapFabCount,#mapSheetBg,.map-sheet-head,.map-reset{display:none}
+@media (max-width:760px){
+  #mapPage{position:relative}
+  #mapContainer{border-radius:0}
+  #mapFab{display:flex;position:absolute;top:10px;left:10px;right:10px;z-index:5;gap:8px;flex-wrap:nowrap;pointer-events:none}
+  #mapFab > *{pointer-events:auto;flex-shrink:0}
+  #mapFab #mapFabStyle{margin-left:auto}
+  #mapContainer .mapboxgl-ctrl-top-right{top:52px}
+  #mapFab button{height:42px;display:flex;align-items:center;gap:6px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(14,18,25,.92);color:#E8ECF3;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 4px 14px rgba(0,0,0,.35)}
+  #mapFab button .ti{font-size:18px;color:var(--brand-light)}
+  #mapFab button.ic{width:42px;padding:0;justify-content:center}
+  .map-fab-n{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--brand-light);color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+  #mapFabCount{display:block;position:absolute;left:10px;bottom:12px;z-index:5;padding:6px 12px;border-radius:999px;background:rgba(14,18,25,.88);border:1px solid rgba(255,255,255,.1);font-size:13px;font-weight:600;color:#C4CBD8;pointer-events:none}
+  #mapFabCount:empty{display:none}
+  /* the two toolbars become bottom sheets */
+  #mapBarFilters,#mapBarLayers{position:fixed !important;left:0;right:0;bottom:0;z-index:170;display:none !important;flex-direction:column !important;align-items:stretch !important;gap:12px !important;
+    padding:8px 16px calc(20px + env(safe-area-inset-bottom)) !important;background:#141927 !important;border:none !important;border-top:1px solid var(--border) !important;border-radius:20px 20px 0 0;max-height:80vh;overflow-y:auto;box-shadow:0 -12px 30px rgba(0,0,0,.45)}
+  #mapPage.map-sheet-filters #mapBarFilters,#mapPage.map-sheet-layers #mapBarLayers{display:flex !important}
+  #mapPage.map-sheet-open #mapSheetBg{display:block;position:fixed;inset:0;z-index:169;background:rgba(0,0,0,.45)}
+  .map-sheet-head{display:flex;justify-content:space-between;align-items:center;min-height:48px;font-size:17px;font-weight:700;color:#fff}
+  .map-sheet-head::before{content:"";position:absolute;left:50%;top:8px;width:40px;height:5px;margin-left:-20px;border-radius:3px;background:#3a4152}
+  .map-sheet-head button{height:40px;padding:0 16px;border-radius:10px;border:none;background:var(--brand-light);color:#fff;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+  #mapBarFilters .map-title,#mapBarFilters > div[style*="flex:1"],#mapStyleBtn,#mapBarFilters > .icon-btn{display:none !important}
+  #mapBarFilters .map-filter{width:100%;min-width:0;height:48px;font-size:16px;border-radius:12px;padding:0 12px}
+  #mapBarFilters #map-count{padding:0 !important;font-size:13px !important}
+  .map-reset{display:block;height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:#1A1F29;color:#E8ECF3;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+  /* layers sheet */
+  #mapBarLayers > label{min-height:52px;padding:0 14px;border-radius:12px;background:#1A1F29;border:1px solid rgba(255,255,255,.08);font-size:15px !important;gap:10px !important}
+  #mapBarLayers > label input[type=checkbox]{width:22px !important;height:22px !important}
+  #mapBarLayers #hailSwathDate{height:46px;font-size:15px !important;border-radius:12px !important;padding:0 12px !important;width:100%}
+  #mapBarLayers #hailLegend{gap:8px !important}
+  #mapBarLayers #roofSliderPanel{flex-direction:column;align-items:stretch !important;min-width:0 !important;gap:12px !important;padding:12px;border-radius:12px;background:#1A1F29}
+  #mapBarLayers #roofAgeLabel{font-size:15px !important}
+  #mapBarLayers #roofSliderPanel input[type=range]{height:32px}
+  #mapBarLayers #roofNameSearch{height:46px;font-size:15px !important;border-radius:10px !important;width:100% !important}
+  #mapBarLayers #roofLayerNote{white-space:normal !important}
+  #mapBarLayers #roofSliderPanel label{font-size:14px !important;min-height:36px}
+  #mapBarLayers #roofSliderPanel label input{width:20px !important;height:20px !important}
+  /* mapbox zoom / locate buttons: bigger */
+  #mapContainer .mapboxgl-ctrl-group button{width:40px;height:40px}
 }
 </style>
 
@@ -20280,6 +20335,50 @@ function ensureMapInit(){
   return __map;
 }
 
+
+// ── PHONE MAP: full-screen map with floating Filters / Layers buttons ──
+function mapIsPhone(){ return !!(window.matchMedia && window.matchMedia('(max-width:760px)').matches); }
+window.mapOpenSheet = function(which){
+  const pg=document.getElementById('mapPage'); if(!pg) return;
+  pg.classList.remove('map-sheet-filters','map-sheet-layers');
+  pg.classList.add('map-sheet-'+which, 'map-sheet-open');
+};
+window.mapCloseSheet = function(){
+  const pg=document.getElementById('mapPage'); if(!pg) return;
+  pg.classList.remove('map-sheet-filters','map-sheet-layers','map-sheet-open');
+  mapSyncFab();
+};
+window.mapResetFilters = function(){
+  ['map-filter-salesman','map-filter-pipeline','map-filter-stage'].forEach(id=>{
+    const el=document.getElementById(id); if(el && el.value!=='all'){ el.value='all'; el.dispatchEvent(new Event('change')); }
+  });
+  mapSyncFab();
+};
+window.mapSyncFab = function(){
+  const nF=['map-filter-salesman','map-filter-pipeline','map-filter-stage'].filter(id=>{const el=document.getElementById(id); return !!(el && el.value && el.value!=='all');}).length;
+  const nL=['roofLayerToggle','hailLayerToggle'].filter(id=>document.getElementById(id)?.checked).length;
+  const fc=document.getElementById('mapFilterCount'), lc=document.getElementById('mapLayerCount');
+  if(fc){ fc.textContent=nF; fc.style.display=nF?'':'none'; }
+  if(lc){ lc.textContent=nL; lc.style.display=nL?'':'none'; }
+  const sb=document.getElementById('mapFabStyle');
+  if(sb) sb.querySelector('i').className = 'ti ' + (window.__mapStyle==='satellite' ? 'ti-map' : 'ti-satellite');
+  const cnt=document.getElementById('map-count'), fcnt=document.getElementById('mapFabCount');
+  if(cnt && fcnt){ fcnt.textContent = (cnt.textContent||'').split(' · ')[0]; }
+};
+// Phone: map fills the space between the top bar and the bottom tabs
+window.mapFitHeight = function(){
+  const mc=document.getElementById('mapContainer'), pg=document.getElementById('mapPage');
+  if(!mc || !pg || pg.style.display==='none') return;
+  if(!mapIsPhone()){ if(mc.dataset.phoneFit){ mc.style.height='calc(100vh - 190px)'; delete mc.dataset.phoneFit; } return; }
+  mc.dataset.phoneFit='1';
+  const top = mc.getBoundingClientRect().top + window.scrollY;
+  const tab = document.querySelector('.rd-tabbar');
+  const tabH = (tab && getComputedStyle(tab).display!=='none') ? (tab.getBoundingClientRect().height + 20) : 0;
+  mc.style.height = Math.max(300, window.innerHeight - top - tabH) + 'px';
+  try{ if(typeof __map!=='undefined' && __map) __map.resize(); }catch(e){}
+};
+window.addEventListener('resize', ()=>{ if(document.getElementById('mapPage')?.style.display!=='none'){ mapFitHeight(); } });
+
 // Satellite / dark style toggle
 window.__mapStyle = 'dark';
 window.toggleMapStyle = function(){
@@ -20316,6 +20415,7 @@ function canSeeJobDetails(){
 
 async function renderMapPage(){
   populateMapFilters();
+  requestAnimationFrame(()=>{ mapFitHeight(); mapSyncFab(); });
   const map = ensureMapInit();
   if(!map) return;
 
@@ -20353,6 +20453,7 @@ async function renderMapPage(){
     }
     countEl.textContent = txt;
   }
+  mapSyncFab();
 
   // Build markers
   clearMarkers();
