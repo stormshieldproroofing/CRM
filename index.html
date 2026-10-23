@@ -15049,6 +15049,65 @@ function keepPrintWindow(win){
 }
 window.keepPrintWindow = keepPrintWindow;
 
+// Show a finished print page in the tab opened for it, at its own (blob)
+// address. Loading it from the full HTML — instead of writing it into a blank
+// tab and copying that — means the page's scripts are all there, and the page
+// survives the phone reloading the tab.
+function showPrintHtml(win, html){
+  if(!win || win.closed) return;
+  try{
+    const url = URL.createObjectURL(new Blob([html], {type:'text/html'}));
+    win.location.replace(url);
+  }catch(e){
+    win.document.open(); win.document.write(html); win.document.close();
+  }
+}
+window.showPrintHtml = showPrintHtml;
+
+// Vouchers become a real PDF with exact geometry, so the fold lines land on the
+// sheet's thirds (3⅔" and 7⅓") and the check box is centered in the bottom
+// third no matter what margins the browser or printer would add to a web page.
+// The page lays itself out at exactly 8.5×11 on screen, is drawn into a PDF
+// page by page, then the tab switches to that PDF. If the PDF tools can't
+// load, the web page with its Print button stays as a fallback.
+function voucherPdfScript(title){
+  const t = JSON.stringify(String(title||'Voucher')).replace(/</g,'\\u003c');
+  return `<div id="vPdfMsg" style="position:fixed;inset:0;background:rgba(229,231,235,.97);display:flex;align-items:center;justify-content:center;font:600 16px -apple-system,Helvetica,Arial,sans-serif;color:#1a3a6a;z-index:50">Preparing PDF…</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+<script>
+(function(){
+  var started=false;
+  function fallback(){ var m=document.getElementById('vPdfMsg'); if(m) m.remove(); }
+  async function go(){
+    if(started) return; started=true;
+    try{
+      if(!window.html2canvas || !window.jspdf) throw new Error('pdf tools did not load');
+      if(document.fonts && document.fonts.ready) await document.fonts.ready;
+      var pages=[].slice.call(document.querySelectorAll('.v-page'));
+      var pdf=new window.jspdf.jsPDF({unit:'in',format:'letter',orientation:'portrait'});
+      pdf.setProperties({title:${t}});
+      for(var i=0;i<pages.length;i++){
+        var c=await window.html2canvas(pages[i],{scale:2.5,backgroundColor:'#ffffff',useCORS:true,logging:false,windowWidth:900});
+        if(i) pdf.addPage('letter','portrait');
+        pdf.addImage(c.toDataURL('image/jpeg',0.92),'JPEG',0,0,8.5,11);
+      }
+      location.replace(URL.createObjectURL(pdf.output('blob')));
+    }catch(e){ console.warn('voucher pdf:', e); fallback(); }
+  }
+  function ready(){
+    // The first copy of this page is replaced by a saved (blob) copy right away;
+    // build the PDF there. If that swap doesn't happen, build it here.
+    if(location.protocol==='blob:') go();
+    else setTimeout(function(){ if(location.protocol!=='blob:') go(); }, 1500);
+  }
+  if(document.readyState==='complete') ready(); else window.addEventListener('load', ready);
+  setTimeout(function(){ if(!started) fallback(); }, 15000);
+})();
+<\/script>`;
+}
+window.voucherPdfScript = voucherPdfScript;
+
 function printSubVoucher(j, sub, c, checkNo, extraLines){
   const ci = getCompanyInfo();
   const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -15144,7 +15203,7 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
       </div>
     </div>`;
 
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Receipt${sub?' - '+escapeHtml(sub.name):''}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
+  const voucherHtml = (`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Receipt${sub?' - '+escapeHtml(sub.name):''}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
   <style>
     @page { size: letter; margin: 0.4in 0.3in; }
     *{box-sizing:border-box}
@@ -15189,16 +15248,24 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
     .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
     .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
+    @media screen{
+      html,body{background:#E5E7EB}
+      body{padding:16px 0 40px}
+      .v-page{width:8.5in;height:11in;overflow:hidden;margin:0 auto 18px;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.18)}
+      .v-panel{height:calc(11in / 3);min-height:0;overflow:hidden}
+      .v-panel-check{height:calc(11in / 3);min-height:0}
+      .v-checkcopy{height:11in}
+    }
     .v-ver{position:fixed;bottom:8px;right:12px;font-size:10px;color:#aaa}
     @media print{.v-print-btn,.v-ver{display:none}}
   </style></head><body>
-    <button class="v-print-btn" onclick="window.print()">🖨 Print</button><div class="v-ver">Voucher layout 4</div>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button><div class="v-ver">Voucher layout 5</div>
     ${page1}
     ${page2}
     ${page3}
+  ${voucherPdfScript('Payment Receipt'+(sub?' - '+sub.name:'')+(addr?' - '+addr.split(',')[0]:''))}
   </body></html>`);
-  win.document.close();
-  keepPrintWindow(win);
+  showPrintHtml(win, voucherHtml);
 }
 window.printSubVoucher = printSubVoucher;
 
@@ -15584,6 +15651,14 @@ function paymentVoucherCss(accent){
     .v-checkcopy{padding:0.5in;height:auto;overflow:visible}
     .v-checkimg{display:block;max-width:100%;max-height:8.8in;margin:0 auto;border:1px solid #ccc}
     .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
+    @media screen{
+      html,body{background:#E5E7EB}
+      body{padding:16px 0 40px}
+      .v-page{width:8.5in;height:11in;overflow:hidden;margin:0 auto 18px;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.18)}
+      .v-panel{height:calc(11in / 3);min-height:0;overflow:hidden}
+      .v-panel-check{height:calc(11in / 3);min-height:0}
+      .v-checkcopy{height:11in}
+    }
     .v-ver{position:fixed;bottom:8px;right:12px;font-size:10px;color:#aaa}
     @media print{.v-print-btn,.v-ver{display:none}}
 `;
@@ -15691,13 +15766,13 @@ async function printCommVoucher(j, user, pay, isDraft){
     </div>` : '';
 
   win.document.open();
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commission Statement - ${escapeHtml(user.name||'')}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
+  const voucherHtml = (`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commission Statement - ${escapeHtml(user.name||'')}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
   <style>${paymentVoucherCss(accent)}  </style></head><body>
-    <button class="v-print-btn" onclick="window.print()">🖨 Print</button><div class="v-ver">Voucher layout 4</div>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button><div class="v-ver">Voucher layout 5</div>
     ${page1}${page2}${page3}${page4}
+  ${voucherPdfScript('Commission Statement - '+(user.name||''))}
   </body></html>`);
-  win.document.close();
-  keepPrintWindow(win);
+  showPrintHtml(win, voucherHtml);
 }
 window.printCommVoucher = printCommVoucher;
 
