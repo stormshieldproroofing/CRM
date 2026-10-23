@@ -1590,14 +1590,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 }
 
 
-/* summary: stages as one row of step boxes */
-.sm-steps{display:flex;margin-top:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.sm-step{flex:1;min-width:0;position:relative;text-align:center;padding:9px 2px 7px;border-left:1px solid var(--border)}
+/* summary: jobs tile — title + total on one line, colored stage numbers below */
+.sm-jobs-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.sm-jobs-head .sm-kpi-label{font-size:13px}
+.sm-jobs-total{font-size:13px;color:var(--muted);white-space:nowrap}
+.sm-jobs-total b{font-size:22px;font-weight:700;color:#fff;margin-right:5px}
+.sm-steps{display:flex;margin-top:12px}
+.sm-step{flex:1;min-width:0;text-align:center;border-left:1px solid var(--border)}
 .sm-step:first-child{border-left:none}
-.sm-step i{position:absolute;left:0;right:0;top:0;height:3px}
-.sm-step b{display:block;font-size:17px;font-weight:700;color:#fff;line-height:1.2}
+.sm-step b{display:block;font-size:19px;font-weight:700;line-height:1.2}
 .sm-step span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sm-step.zero b{color:var(--muted);font-weight:600}
+.sm-step.zero b{color:var(--muted) !important;font-weight:600}
 /* summary: sales by agent */
 .sm-ag-list{display:flex;flex-direction:column}
 .sm-ag-item{padding:10px 0 12px;border-top:1px solid rgba(255,255,255,.05)}
@@ -5444,13 +5447,12 @@ function renderBoardSalesSummary(){
         </div>`).join('')}</div>` : `<div class="sm-empty">No sales activity in this view yet.</div>`}
     </section>`;
 
-  // One row of step boxes: count over a short stage name, thin stage-color line on top.
+  // One row: each stage's count in its color over a short name, thin lines between.
   const STAGE_SHORT = { 'contract signed':'Signed', 'claim filed':'Claim', 'inspection':'Inspect' };
   const stagesHtml = `
     <div class="sm-steps">${stageRows.map(r => `
       <div class="sm-step${r.count?'':' zero'}" title="${escapeHtml(r.name)}: ${r.count}">
-        <i style="background:${r.color}"></i>
-        <b>${r.count}</b>
+        <b style="color:${r.color};color:color-mix(in srgb, ${r.color} 68%, #fff)">${r.count}</b>
         <span>${escapeHtml(STAGE_SHORT[(r.name||'').toLowerCase()] || r.name)}</span>
       </div>`).join('')}</div>`;
 
@@ -5494,8 +5496,7 @@ function renderBoardSalesSummary(){
       </div>
       <div class="sm-kpis">
         <div class="sm-kpi sm-kpi-jobs">
-          <div class="sm-kpi-label">Jobs in pipeline</div>
-          <div class="sm-kpi-value">${summary.jobsInPipeline}</div>
+          <div class="sm-jobs-head"><span class="sm-kpi-label">Jobs in pipeline</span><span class="sm-jobs-total"><b>${summary.jobsInPipeline}</b>total</span></div>
           ${stagesHtml}
         </div>
         ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)')}
