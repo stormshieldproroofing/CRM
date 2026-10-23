@@ -704,3 +704,72 @@ html.ui-new .rd-fin-slot .rd-ov-reset{width:46px!important;height:46px!important
 
 /* Commission: agent rows read like the other rows */
 html.ui-new .rd-fin-slot #jobCommBody .user-dot{width:32px!important;height:32px!important;font-size:11px!important}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Edit Job / New Job form: folded sections, a label on every field
+   ════════════════════════════════════════════════════════════════════════ */
+html.ui-new #addJobModal .rf-modal{background:var(--panel)!important;border:1px solid var(--line)!important;border-radius:18px!important;width:560px!important}
+html.ui-new #addJobModal .rf-top{background:var(--panel)!important;text-align:left!important;padding:16px 60px 14px 20px!important;border-bottom:1px solid var(--line)!important}
+html.ui-new #addJobModal .rf-top #aj-modalTitle{font-family:inherit!important;font-size:18px!important;font-weight:700!important;margin:0!important}
+html.ui-new #addJobModal .rf-top #aj-modalSubtitle{font-size:13px!important;margin-top:2px}
+html.ui-new #addJobModal .rf-top > button{left:auto!important;right:16px!important;top:14px!important;width:36px!important;height:36px!important;font-size:18px!important;background:var(--tile)!important;border-color:var(--line)!important}
+html.ui-new #addJobModal .rf-scroll{padding:12px 16px 16px!important;background:var(--panel)}
+html.ui-new #addJobModal .rf-emptied{display:none!important}
+html.ui-new #addJobModal #aj-searchWrap{margin-bottom:12px!important}
+html.ui-new #addJobModal .rf-secs{display:flex;flex-direction:column;gap:10px}
+html.ui-new #addJobModal .rf-sec{background:#0E1219;border:1px solid var(--line);border-radius:14px}
+html.ui-new #addJobModal .rf-sec.rf-off{display:none}
+html.ui-new #addJobModal .rf-head{width:100%;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 14px;border:none;background:none;color:#fff;font-family:inherit;text-align:left;cursor:pointer}
+html.ui-new #addJobModal .rf-ic{width:32px;height:32px;border-radius:9px;background:rgba(77,157,224,.12);color:#8FB4FF;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+html.ui-new #addJobModal .rf-tt{flex:1;min-width:0}
+html.ui-new #addJobModal .rf-tt b{display:block;font-size:15px;font-weight:600}
+html.ui-new #addJobModal .rf-sub{display:block;font-size:12.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.ui-new #addJobModal .rf-sec.open .rf-sub{display:none}
+html.ui-new #addJobModal .rf-chev{color:var(--muted);font-size:18px;transition:transform .2s}
+html.ui-new #addJobModal .rf-sec.open .rf-chev{transform:rotate(180deg)}
+html.ui-new #addJobModal .rf-body{display:none;padding:0 14px 14px;border-top:1px solid rgba(255,255,255,.05)}
+html.ui-new #addJobModal .rf-sec.open .rf-body{display:block}
+html.ui-new #addJobModal .rf-row{display:grid;gap:10px;margin-top:12px}
+html.ui-new #addJobModal .rf-row.g1{grid-template-columns:1fr}
+html.ui-new #addJobModal .rf-row.g2{grid-template-columns:1fr 1fr}
+html.ui-new #addJobModal .rf-row.g-ext{grid-template-columns:1fr 92px}
+html.ui-new #addJobModal .rf-row.g-csz{grid-template-columns:1.5fr .7fr 1fr}
+html.ui-new #addJobModal .rf-row.g-pm{grid-template-columns:1fr 110px}
+html.ui-new #addJobModal .rf-f{min-width:0;position:relative}
+html.ui-new #addJobModal .rf-f > label{display:flex!important;align-items:center;gap:8px;font-size:12px!important;font-weight:600!important;color:var(--muted)!important;text-transform:none!important;letter-spacing:0!important;margin:0 0 6px!important}
+html.ui-new #addJobModal .rf-f > label + span[id$="-status"],html.ui-new #addJobModal .rf-f > span[id$="-status"]{position:absolute;top:0;right:0;font-size:11px;color:#6EE7B7}
+/* every field the same: 46px, dark, rounded */
+html.ui-new #addJobModal .rf-f input:not([type=checkbox]),html.ui-new #addJobModal .rf-f select,html.ui-new #addJobModal .rf-f textarea,
+html.ui-new #addJobModal .rf-f #aj-dropTrigger{
+  width:100%!important;box-sizing:border-box!important;min-height:46px!important;margin:0!important;border-radius:10px!important;
+  background:#151A23!important;border:1px solid rgba(255,255,255,.09)!important;color:#E8ECF3!important;font-size:15px!important;font-family:inherit!important;padding:0 12px!important}
+html.ui-new #addJobModal .rf-f textarea{padding:12px!important;min-height:96px!important}
+html.ui-new #addJobModal .rf-f input:focus,html.ui-new #addJobModal .rf-f select:focus,html.ui-new #addJobModal .rf-f textarea:focus{border-color:#4D9DE0!important;outline:none;box-shadow:0 0 0 3px rgba(77,157,224,.16)}
+html.ui-new #addJobModal .rf-f input::placeholder,html.ui-new #addJobModal .rf-f textarea::placeholder{color:#5D6577!important}
+/* $ boxes: one box with the $ (or calendar icon) inside */
+html.ui-new #addJobModal .rf-f .rf-box{display:flex!important;align-items:center;gap:6px;min-height:46px;padding:0 12px!important;border-radius:10px!important;background:#151A23!important;border:1px solid rgba(255,255,255,.09)!important;margin:0!important;width:auto!important}
+html.ui-new #addJobModal .rf-f .rf-box > span,html.ui-new #addJobModal .rf-f .rf-box > i{color:var(--muted)!important;font-size:15px!important;position:static!important;transform:none!important}
+html.ui-new #addJobModal .rf-f .rf-box > input.rf-inbox{flex:1;min-width:0;width:auto!important;border:none!important;background:transparent!important;padding:0!important;min-height:44px!important;box-shadow:none!important;border-radius:0!important}
+html.ui-new #addJobModal .rf-f .rf-box:focus-within{border-color:#4D9DE0!important;box-shadow:0 0 0 3px rgba(77,157,224,.16)}
+html.ui-new #addJobModal .rf-f input[type=date]{color-scheme:dark}
+html.ui-new #addJobModal .rf-f select{appearance:none;-webkit-appearance:none;padding-right:34px!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238B94A7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 12px center!important}
+/* ACV / Net claim read as results */
+html.ui-new #addJobModal .rf-result .rf-box{background:rgba(52,211,153,.08)!important;border-color:rgba(52,211,153,.28)!important}
+html.ui-new #addJobModal .rf-result input{font-weight:700!important;color:#fff!important}
+html.ui-new #addJobModal .rf-result > label{color:#A7F3D0!important}
+html.ui-new #addJobModal .rf-hint{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.4}
+html.ui-new #addJobModal .rf-gps{margin-left:auto;background:none!important;border:none!important;padding:0!important;color:#8FB4FF!important;font-size:12.5px!important;font-weight:600!important}
+html.ui-new #addJobModal .rf-toggle{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:14px;color:#E8ECF3}
+html.ui-new #addJobModal .rf-toggle #aj-insToggle{margin:0!important}
+html.ui-new #addJobModal .rf-foot{background:var(--panel)!important;border-top:1px solid var(--line)!important;padding:12px 16px!important;gap:10px!important}
+html.ui-new #addJobModal .rf-foot .btn-cancel{min-height:48px;border-radius:12px!important;padding:0 20px!important;font-size:15px!important}
+html.ui-new #addJobModal .rf-foot .btn-primary{flex:1;justify-content:center;min-height:48px;border-radius:12px!important;font-size:15px!important;background:var(--blue)!important}
+/* the address suggestions list sits under the street field */
+html.ui-new #addJobModal .rf-f .addr-autocomplete-wrap{position:relative}
+@media (max-width:760px){
+  html.ui-new #addJobModal.m-overlay{padding:0!important;align-items:stretch!important}
+  html.ui-new #addJobModal .rf-modal{width:100vw!important;max-width:100vw!important;height:100vh!important;height:100dvh!important;max-height:none!important;border-radius:0!important;border:none!important}
+  html.ui-new #addJobModal .rf-top{padding-top:calc(14px + env(safe-area-inset-top))!important}
+  html.ui-new #addJobModal .rf-foot{padding-bottom:calc(14px + env(safe-area-inset-bottom))!important}
+}
