@@ -15006,6 +15006,20 @@ function createOrUpdateSubExpense(j, sub, c, checkNo, isPaid, voucherData){
 }
 window.createOrUpdateSubExpense = createOrUpdateSubExpense;
 
+// Print windows were written into a blank tab (about:blank). Phones — iPhone
+// especially — can reload a tab after the print sheet closes or when you switch
+// back to it, and a blank tab reloads as an empty page, so the voucher vanished.
+// Move the finished page into a real (blob) address so it survives a reload.
+function keepPrintWindow(win){
+  try{
+    if(!win || win.closed || !win.document || !win.document.documentElement) return;
+    const html = '<!DOCTYPE html>\n' + win.document.documentElement.outerHTML;
+    const url = URL.createObjectURL(new Blob([html], {type:'text/html'}));
+    win.location.replace(url);
+  }catch(e){ /* keep the page as written if the browser refuses */ }
+}
+window.keepPrintWindow = keepPrintWindow;
+
 function printSubVoucher(j, sub, c, checkNo, extraLines){
   const ci = getCompanyInfo();
   const fmt = n => '$'+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -15154,6 +15168,7 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     ${page3}
   </body></html>`);
   win.document.close();
+  keepPrintWindow(win);
 }
 window.printSubVoucher = printSubVoucher;
 
@@ -15651,6 +15666,7 @@ async function printCommVoucher(j, user, pay, isDraft){
     ${page1}${page2}${page3}${page4}
   </body></html>`);
   win.document.close();
+  keepPrintWindow(win);
 }
 window.printCommVoucher = printCommVoucher;
 
