@@ -1589,16 +1589,16 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .sm-todo-item input{width:20px;height:20px}
 }
 
-/* summary: sales by agent */
-.sm-ag-list{display:flex;flex-direction:column}
-.sm-ag-item{padding:10px 0 12px;border-top:1px solid rgba(255,255,255,.05)}
-.sm-ag-item:first-child{border-top:none;padding-top:2px}
-.sm-ag-row{display:flex;align-items:center;gap:10px;min-height:28px}
-.sm-ag-bar{margin:8px 0 0 32px}
-.sm-ag-rank{width:22px;font-size:13px;font-weight:700;color:var(--muted);text-align:center;flex-shrink:0}
-.sm-ag-name{flex:1;min-width:0;font-size:15px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sm-ag-jobs{font-size:13px;color:var(--muted);white-space:nowrap}
-.sm-ag-val{font-size:15px;color:#fff;white-space:nowrap;min-width:84px;text-align:right}
+/* summary: sales by agent (compact) */
+.sm-ag-list{display:flex;flex-direction:column;gap:10px}
+.sm-ag-item{padding:0}
+.sm-ag-row{display:flex;align-items:center;gap:8px;min-height:22px}
+.sm-ag-rank{width:16px;font-size:12px;font-weight:700;color:var(--muted);text-align:center;flex-shrink:0}
+.sm-ag-row .sm-dot{width:7px;height:7px}
+.sm-ag-name{flex:1;min-width:0;font-size:14px;font-weight:500;color:#E8ECF3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-ag-jobs{font-size:12px;color:var(--muted);white-space:nowrap}
+.sm-ag-val{font-size:14px;font-weight:700;color:#fff;white-space:nowrap;min-width:72px;text-align:right}
+.sm-ag-bar{height:6px;margin:5px 0 0 24px}
 </style>
 
 <!-- TEAM MEMBER MODAL (Add / Edit) -->
