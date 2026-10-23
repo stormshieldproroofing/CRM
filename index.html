@@ -653,11 +653,20 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   <span class="nav-link">Payments</span>
   <div style="flex:1"></div>
   <input class="nav-search" id="globalSearch" placeholder="Search jobs, address, phone, policy...">
+  <button type="button" id="gsBtn" class="gs-btn" onclick="gsOpen()" aria-label="Search jobs"><i class="ti ti-search"></i><span>Search</span></button>
   <div class="agent-view-wrap">
     <div class="nav-avatar" id="agentViewAvatar">MT</div>
     <div class="agent-view-drop" id="agentViewDrop" style="display:none"></div>
   </div>
 </nav>
+<!-- Phone search: full screen, results as you type -->
+<div id="gsOverlay" role="dialog" aria-label="Search jobs">
+  <div class="gs-top">
+    <div class="gs-field"><i class="ti ti-search"></i><input id="gsInput" type="search" inputmode="search" autocomplete="off" placeholder="Name, address, phone, claim #…" oninput="gsRender()"><button type="button" id="gsClear" onclick="gsClear()" aria-label="Clear"><i class="ti ti-x"></i></button></div>
+    <button type="button" class="gs-cancel" onclick="gsClose()">Cancel</button>
+  </div>
+  <div id="gsResults"></div>
+</div>
 <div class="mobile-drawer-bg" id="mobileDrawerBg"></div>
 <div class="mobile-drawer" id="mobileDrawer"></div>
 
@@ -1457,6 +1466,40 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   #mapBarLayers #roofSliderPanel label input{width:20px !important;height:20px !important}
   /* mapbox zoom / locate buttons: bigger */
   #mapContainer .mapboxgl-ctrl-group button{width:40px;height:40px}
+}
+
+/* ── SEARCH on phones: a Search button opens a full-screen search ── */
+.gs-btn,#gsOverlay{display:none}
+@media (max-width:760px){
+  #globalSearch{display:none !important}
+  .gs-btn{display:flex;align-items:center;gap:6px;flex:1;min-width:0;height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--muted);font-size:15px;font-family:inherit;cursor:pointer}
+  .gs-btn .ti{font-size:18px;color:var(--brand-light)}
+  html.gs-lock,html.gs-lock body{overflow:hidden}
+  #gsOverlay.open{display:flex;flex-direction:column;position:fixed;inset:0;z-index:500;background:#0E1219}
+  .gs-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;border-bottom:1px solid var(--border);background:#12161E}
+  .gs-field{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:46px;padding:0 6px 0 12px;border-radius:12px;background:#1A1F29;border:1px solid rgba(77,157,224,.5)}
+  .gs-field > .ti{font-size:18px;color:var(--brand-light)}
+  #gsInput{flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-size:16px;font-family:inherit}
+  #gsInput::-webkit-search-cancel-button{display:none}
+  #gsClear{width:34px;height:34px;border:none;border-radius:50%;background:rgba(255,255,255,.08);color:var(--muted);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .gs-cancel{flex-shrink:0;border:none;background:none;color:var(--brand-light);font-size:16px;font-weight:600;font-family:inherit;padding:8px 4px;cursor:pointer}
+  #gsResults{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 12px calc(20px + env(safe-area-inset-bottom))}
+  .gs-label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 4px 6px}
+  .gs-row{display:flex;align-items:center;gap:10px;padding:12px;margin-bottom:8px;border-radius:12px;background:#161B26;border:1px solid var(--border);cursor:pointer}
+  .gs-row:active{background:#1D2331}
+  .gs-main{flex:1;min-width:0}
+  .gs-name{font-size:16px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gs-addr{font-size:13px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gs-row mark{background:rgba(77,157,224,.3);color:#fff;border-radius:3px;padding:0 1px}
+  .gs-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .gs-tags:empty{display:none}
+  .gs-tag{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.07);color:#C4CBD8}
+  .gs-tag.ins{background:rgba(77,157,224,.14);color:#8FB4FF}
+  .gs-call{width:42px;height:42px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(52,211,153,.14);color:#34D399;font-size:19px;text-decoration:none}
+  .gs-chev{color:var(--muted);font-size:18px;flex-shrink:0}
+  .gs-empty{text-align:center;color:var(--muted);font-size:15px;line-height:1.5;padding:48px 24px}
+  .gs-empty .ti{display:block;font-size:34px;margin-bottom:10px;color:var(--brand-light);opacity:.7}
+  .gs-more{text-align:center;color:var(--muted);font-size:13px;padding:10px}
 }
 </style>
 
@@ -10199,6 +10242,71 @@ $('agentViewDrop').addEventListener('click',e=>e.stopPropagation());
     this.classList.remove('open');
   });
 });
+
+
+// ── PHONE SEARCH: full-screen, shows matching jobs as you type ──
+const GS_RECENT_KEY='stormshield_gs_recent_v1';
+function gsRecent(){ try{ return JSON.parse(localStorage.getItem(GS_RECENT_KEY)||'[]'); }catch(e){ return []; } }
+function gsRemember(id){ try{ const r=gsRecent().filter(x=>x!==id); r.unshift(id); localStorage.setItem(GS_RECENT_KEY, JSON.stringify(r.slice(0,6))); }catch(e){} }
+window.gsOpen=function(){
+  const o=document.getElementById('gsOverlay'); if(!o) return;
+  o.classList.add('open'); document.documentElement.classList.add('gs-lock');
+  const inp=document.getElementById('gsInput'); inp.value=''; gsRender();
+  setTimeout(()=>inp.focus(), 30);
+};
+window.gsClose=function(){
+  const o=document.getElementById('gsOverlay'); if(o) o.classList.remove('open');
+  document.documentElement.classList.remove('gs-lock');
+};
+window.gsClear=function(){ const inp=document.getElementById('gsInput'); inp.value=''; gsRender(); inp.focus(); };
+function gsStage(j){
+  try{ const c=columnsForPipeline(j.pipeline).find(c=>c.id===j.col); return c?c.name:''; }catch(e){ return ''; }
+}
+function gsMatch(j,q){
+  if(jobMatchesSearch(j,q)) return true;
+  return [j.email,j.carrier,gsStage(j)].filter(Boolean).join(' ').toLowerCase().includes(q);
+}
+function gsRow(j,q){
+  const hl=t=>{ const e=escapeHtml(t||''); if(!q) return e; const i=e.toLowerCase().indexOf(escapeHtml(q).toLowerCase()); return i<0?e:e.slice(0,i)+'<mark>'+e.slice(i,i+escapeHtml(q).length)+'</mark>'+e.slice(i+escapeHtml(q).length); };
+  const stage=gsStage(j);
+  const tel=(j.phone||'').replace(/[^\d+]/g,'');
+  return `<div class="gs-row" data-gs-id="${j.id}" role="button" tabindex="0">
+    <div class="gs-main">
+      <div class="gs-name">${hl(j.name||'Job')}</div>
+      <div class="gs-addr">${hl((j.address||'No address').replace(/, USA$/,''))}</div>
+      <div class="gs-tags">${stage?`<span class="gs-tag">${escapeHtml(stage)}</span>`:''}${j.carrier?`<span class="gs-tag ins">${escapeHtml(j.carrier)}</span>`:''}${j.claimNum&&q&&String(j.claimNum).toLowerCase().includes(q)?`<span class="gs-tag">Claim ${hl(j.claimNum)}</span>`:''}</div>
+    </div>
+    ${tel?`<a class="gs-call" href="tel:${tel}" aria-label="Call ${escapeHtml(j.name||'')}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i></a>`:''}
+    <i class="ti ti-chevron-right gs-chev"></i>
+  </div>`;
+}
+window.gsRender=function(){
+  const box=document.getElementById('gsResults'); if(!box) return;
+  const raw=(document.getElementById('gsInput').value||'').trim();
+  const q=raw.toLowerCase();
+  document.getElementById('gsClear').style.visibility = raw ? 'visible' : 'hidden';
+  const all=(typeof jobs!=='undefined'&&jobs)||[];
+  let html='';
+  if(!q){
+    const rec=gsRecent().map(id=>all.find(j=>j.id===id)).filter(Boolean);
+    html = rec.length
+      ? `<div class="gs-label">Recent</div>`+rec.map(j=>gsRow(j,'')).join('')
+      : `<div class="gs-empty"><i class="ti ti-search"></i>Search by name, address, phone, email, claim #, policy #, carrier or stage.</div>`;
+  } else {
+    const hits=all.filter(j=>gsMatch(j,q));
+    // names that start with the search come first
+    hits.sort((a,b)=>((b.name||'').toLowerCase().startsWith(q))-((a.name||'').toLowerCase().startsWith(q)));
+    html = hits.length
+      ? `<div class="gs-label">${hits.length} ${hits.length===1?'job':'jobs'}</div>`+hits.slice(0,50).map(j=>gsRow(j,q)).join('')+(hits.length>50?`<div class="gs-more">Showing first 50 — keep typing to narrow it down</div>`:'')
+      : `<div class="gs-empty"><i class="ti ti-mood-empty"></i>No jobs match “${escapeHtml(raw)}”.</div>`;
+  }
+  box.innerHTML=html;
+  box.querySelectorAll('[data-gs-id]').forEach(r=>r.addEventListener('click',()=>{
+    const id=r.dataset.gsId; gsRemember(id); gsClose();
+    if(typeof openDetail==='function') openDetail(id);
+  }));
+};
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && document.getElementById('gsOverlay')?.classList.contains('open')) gsClose(); });
 
 $('globalSearch').addEventListener('input',function(){
   const q=this.value.toLowerCase();
