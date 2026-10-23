@@ -1590,16 +1590,14 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 }
 
 
-/* summary: stages in one row */
-.sm-stbar{display:flex;gap:3px;height:8px;margin-top:12px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.06)}
-.sm-stbar span{min-width:4px}
-.sm-stcols{display:grid;gap:4px;margin-top:10px}
-.sm-stcol{min-width:0;text-align:center}
-.sm-stcol b{display:block;font-size:17px;font-weight:700;color:#fff;line-height:1.2}
-.sm-stcol span{display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sm-stcol span i{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.sm-stcol.zero b{color:var(--muted);font-weight:600}
-@media (max-width:760px){ .sm-stcols{gap:2px} .sm-stcol span{font-size:11px;gap:4px} .sm-stcol span i{width:6px;height:6px} }
+/* summary: stages as one row of step boxes */
+.sm-steps{display:flex;margin-top:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.sm-step{flex:1;min-width:0;position:relative;text-align:center;padding:9px 2px 7px;border-left:1px solid var(--border)}
+.sm-step:first-child{border-left:none}
+.sm-step i{position:absolute;left:0;right:0;top:0;height:3px}
+.sm-step b{display:block;font-size:17px;font-weight:700;color:#fff;line-height:1.2}
+.sm-step span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-step.zero b{color:var(--muted);font-weight:600}
 /* summary: sales by agent */
 .sm-ag-list{display:flex;flex-direction:column}
 .sm-ag-item{padding:10px 0 12px;border-top:1px solid rgba(255,255,255,.05)}
@@ -5446,15 +5444,14 @@ function renderBoardSalesSummary(){
         </div>`).join('')}</div>` : `<div class="sm-empty">No sales activity in this view yet.</div>`}
     </section>`;
 
-  // One row: a color bar split by stage, and a column per stage (count over a short name).
+  // One row of step boxes: count over a short stage name, thin stage-color line on top.
   const STAGE_SHORT = { 'contract signed':'Signed', 'claim filed':'Claim', 'inspection':'Inspect' };
-  const stageSum = Math.max(1, stageRows.reduce((t,r)=>t+r.count,0));
   const stagesHtml = `
-    <div class="sm-stbar" aria-hidden="true">${stageRows.filter(r=>r.count).map(r => `<span style="flex:${r.count};background:${r.color}"></span>`).join('')}</div>
-    <div class="sm-stcols" style="grid-template-columns:repeat(${stageRows.length||1},minmax(0,1fr))">${stageRows.map(r => `
-      <div class="sm-stcol${r.count?'':' zero'}" title="${escapeHtml(r.name)}: ${r.count}">
+    <div class="sm-steps">${stageRows.map(r => `
+      <div class="sm-step${r.count?'':' zero'}" title="${escapeHtml(r.name)}: ${r.count}">
+        <i style="background:${r.color}"></i>
         <b>${r.count}</b>
-        <span><i style="background:${r.color}"></i>${escapeHtml(STAGE_SHORT[(r.name||'').toLowerCase()] || r.name)}</span>
+        <span>${escapeHtml(STAGE_SHORT[(r.name||'').toLowerCase()] || r.name)}</span>
       </div>`).join('')}</div>`;
 
   const phoneNow = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
