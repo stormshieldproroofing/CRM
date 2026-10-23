@@ -1501,6 +1501,93 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .gs-empty .ti{display:block;font-size:34px;margin-bottom:10px;color:var(--brand-light);opacity:.7}
   .gs-more{text-align:center;color:var(--muted);font-size:13px;padding:10px}
 }
+
+/* ── SUMMARY PAGE (rebuilt) ── */
+#boardSalesSummary{overflow-x:visible !important;padding:16px 20px 28px !important}
+.sm-page{max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.sm-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sm-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:#fff}
+.sm-chip{font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.sm-kpis{display:grid;grid-template-columns:1.6fr repeat(4,minmax(0,1fr));gap:12px}
+.sm-kpi{background:#161B28;border:1px solid var(--border);border-radius:14px;padding:14px 16px;min-width:0}
+.sm-kpi-label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.sm-kpi-value{font-size:26px;font-weight:700;color:#fff;margin-top:4px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-kpi-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.sm-kpi-track{margin-top:8px}
+.sm-stages{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.sm-stage{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);font-size:12px;color:#C4CBD8}
+.sm-stage b{color:#fff}
+.sm-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.sm-cols{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
+.sm-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.sm-panel{background:#12161F;border:1px solid var(--border);border-radius:14px;padding:14px 16px;min-width:0}
+.sm-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;list-style:none;cursor:default}
+.sm-panel-head::-webkit-details-marker{display:none}
+.sm-panel-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#fff}
+.sm-panel-title .ti{font-size:17px;color:var(--brand-light)}
+.sm-panel-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.sm-fold > summary{cursor:pointer;margin-bottom:0}
+.sm-fold[open] > summary{margin-bottom:10px}
+.sm-fold-chev{color:var(--muted);font-size:18px;transition:transform .2s}
+.sm-fold[open] .sm-fold-chev{transform:rotate(180deg)}
+.sm-empty{padding:16px 4px;color:var(--muted);font-size:13px;text-align:center}
+.sm-list{display:flex;flex-direction:column}
+.sm-fu-row,.sm-wk-row{display:flex;align-items:center;gap:12px;padding:10px 4px;border-top:1px solid rgba(255,255,255,.05);cursor:pointer;border-radius:8px}
+.sm-fu-row:first-child,.sm-wk-row:first-child{border-top:none}
+.sm-fu-row:hover,.sm-wk-row:hover{background:rgba(255,255,255,.025)}
+.sm-fu-days{width:44px;height:44px;flex-shrink:0;border-radius:12px;border:1px solid;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800}
+.sm-fu-days .ti{font-size:20px}
+.sm-fu-main{flex:1;min-width:0}
+.sm-fu-name{font-size:14px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.sm-fu-why{font-size:12px;margin-top:2px}
+.sm-fu-stage{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-top:3px}
+.sm-fu-stage span{width:6px;height:6px;border-radius:50%}
+.sm-fu-btn{width:40px;height:40px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;text-decoration:none;border:none;cursor:pointer}
+.sm-fu-btn.call{background:rgba(52,211,153,.14);color:#34D399}
+.sm-fu-btn.log{background:rgba(77,157,224,.12);color:var(--brand-light)}
+.sm-more{width:100%;height:42px;margin-top:8px;border-radius:10px;border:1px solid var(--border);background:#1A1F29;color:var(--brand-light);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer}
+.sm-note{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:var(--muted);margin-top:10px;line-height:1.4}
+.sm-note .ti{font-size:14px;margin-top:1px}
+.sm-bars{display:flex;flex-direction:column;gap:12px}
+.sm-bar-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:#E8ECF3;margin-bottom:6px}
+.sm-bar-name{display:flex;align-items:center;gap:7px;min-width:0}
+.sm-bar-n{color:var(--muted);font-size:12px}
+.sm-track{height:8px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden}
+.sm-track > div{height:100%;border-radius:999px}
+.sm-wk-date{width:44px;height:44px;flex-shrink:0;border-radius:12px;background:rgba(56,189,248,.1);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#7DD3FC;line-height:1.1}
+.sm-wk-date span{font-size:10px;font-weight:700;text-transform:uppercase}
+.sm-wk-date b{font-size:16px}
+.sm-wk-date.today{background:var(--brand-light);color:#fff}
+.sm-wk-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-chev{color:var(--muted);font-size:18px}
+.sm-todo-list{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 240px);overflow:auto}
+.sm-todo-job{display:flex;align-items:center;gap:8px;padding:8px 10px;border-left:3px solid;border-radius:6px;background:rgba(255,255,255,.04);cursor:pointer}
+.sm-todo-job .sm-fu-name{flex:1}
+.sm-todo-stage{font-size:11px;white-space:nowrap}
+.sm-todo-n{font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);padding:1px 7px;border-radius:999px;white-space:nowrap}
+.sm-todo-item{display:flex;align-items:flex-start;gap:10px;padding:8px 6px 8px 14px;font-size:13px;color:#D5DAE3;line-height:1.35;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04)}
+.sm-todo-item input{width:18px;height:18px;margin-top:0;flex-shrink:0;accent-color:var(--brand-light)}
+.sm-todo-item span{flex:1}
+.sm-todo-item em{font-style:normal;font-size:10px;font-weight:700;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:1px 5px;flex-shrink:0}
+.sm-todo-item.locked{opacity:.55;cursor:not-allowed}
+@media (max-width:1180px){
+  .sm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sm-kpi-jobs{grid-column:1/-1}
+  .sm-cols{grid-template-columns:1fr}
+  .sm-todo-list{max-height:none}
+}
+@media (max-width:760px){
+  #boardSalesSummary{padding:12px 12px 24px !important}
+  .sm-page{gap:12px}
+  .sm-title{font-size:17px}
+  .sm-kpis{gap:10px}
+  .sm-kpi{padding:12px 14px;border-radius:14px}
+  .sm-kpi-value{font-size:22px}
+  .sm-panel{padding:12px 14px}
+  .sm-fu-name{font-size:15px}
+  .sm-todo-item{font-size:14px;padding:10px 6px 10px 12px}
+  .sm-todo-item input{width:20px;height:20px}
+}
 </style>
 
 <!-- TEAM MEMBER MODAL (Add / Edit) -->
@@ -5244,190 +5331,158 @@ function renderBoardSalesSummary(){
   }
   const wkTotal = wkDays.reduce((s,x)=>s+x.jobs.length,0);
 
-  // ── Follow-Ups Due panel — jobs overdue for client/insurance contact ──
-  const fuRows = summaryJobs
-    .map(j => ({ j, st: (typeof followUpStatus==='function') ? followUpStatus(j) : null }))
-    .filter(x => x.st)
-    .sort((a,b) => b.st.worst.overdueBy - a.st.worst.overdueBy)
-    .slice(0, 12);
-  const fuItemLabel = it => {
-    if(it.party === 'date') return it.days === 0 ? 'Follow-up date is today' : `Follow-up date passed ${it.days}d ago`;
-    const who = it.party === 'insurance' ? 'insurance' : 'client';
-    return it.never ? `No ${who} contact yet · job is ${it.days}d old` : `${it.days}d since ${who} contact (limit ${it.limit}d)`;
+  // ── Follow-ups: only jobs that are moving. Leads sitting in the Lead stage
+  // are left out unless someone set a follow-up date on them. Top 5 shown.
+  const isLeadStage = j => {
+    const col = columnsForPipeline(j.pipeline || 'insurance').find(c => c.id === j.col);
+    const id = (j.col||'').toLowerCase(), nm = (col?.name||'').toLowerCase();
+    return id === 'lead' || id === 'new-lead' || nm === 'lead' || nm === 'new lead' || nm === 'leads';
   };
-  const followUpsPanelHtml = `
-    <div class="summary-panel" style="margin-top:12px">
-      <div class="summary-panel-title">
-        <span><i class="ti ti-phone-outgoing" style="font-size:12px;margin-right:4px"></i>Follow-Ups Due</span>
-        <span style="font-size:10px;color:${fuRows.length?'#FBBF24':'var(--muted)'}">${fuRows.length ? fuRows.length + ' job' + (fuRows.length===1?'':'s') + ' need contact' : 'all caught up'}</span>
+  let fuHiddenLeads = 0;
+  const fuAll = summaryJobs.map(j => {
+    const st = (typeof followUpStatus==='function') ? followUpStatus(j) : null;
+    if(!st) return null;
+    const lead = isLeadStage(j);
+    const due = st.due.filter(it => it.party === 'date' || !lead);
+    if(!due.length){ fuHiddenLeads++; return null; }
+    due.sort((x,y) => (y.party==='date') - (x.party==='date') || y.overdueBy - x.overdueBy);
+    return { j, st: { worst: due[0], due } };
+  }).filter(Boolean).sort((a,b) => (b.st.worst.party==='date') - (a.st.worst.party==='date') || b.st.worst.overdueBy - a.st.worst.overdueBy);
+  const fuShowAll = !!window.__sumFuAll;
+  const fuRows = fuShowAll ? fuAll : fuAll.slice(0, 5);
+  const fuItemLabel = it => {
+    if(it.party === 'date') return it.days === 0 ? 'Follow-up set for today' : `Follow-up date passed ${it.days}d ago`;
+    const who = it.party === 'insurance' ? 'insurance' : 'client';
+    return it.never ? `No ${who} contact yet · job is ${it.days}d old` : `${it.days}d since ${who} contact`;
+  };
+  const stageOf = j => columnsForPipeline(j.pipeline || 'insurance').find(c => c.id === j.col);
+  const followUpsHtml = `
+    <section class="sm-panel sm-fu">
+      <div class="sm-panel-head">
+        <div><div class="sm-panel-title"><i class="ti ti-phone-outgoing"></i>Follow-ups</div>
+        <div class="sm-panel-sub">${fuAll.length ? `${fuAll.length} job${fuAll.length===1?'':'s'} to contact` : 'All caught up'}</div></div>
       </div>
-      ${!fuRows.length ? `<div class="summary-empty" style="padding:14px 4px">Nobody's waiting on a call. Nice.</div>` : `
-      <div style="display:flex;flex-direction:column">
+      ${!fuAll.length ? `<div class="sm-empty">Nobody's waiting on a call. Nice.</div>` : `
+      <div class="sm-list">
         ${fuRows.map(({j,st}) => {
-          const sev = st.worst.overdueBy >= 7 ? '#F87171' : '#FBBF24';
-          const lastNote = st.worst.last && st.worst.last.note ? st.worst.last.note : '';
+          const sev = st.worst.party==='date' ? '#60A5FA' : (st.worst.overdueBy >= 7 ? '#F87171' : '#FBBF24');
+          const col = stageOf(j);
+          const tel = (j.phone && j.phone!=='—') ? String(j.phone).replace(/[^\d+]/g,'') : '';
           return `
-          <div onclick="openDetail('${j.id}')" style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
-            <div style="width:34px;height:34px;border-radius:8px;background:${sev}18;border:1px solid ${sev}55;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">
-              <span style="font-size:13px;font-weight:800;color:${sev};line-height:1">${st.worst.days}d</span>
+          <div class="sm-fu-row" onclick="openDetail('${j.id}')">
+            <div class="sm-fu-days" style="color:${sev};background:${sev}1A;border-color:${sev}55">${st.worst.party==='date' && st.worst.days===0 ? '<i class="ti ti-calendar-event"></i>' : st.worst.days+'d'}</div>
+            <div class="sm-fu-main">
+              <div class="sm-fu-name">${escapeHtml(j.name||'')}</div>
+              <div class="sm-fu-why" style="color:${sev}">${fuItemLabel(st.worst)}</div>
+              ${col?`<div class="sm-fu-stage"><span style="background:${col.color||'var(--brand-light)'}"></span>${escapeHtml(col.name)}</div>`:''}
             </div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:700;color:var(--brand);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(j.name||'')}</div>
-              <div style="font-size:10px;color:${sev};margin-top:1px">${fuItemLabel(st.worst)}${st.due.length>1?` <span style="color:var(--muted)">+${st.due.length-1} more</span>`:''}</div>
-              ${lastNote?`<div style="font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Last: ${escapeHtml(lastNote)}</div>`:''}
-            </div>
-            ${j.phone && j.phone!=='—' ? `<a href="tel:${escapeHtml(j.phone)}" onclick="event.stopPropagation()" title="Call ${escapeHtml(j.name||'')}" style="width:30px;height:30px;border-radius:7px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.4);display:flex;align-items:center;justify-content:center;color:#34D399;flex-shrink:0;text-decoration:none"><i class="ti ti-phone" style="font-size:14px"></i></a>` : ''}
+            <button type="button" class="sm-fu-btn log" title="Log contact" onclick="event.stopPropagation();openLogContact('${j.id}')"><i class="ti ti-notes"></i></button>
+            ${tel?`<a class="sm-fu-btn call" href="tel:${tel}" title="Call ${escapeHtml(j.name||'')}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i></a>`:''}
           </div>`;
         }).join('')}
-      </div>`}
-    </div>`;
-  const dowFull = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const todayKey = wkDays[0].key;
-  const upcomingPanelHtml = `
-    <div class="summary-panel" style="margin-top:12px">
-      <div class="summary-panel-title">
-        <span><i class="ti ti-calendar-week" style="font-size:12px;margin-right:4px"></i>Upcoming This Week</span>
-        <span style="font-size:10px;color:var(--muted)">${wkTotal} event${wkTotal===1?'':'s'} · next 7 days</span>
       </div>
-      ${wkTotal===0 ? `<div class="summary-empty" style="padding:14px 4px">No scheduled events in the next 7 days.</div>` : `
-      <div style="display:flex;flex-direction:column;gap:2px">
-        ${wkDays.filter(x=>x.jobs.length).map(x=>{
-          const isToday = x.key===todayKey;
-          const dateLbl = `${dowFull[x.d.getDay()]} ${x.d.getMonth()+1}/${x.d.getDate()}`;
-          return `
-          <div style="padding:6px 0">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-              <span style="font-size:11px;font-weight:700;color:${isToday?'var(--brand-light)':'var(--brand)'}">${isToday?'Today · ':''}${escapeHtml(dateLbl)}</span>
-              <span style="flex:1;height:1px;background:rgba(255,255,255,0.06)"></span>
-              <span style="font-size:9px;color:var(--muted)">${x.jobs.length} job${x.jobs.length===1?'':'s'}</span>
-            </div>
-            ${x.jobs.map(j=>{
-              const who = jobRep(j).name;
-              const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
-              return `
-              <div onclick="openDetail && openDetail('${j.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:3px;cursor:pointer">
-                <i class="ti ti-hammer" style="font-size:13px;color:#38BDF8;flex-shrink:0"></i>
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(j.name||'Job')}</div>
-                  ${(addr||who)?`<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(addr)}${addr&&who?' · ':''}${escapeHtml(who)}</div>`:''}
-                </div>
-                <span style="font-size:9px;color:#38BDF8;background:rgba(56,189,248,0.12);padding:1px 6px;border-radius:8px;flex-shrink:0">Install</span>
-              </div>`;
-            }).join('')}
-          </div>`;
-        }).join('')}
-      </div>`}
-    </div>`;
+      ${fuAll.length > 5 ? `<button type="button" class="sm-more" onclick="window.__sumFuAll=${fuShowAll?'false':'true'};renderBoardSalesSummary()">${fuShowAll?'Show fewer':`Show all ${fuAll.length}`}</button>` : ''}`}
+      ${fuHiddenLeads ? `<div class="sm-note"><i class="ti ti-info-circle"></i>${fuHiddenLeads} lead${fuHiddenLeads===1?'':'s'} in the Lead stage not listed. Set a follow-up date on a lead to have it show here.</div>` : ''}
+    </section>`;
 
-  // To-Do panel markup (placed high on the page, right under the KPI cards).
-  const todoPanelHtml = `
-    <div class="summary-panel" style="display:flex;flex-direction:column;height:100%;min-width:300px">
-      <div class="summary-panel-title">
-        <span>Open To-Do Items</span>
-        <span style="font-size:10px;color:var(--muted)">${todoOpenCount} open · ${todoReqCount} required</span>
-      </div>
-      ${todoGroups.length?`<div style="flex:1;max-height:calc(100vh - 220px);overflow:auto;margin:0 -4px">${todoGroups.map(g=>{
+  const dowShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const todayKey = wkDays[0].key;
+  const upcomingHtml = `
+    <section class="sm-panel">
+      <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-calendar-week"></i>This week</div>
+      <div class="sm-panel-sub">${wkTotal} build${wkTotal===1?'':'s'} in the next 7 days</div></div></div>
+      ${wkTotal===0 ? `<div class="sm-empty">No builds scheduled in the next 7 days.</div>` : `
+      <div class="sm-list">
+        ${wkDays.filter(x=>x.jobs.length).map(x => x.jobs.map(j => {
+          const who = jobRep(j).name;
+          const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+          return `<div class="sm-wk-row" onclick="openDetail('${j.id}')">
+            <div class="sm-wk-date${x.key===todayKey?' today':''}"><span>${x.key===todayKey?'Today':dowShort[x.d.getDay()]}</span><b>${x.d.getDate()}</b></div>
+            <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name||'Job')}</div><div class="sm-wk-sub">${escapeHtml(addr)}${addr&&who?' · ':''}${escapeHtml(who||'')}</div></div>
+            <i class="ti ti-chevron-right sm-chev"></i>
+          </div>`;
+        }).join('')).join('')}
+      </div>`}
+    </section>`;
+
+  const agentsHtml = `
+    <section class="sm-panel">
+      <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>${user?'My pipeline value':'Sales value by agent'}</div>
+      <div class="sm-panel-sub">Average job ${'$'+Math.round(avgDeal).toLocaleString('en-US')}</div></div></div>
+      ${agentRows.length ? `<div class="sm-bars">${agentRows.map(row => `
+        <div class="sm-bar">
+          <div class="sm-bar-top"><span class="sm-bar-name"><span class="sm-dot" style="background:${row.color}"></span>${escapeHtml(row.name)}<span class="sm-bar-n">${row.count} job${row.count===1?'':'s'}</span></span><b>${'$'+Math.round(row.value).toLocaleString('en-US')}</b></div>
+          <div class="sm-track"><div style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
+        </div>`).join('')}</div>` : `<div class="sm-empty">No sales activity in this view yet.</div>`}
+    </section>`;
+
+  const stagesHtml = `
+    <div class="sm-stages">${stageRows.map(row => `<div class="sm-stage"><span class="sm-dot" style="background:${row.color}"></span><span class="sm-stage-name">${escapeHtml(row.name)}</span><b>${row.count}</b></div>`).join('')}</div>`;
+
+  const phoneNow = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  const openAttr = key => {
+    const st = (window.__sumOpen||{})[key];
+    return (st === undefined ? !phoneNow : st) ? ' open' : '';
+  };
+  const todoHtml = `
+    <details class="sm-panel sm-fold sm-todo"${openAttr('todo')} data-sm-fold="todo">
+      <summary class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-checklist"></i>Open to-do items</div>
+      <div class="sm-panel-sub">${todoOpenCount} open · ${todoReqCount} required</div></div><i class="ti ti-chevron-down sm-fold-chev"></i></summary>
+      ${todoGroups.length ? `<div class="sm-todo-list">${todoGroups.map(g => {
         const reqInGroup = g.items.filter(i=>i.required).length;
-        return `
-        <div style="margin-bottom:4px">
-          <div style="display:flex;align-items:center;gap:7px;padding:7px 8px;background:rgba(255,255,255,0.04);border-left:3px solid ${g.stageColor};border-radius:4px;position:sticky;top:0;backdrop-filter:blur(2px)">
-            <i class="ti ti-folder" style="font-size:13px;color:${g.stageColor};flex-shrink:0"></i>
-            <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.jobName)}</span>
-            <span style="font-size:9px;color:${g.stageColor};white-space:nowrap">${escapeHtml(g.stage)}</span>
-            <span style="font-size:9px;color:var(--muted);background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:8px;white-space:nowrap">${g.items.length}${reqInGroup?` · ${reqInGroup} req`:''}</span>
+        return `<div class="sm-todo-group">
+          <div class="sm-todo-job" style="border-left-color:${g.stageColor}" onclick="openDetail('${g.jobId}')">
+            <span class="sm-fu-name">${escapeHtml(g.jobName)}</span>
+            <span class="sm-todo-stage" style="color:${g.stageColor}">${escapeHtml(g.stage)}</span>
+            <span class="sm-todo-n">${g.items.length}${reqInGroup?` · ${reqInGroup} req`:''}</span>
           </div>
-          ${g.items.map(t=>`
-            <label class="sum-todo-item" style="display:flex;align-items:flex-start;gap:9px;padding:7px 8px 7px 20px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:${(!t.canCheck)?'not-allowed':'pointer'};opacity:${(!t.canCheck)?'0.55':'1'}">
-              <input type="checkbox" data-sum-todo-check="${g.jobId}|${g.colId}|${t.itemId}" ${(!t.canCheck)?'disabled':''} style="margin-top:2px;flex-shrink:0;cursor:inherit;accent-color:var(--brand-light)">
-              <div style="flex:1;min-width:0;font-size:12px;color:var(--brand);line-height:1.35">${escapeHtml(t.text)}</div>
-              ${t.required?`<span style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:var(--warn);padding:1px 5px;border:1px solid var(--warn);border-radius:3px;flex-shrink:0;margin-top:1px">REQ</span>`:''}
-            </label>
-          `).join('')}
+          ${g.items.map(t => `<label class="sm-todo-item${t.canCheck?'':' locked'}">
+            <input type="checkbox" data-sum-todo-check="${g.jobId}|${g.colId}|${t.itemId}" ${t.canCheck?'':'disabled'}>
+            <span>${escapeHtml(t.text)}</span>${t.required?'<em>REQ</em>':''}
+          </label>`).join('')}
         </div>`;
-      }).join('')}</div>`:`<div class="summary-empty" style="flex:1;display:flex;align-items:center;justify-content:center;min-height:80px">No open to-do items. All caught up!</div>`}
-    </div>`;
-  wrap.innerHTML=`
-    <div class="summary-head">
-      <div class="summary-title">
-        ${badge}
-        <span style="font-weight:700;font-size:12px;color:var(--brand)">${title}</span>
-        <span style="font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:1px 7px">${user?'Agent View':'All Agents'}</span>
+      }).join('')}</div>` : `<div class="sm-empty">No open to-do items. All caught up!</div>`}
+    </details>`;
+  const activityHtml = `
+    <details class="sm-panel sm-fold"${openAttr('activity')} data-sm-fold="activity">
+      <summary class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-bell"></i>Team activity</div><div class="sm-panel-sub">Live updates</div></div><i class="ti ti-chevron-down sm-fold-chev"></i></summary>
+      <div id="teamFeedList">${renderTeamFeedRows()}</div>
+    </details>`;
+
+  const money0 = v => '$' + Math.round(Number(v)||0).toLocaleString('en-US');
+  const kpi = (label, value, sub, color, extra='') => `<div class="sm-kpi"><div class="sm-kpi-label">${label}</div><div class="sm-kpi-value" style="color:${color}">${value}</div>${sub?`<div class="sm-kpi-sub">${sub}</div>`:''}${extra}</div>`;
+  wrap.innerHTML = `
+    <div class="sm-page">
+      <div class="sm-head">
+        <div class="sm-title">${badge}<span>${title}</span></div>
+        <span class="sm-chip">${user?'Agent view':'All agents'}</span>
       </div>
-      <div style="display:flex;gap:12px;align-items:stretch;margin-top:12px;min-width:max-content">
-        <!-- LEFT: KPI cards, focus cards, overview -->
-        <div style="flex:1 1 auto;min-width:720px;display:flex;flex-direction:column;gap:12px">
-          <div class="summary-grid" style="margin-top:0">
-            ${items.map(item=>`
-              <div class="summary-card">
-                <div class="summary-label">${item.label}</div>
-                <div class="summary-value" style="color:${item.color}">${item.value}</div>
-              </div>
-            `).join('')}
-          </div>
-          <div class="summary-focus" style="margin-top:0">
-            <div class="focus-card">
-              <div class="focus-kicker"><i class="ti ti-target-arrow" aria-hidden="true"></i>Collection Progress</div>
-              <div class="focus-main">${collectionPct}% collected</div>
-              <div class="focus-sub">${moneyText(collected)} collected from ${moneyText(totalPipelineValue)}</div>
-              <div class="summary-meter"><div class="summary-meter-fill" style="width:${collectionPct}%"></div></div>
-            </div>
-            <div class="focus-card">
-              <div class="focus-kicker"><i class="ti ti-trophy" aria-hidden="true"></i>Win Momentum</div>
-              <div class="focus-main">${closeRate}% close rate</div>
-              <div class="focus-sub">${wonJobs.length} completed &middot; ${activeJobs.length} still moving</div>
-              <div class="summary-meter"><div class="summary-meter-fill" style="width:${closeRate}%;background:linear-gradient(90deg,#A78BFA,#60C4FF)"></div></div>
-            </div>
-            <div class="focus-card">
-              <div class="focus-kicker"><i class="ti ti-bolt" aria-hidden="true"></i>Next Best Win</div>
-              <div class="focus-main">${nextWin?escapeHtml(nextWin.name):'No open jobs'}</div>
-              <div class="focus-sub">${nextWin?`${moneyText(nextWin.balance||moneyValue(nextWin.potVal))} ${nextWin.balance?'left to collect':'potential value'}`:'Add a lead to start the board'}</div>
-            </div>
-          </div>
-          <div class="summary-visuals" style="margin-top:0;min-width:0;grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
-            <div class="summary-panel">
-                <div class="summary-panel-title">
-                  <span>${user?'My Pipeline Value':'Sales Value by Agent'}</span>
-                  <span style="font-size:10px;color:var(--muted)">Avg ${moneyText(avgDeal)}</span>
-                </div>
-                ${agentRows.length?agentRows.map(row=>`
-                  <div class="viz-row">
-                    <div class="viz-name">${escapeHtml(row.name)}</div>
-                    <div class="viz-track"><div class="viz-fill" style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
-                    <div class="viz-amt">${moneyText(row.value)}</div>
-                  </div>
-                `).join(''):`<div class="summary-empty">No sales activity in this view yet.</div>`}
-              </div>
-              <div class="summary-panel">
-                <div class="summary-panel-title">
-                  <span>Pipeline Stages</span>
-                  <span style="font-size:10px;color:var(--muted)">Lead → Contract Signed</span>
-                </div>
-                <div class="stage-list">
-                  ${stageRows.map(row=>`
-                    <div class="stage-chip">
-                      <div class="stage-chip-name"><span style="width:8px;height:8px;border-radius:50%;background:${row.color};flex-shrink:0"></span><span>${escapeHtml(row.name)}</span></div>
-                      <strong>${row.count}</strong>
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
-          </div>
-          ${followUpsPanelHtml}
-          ${upcomingPanelHtml}
-          <div class="summary-panel" style="margin-top:12px">
-            <div class="summary-panel-title">
-              <span><i class="ti ti-bell" style="font-size:12px;margin-right:4px"></i>Team Activity</span>
-              <span style="font-size:10px;color:var(--muted)">Live updates</span>
-            </div>
-            <div id="teamFeedList">${renderTeamFeedRows()}</div>
-          </div>
+      <div class="sm-kpis">
+        <div class="sm-kpi sm-kpi-jobs">
+          <div class="sm-kpi-label">Jobs in pipeline</div>
+          <div class="sm-kpi-value">${summary.jobsInPipeline}</div>
+          ${stagesHtml}
         </div>
-        <!-- RIGHT: open to-do list -->
-        <div style="flex:0 0 340px;display:flex;flex-direction:column">
-          ${todoPanelHtml}
+        ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)')}
+        ${kpi('Commission YTD', money0(summary.commissionYtd), 'Estimated', '#60C4FF')}
+        ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`)}
+        ${kpi('Pending commission', money0(summary.pendingCommission), 'On jobs not fully paid', '#A78BFA')}
+      </div>
+      <div class="sm-cols">
+        <div class="sm-col">
+          ${followUpsHtml}
+          ${agentsHtml}
+          ${upcomingHtml}
+          ${activityHtml}
+        </div>
+        <div class="sm-col sm-col-side">
+          ${todoHtml}
         </div>
       </div>
     </div>`;
+  wrap.querySelectorAll('[data-sm-fold]').forEach(d => d.addEventListener('toggle', () => {
+    window.__sumOpen = Object.assign({}, window.__sumOpen, { [d.dataset.smFold]: d.open });
+  }));
 
   // Wire the checkable to-do items (same behavior as the To-Do page).
   wrap.querySelectorAll('[data-sum-todo-check]').forEach(box => {
