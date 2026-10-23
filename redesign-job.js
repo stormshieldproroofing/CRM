@@ -784,3 +784,195 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+/* ── Edit Job / New Job form (new look): folded sections, labels on every field ──
+   Re-arranges the CRM's own form fields into sections, so saving, the address
+   suggestions, the claim-amount math and the drafts all keep working as before. */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let built = false;
+  const S = {};          // section id -> {wrap, head, sub, body}
+
+  const money = v => {
+    const n = parseFloat(String(v || '').replace(/[^0-9.\-]/g, ''));
+    return isFinite(n) && n ? '$' + Math.round(n).toLocaleString('en-US') : '';
+  };
+  const val = id => { const e = $(id); return e ? String(e.value || '').trim() : ''; };
+  const selText = id => { const e = $(id); if (!e || !e.value) return ''; const o = e.options[e.selectedIndex]; return o ? o.textContent.trim() : ''; };
+
+  function field(label, el, opts) {
+    opts = opts || {};
+    if (!el) return null;
+    const f = document.createElement('div');
+    f.className = 'rf-f' + (opts.cls ? ' ' + opts.cls : '');
+    const l = document.createElement('label');
+    l.textContent = label;
+    if (el.id) l.htmlFor = el.id;
+    f.appendChild(l);
+    if (opts.extra) l.appendChild(opts.extra);
+    f.appendChild(opts.box || el);
+    if (el.placeholder) el.placeholder = el.placeholder.replace(/\s*\(try[^)]*\)/i, '').replace(/\s*\(e\.g\.[^)]*\)/i, '');
+    return f;
+  }
+  function row(cls, items) {
+    const r = document.createElement('div');
+    r.className = 'rf-row ' + cls;
+    items.filter(Boolean).forEach(i => r.appendChild(i));
+    return r;
+  }
+  function section(id, icon, title, parent) {
+    const wrap = document.createElement('div');
+    wrap.className = 'rf-sec';
+    wrap.dataset.sec = id;
+    wrap.innerHTML = '<button type="button" class="rf-head"><span class="rf-ic"><i class="ti ' + icon + '"></i></span>' +
+      '<span class="rf-tt"><b></b><span class="rf-sub"></span></span><i class="ti ti-chevron-down rf-chev"></i></button><div class="rf-body"></div>';
+    wrap.querySelector('b').textContent = title;
+    wrap.querySelector('.rf-head').addEventListener('click', () => wrap.classList.toggle('open'));
+    parent.appendChild(wrap);
+    S[id] = { wrap, sub: wrap.querySelector('.rf-sub'), body: wrap.querySelector('.rf-body') };
+    return S[id].body;
+  }
+  const dollarBox = id => { const i = $(id); if (!i) return null; i.classList.add('rf-inbox'); i.parentElement.classList.add('rf-box'); return i.parentElement; };
+
+  function build() {
+    const modal = document.querySelector('#addJobModal .modal');
+    if (!modal || built) return;
+    const head = modal.children[0], body = modal.children[1], foot = modal.children[2];
+    if (!head || !body || !$('f-firstname')) return;
+    built = true;
+    modal.classList.add('rf-modal'); head.classList.add('rf-top'); body.classList.add('rf-scroll'); if (foot) foot.classList.add('rf-foot');
+    const old = Array.from(body.children);
+    const host = document.createElement('div');
+    host.className = 'rf-secs';
+    body.appendChild(host);
+
+    // Customer
+    let b = section('cust', 'ti-user', 'Customer', host);
+    b.appendChild(row('g1', [field('First name', $('f-firstname'))]));
+    b.appendChild(row('g1', [field('Last name', $('f-lastname'))]));
+    b.appendChild(row('g-ext', [field('Phone', $('f-phone')), field('Ext.', $('f-ext'))]));
+    b.appendChild(row('g1', [field('Email', $('f-email'))]));
+    b.appendChild(row('g1', [field('Lead source', $('f-source'))]));
+
+    // Property
+    b = section('prop', 'ti-map-pin', 'Property', host);
+    const gps = $('aj-gpsBtn');
+    if (gps) gps.classList.add('rf-gps');
+    const streetWrap = $('f-street') && $('f-street').closest('.addr-autocomplete-wrap');
+    b.appendChild(row('g1', [field('Street', $('f-street'), { box: streetWrap || $('f-street'), extra: gps })]));
+    b.appendChild(row('g1', [field('Apt / suite', $('f-apt'))]));
+    b.appendChild(row('g-csz', [field('City', $('f-city')), field('State', $('f-state')), field('ZIP', $('f-zip'))]));
+
+    // Team & stage
+    b = section('team', 'ti-users', 'Team & stage', host);
+    const assign = $('aj-dropTrigger') && $('aj-dropTrigger').parentElement;
+    b.appendChild(row('g1', [field('Assigned to', $('aj-dropTrigger'), { box: assign })]));
+    b.appendChild(row('g1', [field('Stage', $('f-stage'))]));
+    b.appendChild(row('g-pm', [field('Project manager', $('f-pm')), field('PM fee', $('f-pmFee'))]));
+
+    // Insurance claim (with the on/off switch)
+    b = section('ins', 'ti-shield-check', 'Insurance claim', host);
+    const tog = $('aj-insToggle');
+    const togRow = document.createElement('div');
+    togRow.className = 'rf-toggle';
+    togRow.innerHTML = '<span>This is an insurance claim</span>';
+    if (tog) togRow.appendChild(tog);
+    b.appendChild(togRow);
+    const insBox = document.createElement('div');
+    insBox.className = 'rf-insonly';
+    insBox.appendChild(row('g2', [field('Carrier', $('f-carrier')), field('Claim type', $('f-claimtype'))]));
+    insBox.appendChild(row('g2', [field('Claim #', $('f-claimnum')), field('Policy #', $('f-policynum'))]));
+    const dol = $('f-dol');
+    insBox.appendChild(row('g2', [field('Date of loss', dol, { box: dollarBox('f-dol') }), field('Claim status', $('f-claimstatus'))]));
+    b.appendChild(insBox);
+
+    // Claim amounts
+    b = section('amt', 'ti-currency-dollar', 'Claim amounts', host);
+    b.appendChild(row('g2', [field('RCV (claim amount)', $('f-rcv'), { box: dollarBox('f-rcv') }), field('Deductible', $('f-deductible'), { box: dollarBox('f-deductible') })]));
+    b.appendChild(row('g2', [field('Recoverable dep.', $('f-recovdep'), { box: dollarBox('f-recovdep') }), field('Non-recov. dep.', $('f-nonrecovdep'), { box: dollarBox('f-nonrecovdep') })]));
+    const acv = field('ACV (RCV − depreciation)', $('f-acv'), { box: dollarBox('f-acv'), cls: 'rf-result', extra: $('f-acv-status') });
+    const net = field('Net claim (ACV − deductible)', $('f-netclaim'), { box: dollarBox('f-netclaim'), cls: 'rf-result', extra: $('f-netclaim-status') });
+    b.appendChild(row('g1', [acv]));
+    b.appendChild(row('g1', [net]));
+    const tip = document.createElement('div');
+    tip.className = 'rf-hint';
+    tip.textContent = 'Fill in any 4 and the 5th works itself out. ACV syncs with the Loss Statement. Tip: you can type math, like 800+1200.';
+    b.appendChild(tip);
+
+    // Adjuster
+    b = section('adj', 'ti-user-search', 'Adjuster', host);
+    b.appendChild(row('g2', [field('Adjuster name', $('f-adjname')), field('Adjuster phone', $('f-adjphone'))]));
+    b.appendChild(row('g1', [field('Insurance email (for depreciation release)', $('f-insemail'))]));
+    b.appendChild(row('g1', [field('Adjuster inspection date', $('f-inspdate'))]));
+
+    // Notes
+    b = section('notes', 'ti-notes', 'Claim notes', host);
+    b.appendChild(row('g1', [field('Notes', $('f-claimnotes'))]));
+
+    // The old containers are now empty shells; keep search + draft banner.
+    old.forEach(el => { if (el.id !== 'aj-searchWrap' && el.id !== 'aj-draftBanner' && !host.contains(el)) el.classList.add('rf-emptied'); });
+
+    body.addEventListener('input', summarize);
+    body.addEventListener('change', summarize);
+    const insFields = $('aj-insFields');
+    if (insFields) new MutationObserver(syncIns).observe(insFields, { attributes: true, attributeFilter: ['style'] });
+    const dd = $('aj-dropDisplay');
+    if (dd) new MutationObserver(summarize).observe(dd, { childList: true, subtree: true, characterData: true });
+  }
+
+  function insOn() { const f = $('aj-insFields'); return !!(f && f.style.display !== 'none'); }
+  function syncIns() {
+    const on = insOn();
+    ['amt', 'adj', 'notes'].forEach(k => { if (S[k]) S[k].wrap.classList.toggle('rf-off', !on); });
+    const box = document.querySelector('#addJobModal .rf-insonly');
+    if (box) box.style.display = on ? '' : 'none';
+    summarize();
+  }
+  function summarize() {
+    if (!built) return;
+    const set = (k, t) => { if (S[k]) S[k].sub.textContent = t; };
+    const name = [val('f-firstname'), val('f-lastname')].filter(Boolean).join(' ');
+    set('cust', [name, val('f-phone')].filter(Boolean).join(' · ') || 'Name, phone, email');
+    set('prop', [val('f-street'), val('f-city')].filter(Boolean).join(', ') || 'No address yet');
+    const who = ($('aj-dropDisplay') ? $('aj-dropDisplay').textContent.trim() : '').replace(/^[—–\-\s]+/, '').replace(/^Select team member…$/, 'Unassigned');
+    const stg = selText('f-stage'); const stage = stg === stg.toUpperCase() ? stg.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : stg;
+    set('team', [stage, who || 'Unassigned', val('f-pm') ? selText('f-pm') : 'No PM'].filter(Boolean).join(' · '));
+    set('ins', insOn() ? ([val('f-carrier'), val('f-claimnum') ? '#' + val('f-claimnum') : '', selText('f-claimstatus')].filter(Boolean).join(' · ') || 'Insurance claim — details not added') : 'Not an insurance claim');
+    set('amt', [money(val('f-rcv')) ? 'RCV ' + money(val('f-rcv')) : '', money(val('f-netclaim')) ? 'Net claim ' + money(val('f-netclaim')) : ''].filter(Boolean).join(' · ') || 'No amounts yet');
+    set('adj', val('f-adjname') || 'Not added yet');
+    const n = val('f-claimnotes');
+    set('notes', n ? (n.length > 48 ? n.slice(0, 48) + '…' : n) : 'No notes');
+    const top = document.querySelector('#addJobModal .rf-top');
+    if (top) top.dataset.who = name;
+  }
+  function onOpen() {
+    build();
+    if (!built) return;
+    const editing = /edit/i.test(($('aj-modalTitle') || {}).textContent || '');
+    const openNow = editing ? [] : ['cust', 'prop', 'team'];
+    Object.keys(S).forEach(k => S[k].wrap.classList.toggle('open', openNow.includes(k)));
+    syncIns();
+    setTimeout(() => {   // after the CRM finishes filling the fields
+      summarize();
+      const sub = $('aj-modalSubtitle'), nm = [val('f-firstname'), val('f-lastname')].filter(Boolean).join(' ');
+      if (editing && sub && nm) sub.textContent = nm;
+    }, 60);
+    const sc = document.querySelector('#addJobModal .rf-scroll'); if (sc) sc.scrollTop = 0;
+  }
+  // If Save stops on a missing name, open Customer so the reason is visible.
+  document.addEventListener('click', e => {
+    if (!e.target.closest || !e.target.closest('#saveJob') || !built) return;
+    if (!val('f-firstname') && !val('f-lastname') && S.cust) S.cust.wrap.classList.add('open');
+  }, true);
+
+  function init() {
+    const m = $('addJobModal');
+    if (!m) return;
+    let was = m.classList.contains('open');
+    new MutationObserver(() => { const now = m.classList.contains('open'); if (now && !was) onOpen(); was = now; }).observe(m, { attributes: true, attributeFilter: ['class'] });
+    if (m.classList.contains('open')) onOpen();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
