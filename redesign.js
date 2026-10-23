@@ -213,7 +213,7 @@
 
   // Bottom tab bar (phone): the four most-used pages plus More (opens the menu).
   const TABS = [['boards', 'Boards', 'ti-layout-kanban'], ['calendar', 'Calendar', 'ti-calendar'],
-                ['todo', 'To-Do', 'ti-checkbox'], ['map', 'Map', 'ti-map']];
+                ['summary', 'Summary', 'ti-chart-bar'], ['map', 'Map', 'ti-map']];
   let tabBar = null;
   function activePage() {
     const a = document.querySelector('.topnav .nav-link.active');
