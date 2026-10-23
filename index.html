@@ -5279,15 +5279,25 @@ function renderBoardSalesSummary(){
   });
   const maxStageValue=Math.max(1,...stageRows.map(r=>r.value));
   const stageTotal=Math.max(1,stageRows.reduce((s,r)=>s+r.count,0));
+  // Contract signed or later (Contract Signed → Invoiced → Job Completed).
+  const isSigned = j => {
+    const cols = columnsForPipeline(j.pipeline || 'insurance');
+    const ci = cols.findIndex(c => c.id === 'contract' || /contract signed/i.test(c.name||''));
+    const ji = cols.findIndex(c => c.id === j.col);
+    if(ci < 0 || ji < ci) return false;
+    const done = cols.findIndex(c => c.id === 'completed');
+    return done >= ci ? ji <= done : cols[ji]?.closed !== true;
+  };
   const agentRows=(user?[user]:USERS).map(agent=>{
     const agentJobs=summaryJobs.filter(j=>j.user===agent.id);
     return {
       name:agent.name,
       color:agent.color,
       value:agentJobs.reduce((s,j)=>s+moneyValue(j.potVal),0),
-      count:agentJobs.length
+      count:agentJobs.filter(isSigned).length,
+      any:agentJobs.length
     };
-  }).filter(r=>r.count||user).sort((a,b)=>b.value-a.value);
+  }).filter(r=>r.any||user).sort((a,b)=>b.value-a.value);
   const maxAgentValue=Math.max(1,...agentRows.map(r=>r.value));
   const topOpportunities=(openReceivables.length?openReceivables:activeJobs.slice().sort((a,b)=>moneyValue(b.potVal)-moneyValue(a.potVal))).slice(0,3);
   const title=user?`${escapeHtml(user.name)} Sales Summary`:(userId==='__unassigned'?'Unassigned Sales Summary':`${escapeHtml(currentPipeline().name)} Team Summary`);
@@ -5421,14 +5431,14 @@ function renderBoardSalesSummary(){
   const agentsHtml = `
     <section class="sm-panel">
       <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>${user?'My sales':'Sales by agent'}</div>
-      <div class="sm-panel-sub">Jobs and total revenue · ${escapeHtml(currentPipeline().name)}</div></div></div>
+      <div class="sm-panel-sub">Signed contracts and total revenue · ${escapeHtml(currentPipeline().name)}</div></div></div>
       ${agentRows.length ? `<div class="sm-ag-list">${agentRows.map((row,i) => `
         <div class="sm-ag-item">
           <div class="sm-ag-row">
             <span class="sm-ag-rank">${i+1}</span>
             <span class="sm-dot" style="background:${row.color}"></span>
             <span class="sm-ag-name">${escapeHtml(row.name)}</span>
-            <span class="sm-ag-jobs">${row.count} job${row.count===1?'':'s'}</span>
+            <span class="sm-ag-jobs">${row.count} signed</span>
             <b class="sm-ag-val">${d0(row.value)}</b>
           </div>
           <div class="sm-track sm-ag-bar"><div style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
