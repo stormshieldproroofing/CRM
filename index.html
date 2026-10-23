@@ -1588,6 +1588,27 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .sm-todo-item{font-size:14px;padding:10px 6px 10px 12px}
   .sm-todo-item input{width:20px;height:20px}
 }
+
+/* summary: sales leaderboard */
+.sm-lb-head{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:12px;border-radius:12px;background:linear-gradient(90deg,rgba(245,197,66,.16),rgba(245,197,66,.04));border:1px solid rgba(245,197,66,.3);font-size:14px;color:#F3E3B0;line-height:1.35}
+.sm-lb-head .ti{font-size:20px;color:#F5C542;flex-shrink:0}
+.sm-lb-head b{color:#fff}
+.sm-lb-list{display:flex;flex-direction:column;gap:6px}
+.sm-lb-row{display:flex;align-items:center;gap:12px;padding:10px;border-radius:12px;border:1px solid transparent}
+.sm-lb-row.first{background:rgba(245,197,66,.06);border-color:rgba(245,197,66,.22)}
+.sm-lb-row.me{background:rgba(77,157,224,.10);border-color:rgba(77,157,224,.45)}
+.sm-lb-rank{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:rgba(255,255,255,.07);color:#C4CBD8}
+.sm-lb-rank .ti{font-size:17px}
+.sm-lb-av{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff}
+.sm-lb-main{flex:1;min-width:0}
+.sm-lb-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.sm-lb-name{font-size:15px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-lb-name em{font-style:normal;font-size:11px;font-weight:700;color:#fff;background:var(--brand-light);padding:2px 7px;border-radius:999px;margin-left:4px;vertical-align:2px}
+.sm-lb-top b{font-size:16px;color:#fff;white-space:nowrap}
+.sm-lb-row.first .sm-lb-top b{color:#F5C542}
+.sm-lb-sub span{white-space:nowrap}
+.sm-lb-sub{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;font-size:12px;color:var(--muted);margin-top:6px}
+.sm-lb-sub .lead{color:#6EE7B7}
 </style>
 
 <!-- TEAM MEMBER MODAL (Add / Edit) -->
@@ -5405,13 +5426,53 @@ function renderBoardSalesSummary(){
       </div>`}
     </section>`;
 
-  const agentsHtml = `
+  // ── Sales leaderboard — built to motivate: rank, medal, and the gap to the next spot.
+  // Uses every job in this pipeline (not just the filtered agent) so ranks are real.
+  const lbJobs = jobs.filter(j => (j.pipeline||'insurance') === currentPipelineId);
+  const lbRows = (USERS||[]).map(agent => {
+    const aj = lbJobs.filter(j => j.user === agent.id);
+    return { id:agent.id, name:agent.name, color:agent.color,
+      value: aj.reduce((t,j)=>t+moneyValue(j.potVal),0),
+      count: aj.length,
+      won: aj.filter(j => j.col === 'completed').length };
+  }).filter(r => r.count).sort((x,y) => y.value - x.value);
+  const lbMax = Math.max(1, ...lbRows.map(r => r.value));
+  const d0 = v => '$' + Math.round(Number(v)||0).toLocaleString('en-US');
+  const initials = n => String(n||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const MEDAL = ['#F5C542','#C9D1DC','#D9895B'];
+  const meIdx = user ? lbRows.findIndex(r => r.id === user.id) : -1;
+  let lbHeadline = '';
+  if(lbRows.length >= 2){
+    if(meIdx === 0) lbHeadline = `<b>You're #1</b> — ${d0(lbRows[0].value - lbRows[1].value)} ahead of ${escapeHtml(lbRows[1].name.split(' ')[0])}. Keep it up.`;
+    else if(meIdx > 0) lbHeadline = `<b>You're #${meIdx+1}</b> — ${d0(lbRows[meIdx-1].value - lbRows[meIdx].value)} to pass ${escapeHtml(lbRows[meIdx-1].name.split(' ')[0])}.`;
+    else lbHeadline = `<b>${escapeHtml(lbRows[0].name)}</b> leads with ${d0(lbRows[0].value)} — ${d0(lbRows[0].value - lbRows[1].value)} ahead of #2.`;
+  }
+  const agentsHtml = (lbRows.length >= 2) ? `
+    <section class="sm-panel sm-lb">
+      <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-trophy"></i>Sales leaderboard</div>
+      <div class="sm-panel-sub">Sales value · ${escapeHtml(currentPipeline().name)} · average job ${d0(avgDeal)}</div></div></div>
+      ${lbHeadline ? `<div class="sm-lb-head"><i class="ti ti-flame"></i><span>${lbHeadline}</span></div>` : ''}
+      <div class="sm-lb-list">${lbRows.map((r,i) => {
+        const me = user && r.id === user.id;
+        const medal = MEDAL[i];
+        const gap = i > 0 ? `${d0(lbRows[i-1].value - r.value)} to pass ${escapeHtml(lbRows[i-1].name.split(' ')[0])}` : (lbRows[1] ? `${d0(r.value - lbRows[1].value)} ahead` : '');
+        return `<div class="sm-lb-row${me?' me':''}${i===0?' first':''}">
+          <div class="sm-lb-rank" style="${medal?`background:${medal};color:#1a1406`:''}">${i===0?'<i class="ti ti-crown"></i>':i+1}</div>
+          <div class="sm-lb-av" style="background:${r.color||'#4D9DE0'}">${initials(r.name)}</div>
+          <div class="sm-lb-main">
+            <div class="sm-lb-top"><span class="sm-lb-name">${escapeHtml(r.name)}${me?' <em>You</em>':''}</span><b>${d0(r.value)}</b></div>
+            <div class="sm-track"><div style="width:${Math.max(3,Math.round(r.value/lbMax*100))}%;background:${r.color||'#4D9DE0'}"></div></div>
+            <div class="sm-lb-sub"><span>${r.count} job${r.count===1?'':'s'}${r.won?` · ${r.won} completed`:''}</span>${gap?`<span class="${i===0?'lead':''}">${gap}</span>`:''}</div>
+          </div>
+        </div>`;
+      }).join('')}</div>
+    </section>` : `
     <section class="sm-panel">
       <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>${user?'My pipeline value':'Sales value by agent'}</div>
-      <div class="sm-panel-sub">Average job ${'$'+Math.round(avgDeal).toLocaleString('en-US')}</div></div></div>
+      <div class="sm-panel-sub">Average job ${d0(avgDeal)}</div></div></div>
       ${agentRows.length ? `<div class="sm-bars">${agentRows.map(row => `
         <div class="sm-bar">
-          <div class="sm-bar-top"><span class="sm-bar-name"><span class="sm-dot" style="background:${row.color}"></span>${escapeHtml(row.name)}<span class="sm-bar-n">${row.count} job${row.count===1?'':'s'}</span></span><b>${'$'+Math.round(row.value).toLocaleString('en-US')}</b></div>
+          <div class="sm-bar-top"><span class="sm-bar-name"><span class="sm-dot" style="background:${row.color}"></span>${escapeHtml(row.name)}<span class="sm-bar-n">${row.count} job${row.count===1?'':'s'}</span></span><b>${d0(row.value)}</b></div>
           <div class="sm-track"><div style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
         </div>`).join('')}</div>` : `<div class="sm-empty">No sales activity in this view yet.</div>`}
     </section>`;
@@ -5470,9 +5531,9 @@ function renderBoardSalesSummary(){
       </div>
       <div class="sm-cols">
         <div class="sm-col">
-          ${followUpsHtml}
           ${agentsHtml}
           ${upcomingHtml}
+          ${followUpsHtml}
           ${activityHtml}
         </div>
         <div class="sm-col sm-col-side">
