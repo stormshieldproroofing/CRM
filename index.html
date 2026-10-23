@@ -1588,6 +1588,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
   .sm-todo-item{font-size:14px;padding:10px 6px 10px 12px}
   .sm-todo-item input{width:20px;height:20px}
 }
+
+/* summary: sales by agent */
+.sm-ag-list{display:flex;flex-direction:column}
+.sm-ag-item{padding:10px 0 12px;border-top:1px solid rgba(255,255,255,.05)}
+.sm-ag-item:first-child{border-top:none;padding-top:2px}
+.sm-ag-row{display:flex;align-items:center;gap:10px;min-height:28px}
+.sm-ag-bar{margin:8px 0 0 32px}
+.sm-ag-rank{width:22px;font-size:13px;font-weight:700;color:var(--muted);text-align:center;flex-shrink:0}
+.sm-ag-name{flex:1;min-width:0;font-size:15px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-ag-jobs{font-size:13px;color:var(--muted);white-space:nowrap}
+.sm-ag-val{font-size:15px;color:#fff;white-space:nowrap;min-width:84px;text-align:right}
 </style>
 
 <!-- TEAM MEMBER MODAL (Add / Edit) -->
@@ -5405,14 +5416,22 @@ function renderBoardSalesSummary(){
       </div>`}
     </section>`;
 
+  // ── Sales by agent: just job count and total revenue, highest first.
+  const d0 = v => '$' + Math.round(Number(v)||0).toLocaleString('en-US');
   const agentsHtml = `
     <section class="sm-panel">
-      <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>${user?'My pipeline value':'Sales value by agent'}</div>
-      <div class="sm-panel-sub">Average job ${'$'+Math.round(avgDeal).toLocaleString('en-US')}</div></div></div>
-      ${agentRows.length ? `<div class="sm-bars">${agentRows.map(row => `
-        <div class="sm-bar">
-          <div class="sm-bar-top"><span class="sm-bar-name"><span class="sm-dot" style="background:${row.color}"></span>${escapeHtml(row.name)}<span class="sm-bar-n">${row.count} job${row.count===1?'':'s'}</span></span><b>${'$'+Math.round(row.value).toLocaleString('en-US')}</b></div>
-          <div class="sm-track"><div style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
+      <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>${user?'My sales':'Sales by agent'}</div>
+      <div class="sm-panel-sub">Jobs and total revenue · ${escapeHtml(currentPipeline().name)}</div></div></div>
+      ${agentRows.length ? `<div class="sm-ag-list">${agentRows.map((row,i) => `
+        <div class="sm-ag-item">
+          <div class="sm-ag-row">
+            <span class="sm-ag-rank">${i+1}</span>
+            <span class="sm-dot" style="background:${row.color}"></span>
+            <span class="sm-ag-name">${escapeHtml(row.name)}</span>
+            <span class="sm-ag-jobs">${row.count} job${row.count===1?'':'s'}</span>
+            <b class="sm-ag-val">${d0(row.value)}</b>
+          </div>
+          <div class="sm-track sm-ag-bar"><div style="width:${Math.max(3,Math.round((row.value/maxAgentValue)*100))}%;background:${row.color}"></div></div>
         </div>`).join('')}</div>` : `<div class="sm-empty">No sales activity in this view yet.</div>`}
     </section>`;
 
@@ -5470,9 +5489,9 @@ function renderBoardSalesSummary(){
       </div>
       <div class="sm-cols">
         <div class="sm-col">
-          ${followUpsHtml}
           ${agentsHtml}
           ${upcomingHtml}
+          ${followUpsHtml}
           ${activityHtml}
         </div>
         <div class="sm-col sm-col-side">
