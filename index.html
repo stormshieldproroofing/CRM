@@ -15149,13 +15149,13 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     @page { size: letter; margin: 0.4in 0.3in; }
     *{box-sizing:border-box}
     body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10.5pt}
-    .v-page{position:relative;height:9.6in;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
+    .v-page{position:relative;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
     .v-page-last{page-break-after:auto}
-    .v-panel{height:3.2in;padding:0.3in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-panel{min-height:2.9in;padding:0.3in 0.5in;position:relative;border-bottom:1px dashed #d2d2d2}
     .v-page .v-panel:last-child{border-bottom:none}
     .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
     .v-page .v-panel:last-child::after{content:none}
-    .v-panel-check{padding:0;display:flex;align-items:center;justify-content:center}
+    .v-panel-check{padding:0;min-height:3.15in;display:flex;align-items:center;justify-content:center}
     .v-copytag{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:${accent};display:inline-block;padding:3px 10px;border-radius:3px;margin-bottom:9px}
     .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:8px;margin-bottom:10px}
     .v-co{display:flex;align-items:center;gap:11px}
@@ -15189,9 +15189,10 @@ function printSubVoucher(j, sub, c, checkNo, extraLines){
     .v-check-amt{font-size:10pt;color:#888;margin-top:8px}
     .v-tape{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:#f4f4f4;border:1px solid #ccc;border-top:none;border-radius:0 0 5px 5px;font-size:7.5pt;color:#999;padding:2px 14px;letter-spacing:.05em}
     .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
-    @media print{.v-print-btn{display:none}}
+    .v-ver{position:fixed;bottom:8px;right:12px;font-size:10px;color:#aaa}
+    @media print{.v-print-btn,.v-ver{display:none}}
   </style></head><body>
-    <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button><div class="v-ver">Voucher layout 4</div>
     ${page1}
     ${page2}
     ${page3}
@@ -15540,13 +15541,13 @@ function paymentVoucherCss(accent){
     @page { size: letter; margin: 0.4in 0.3in; }
     *{box-sizing:border-box}
     body{font-family:'Helvetica Neue',Arial,sans-serif;color:#000;margin:0;padding:0;font-size:10pt}
-    .v-page{position:relative;height:9.6in;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
+    .v-page{position:relative;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid}
     .v-page-last{page-break-after:auto}
-    .v-panel{height:3.2in;padding:0.26in 0.5in;overflow:hidden;position:relative;border-bottom:1px dashed #d2d2d2}
+    .v-panel{min-height:2.9in;padding:0.26in 0.5in;position:relative;border-bottom:1px dashed #d2d2d2}
     .v-page .v-panel:last-child{border-bottom:none}
     .v-panel::after{content:'fold';position:absolute;right:0.18in;bottom:-5pt;font-size:6pt;letter-spacing:.1em;color:#cfcfcf;background:#fff;padding:0 4px;text-transform:uppercase}
     .v-page .v-panel:last-child::after{content:none}
-    .v-panel-check{padding:0;display:flex;align-items:center;justify-content:center}
+    .v-panel-check{padding:0;min-height:3.15in;display:flex;align-items:center;justify-content:center}
     .v-copytag{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:${accent};display:inline-block;padding:3px 10px;border-radius:3px;margin-bottom:9px}
     .v-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accent};padding-bottom:8px;margin-bottom:10px}
     .v-co{display:flex;align-items:center;gap:11px}
@@ -15583,7 +15584,8 @@ function paymentVoucherCss(accent){
     .v-checkcopy{padding:0.5in;height:auto;overflow:visible}
     .v-checkimg{display:block;max-width:100%;max-height:8.8in;margin:0 auto;border:1px solid #ccc}
     .v-print-btn{position:fixed;top:12px;right:12px;background:${accent};color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:20}
-    @media print{.v-print-btn{display:none}}
+    .v-ver{position:fixed;bottom:8px;right:12px;font-size:10px;color:#aaa}
+    @media print{.v-print-btn,.v-ver{display:none}}
 `;
 }
 
@@ -15691,7 +15693,7 @@ async function printCommVoucher(j, user, pay, isDraft){
   win.document.open();
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Commission Statement - ${escapeHtml(user.name||'')}${addr?' - '+escapeHtml(addr.split(',')[0]):''}</title>
   <style>${paymentVoucherCss(accent)}  </style></head><body>
-    <button class="v-print-btn" onclick="window.print()">🖨 Print</button>
+    <button class="v-print-btn" onclick="window.print()">🖨 Print</button><div class="v-ver">Voucher layout 4</div>
     ${page1}${page2}${page3}${page4}
   </body></html>`);
   win.document.close();
