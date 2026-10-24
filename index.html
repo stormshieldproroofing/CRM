@@ -1611,6 +1611,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .sm-ag-row .sm-dot{width:7px;height:7px}
 .sm-ag-name{flex:1;min-width:0;font-size:14px;font-weight:500;color:#E8ECF3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sm-ag-jobs{font-size:12px;color:var(--muted);white-space:nowrap}
+.sm-ag-you{font-style:normal;font-size:10.5px;font-weight:700;color:#fff;background:var(--brand-light);border-radius:999px;padding:1px 7px;margin-left:6px;vertical-align:1px}
+.sm-ag-viewing{background:rgba(255,255,255,.14);color:#E8ECF3}
 .sm-ag-val{font-size:14px;font-weight:700;color:#fff;white-space:nowrap;min-width:72px;text-align:right}
 .sm-ag-bar{height:6px;margin:5px 0 0 24px}
 
@@ -5356,16 +5358,48 @@ function renderBoardSalesSummary(){
     const done = cols.findIndex(c => c.id === 'completed');
     return done >= ci ? ji <= done : cols[ji]?.closed !== true;
   };
-  const agentRows=(user?[user]:USERS).map(agent=>{
-    const agentJobs=summaryJobs.filter(j=>j.user===agent.id);
+  // Sales by agent always shows every agent, so everyone can see where they
+  // rank — even in one agent's view. The viewed agent is marked "You".
+  const pipelineJobs=jobs.filter(j=>(j.pipeline||'insurance')===currentPipelineId);
+  const agentRows=(USERS||[]).map(agent=>{
+    const agentJobs=pipelineJobs.filter(j=>j.user===agent.id);
     return {
+      id:agent.id,
       name:agent.name,
       color:agent.color,
       value:agentJobs.reduce((s,j)=>s+moneyValue(j.potVal),0),
       count:agentJobs.filter(isSigned).length,
-      any:agentJobs.length
+      any:agentJobs.length,
+      me:!!(window.currentMember && agent.id===window.currentMember.id),
+      viewing:!!(user && agent.id===user.id)
     };
-  }).filter(r=>r.any||user).sort((a,b)=>b.value-a.value);
+  }).filter(r=>r.any||r.me||r.viewing).sort((a,b)=>b.value-a.value);
+  // Salesmen can only load their own jobs, so for them the totals come from the
+  // server (job counts and totals per agent only — no job details).
+  const teamView = (typeof canSeeJobDetails === 'function') && !canSeeJobDetails() && !!(window.sb && window.sb.rpc);
+  if(teamView){
+    const ts = window.__teamSales;
+    const fresh = ts && ts.pipeline === currentPipelineId && (Date.now() - ts.at) < 60000;
+    if(!fresh && !(ts && ts.loading)){
+      window.__teamSales = Object.assign({}, ts || {}, { loading:true });
+      window.sb.rpc('team_sales_by_agent', { p_pipeline: currentPipelineId }).then(({ data, error }) => {
+        window.__teamSales = { pipeline: currentPipelineId, at: Date.now(), rows: error ? null : (data || []), loading:false };
+        if(error) console.warn('team sales totals unavailable', error);
+        else if(document.getElementById('summaryPage')?.style.display !== 'none') renderBoardSalesSummary();
+      }).catch(() => { window.__teamSales = { pipeline: currentPipelineId, at: Date.now(), rows: null, loading:false }; });
+    }
+    const rows = (window.__teamSales && window.__teamSales.pipeline === currentPipelineId) ? window.__teamSales.rows : null;
+    if(rows && rows.length){
+      const meId = window.currentMember && window.currentMember.id;
+      agentRows.length = 0;
+      rows.forEach(r => {
+        const a = (USERS || []).find(u => u.id === r.agent_id) || (window.TEAM || []).find(u => u.id === r.agent_id);
+        if(!a) return;
+        agentRows.push({ id:a.id, name:a.name, color:a.color, value:Number(r.total_value)||0, count:r.signed_count||0, any:r.job_count||0, me: a.id === meId, viewing: !!(user && a.id === user.id) });
+      });
+      agentRows.sort((x,y) => y.value - x.value);
+    }
+  }
   const maxAgentValue=Math.max(1,...agentRows.map(r=>r.value));
   const topOpportunities=(openReceivables.length?openReceivables:activeJobs.slice().sort((a,b)=>moneyValue(b.potVal)-moneyValue(a.potVal))).slice(0,3);
   const title=user?`${escapeHtml(user.name)} Sales Summary`:(userId==='__unassigned'?'Unassigned Sales Summary':`${escapeHtml(currentPipeline().name)} Team Summary`);
@@ -5498,14 +5532,14 @@ function renderBoardSalesSummary(){
   const d0 = v => '$' + Math.round(Number(v)||0).toLocaleString('en-US');
   const agentsHtml = `
     <section class="sm-panel">
-      <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>${user?'My sales':'Sales by agent'}</div>
+      <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>Sales by agent</div>
       <div class="sm-panel-sub">Signed contracts and total revenue · ${escapeHtml(currentPipeline().name)}</div></div></div>
       ${agentRows.length ? `<div class="sm-ag-list">${agentRows.map((row,i) => `
         <div class="sm-ag-item">
           <div class="sm-ag-row">
             <span class="sm-ag-rank">${i+1}</span>
             <span class="sm-dot" style="background:${row.color}"></span>
-            <span class="sm-ag-name">${escapeHtml(row.name)}</span>
+            <span class="sm-ag-name">${escapeHtml(row.name)}${row.me?' <em class="sm-ag-you">You</em>':(row.viewing?' <em class="sm-ag-you sm-ag-viewing">Viewing</em>':'')}</span>
             <span class="sm-ag-jobs">${row.count} signed</span>
             <b class="sm-ag-val">${d0(row.value)}</b>
           </div>
