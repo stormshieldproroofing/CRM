@@ -296,6 +296,14 @@ html.ui-new .rd-stagebar,html.ui-new .rd-tabbar{display:none}
   html.ui-new .rd-sb-iname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* the stage name lives in the header above — no second title on the column */
   html.ui-new #board .col-header{display:none}
+  /* Each stage scrolls up and down on its own, so a long Leads list never
+     leaves the next stage blank and every stage keeps its own place.
+     --rd-board-h is the room left under the stage header (set in redesign.js). */
+  html.ui-new #boardsPage .board-wrap{height:var(--rd-board-h,auto);box-sizing:border-box;padding-top:4px;padding-bottom:10px;overflow-y:hidden}
+  html.ui-new #boardsPage #board{height:100%;align-items:flex-start}
+  /* the board already stops above the tab bar, so the page itself doesn't need to scroll */
+  html.ui-new body:has(#boardsPage:not([style*="none"]) .rd-stagebar){padding-bottom:0}
+  html.ui-new #boardsPage #board > .col{max-height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
 }
 
 /* Phone: fit the whole toolbar on one row — Add Job becomes a blue + button */

@@ -106,6 +106,7 @@
   // by CSS outside phone widths.
   let stageBar = null;
   function boardWrap() { return document.querySelector('#boardsPage .board-wrap'); }
+  function board0() { return document.getElementById('board'); }
   function boardCols() { return Array.from(document.querySelectorAll('#board > .col')); }
   function colLeft(col, wrap) {
     return col.getBoundingClientRect().left - wrap.getBoundingClientRect().left + wrap.scrollLeft;
@@ -232,34 +233,21 @@
       ticking = true;
       requestAnimationFrame(() => { ticking = false; updateStageBar(); });
     }, { passive: true });
-    // The page scrolls up and down, the stages scroll sideways. Scrolling far
-    // down a long stage and then swiping to a short one left a blank screen,
-    // so each stage remembers how far down it was: a stage you haven't
-    // scrolled opens at the top, and coming back puts you where you left off.
-    const stageScroll = {};
-    let shownStage = currentStageIndex(), settleTimer = null;
-    const pageScroller = () => document.scrollingElement || document.documentElement;
-    const stageKey = i => { const c = boardCols()[i]; return c ? (colInfo(c).name || String(i)) : String(i); };
-    window.addEventListener('scroll', () => {
-      if (stageBar && stageBar.offsetParent !== null && settleTimer === null) stageScroll[stageKey(shownStage)] = pageScroller().scrollTop;
-    }, { passive: true });
-    wrap.addEventListener('scroll', () => {
-      if (!stageBar || stageBar.offsetParent === null) return;   // phone only
-      if (settleTimer === null) stageScroll[stageKey(shownStage)] = pageScroller().scrollTop;
-      clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => {
-        settleTimer = null;
-        const i = currentStageIndex();
-        if (i === shownStage) return;
-        shownStage = i;
-        const col = boardCols()[i];
-        const se = pageScroller();
-        // never past the end of this stage's list
-        const colBottom = col ? col.getBoundingClientRect().bottom + se.scrollTop - window.innerHeight + 120 : 0;
-        const want = Math.max(0, Math.min(stageScroll[stageKey(i)] || 0, colBottom));
-        if (Math.abs(se.scrollTop - want) > 4) window.scrollTo({ top: want, behavior: 'auto' });
-      }, 120);
-    }, { passive: true });
+    // Phone: each stage scrolls on its own (see redesign.css). The board
+    // takes the height left under the stage header, above the tab bar.
+    const sizeBoard = () => {
+      if (!stageBar || stageBar.offsetParent === null) { document.documentElement.style.removeProperty('--rd-board-h'); return; }
+      const top = wrap.getBoundingClientRect().top + (document.scrollingElement || document.documentElement).scrollTop;
+      const tab = document.querySelector('.rd-tabbar');
+      const tabH = tab && getComputedStyle(tab).display !== 'none' ? (window.innerHeight - tab.getBoundingClientRect().top) : 0;
+      document.documentElement.style.setProperty('--rd-board-h', Math.max(260, Math.round(window.innerHeight - top - tabH)) + 'px');
+    };
+    window.addEventListener('resize', sizeBoard);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', sizeBoard);
+    if (board0()) new MutationObserver(() => requestAnimationFrame(sizeBoard)).observe(board0(), { childList: true });
+    if (window.ResizeObserver) { const ro = new ResizeObserver(() => sizeBoard()); ro.observe(stageBar); const top = document.querySelector('#boardsPage .subbar'); if (top) ro.observe(top); }
+    document.addEventListener('click', () => setTimeout(sizeBoard, 50));   // after switching pages or pipelines
+    requestAnimationFrame(sizeBoard); setTimeout(sizeBoard, 600);
     window.addEventListener('resize', updateStageBar);
     const board = document.getElementById('board');
     if (board) new MutationObserver(() => requestAnimationFrame(updateStageBar)).observe(board, { childList: true });
