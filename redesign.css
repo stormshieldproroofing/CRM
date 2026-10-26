@@ -329,7 +329,9 @@ html.ui-new .rd-job .dp-name-row{align-items:flex-start;gap:12px}
 html.ui-new .rd-job .dp-title-group{flex-direction:column;align-items:flex-start;gap:8px}
 html.ui-new .rd-job .dp-title-group .dp-name{max-width:100%}
 html.ui-new .rd-sub{font-size:13px;color:var(--muted);margin-top:-6px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-html.ui-new .rd-days{font-size:12px;color:var(--muted);white-space:nowrap}
+/* Job header: pipeline + stage centered under the name, tinted in the stage's color */
+html.ui-new .dp-status-group.rd-status-center{display:flex;justify-content:flex-start;flex-wrap:wrap;width:100%;margin:10px 0 2px}
+html.ui-new .dp-header-area.rd-tint{background:linear-gradient(180deg,var(--rd-stage-soft),var(--rd-stage-none) 75%),var(--panel);border-top:3px solid var(--rd-stage)}
 html.ui-new .rd-more-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);color:var(--brand);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0}
 html.ui-new .rd-more-btn:hover{background:#1F2533}
 
@@ -431,7 +433,7 @@ html.ui-new .rd-actionbar #dpMove i{font-size:18px}
   html.ui-new .rd-job .rd-more-btn{order:1;width:44px;height:44px;border-radius:12px}
   html.ui-new .rd-job #dpEdit{display:none}
   html.ui-new .rd-job .dp-name{font-size:20px}
-  html.ui-new .rd-job .dp-status-group{margin-left:-44px;margin-top:4px}
+  html.ui-new .rd-job .dp-status-group.rd-status-center{margin:12px 0 2px;justify-content:center}
   html.ui-new .rd-job .dp-tabs{margin:12px 0}
   html.ui-new .rd-job .dp-body{padding:16px 14px 20px}
   html.ui-new .rd-tabmenu{right:12px}
