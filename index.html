@@ -19046,12 +19046,16 @@ function buildQuoteLayoutA(j, opts){
     </div>`;
     // Page-2 payment card
     const ins = Math.max(0, base - deductible);
+    // Cash: deposit = the option's Deposit field, or 50% when it is blank
+    const depOf = r => { const d = num(r.q.depositAmount); return d > 0 ? Math.min(d, r.price) : Math.round(r.price * 50) / 100; };
+    const allHalf = tiered.every(r => !(num(r.q.depositAmount) > 0) || Math.abs(num(r.q.depositAmount) - r.price / 2) < 1);
     payCard = isCash ? `
-      <table class="a-inv">
-        ${tiered.map(r => `<tr><td>${esc(r.tier)}</td><td class="r">${r.price > 0 ? fmt(r.price) : '—'}</td></tr>`).join('')}
-        ${deposit > 0 ? `<tr class="sub"><td>Deposit due at signing</td><td class="r">${fmt(deposit)}</td></tr>` : ''}
-        <tr class="tot"><td>You pay</td><td class="r">price of your option</td></tr>
-      </table>` : `
+      <table class="a-pt">
+        <tr><th>Option</th><th>Total</th><th>At signing</th><th>On completion</th></tr>
+        ${tiered.map((r, k) => { const d = r.price > 0 ? depOf(r) : 0;
+          return `<tr${k === featured ? ' class="mid"' : ''}><td><span class="a-box"></span>${esc(r.tier)}</td><td>${r.price > 0 ? fmt0(r.price) : '—'}</td><td>${r.price > 0 ? fmt0(d) : '—'}</td><td>${r.price > 0 ? fmt0(r.price - d) : '—'}</td></tr>`; }).join('')}
+      </table>
+      <div class="a-pn">${allHalf ? '50% deposit' : 'Deposit'} at signing; balance due when the job is complete.</div>` : `
       <table class="a-inv">
         ${hasCarrier ? `<tr><td>Insurance pays (approved scope)</td><td class="r">${fmt(ins)}</td></tr>` : ''}
         <tr><td>Your deductible</td><td class="r">${fmt(deductible)}</td></tr>
@@ -19063,8 +19067,13 @@ function buildQuoteLayoutA(j, opts){
     // Single option payment card
     let rows = '';
     if(isCash){
-      if(showItemized) rows += workSections.filter(s => s.price > 0).map(s => `<tr><td>${esc(s.title || 'Section')}</td><td class="r">${fmt(s.price)}</td></tr>`).join('');
-      if(deposit > 0) rows += `<tr class="sub"><td>Deposit due at signing</td><td class="r">${fmt(deposit)}</td></tr>`;
+      const dep = deposit > 0 ? Math.min(deposit, contract) : Math.round(contract * 50) / 100;
+      const half = !(deposit > 0) || Math.abs(deposit - contract / 2) < 1;
+      if(showItemized) rows += workSections.filter(s => s.price > 0).map(s => `<tr><td>${esc(s.title && !/^scope of work$/i.test(s.title.trim()) ? s.title : 'Roof replacement — scope of work')}</td><td class="r">${fmt(s.price)}</td></tr>`).join('');
+      if(contract > 0){
+        rows += `<tr><td>Deposit due at signing${half ? ' (50%)' : ''}</td><td class="r">${fmt(dep)}</td></tr>`;
+        rows += `<tr><td>Balance due on completion</td><td class="r">${fmt(contract - dep)}</td></tr>`;
+      }
       rows += `<tr class="tot"><td>Total investment</td><td class="r">${fmt(contract)}</td></tr>`;
     } else {
       rows += `<tr><td>Total contract</td><td class="r">${fmt(contract)}</td></tr>`;
@@ -19087,7 +19096,7 @@ function buildQuoteLayoutA(j, opts){
         ${name ? `<div class="a-sys-h"><span class="a-sys-n">${esc(name)}</span>${q.shingleColor ? `<span class="a-sys-c">Color: ${esc(q.shingleColor)}</span>` : ''}</div>` : ''}
         ${fs.length ? `<div class="a-feat">${fs.map(f => `<div>${f.k ? `<div class="a-k">${esc(f.k)}</div>` : ''}${hi(f.v)}</div>`).join('')}</div>` : ''}
       </div>
-      <div class="a-card"><div class="a-h3">Your investment</div>${payCard}</div>
+      <div class="a-card"><div class="a-h3">${isCash ? 'Payment schedule' : 'Your investment'}</div>${payCard}</div>
     </div>`;
   }
 
@@ -19114,12 +19123,12 @@ function buildQuoteLayoutA(j, opts){
     ? `${header}${info}
       <div class="a-two">
         <div class="a-sec" style="margin:0"><div class="a-h2">Scope of work<small>included with every option</small></div>${scopeHtml}</div>
-        <div><div class="a-card"><div class="a-h3">Your investment</div>${payCard}</div>${warrantyCard}</div>
+        <div><div class="a-card"><div class="a-h3">${isCash ? 'Payment schedule' : 'Your investment'}</div>${payCard}</div>${warrantyCard}</div>
       </div>
       ${termsHtml ? `<div class="a-sec"><div class="a-h2">Terms &amp; conditions</div><div class="a-terms">${termsHtml}</div></div>` : ''}
       ${trust}${signatures}`
     : `${header}${info}
-      ${warrantyCard ? `<div class="a-two a-two-s"><div>${warrantyCard}</div><div class="a-card"><div class="a-h3">Amount accepted</div>${payCard}</div></div>` : ''}
+      ${warrantyCard ? `<div class="a-two a-two-s"><div>${warrantyCard}</div><div class="a-card"><div class="a-h3">${isCash ? 'Payment schedule' : 'Amount accepted'}</div>${payCard}</div></div>` : ''}
       ${termsHtml ? `<div class="a-sec"><div class="a-h2">Terms &amp; conditions</div><div class="a-terms">${termsHtml}</div></div>` : ''}
       ${trust}${signatures}`;
 
@@ -19216,6 +19225,14 @@ function buildQuoteLayoutA(j, opts){
   .a-inv td.r { text-align: right; font-weight: 600; white-space: nowrap; padding-left: 10px; }
   .a-inv tr.sub td { color: ${muted}; font-size: 8.2pt; }
   .a-inv tr.tot td { border-bottom: 0; border-top: 3px double ${gold}; padding-top: 8px; font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 11.5pt; }
+  .a-pt { width: 100%; border-collapse: collapse; font-size: 8.7pt; }
+  .a-pt th { font-size: 6.4pt; letter-spacing: .12em; text-transform: uppercase; color: ${goldDk}; text-align: right; font-weight: 700; padding: 0 0 4px 6px; border-bottom: 1px solid ${gold}; white-space: nowrap; }
+  .a-pt th:first-child, .a-pt td:first-child { text-align: left; padding-left: 4px; }
+  .a-pt td { padding: 6px 4px 6px 6px; border-bottom: 1px solid ${line}; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .a-pt td:first-child { font-weight: 700; }
+  .a-pt tr.mid td { background: ${cream}; }
+  .a-pt .a-box { width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; }
+  .a-pn { font-size: 7.8pt; color: ${muted}; margin-top: 7px; line-height: 1.4; }
   .a-wl { margin: 0; padding-left: 0; list-style: none; font-size: 8.8pt; }
   .a-wl li { position: relative; padding-left: 15px; margin-bottom: 4px; }
   .a-wl li::before { content: '✓'; position: absolute; left: 0; color: ${goldDk}; font-weight: 700; }
