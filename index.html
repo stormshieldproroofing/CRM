@@ -18271,23 +18271,27 @@ window.EST_THEMES = EST_THEMES;
 // literature (checked Oct 2026); wind / algae terms often need the maker's
 // starter + ridge products or a high-wind install, so the wording keeps
 // those conditions. Edit the Features box per quote if anything differs.
-// Every system lists the same five rows in the same order — Impact, Wind,
-// Algae, Design, Warranty — so Good / Better / Best compare line by line.
+// Every system lists the same six rows in the same order — Upgrade (what
+// this tier adds over the one below), Impact, Wind, Algae, Design, Warranty —
+// so Good / Better / Best compare line by line.
 const SHINGLE_CATALOG = [
   // TAMKO
   { key: 'tamko-heritage', brand: 'TAMKO', model: 'Heritage', tier: 'Good', features: [
+    'Upgrade: Base option — TAMKO\'s dependable laminated shingle',
     'Impact: Standard — not impact rated',
     'Wind: 110 mph (130 mph with high-wind install)',
     'Algae: 10-year algae cleaning warranty',
     'Design: Laminated wood-shake look, Shadowtone depth',
     'Warranty: Limited lifetime · 10-yr Full Start' ] },
   { key: 'tamko-titan-xt', brand: 'TAMKO', model: 'Titan XT', tier: 'Better', features: [
+    'Upgrade: AnchorLock nailing zone 5× larger than Heritage, plus Class 3 impact',
     'Impact: Class 3 (UL 2218)',
     'Wind: 160 mph WindGUARD (TAMKO starter + ridge)',
     'Algae: Algae-resistant granules',
-    'Design: AnchorLock nailing zone, 5× larger than Heritage',
+    'Design: Advanced sealants that grip even in cool weather',
     'Warranty: Limited lifetime' ] },
   { key: 'tamko-stormfighter-ir', brand: 'TAMKO', model: 'StormFighter IR', tier: 'Best', features: [
+    'Upgrade: Steps up from Class 3 to Class 4 impact over Titan XT',
     'Impact: Class 4 (UL 2218) — highest hail rating',
     'Wind: 160 mph (TAMKO starter, high-wind install)',
     'Algae: 10-year algae cleaning warranty',
@@ -18295,18 +18299,21 @@ const SHINGLE_CATALOG = [
     'Warranty: Limited lifetime' ] },
   // Owens Corning
   { key: 'oc-oakridge', brand: 'Owens Corning', model: 'Oakridge', tier: 'Good', features: [
+    'Upgrade: Base option — Owens Corning\'s everyday laminated shingle',
     'Impact: Standard — not impact rated',
     'Wind: 110 mph (130 mph with 6 nails + OC starter)',
     'Algae: StreakGuard 10-year algae resistance',
     'Design: TruDefinition color depth and shadowing',
     'Warranty: Limited lifetime · 10-yr TRU PROtection' ] },
   { key: 'oc-duration', brand: 'Owens Corning', model: 'Duration', tier: 'Better', features: [
+    'Upgrade: SureNail strip: 130 mph with 4 nails vs Oakridge\'s 110 mph',
     'Impact: Standard — not impact rated',
     'Wind: 130 mph with just 4 nails',
     'Algae: StreakGuard 10-year algae resistance',
     'Design: Patented SureNail reinforced nailing strip',
     'Warranty: Limited lifetime' ] },
   { key: 'oc-duration-flex', brand: 'Owens Corning', model: 'Duration FLEX', tier: 'Best', features: [
+    'Upgrade: Adds Class 4 impact and SBS flexibility over Duration',
     'Impact: Class 4 (UL 2218) — highest hail rating',
     'Wind: 130 mph · SureNail strip',
     'Algae: StreakGuard 10-year algae resistance',
@@ -18314,18 +18321,21 @@ const SHINGLE_CATALOG = [
     'Warranty: Limited lifetime' ] },
   // CertainTeed
   { key: 'ct-landmark', brand: 'CertainTeed', model: 'Landmark', tier: 'Good', features: [
+    'Upgrade: Base option — CertainTeed\'s best-selling laminated shingle',
     'Impact: Standard — not impact rated',
     'Wind: 110 mph (130 mph with CT starter + ridge)',
     'Algae: 10-year StreakFighter',
     'Design: Dual-layer laminated, wood or slate look',
     'Warranty: Lifetime transferable · 10-yr SureStart' ] },
   { key: 'ct-landmark-pro', brand: 'CertainTeed', model: 'Landmark PRO', tier: 'Better', features: [
+    'Upgrade: Heavier weight and Max Def colors over Landmark',
     'Impact: Standard — not impact rated',
     'Wind: 110 mph (upgrade with CT starter + hip & ridge)',
     'Algae: StreakFighter algae resistance',
     'Design: Heavier weight with Max Def color depth',
     'Warranty: Lifetime transferable · 10-yr SureStart' ] },
   { key: 'ct-landmark-climateflex', brand: 'CertainTeed', model: 'Landmark ClimateFlex', tier: 'Best', features: [
+    'Upgrade: Adds Class 4 impact and polymer flexibility over Landmark PRO',
     'Impact: Class 4 (UL 2218) — highest hail rating',
     'Wind: 110 mph (130 mph with CT starter + ridge)',
     'Algae: 25-year StreakFighter',
@@ -18333,18 +18343,21 @@ const SHINGLE_CATALOG = [
     'Warranty: Lifetime limited transferable' ] },
   // GAF
   { key: 'gaf-timberline-hdz', brand: 'GAF', model: 'Timberline HDZ', tier: 'Good', features: [
+    'Upgrade: Base option — GAF\'s standard Timberline shingle',
     'Impact: Standard — not impact rated',
     'Wind: WindProven — no max wind speed (GAF accessories)',
     'Algae: 25-year StainGuard Plus',
     'Design: LayerLock · widest StrikeZone nailing area',
     'Warranty: Lifetime limited' ] },
   { key: 'gaf-timberline-uhdz', brand: 'GAF', model: 'Timberline UHDZ', tier: 'Better', features: [
+    'Upgrade: Thicker than HDZ, adds Class 4 impact and 30-yr algae',
     'Impact: Class 4 (UL 2218) — highest hail rating',
     'Wind: WindProven — no max wind speed (GAF accessories)',
     'Algae: 30-year StainGuard Plus PRO',
     'Design: Thicker shingle, bolder look · LayerLock',
     'Warranty: Lifetime limited' ] },
   { key: 'gaf-timberline-as2', brand: 'GAF', model: 'Timberline AS II', tier: 'Best', features: [
+    'Upgrade: SBS rubberized asphalt over UHDZ for flexibility in hail and cold',
     'Impact: Class 4 (UL 2218) — highest hail rating',
     'Wind: WindProven — no max wind speed (GAF accessories)',
     'Algae: 25-year StainGuard Plus',
@@ -18352,24 +18365,28 @@ const SHINGLE_CATALOG = [
     'Warranty: Lifetime limited' ] },
   // Atlas
   { key: 'atlas-prolam', brand: 'Atlas', model: 'ProLAM', tier: 'Good', features: [
+    'Upgrade: Base option — Atlas\'s Class 3 laminated shingle',
     'Impact: Class 3 (UL 2218)',
     'Wind: Up to 130 mph (Atlas Signature Select)',
     'Algae: Algae-resistant granules',
     'Design: HP42 oversized shingle for a cleaner install',
     'Warranty: Lifetime limited' ] },
   { key: 'atlas-pinnacle-pristine', brand: 'Atlas', model: 'Pinnacle Pristine', tier: 'Better', features: [
+    'Upgrade: Adds lifetime Scotchgard algae protection over ProLAM',
     'Impact: Standard — not impact rated',
     'Wind: 130 mph',
     'Algae: Lifetime with Scotchgard (Atlas Pro-Cut ridge)',
     'Design: Scotchgard Protector by 3M · lifetime color',
     'Warranty: Lifetime limited' ] },
   { key: 'atlas-pinnacle-impact', brand: 'Atlas', model: 'Pinnacle Impact', tier: 'Better', features: [
+    'Upgrade: Adds Class 4 impact over Pinnacle Pristine',
     'Impact: Class 4 (UL 2218) — highest hail rating',
     'Wind: 130 mph',
     'Algae: Lifetime with Scotchgard Protector',
     'Design: Polymer-modified · 3M smog-reducing granules',
     'Warranty: Lifetime limited' ] },
   { key: 'atlas-stormmaster-shake', brand: 'Atlas', model: 'StormMaster Shake', tier: 'Best', features: [
+    'Upgrade: Adds Class 4, Core4 polymer and 150 mph wind over Pristine',
     'Impact: Class 4 (UL 2218) — highest hail rating',
     'Wind: 150 mph',
     'Algae: Lifetime with Scotchgard Protector',
