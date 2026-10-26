@@ -19076,7 +19076,7 @@ function buildQuoteLayoutA(j, opts){
     const col = k => k === featured ? ' class="mid"' : '';
     compare = `
     <div class="a-sec">
-      <div class="a-h2">Choose your roof</div>
+      <div class="a-h2">${isCash ? 'Options for Your New Roof' : 'Your Replacement Options'}</div>
       <table class="a-cmp a-cmp-${tiered.length}">
         <colgroup><col class="lab">${tiered.map(() => '<col>').join('')}</colgroup>
         <thead><tr><th></th>${tiered.map((r, k) => `
