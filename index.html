@@ -18959,6 +18959,12 @@ function buildQuoteLayoutA(j, opts){
 
   const allQuotes = getJobQuotes(j);
   const tiered = allQuotes.length > 1 ? quoteTiers(allQuotes) : null;
+  // Price lock: prices hold for N days from the quote date (company setting, default 30)
+  const validDays = Math.max(1, parseInt(ci.quoteValidDays, 10) || 30);
+  const validUntil = new Date((q.quoteDate || new Date().toISOString().slice(0,10)) + 'T00:00:00');
+  validUntil.setDate(validUntil.getDate() + validDays);
+  const validText = validUntil.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+  const priceLock = `Prices locked until <b>${validText}</b> (${validDays} days). Material prices can change after that.`;
   const contract = num(q.contractAmount);
   const deductible = num(q.deductible);
   const deposit = num(q.depositAmount);
@@ -19091,7 +19097,7 @@ function buildQuoteLayoutA(j, opts){
           <tr class="pick"><td></td>${tiered.map((r, k) => `<td${col(k)}><span class="a-box"></span>I choose ${esc(r.tier)}</td>`).join('')}</tr>
         </tbody>
       </table>
-      ${hasCarrier ? `<div class="a-foot-note">Your claim with <b>${esc(j.carrier)}</b> pays the approved scope. You pay your deductible, plus the upgrade for any option above ${esc(tiered[0].tier)}.</div>` : ''}
+      <div class="a-valid">${hasCarrier ? `Your claim with <b class="n">${esc(j.carrier)}</b> pays the approved scope; you pay your deductible plus any upgrade. ` : ''}${priceLock}</div>
     </div>`;
     // Page-2 payment card
     const ins = Math.max(0, base - deductible);
@@ -19145,7 +19151,7 @@ function buildQuoteLayoutA(j, opts){
         ${name ? `<div class="a-sys-h"><span class="a-sys-n">${esc(name)}</span>${q.shingleColor ? `<span class="a-sys-c">Color: ${esc(q.shingleColor)}</span>` : ''}</div>` : ''}
         ${fs.length ? `<div class="a-feat">${fs.map(f => `<div>${f.k ? `<div class="a-k">${esc(f.k)}</div>` : ''}${hi(f.v)}</div>`).join('')}</div>` : ''}
       </div>
-      <div class="a-card"><div class="a-h3">${isCash ? 'Payment schedule' : 'Your investment'}</div>${payCard}</div>
+      <div class="a-card"><div class="a-h3">${isCash ? 'Payment schedule' : 'Your investment'}</div>${payCard}<div class="a-valid in">${priceLock}</div></div>
     </div>`;
   }
 
@@ -19164,6 +19170,7 @@ function buildQuoteLayoutA(j, opts){
     </div>
     <div class="a-agree">By signing, the customer accepts the ${tiered ? 'selected option, ' : ''}scope of work, pricing and terms in this ${docTitle.toLowerCase()}.${ci.license ? '<br>' + esc(ci.license) : ''}</div>`;
 
+  const pageFoot = n => `<div class="a-pf"><span>${esc(ci.name || '')} · Quote ${esc(quoteNo)} · Page ${n} of 2</span><span class="a-init">Customer initials <i></i></span></div>`;
   const page1 = tiered
     ? `${header}${info}${glance}${compare}`
     : `${header}${info}${glance}${system}
@@ -19190,6 +19197,16 @@ function buildQuoteLayoutA(j, opts){
   .serif { font-family: 'Playfair Display', Georgia, serif; }
   .a-page { width: 7.5in; margin: 0 auto; }
   .a-page + .a-page { break-before: page; page-break-before: always; }
+  .a-page { display: flex; flex-direction: column; min-height: 9.9in; }
+  .a-body { flex: 1 0 auto; }
+  .a-pf { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-top: 12px; padding-top: 6px; border-top: 1px solid ${line}; font-size: 7.4pt; color: ${muted}; break-inside: avoid; break-before: avoid; }
+  .a-init { display: inline-flex; align-items: flex-end; gap: 6px; white-space: nowrap; }
+  .a-init i { display: inline-block; width: 52px; height: 13px; border-bottom: 1px solid ${ink}; }
+  .a-valid { margin-top: 10px; padding: 7px 12px; background: ${cream}; border-left: 2px solid ${gold}; font-size: 8.2pt; color: #4A433B; break-inside: avoid; break-before: avoid; }
+  .a-valid b { font-family: 'Playfair Display', Georgia, serif; font-size: 9pt; color: ${ink}; }
+  .a-valid b.n { font-family: inherit; font-size: inherit; }
+  .a-valid.in { margin: 9px -13px -11px; padding: 6px 13px; border-left: 0; border-top: 1px solid ${line}; font-size: 7.6pt; }
+  .a-valid.in b { font-size: 8.2pt; }
   @media screen {
     body { background: #E7E2DA; padding: 24px 0; }
     .a-page { width: 8.5in; min-height: 11in; background: #fff; padding: 0.45in 0.5in 0.5in; margin: 0 auto 24px; box-shadow: 0 2px 18px rgba(0,0,0,.12); }
@@ -19222,7 +19239,7 @@ function buildQuoteLayoutA(j, opts){
   /* glance */
   .a-glance { display: grid; grid-template-columns: 2.3in 1fr; gap: 16px; margin-top: 14px; break-inside: avoid; page-break-inside: avoid; }
   .a-glance.noimg { grid-template-columns: 1fr; }
-  .a-diag { border: 1px solid ${gold}; padding: 6px; height: 2.1in; display: flex; align-items: center; justify-content: center; background: #fff; }
+  .a-diag { border: 1px solid ${gold}; padding: 6px; height: 1.6in; display: flex; align-items: center; justify-content: center; background: #fff; }
   .a-diag img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .a-diag.sat img { width: 100%; height: 100%; object-fit: cover; }
   .a-glance-r { display: flex; flex-direction: column; }
@@ -19315,8 +19332,8 @@ function buildQuoteLayoutA(j, opts){
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 ${theme.fonts || '<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">'}
 <style>${css}</style></head><body>
-<div class="a-page">${page1}</div>
-<div class="a-page">${page2}</div>
+<div class="a-page"><div class="a-body">${page1}</div>${pageFoot(1)}</div>
+<div class="a-page"><div class="a-body">${page2}</div>${pageFoot(2)}</div>
 </body></html>`;
 }
 window.buildQuoteLayoutA = buildQuoteLayoutA;
