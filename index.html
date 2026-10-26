@@ -608,13 +608,11 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <script>
-// Redesign preview: open the CRM with ?ui=new to try the new look (remembered on
-// this device), ?ui=old to switch back. Without it nothing below loads.
+// The new look is the CRM's standard look for everyone. ?ui=old is kept only
+// as a temporary emergency fallback for this one visit (not remembered).
 (function(){try{
-  var q=new URLSearchParams(location.search).get('ui');
-  if(q==='new') localStorage.setItem('ssUI','new');
-  if(q==='old') localStorage.removeItem('ssUI');
-  if(localStorage.getItem('ssUI')!=='new') return;
+  localStorage.removeItem('ssUI');
+  if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
     +'<link rel="stylesheet" href="redesign.css?v=31">'

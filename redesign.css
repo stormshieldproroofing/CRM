@@ -1,6 +1,6 @@
 /* ==========================================================================
    StormShield CRM redesign — Part 1: colors, type, sidebar navigation.
-   Loaded only when the CRM is opened with ?ui=new (see loader in index.html).
+   Loaded for everyone by the loader in index.html.
    Every rule is scoped to html.ui-new so the current look is untouched.
    ========================================================================== */
 

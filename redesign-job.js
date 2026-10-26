@@ -1,5 +1,5 @@
 /* StormShield CRM redesign — job screen (Overview clean-up).
-   Loaded only with ?ui=new (see the loader in index.html).
+   Loaded for everyone by the loader in index.html.
 
    It does not re-create anything: after the CRM draws a job, this file moves
    the existing pieces (checklist, contact card, deposits, expenses, contract
