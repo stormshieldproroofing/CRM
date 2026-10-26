@@ -19143,6 +19143,15 @@ function openQuotePreview(j, opts){
   .q-trust-ic { width: 24px; height: 24px; border-radius: 50%; background: ${navy}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11pt; flex-shrink: 0; }
   .q-wrap .q-trust { background: ${soft}; border-radius: 10px; padding: 11px 12px; margin-bottom: 16px; }
 
+  /* Clean page breaks: keep each block whole, never strand a heading */
+  .q-info, .q-options, .q-mat, .q-scope-sec, .q-warranty, .q-price-card, .q-trust, .q-opt-note, .q-row2 { break-inside: avoid; page-break-inside: avoid; }
+  .q-section-title { page-break-after: avoid; }
+  .q-section-title + * { break-before: avoid; page-break-before: avoid; }
+  .q-scope li { page-break-inside: avoid; }
+  /* Terms, signatures and footer start on their own page */
+  .q-terms-page, .q-page-break { break-before: page; page-break-before: always; padding-top: 0.15in; }
+  .q-terms-page.q-flow { break-before: auto; page-break-before: auto; padding-top: 0; }
+  @media screen { .q-terms-page:not(.q-flow), .q-page-break { border-top: 2px dashed #C9D2DE; margin-top: 18px; padding-top: 18px; } }
   .q-terms { font-size: 8.3pt; line-height: 1.5; color: #3A4555; column-count: 2; column-gap: 22px; }
   .q-terms p { margin: 0 0 6px; break-inside: avoid; }
   .q-signature { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; page-break-inside: avoid; }
@@ -19230,7 +19239,7 @@ ${coverHtml}
       </div>
     </div>`:''}
 
-    <div class="q-section">
+    <div class="q-section${tiered ? ' q-page-break' : ''}">
       <div class="q-section-title"><span>Scope of Work${tiered?' · Included With Every Option':''}</span></div>
       <div class="q-scope-grid">${scopeHtml}</div>
     </div>
@@ -19243,6 +19252,7 @@ ${coverHtml}
 
     ${trustHtml}
 
+    <div class="q-terms-page${tiered ? ' q-flow' : ''}">
     <div class="q-section">
       <div class="q-section-title"><span>Terms &amp; Conditions</span></div>
       <div class="q-terms">${termsHtml}</div>
@@ -19264,6 +19274,7 @@ ${coverHtml}
     <div class="q-footer">
       By signing above, customer agrees to the scope of work, pricing, and terms set forth in this document.
       ${ci.license?'<br>'+escapeHtml(ci.license):''}
+    </div>
     </div>
   </div>
 </div>
