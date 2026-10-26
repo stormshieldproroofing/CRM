@@ -16816,7 +16816,7 @@ function buildQuoteSelector(j, q){
   const delBtn = list.length>1 ? '<button onclick="quoteDelete(\''+j.id+'\',\''+q._qid+'\')" title="Delete this quote" style="background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;padding:7px 9px;border-radius:6px" onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--muted)\'"><i class="ti ti-trash" style="font-size:14px"></i></button>' : '';
   return '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;align-items:center">'
     + tabs
-    + '<button onclick="quoteMakeTiers(\''+j.id+'\')" title="Create Good / Better / Best shingle options" style="flex-shrink:0;background:rgba(184,149,90,0.14);border:1px solid rgba(184,149,90,0.5);color:#E8D3AE;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;white-space:nowrap"><i class="ti ti-stack-2" style="font-size:12px;margin-right:3px"></i>Good / Better / Best</button>'
+    + '<button onclick="quoteMakeTiersPick(\''+j.id+'\',this)" title="Create Good / Better / Best shingle options" style="flex-shrink:0;background:rgba(184,149,90,0.14);border:1px solid rgba(184,149,90,0.5);color:#E8D3AE;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;white-space:nowrap"><i class="ti ti-stack-2" style="font-size:12px;margin-right:3px"></i>Good / Better / Best</button>'
     + '<button onclick="quoteAdd(\''+j.id+'\',false)" title="New blank quote" style="flex-shrink:0;background:rgba(52,211,153,0.1);border:1px dashed rgba(52,211,153,0.4);color:#34D399;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-plus" style="font-size:12px"></i>New</button>'
     + '<button onclick="quoteAdd(\''+j.id+'\',true)" title="Duplicate this quote" style="flex-shrink:0;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-copy" style="font-size:12px"></i>Duplicate</button>'
     + '</div>'
@@ -18317,6 +18317,12 @@ const SHINGLE_CATALOG = [
     '10-year StreakFighter algae resistance',
     '10-year SureStart protection',
     'Lifetime limited transferable warranty' ] },
+  { key: 'ct-landmark-pro', brand: 'CertainTeed', model: 'Landmark PRO', tier: 'Better', features: [
+    'Heavier-weight dual-layer shingle with Max Def color depth',
+    '110 mph wind warranty (upgrade with CertainTeed starter + hip & ridge)',
+    'StreakFighter algae-resistance warranty',
+    '10-year SureStart protection',
+    'Lifetime limited transferable warranty' ] },
   { key: 'ct-landmark-climateflex', brand: 'CertainTeed', model: 'Landmark ClimateFlex', tier: 'Best', features: [
     'Class 4 impact rating (UL 2218) — highest hail rating',
     'Polymer-modified asphalt with rubber-like flexibility',
@@ -18324,12 +18330,49 @@ const SHINGLE_CATALOG = [
     '25-year StreakFighter algae resistance',
     'Lifetime limited transferable warranty' ] },
   // GAF
-  { key: 'gaf-timberline-hdz', brand: 'GAF', model: 'Timberline HDZ', tier: 'Better', features: [
+  { key: 'gaf-timberline-hdz', brand: 'GAF', model: 'Timberline HDZ', tier: 'Good', features: [
     'LayerLock technology with the widest StrikeZone nailing area',
     'WindProven wind warranty — no maximum wind speed (with GAF accessories)',
     '25-year StainGuard Plus algae warranty',
     'DuraGrip adhesive against wind-driven rain',
     'Lifetime limited warranty' ] },
+  { key: 'gaf-timberline-uhdz', brand: 'GAF', model: 'Timberline UHDZ', tier: 'Better', features: [
+    'Thicker shingle for a bolder dimensional look than HDZ',
+    'LayerLock technology with the StrikeZone nailing area',
+    'WindProven wind warranty — no maximum wind speed (with GAF accessories)',
+    '30-year StainGuard Plus PRO algae warranty',
+    'Lifetime limited warranty' ] },
+  { key: 'gaf-timberline-as2', brand: 'GAF', model: 'Timberline AS II', tier: 'Best', features: [
+    'Class 4 impact rating (UL 2218) — highest hail rating',
+    'SBS polymer-modified asphalt for flexibility',
+    'May qualify for a homeowners insurance discount',
+    'WindProven wind warranty — no maximum wind speed (with GAF accessories)',
+    '25-year StainGuard Plus algae · lifetime limited warranty' ] },
+  // Atlas
+  { key: 'atlas-prolam', brand: 'Atlas', model: 'ProLAM', tier: 'Good', features: [
+    'Class 3 impact rating (UL 2218)',
+    'Up to 130 mph limited wind warranty (Atlas Signature Select system)',
+    'HP42 oversized shingle for a cleaner, faster install',
+    'Algae-resistant granules',
+    'Lifetime limited warranty' ] },
+  { key: 'atlas-pinnacle-pristine', brand: 'Atlas', model: 'Pinnacle Pristine', tier: 'Better', features: [
+    'Scotchgard Protector by 3M against black algae streaks',
+    'Lifetime algae-resistance warranty (with Atlas Pro-Cut Hip & Ridge)',
+    '130 mph wind warranty',
+    'Lifetime color warranty',
+    'Lifetime limited warranty' ] },
+  { key: 'atlas-pinnacle-impact', brand: 'Atlas', model: 'Pinnacle Impact', tier: 'Better', features: [
+    'Class 4 impact rating (UL 2218) — highest hail rating',
+    'Polymer-modified blend for flexibility',
+    'May qualify for a homeowners insurance discount',
+    '130 mph wind rating · 3M smog-reducing granules',
+    'Lifetime algae resistance with Scotchgard Protector' ] },
+  { key: 'atlas-stormmaster-shake', brand: 'Atlas', model: 'StormMaster Shake', tier: 'Best', features: [
+    'Class 4 impact rating (UL 2218) — highest hail rating',
+    'Core4 premium polymer-modified asphalt',
+    'May qualify for a homeowners insurance discount',
+    '150 mph wind rating · 3M smog-reducing granules',
+    'Lifetime algae resistance with Scotchgard Protector' ] },
 ];
 window.SHINGLE_CATALOG = SHINGLE_CATALOG;
 function shingleSystemFor(q){
@@ -18349,11 +18392,47 @@ function shingleSystemOptions(selectedKey){
 // ── GOOD / BETTER / BEST shingle tiers ──
 // Starting systems for a three-option estimate (from SHINGLE_CATALOG). Each
 // option's system can be switched with the Shingle System dropdown.
-const SHINGLE_TIER_PRESETS = [
-  ['Good', 'tamko-heritage'], ['Better', 'tamko-titan-xt'], ['Best', 'tamko-stormfighter-ir'],
-].map(([tier, key]) => { const c = SHINGLE_CATALOG.find(x => x.key === key);
-  return { tier, key, label: tier + ' — ' + c.brand + ' ' + c.model, brand: c.brand, model: c.model, features: c.features }; });
+const SHINGLE_TIER_SETS = {
+  'TAMKO':         ['tamko-heritage', 'tamko-titan-xt', 'tamko-stormfighter-ir'],
+  'GAF':           ['gaf-timberline-hdz', 'gaf-timberline-uhdz', 'gaf-timberline-as2'],
+  'Owens Corning': ['oc-oakridge', 'oc-duration', 'oc-duration-flex'],
+  'CertainTeed':   ['ct-landmark', 'ct-landmark-pro', 'ct-landmark-climateflex'],
+  'Atlas':         ['atlas-prolam', 'atlas-pinnacle-pristine', 'atlas-stormmaster-shake'],
+};
+window.SHINGLE_TIER_SETS = SHINGLE_TIER_SETS;
+function shingleTierPresets(brand){
+  const keys = SHINGLE_TIER_SETS[brand] || SHINGLE_TIER_SETS['TAMKO'];
+  return ['Good','Better','Best'].map((tier, i) => { const c = SHINGLE_CATALOG.find(x => x.key === keys[i]);
+    return { tier, key: c.key, label: tier + ' — ' + c.brand + ' ' + c.model, brand: c.brand, model: c.model, features: c.features }; });
+}
+const SHINGLE_TIER_PRESETS = shingleTierPresets('TAMKO');
 window.SHINGLE_TIER_PRESETS = SHINGLE_TIER_PRESETS;
+
+// Small brand menu under the Good / Better / Best button
+function quoteMakeTiersPick(jobId, btn){
+  const old = document.getElementById('gbbBrandMenu'); if(old){ old.remove(); return; }
+  const r = btn.getBoundingClientRect();
+  const m = document.createElement('div');
+  m.id = 'gbbBrandMenu';
+  m.style.cssText = 'position:fixed;z-index:10050;min-width:200px;background:var(--surface,#151B2C);border:1px solid var(--border,#2A3350);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:6px;font-size:13px';
+  m.style.top = Math.min(r.bottom + 6, window.innerHeight - 260) + 'px';
+  m.style.left = Math.max(8, Math.min(r.right - 220, window.innerWidth - 228)) + 'px';
+  m.innerHTML = '<div style="padding:6px 10px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#8A93A8)">Good / Better / Best — brand</div>'
+    + Object.keys(SHINGLE_TIER_SETS).map(b => {
+        const names = shingleTierPresets(b).map(p => p.model).join(' · ');
+        return '<button type="button" data-brand="' + escapeHtml(b) + '" style="display:block;width:100%;text-align:left;background:none;border:0;border-radius:7px;padding:8px 10px;color:var(--text,#E6EAF2);cursor:pointer"><b>' + escapeHtml(b) + '</b><div style="font-size:11px;color:var(--muted,#8A93A8);margin-top:2px">' + escapeHtml(names) + '</div></button>';
+      }).join('');
+  document.body.appendChild(m);
+  m.querySelectorAll('button[data-brand]').forEach(b => {
+    b.onmouseenter = () => b.style.background = 'rgba(255,255,255,.06)';
+    b.onmouseleave = () => b.style.background = 'none';
+    b.onclick = () => { m.remove(); quoteMakeTiers(jobId, b.dataset.brand); };
+  });
+  setTimeout(() => document.addEventListener('click', function off(e){
+    if(!m.contains(e.target)){ m.remove(); document.removeEventListener('click', off, true); }
+  }, true), 0);
+}
+window.quoteMakeTiersPick = quoteMakeTiersPick;
 
 // Tier name for each quote in display order. A label that starts with
 // Good / Better / Best wins; otherwise options are ranked by price.
@@ -18370,7 +18449,7 @@ function quoteTiers(list){
 
 // Replace the job's quotes with Good / Better / Best, carrying over the
 // active quote's scope, terms, mode, rep and color.
-function quoteMakeTiers(jobId){
+function quoteMakeTiers(jobId, brand){
   const j = jobs.find(x=>x.id===jobId); if(!j) return;
   const list = getJobQuotes(j);
   const src = list[j.activeQuote] || list[0] || {};
@@ -18380,7 +18459,7 @@ function quoteMakeTiers(jobId){
   } else {
     list.length = 0;   // a single blank quote is simply replaced
   }
-  SHINGLE_TIER_PRESETS.forEach(p => {
+  shingleTierPresets(brand).forEach(p => {
     const nq = quoteDefaults(j);
     Object.assign(nq, {
       label: p.label, systemKey: p.key, shingleBrand: p.brand, shingleModel: p.model, shingleColor: src.shingleColor || '',
