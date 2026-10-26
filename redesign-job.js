@@ -36,7 +36,8 @@
   }
   function cleanUsd(text) { const v = num(text); return v == null ? '—' : usd(v); }
 
-  // ── Header: address under the name, days in stage, ⋯ menu ─────────────
+  // ── Header: address under the name, pipeline + stage centered under it,
+  //    a soft tint in the stage's color, ⋯ menu ─────────────────────────
   function decorateHeader(panel, j) {
     const name = panel.querySelector('.dp-name');
     const addr = (j.address && j.address !== '—') ? j.address : '';
@@ -47,14 +48,20 @@
       name.insertAdjacentElement('afterend', sub);
     }
     const status = panel.querySelector('.dp-status-group');
-    if (status && !panel.querySelector('.rd-days')) {
-      let d = null;
-      try { d = daysInStage(j); } catch (e) {}
-      if (d != null && !isNaN(d)) {
-        const s = document.createElement('span');
-        s.className = 'rd-days';
-        s.textContent = d + (d === 1 ? ' day' : ' days') + ' in stage';
-        status.appendChild(s);
+    const row = panel.querySelector('.dp-name-row');
+    if (status && row && status.parentElement !== row.parentElement) {
+      status.classList.add('rd-status-center');
+      row.insertAdjacentElement('afterend', status);
+    }
+    const head = panel.querySelector('.dp-header-area');
+    const dot = panel.querySelector('#stageSelector .dp-stage-dot');
+    if (head && dot) {
+      const m = (getComputedStyle(dot).backgroundColor || '').match(/\d+(\.\d+)?/g);
+      if (m && m.length >= 3) {
+        head.classList.add('rd-tint');
+        head.style.setProperty('--rd-stage', 'rgb(' + m[0] + ',' + m[1] + ',' + m[2] + ')');
+        head.style.setProperty('--rd-stage-soft', 'rgba(' + m[0] + ',' + m[1] + ',' + m[2] + ',0.16)');
+        head.style.setProperty('--rd-stage-none', 'rgba(' + m[0] + ',' + m[1] + ',' + m[2] + ',0)');
       }
     }
     const close = panel.querySelector('#dpClose');
