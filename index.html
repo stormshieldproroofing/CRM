@@ -18784,7 +18784,6 @@ function openQuotePreview(j, opts){
             <img src="${coverSrc}" class="q-cover-img${sketch?' q-cover-img--sketch':''}" alt="${sketch?'Roof measurement diagram':'Satellite view of property'}"
                  onerror="this.style.display='none';document.getElementById('qCoverImgFallback').style.display='flex';">
             <div id="qCoverImgFallback" class="q-cover-imgfallback" style="display:none">${sketch?'Roof diagram unavailable':'Satellite image unavailable'}</div>
-            ${sketch?`<div class="q-cover-imgcap">Roof diagram${sketch.vendor?' · '+escapeHtml(sketch.vendor)+' measurement report':' · measurement report'}</div>`:''}
           </div>
           <div class="q-cover-addr">${escapeHtml(j.address||'')}</div>
           <div class="q-cover-meta"><span>${escapeHtml(quoteNo)}</span><span>${escapeHtml(dateText)}</span>${q.repName?`<span>Prepared by ${escapeHtml(q.repName)}</span>`:''}</div>
