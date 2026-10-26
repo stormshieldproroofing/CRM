@@ -19010,7 +19010,7 @@ function buildQuoteLayoutA(j, opts){
   const addrParts = addr.split(',');
   const addr1 = addrParts[0].trim(), addr2 = addrParts.slice(1).join(',').trim();
   const thirdCell = isCash
-    ? `<div><div class="a-k">Payment</div><div class="a-v">Cash</div><div class="a-v2">${deposit > 0 ? fmt0(deposit) + ' deposit at signing' : 'Paid on completion'}</div></div>`
+    ? `<div><div class="a-k">Payment</div><div class="a-v">Cash</div><div class="a-v2">&nbsp;</div></div>`
     : `<div><div class="a-k">Insurance claim</div><div class="a-v">${esc(j.carrier || '—')}</div><div class="a-v2">${[j.claimNum ? 'Claim ' + esc(j.claimNum) : '', deductible > 0 ? 'Deductible ' + fmt0(deductible) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</div></div>`;
   const info = `
     <div class="a-info">
