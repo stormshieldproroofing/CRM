@@ -17019,10 +17019,18 @@ function renderQuoteTab(j){
     if(tm && typeof renderDetailPanel === 'function') renderDetailPanel();
     else toast(sys.brand + ' ' + sys.model + ' features filled in');
   });
-  $('quotePreviewBtn').addEventListener('click', () => {
+  $('quotePreviewBtn').addEventListener('click', async () => {
     collectQuote();
     saveToStorage();
-    openQuotePreview(j);
+    const hasReport = (j.roofFiles||[]).some(f=>jobFileIsPdf(f) || jobFileIsImage(f));
+    if(!hasReport){ openQuotePreview(j); return; }
+    // Open the tab now (inside the tap) so iPhone Safari doesn't block it,
+    // then fill it once the roof diagram is rendered from the report.
+    const win = window.open('', '_blank');
+    if(win){ try { win.document.write('<p style="font-family:sans-serif;padding:24px;color:#555">Preparing estimate…</p>'); } catch(e){} }
+    let sketch = null;
+    try { sketch = await roofSketchFromReport(j); } catch(e){ console.warn('[quote] roof diagram', e); }
+    openQuotePreview(j, Object.assign({ win }, sketch ? { coverImg: sketch } : {}));
   });
   $('quoteEditCompanyBtn').addEventListener('click', openCompanyInfoModal);
   $('quoteResetScopeBtn').addEventListener('click', () => {
@@ -18393,6 +18401,104 @@ window.quoteMakeTiers = quoteMakeTiers;
 // Open a clean printable quote in a new window for browser print → PDF.
 // With 2+ quote options on the job, every option prints side by side as
 // Good / Better / Best cards; with one option it prints a single estimate.
+// ── ROOF DIAGRAM FOR THE QUOTE COVER ────────────────────────────────────────
+// When the job has a measurement report (GAF QuickMeasure, FirstMate,
+// EagleView, Roofr, Hover…) in its Roof files, render the report's roof
+// diagram page to an image and use it on the quote cover. Works without
+// geocoded coordinates and without Mapbox, so the cover is never blank.
+const __roofSketchCache = new Map();
+function roofSketchPageScore(text){
+  const t = String(text||'').toLowerCase();
+  let s = 0;
+  if(/length(s)?\s+diagram/.test(t)) s += 10;
+  if(/roof\s+(diagram|sketch|outline)/.test(t)) s += 8;
+  if(/line\s+diagram|lengths?\s+(and|&)\s+pitch/.test(t)) s += 6;
+  if(/pitch\s+diagram|pitch\s*(and|&)\s*direction/.test(t)) s += 4;
+  if(/\bdiagram\b|\bsketch\b/.test(t)) s += 3;
+  if(/area\s+diagram|notes\s+diagram/.test(t)) s += 1;
+  // Summary / invoice / table pages are mostly words — not the drawing
+  if(/report summary|waste calculation|invoice|terms of use|disclaimer|material (order|calculation)/.test(t)) s -= 6;
+  return s;
+}
+function roofSketchTrim(canvas){
+  try {
+    const ctx = canvas.getContext('2d');
+    const { width:w, height:h } = canvas;
+    const d = ctx.getImageData(0,0,w,h).data;
+    let x0=w, y0=h, x1=-1, y1=-1;
+    for(let y=0; y<h; y+=2){
+      for(let x=0; x<w; x+=2){
+        const i=(y*w+x)*4;
+        if(d[i]<235 || d[i+1]<235 || d[i+2]<235){
+          if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+        }
+      }
+    }
+    if(x1<0) return canvas;
+    const pad = Math.round(Math.min(w,h)*0.02);
+    x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad);
+    x1=Math.min(w,x1+pad); y1=Math.min(h,y1+pad);
+    const out = document.createElement('canvas');
+    out.width = x1-x0; out.height = y1-y0;
+    const oc = out.getContext('2d');
+    oc.fillStyle = '#fff'; oc.fillRect(0,0,out.width,out.height);
+    oc.drawImage(canvas, x0,y0,out.width,out.height, 0,0,out.width,out.height);
+    return out;
+  } catch(e){ return canvas; }
+}
+async function roofSketchFromReport(j){
+  if(!j) return null;
+  const files = Array.isArray(j.roofFiles) ? j.roofFiles.slice() : [];
+  if(!files.length) return null;
+  const re = j.roofEstimate || {};
+  // Prefer the report the measurements came from, then the newest PDF
+  const pdfs = files.filter(f=>typeof jobFileIsPdf==='function' ? jobFileIsPdf(f) : /\.pdf$/i.test(f.name||'')).reverse();
+  if(re.reportName){
+    const k = pdfs.findIndex(f=>(f.name||'')===re.reportName);
+    if(k>0) pdfs.unshift(pdfs.splice(k,1)[0]);
+  }
+  const imgs = files.filter(f=>typeof jobFileIsImage==='function' && jobFileIsImage(f)).reverse();
+  const getUrl = async f => (typeof jobFileUrl==='function') ? await jobFileUrl(f) : (f.url||null);
+
+  for(const f of pdfs){
+    const key = 'pdf:' + (f.path || f.name || f.id);
+    if(__roofSketchCache.has(key)) return __roofSketchCache.get(key);
+    try {
+      if(!window.pdfjsLib) break;
+      const url = await getUrl(f); if(!url) continue;
+      const buf = await (await fetch(url)).arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let best = null;
+      for(let n=1; n<=Math.min(pdf.numPages, 15); n++){
+        const page = await pdf.getPage(n);
+        const tc = await page.getTextContent();
+        const text = tc.items.map(it=>it.str).join(' ');
+        const sc = roofSketchPageScore(text);
+        if(!best || sc > best.sc) best = { n, sc };
+      }
+      // No page labelled as a diagram: page 2 is the drawing on most reports,
+      // page 1 (cover with the aerial photo) on single-page ones.
+      const pageNo = (best && best.sc > 0) ? best.n : (pdf.numPages >= 2 ? 2 : 1);
+      const page = await pdf.getPage(pageNo);
+      const vp0 = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: Math.min(3, 1700 / Math.max(vp0.width, vp0.height)) });
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+      const ctx = c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,c.width,c.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      const out = { src: roofSketchTrim(c).toDataURL('image/jpeg', 0.9), kind: 'report', vendor: re.vendor || '' };
+      __roofSketchCache.set(key, out);
+      return out;
+    } catch(e){ console.warn('[quote] roof diagram render failed', f && f.name, e); }
+  }
+  // No usable PDF — a screenshot / photo of the sketch in Roof files works too
+  for(const f of imgs){
+    try { const url = await getUrl(f); if(url) return { src: url, kind: 'image', vendor: '' }; } catch(e){}
+  }
+  return null;
+}
+window.roofSketchFromReport = roofSketchFromReport;
+
 function openQuotePreview(j, opts){
   opts = opts || {};
   const themeKey = opts.theme || 'heritage';
@@ -18506,12 +18612,19 @@ function openQuotePreview(j, opts){
   const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
   const hasCoords = (j.latitude != null && j.longitude != null && isFinite(j.latitude) && isFinite(j.longitude));
   let coverHtml = '';
-  if(hasCoords){
+  // Cover image: the roof diagram from the measurement report when there is
+  // one, otherwise the Mapbox satellite view (needs geocoded coordinates).
+  const sketch = opts.coverImg || null;
+  let satUrl = null;
+  if(!sketch && hasCoords){
     const lon = j.longitude, lat = j.latitude;
-    const satUrl = opts.satUrl || (`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/`
+    satUrl = opts.satUrl || (`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/`
       + `pin-l+f97316(${lon},${lat})/`
       + `${lon},${lat},19,0/640x440@2x`
       + `?access_token=${MAPBOX_TOKEN}`);
+  }
+  const coverSrc = sketch ? sketch.src : satUrl;
+  if(coverSrc){
     coverHtml = `
       <div class="q-cover">
         <div class="q-cover-band">
@@ -18526,9 +18639,10 @@ function openQuotePreview(j, opts){
           <div class="q-cover-title">Your New Roof</div>
           <div class="q-cover-sub">Prepared for <strong>${escapeHtml(j.name||'')}</strong></div>
           <div class="q-cover-imgwrap">
-            <img src="${satUrl}" class="q-cover-img" alt="Satellite view of property"
+            <img src="${coverSrc}" class="q-cover-img${sketch?' q-cover-img--sketch':''}" alt="${sketch?'Roof measurement diagram':'Satellite view of property'}"
                  onerror="this.style.display='none';document.getElementById('qCoverImgFallback').style.display='flex';">
-            <div id="qCoverImgFallback" class="q-cover-imgfallback" style="display:none">Satellite image unavailable</div>
+            <div id="qCoverImgFallback" class="q-cover-imgfallback" style="display:none">${sketch?'Roof diagram unavailable':'Satellite image unavailable'}</div>
+            ${sketch?`<div class="q-cover-imgcap">Roof diagram${sketch.vendor?' · '+escapeHtml(sketch.vendor)+' measurement report':' · measurement report'}</div>`:''}
           </div>
           <div class="q-cover-addr">${escapeHtml(j.address||'')}</div>
           <div class="q-cover-meta"><span>${escapeHtml(quoteNo)}</span><span>${escapeHtml(dateText)}</span>${q.repName?`<span>Prepared by ${escapeHtml(q.repName)}</span>`:''}</div>
@@ -18660,6 +18774,8 @@ function openQuotePreview(j, opts){
   .q-cover-imgwrap { width: 100%; position: relative; }
   .q-cover-img, .q-cover-imgfallback { width: 100%; height: 4.3in; object-fit: cover; border-radius: 14px; border: 4px solid #fff; box-shadow: 0 0 0 2px ${navy}, 0 10px 26px rgba(15,42,74,0.28); display: block; }
   .q-cover-imgfallback { align-items: center; justify-content: center; background: ${soft}; color: #888; }
+  .q-cover-img--sketch { object-fit: contain; background: #fff; padding: 10px; }
+  .q-cover-imgcap { margin-top: 6px; font-size: 8.5pt; color: #6B7686; text-align: center; letter-spacing: 0.02em; }
   .q-cover-addr { font-size: 15pt; font-weight: 700; color: ${navy}; margin-top: 20px; }
   .q-cover-meta { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
   .q-cover-meta span { background: ${soft}; border: 1px solid ${line}; border-radius: 20px; padding: 3px 12px; font-size: 9pt; color: #3A4555; }
@@ -18762,7 +18878,7 @@ ${coverHtml}
 </body></html>`;
 
   if(opts.returnHtml) return html;
-  const w = window.open('', '_blank');
+  const w = (opts.win && !opts.win.closed) ? opts.win : window.open('', '_blank');
   if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
   w.document.open();
   w.document.write(html);
