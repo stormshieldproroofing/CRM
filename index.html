@@ -19207,7 +19207,14 @@ function buildQuoteLayoutA(j, opts){
   .a-valid b.n { font-family: inherit; font-size: inherit; }
   .a-valid.in { margin: 9px -13px -11px; padding: 6px 13px; border-left: 0; border-top: 1px solid ${line}; font-size: 7.6pt; }
   .a-valid.in b { font-size: 8.2pt; }
+  .a-bar { display: none; }
   @media screen {
+    .a-bar { display: flex; position: sticky; top: 0; z-index: 50; gap: 8px; justify-content: center; align-items: center; padding: 10px 12px; margin: -24px 0 20px; background: rgba(42,38,34,.94); backdrop-filter: blur(4px); }
+    .a-bar button { font: 600 14px 'Source Sans 3', -apple-system, Arial, sans-serif; border-radius: 8px; padding: 10px 18px; cursor: pointer; border: 1px solid #B8955A; }
+    .a-bar .pri { background: #B8955A; color: #fff; }
+    .a-bar .sec { background: transparent; color: #F4ECDD; }
+    .a-bar button[disabled] { opacity: .6; cursor: default; }
+    .a-bar .msg { color: #E8D3AE; font: 13px 'Source Sans 3', Arial, sans-serif; }
     body { background: #E7E2DA; padding: 24px 0; }
     .a-page { width: 8.5in; min-height: 11in; background: #fff; padding: 0.45in 0.5in 0.5in; margin: 0 auto 24px; box-shadow: 0 2px 18px rgba(0,0,0,.12); }
   }
@@ -19332,8 +19339,48 @@ function buildQuoteLayoutA(j, opts){
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 ${theme.fonts || '<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">'}
 <style>${css}</style></head><body>
+<div class="a-bar"><button type="button" class="pri" id="aSavePdf">Save PDF</button><button type="button" class="sec" onclick="window.print()">Print</button><span class="msg" id="aMsg"></span></div>
 <div class="a-page"><div class="a-body">${page1}</div>${pageFoot(1)}</div>
 <div class="a-page"><div class="a-body">${page2}</div>${pageFoot(2)}</div>
+<script>
+(function(){
+  var FILE = ${JSON.stringify((title.replace(/&amp;/g,'&').replace(/[\\/:*?"<>|]+/g,'') || 'Roofing Estimate') + '.pdf')};
+  function load(src){ return new Promise(function(res, rej){ var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function(){ rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); }); }
+  var btn = document.getElementById('aSavePdf'), msg = document.getElementById('aMsg');
+  btn.addEventListener('click', async function(){
+    btn.disabled = true; msg.textContent = 'Creating PDF…';
+    try {
+      if(!window.html2canvas) await load('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+      if(!window.jspdf) await load('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+      if(document.fonts && document.fonts.ready) await document.fonts.ready;
+      var pdf = new window.jspdf.jsPDF({ unit: 'in', format: 'letter', orientation: 'portrait', compress: true });
+      var pages = document.querySelectorAll('.a-page');
+      for(var i = 0; i < pages.length; i++){
+        var el = pages[i], shadow = el.style.boxShadow; el.style.boxShadow = 'none';
+        var c = await window.html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 900, logging: false });
+        el.style.boxShadow = shadow;
+        var w = 8.5, h = c.height / c.width * 8.5;
+        if(h > 11){ w = 8.5 * 11 / h; h = 11; }
+        if(i) pdf.addPage('letter', 'portrait');
+        pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', (8.5 - w) / 2, 0, w, h);
+      }
+      var blob = pdf.output('blob');
+      var file = new File([blob], FILE, { type: 'application/pdf' });
+      var touch = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+      if(touch && navigator.canShare && navigator.canShare({ files: [file] })){
+        try { await navigator.share({ files: [file], title: FILE.replace(/\.pdf$/, '') }); msg.textContent = ''; }
+        catch(e){ msg.textContent = (e && e.name === 'AbortError') ? '' : 'Could not share — try Print instead'; }
+      } else {
+        var url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = FILE; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 30000);
+        msg.textContent = 'Saved ' + FILE;
+      }
+    } catch(e){ console.error(e); msg.textContent = 'Could not create the PDF — use Print and choose Save as PDF'; }
+    btn.disabled = false;
+  });
+})();
+<\/script>
 </body></html>`;
 }
 window.buildQuoteLayoutA = buildQuoteLayoutA;
