@@ -1,5 +1,5 @@
 /* StormShield CRM redesign — Part 1: groups the nav links into sections and
-   gives each one an icon. Loaded only with ?ui=new (see loader in index.html).
+   gives each one an icon. Loaded for everyone by the loader in index.html.
    It only moves and decorates the existing links, so their click handlers,
    page names and role-based visibility (Profits, Company Docs) keep working. */
 (function () {
