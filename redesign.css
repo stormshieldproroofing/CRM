@@ -494,12 +494,19 @@ html.ui-new .rd-sec > #contractCalcCard{margin:0!important}
 html.ui-new .rd-docs > *{white-space:normal!important;text-align:left!important;line-height:1.25!important;padding:8px 12px!important}
 
 /* Quick actions pinned to the bottom of the job screen */
-html.ui-new .rd-qa-bar{position:sticky;bottom:0;z-index:6;margin:0 -18px -20px;padding:10px 18px calc(12px + env(safe-area-inset-bottom));background:rgba(18,22,30,0.97);border-top:1px solid var(--line);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-html.ui-new .rd-qa-bar .rd-qa-ic{width:46px;height:46px;border-radius:14px;font-size:20px}
-html.ui-new .rd-qa-bar .rd-qa-btn{gap:4px;font-size:11px}
+/* floats above the bottom edge, same as the main tab bar */
+html.ui-new .rd-qa-bar{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom));z-index:6;margin:0 -8px 10px;padding:8px 10px;background:rgba(18,22,30,0.96);border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,0.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+/* same look as the main tab bar: icon over label, the main action on a dark tile; icons keep their colors */
+html.ui-new .rd-qa-bar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+html.ui-new .rd-qa-bar .rd-qa-btn{height:52px;border-radius:12px;justify-content:center;gap:3px;font-size:11px;font-weight:500;color:#9AA3B5}
+html.ui-new .rd-qa-bar .rd-qa-btn .rd-qa-ic{width:auto;height:auto;border-radius:0;background:none;border:none;font-size:20px}
+html.ui-new .rd-qa-bar .rd-qa-btn.primary{background:#1B2230;color:#fff;font-weight:600}
+html.ui-new .rd-qa-bar .rd-qa-btn.primary .rd-qa-ic{background:none;color:#7AA2FF}
 html.ui-new .rd-job .dp-tab{flex-shrink:0}
 @media (max-width:760px){
-  html.ui-new .rd-qa-bar{margin:0 -14px -20px;padding:8px 14px calc(10px + env(safe-area-inset-bottom))}
+  html.ui-new .rd-qa-bar{margin:0 -4px 10px;padding:6px 6px}
+  /* scrolling past the end no longer drags the page (and the tab bar) up */
+  html.ui-new,html.ui-new body{overscroll-behavior-y:none}
 }
 
 /* ── Money list: tap a line to open its form underneath ─────────────── */
