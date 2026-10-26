@@ -18888,8 +18888,383 @@ async function roofSketchFromReport(j){
 }
 window.roofSketchFromReport = roofSketchFromReport;
 
+// ── QUOTE PRINT LAYOUT A ─────────────────────────────────────────────────────
+// Two-page proposal in the Heritage look (Playfair Display + Source Sans 3,
+// charcoal and warm gold). Page 1 sells: who it's for, the roof, the options
+// compared line by line with what the homeowner pays. Page 2 closes: scope,
+// payment, warranty, terms and signatures. Blocks never split across pages.
+function buildQuoteLayoutA(j, opts){
+  opts = opts || {};
+  const esc = s => escapeHtml(String(s == null ? '' : s));
+  const themeKey = opts.theme || 'heritage';
+  const theme = (typeof EST_THEMES !== 'undefined' && EST_THEMES[themeKey]) || {};
+  const q = getJobQuote(j);
+  const ci = getCompanyInfo();
+  const isCash = q.mode === 'cash';
+  const num = v => moneyNum(v);
+  const fmt = n => '$' + (parseFloat(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmt0 = n => '$' + Math.round(parseFloat(n)||0).toLocaleString('en-US');
+  const dateText = (q.quoteDate ? new Date(q.quoteDate + 'T00:00:00') : new Date()).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const qd = (q.quoteDate || new Date().toISOString().slice(0,10)).replace(/-/g,'').slice(2,8);
+  const quoteNo = `Q-${(j.id || '').slice(-6).toUpperCase()}-${qd}`;
+
+  const allQuotes = getJobQuotes(j);
+  const tiered = allQuotes.length > 1 ? quoteTiers(allQuotes) : null;
+  const contract = num(q.contractAmount);
+  const deductible = num(q.deductible);
+  const deposit = num(q.depositAmount);
+  const hasCarrier = !isCash && !!j.carrier;
+
+  // Scope (exclusions removed; warranty section pulled out)
+  const excludeSet = new Set(q.scopeExclude || []);
+  const showItemized = isCash && !q.lumpSumOnly && !tiered;
+  const scopeSections = parseScopeSections(q.scope).map(sec => ({
+    title: sec.title,
+    items: sec.items.filter(i => !excludeSet.has(i)),
+    price: num(q.sectionPrices?.[sec.title || ''] || 0),
+  })).filter(sec => sec.items.length > 0);
+  const isWarranty = s => /warrant/i.test(s.title || '');
+  const warrantySec = scopeSections.find(isWarranty);
+  const workSections = scopeSections.filter(s => !isWarranty(s));
+  const scopeHtml = workSections.length ? workSections.map(sec => `
+    <div class="a-scope-sec">
+      ${sec.title && !/^scope of work$/i.test(sec.title.trim()) ? `<div class="a-scope-h"><span>${esc(sec.title)}</span>${showItemized && sec.price > 0 ? `<span>${fmt(sec.price)}</span>` : ''}</div>` : ''}
+      <ul class="a-scope">${sec.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+    </div>`).join('') : '<ul class="a-scope"><li>—</li></ul>';
+  const termsHtml = (q.terms || '').split('\n\n').filter(s => s.trim()).map(p => `<p>${esc(p.trim()).replace(/\n/g,'<br>')}</p>`).join('');
+
+  // Feature lines → [{k, v}]
+  const parseFeats = text => String(text || '').split('\n').map(s => s.trim()).filter(Boolean).map(f => {
+    const m = f.match(/^([A-Za-z][A-Za-z &/]{1,18}):\s*(.+)$/);
+    return m ? { k: m[1].trim(), v: m[2].trim() } : { k: '', v: f };
+  });
+  const hi = v => esc(v).replace(/\b(Class\s*[34])\b/g, '<b class="a-hi">$1</b>');
+
+  // ── Header + info strip (both pages) ──
+  const docTitle = tiered ? 'Proposal' : 'Estimate';
+  const header = `
+    <div class="a-hd">
+      <div class="a-hd-l">
+        ${ci.logoDataUrl ? `<img class="a-logo" src="${ci.logoDataUrl}" alt="">` : ''}
+        <div>
+          <div class="a-co">${esc(ci.name||'')}</div>
+          <div class="a-co-sub">${esc([ci.address, ci.cityStateZip].filter(Boolean).join(', '))}${ci.phone ? ' · ' + esc(ci.phone) : ''}${ci.email ? ' · ' + esc(ci.email) : ''}</div>
+        </div>
+      </div>
+      <div class="a-hd-r">
+        <div class="a-doc">Roofing <em>${docTitle}</em></div>
+        <div class="a-meta">Quote <b>${esc(quoteNo)}</b><br>Date <b>${esc(dateText)}</b>${q.repName ? `<br>Prepared by <b>${esc(q.repName)}</b>` : ''}</div>
+      </div>
+    </div>`;
+  const contactLine = [j.phone, j.email].filter(x => x && x !== '—').join(' · ');
+  const addr = String(j.address || '—');
+  const addrParts = addr.split(',');
+  const addr1 = addrParts[0].trim(), addr2 = addrParts.slice(1).join(',').trim();
+  const thirdCell = isCash
+    ? `<div><div class="a-k">Payment</div><div class="a-v">Cash</div><div class="a-v2">${deposit > 0 ? fmt0(deposit) + ' deposit at signing' : 'Paid on completion'}</div></div>`
+    : `<div><div class="a-k">Insurance claim</div><div class="a-v">${esc(j.carrier || '—')}</div><div class="a-v2">${[j.claimNum ? 'Claim ' + esc(j.claimNum) : '', deductible > 0 ? 'Deductible ' + fmt0(deductible) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</div></div>`;
+  const info = `
+    <div class="a-info">
+      <div><div class="a-k">Prepared for</div><div class="a-v">${esc(j.name || '—')}</div><div class="a-v2">${esc(contactLine) || '&nbsp;'}</div></div>
+      <div><div class="a-k">Property</div><div class="a-v">${esc(addr1)}</div><div class="a-v2">${esc(addr2) || '&nbsp;'}</div></div>
+      ${thirdCell}
+    </div>`;
+
+  // ── Roof at a glance ──
+  const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3Rvcm1zaGllbGRwcm9yb29maW5nIiwiYSI6ImNtcHFlbjM5dzBrbHEycnByOG50dnAxaHYifQ.TKaNODJPjtkz3dWbRAk3tw';
+  const hasCoords = j.latitude != null && j.longitude != null && isFinite(j.latitude) && isFinite(j.longitude);
+  const sketch = opts.coverImg || null;
+  const imgSrc = sketch ? sketch.src : (opts.satUrl || (hasCoords
+    ? `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-l+b8955a(${j.longitude},${j.latitude})/${j.longitude},${j.latitude},19,0/640x440@2x?access_token=${MAPBOX_TOKEN}`
+    : null));
+  const re = j.roofEstimate || {};
+  const sq = re.dwellingSquares || re.totalSquares;
+  const tiles = [
+    sq ? [String(Math.round(sq*10)/10), 'Squares'] : null,
+    re.pitch ? [String(re.pitch), 'Main pitch'] : null,
+    re.facets ? [String(re.facets), 'Roof facets'] : null,
+    (re.waste != null && re.waste !== '') ? [String(re.waste).replace(/%?$/, '%'), 'Waste'] : null,
+  ].filter(Boolean);
+  const src = re.vendor || (sketch && sketch.vendor) || '';
+  const glanceNote = tiered
+    ? `Every option is a <b>full tear-off and replacement</b> with the scope of work on page 2. They differ only in the shingle you choose.`
+    : `This estimate covers a <b>full tear-off and replacement</b> with the roofing system and scope of work below.`;
+  const glance = (imgSrc || tiles.length) ? `
+    <div class="a-glance${imgSrc ? '' : ' noimg'}">
+      ${imgSrc ? `<div class="a-diag${sketch ? '' : ' sat'}"><img src="${imgSrc}" alt="${sketch ? 'Roof diagram' : 'Satellite view of property'}" onerror="this.parentNode.style.display='none'"></div>` : ''}
+      <div class="a-glance-r">
+        <div class="a-h2">Your roof at a glance${src ? `<small>${esc(src)} measurement report</small>` : ''}</div>
+        ${tiles.length ? `<div class="a-tiles">${tiles.map(t => `<div class="a-tile"><div class="n">${esc(t[0])}</div><div class="l">${t[1]}</div></div>`).join('')}</div>` : ''}
+        <div class="a-note">${glanceNote}</div>
+      </div>
+    </div>` : '';
+
+  // ── Options comparison (tiered) ──
+  let compare = '', payCard = '';
+  const priceOf = r => r.price;
+  if(tiered){
+    const prices = tiered.map(priceOf).filter(p => p > 0);
+    const base = prices.length ? Math.min(...prices) : 0;
+    const featured = tiered.length >= 3 ? 1 : tiered.length - 1;
+    const feats = tiered.map(r => parseFeats(r.q.features));
+    const labelled = feats.every(fs => fs.length && fs.every(f => f.k));
+    let rows = [];
+    if(labelled){
+      const keys = [];
+      feats.forEach(fs => fs.forEach(f => { if(!keys.some(k => k.toLowerCase() === f.k.toLowerCase())) keys.push(f.k); }));
+      rows = keys.map(k => ({ k, cells: feats.map(fs => (fs.find(f => f.k.toLowerCase() === k.toLowerCase()) || {}).v || '—') }));
+    } else {
+      const n = Math.max(0, ...feats.map(fs => fs.length));
+      for(let i = 0; i < n; i++) rows.push({ k: '', cells: feats.map(fs => fs[i] ? (fs[i].k ? fs[i].k + ': ' + fs[i].v : fs[i].v) : '') });
+    }
+    const dedOf = r => isCash ? 0 : (num(r.q.deductible) || deductible);
+    const col = k => k === featured ? ' class="mid"' : '';
+    compare = `
+    <div class="a-sec">
+      <div class="a-h2">Choose your roof<small>compare line by line</small></div>
+      <table class="a-cmp a-cmp-${tiered.length}">
+        <colgroup><col class="lab">${tiered.map(() => '<col>').join('')}</colgroup>
+        <thead><tr><th></th>${tiered.map((r, k) => `
+          <th${col(k)}><div class="a-oh">${k === featured ? `<div class="a-rib">${esc(theme.ribbon || 'Recommended')}</div>` : ''}
+            <div class="t">${esc(r.tier)}</div>
+            <div class="m">${esc([r.q.shingleBrand, r.q.shingleModel].filter(Boolean).join(' ') || r.q.label || '')}</div>
+            ${r.q.shingleColor ? `<div class="c">Color: ${esc(r.q.shingleColor)}</div>` : ''}</div></th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows.map(row => `<tr><td class="rk">${esc(row.k)}</td>${row.cells.map((v, k) => `<td${col(k)}>${hi(v)}</td>`).join('')}</tr>`).join('')}
+          <tr class="price"><td class="rk">Total price</td>${tiered.map((r, k) => `<td${col(k)}><div class="amt">${r.price > 0 ? fmt0(r.price) : '—'}</div><div class="amt-s">installed price</div></td>`).join('')}</tr>
+          ${isCash ? '' : `<tr class="pay"><td class="rk">You pay</td>${tiered.map((r, k) => {
+            const up = r.price > 0 ? Math.max(0, r.price - base) : 0;
+            const pay = isCash ? r.price : dedOf(r) + up;
+            const sub = isCash ? (num(r.q.depositAmount) > 0 ? fmt0(num(r.q.depositAmount)) + ' at signing' : 'total due') : (up ? 'deductible + ' + fmt0(up) + ' upgrade' : 'your deductible');
+            return `<td${col(k)}><div class="pay-n">${r.price > 0 || pay > 0 ? fmt0(pay) : '—'}</div><div class="amt-s">${sub}</div></td>`;
+          }).join('')}</tr>`}
+          <tr class="pick"><td></td>${tiered.map((r, k) => `<td${col(k)}><span class="a-box"></span>I choose ${esc(r.tier)}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+      ${hasCarrier ? `<div class="a-foot-note">Your claim with <b>${esc(j.carrier)}</b> pays the approved scope. You pay your deductible, plus the upgrade for any option above ${esc(tiered[0].tier)}.</div>` : ''}
+    </div>`;
+    // Page-2 payment card
+    const ins = Math.max(0, base - deductible);
+    payCard = isCash ? `
+      <table class="a-inv">
+        ${tiered.map(r => `<tr><td>${esc(r.tier)}</td><td class="r">${r.price > 0 ? fmt(r.price) : '—'}</td></tr>`).join('')}
+        ${deposit > 0 ? `<tr class="sub"><td>Deposit due at signing</td><td class="r">${fmt(deposit)}</td></tr>` : ''}
+        <tr class="tot"><td>You pay</td><td class="r">price of your option</td></tr>
+      </table>` : `
+      <table class="a-inv">
+        ${hasCarrier ? `<tr><td>Insurance pays (approved scope)</td><td class="r">${fmt(ins)}</td></tr>` : ''}
+        <tr><td>Your deductible</td><td class="r">${fmt(deductible)}</td></tr>
+        ${tiered.slice(1).filter(r => r.price > base).map(r => `<tr><td>${esc(r.tier)} upgrade</td><td class="r">+${fmt(r.price - base)}</td></tr>`).join('')}
+        ${deposit > 0 ? `<tr class="sub"><td>Deposit due at signing</td><td class="r">${fmt(deposit)}</td></tr>` : ''}
+        <tr class="tot"><td>You pay</td><td class="r">${fmt0(deductible)} + upgrade</td></tr>
+      </table>`;
+  } else {
+    // Single option payment card
+    let rows = '';
+    if(isCash){
+      if(showItemized) rows += workSections.filter(s => s.price > 0).map(s => `<tr><td>${esc(s.title || 'Section')}</td><td class="r">${fmt(s.price)}</td></tr>`).join('');
+      if(deposit > 0) rows += `<tr class="sub"><td>Deposit due at signing</td><td class="r">${fmt(deposit)}</td></tr>`;
+      rows += `<tr class="tot"><td>Total investment</td><td class="r">${fmt(contract)}</td></tr>`;
+    } else {
+      rows += `<tr><td>Total contract</td><td class="r">${fmt(contract)}</td></tr>`;
+      if(hasCarrier) rows += `<tr><td>Less: estimated insurance coverage</td><td class="r">−${fmt(Math.max(0, contract - deductible))}</td></tr>`;
+      if(deposit > 0) rows += `<tr class="sub"><td>Deposit due at signing</td><td class="r">${fmt(deposit)}</td></tr>`;
+      rows += `<tr class="tot"><td>You pay${hasCarrier ? ' (deductible)' : ''}</td><td class="r">${fmt(hasCarrier ? deductible : contract)}</td></tr>`;
+    }
+    payCard = `<table class="a-inv">${rows}</table>`;
+  }
+
+  // ── Single-option system block ──
+  let system = '';
+  if(!tiered){
+    const fs = parseFeats(q.features).filter(f => !/^upgrade$/i.test(f.k));
+    const name = [q.shingleBrand, q.shingleModel].filter(Boolean).join(' ');
+    system = `
+    <div class="a-sys">
+      <div class="a-sec" style="margin:0">
+        <div class="a-h2">Your roofing system</div>
+        ${name ? `<div class="a-sys-h"><span class="a-sys-n">${esc(name)}</span>${q.shingleColor ? `<span class="a-sys-c">Color: ${esc(q.shingleColor)}</span>` : ''}</div>` : ''}
+        ${fs.length ? `<div class="a-feat">${fs.map(f => `<div>${f.k ? `<div class="a-k">${esc(f.k)}</div>` : ''}${hi(f.v)}</div>`).join('')}</div>` : ''}
+      </div>
+      <div class="a-card"><div class="a-h3">Your investment</div>${payCard}</div>
+    </div>`;
+  }
+
+  const warrantyCard = warrantySec ? `<div class="a-card"><div class="a-h3">Your warranty</div><ul class="a-wl">${warrantySec.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>` : '';
+  const trust = `
+    <div class="a-trust">
+      <div><b>Licensed &amp; fully insured</b>COI available on request</div>
+      <div><b>Certified installers</b>Manufacturer-certified crews</div>
+      <div><b>Storm damage experts</b>We work with your insurance</div>
+      <div><b>Workmanship warranty</b>We stand behind every roof</div>
+    </div>`;
+  const signatures = `
+    <div class="a-sig">
+      <div><div class="ln"></div><div class="cap"><span><b>Customer signature</b>${tiered ? ' · option checked above' : ''}</span><span>Date</span></div></div>
+      <div><div class="ln"></div><div class="cap"><span><b>${esc(ci.name || 'Contractor')} representative</b>${q.repName ? ' · ' + esc(q.repName) : ''}</span><span>Date</span></div></div>
+    </div>
+    <div class="a-agree">By signing, the customer accepts the ${tiered ? 'selected option, ' : ''}scope of work, pricing and terms in this ${docTitle.toLowerCase()}.${ci.license ? '<br>' + esc(ci.license) : ''}</div>`;
+
+  const page1 = tiered
+    ? `${header}${info}${glance}${compare}`
+    : `${header}${info}${glance}${system}
+       <div class="a-sec"><div class="a-h2">Scope of work</div><div class="a-scope-grid">${scopeHtml}</div></div>`;
+  const page2 = tiered
+    ? `${header}${info}
+      <div class="a-two">
+        <div class="a-sec" style="margin:0"><div class="a-h2">Scope of work<small>included with every option</small></div>${scopeHtml}</div>
+        <div><div class="a-card"><div class="a-h3">Your investment</div>${payCard}</div>${warrantyCard}</div>
+      </div>
+      ${termsHtml ? `<div class="a-sec"><div class="a-h2">Terms &amp; conditions</div><div class="a-terms">${termsHtml}</div></div>` : ''}
+      ${trust}${signatures}`
+    : `${header}${info}
+      ${warrantyCard ? `<div class="a-two a-two-s"><div>${warrantyCard}</div><div class="a-card"><div class="a-h3">Amount accepted</div>${payCard}</div></div>` : ''}
+      ${termsHtml ? `<div class="a-sec"><div class="a-h2">Terms &amp; conditions</div><div class="a-terms">${termsHtml}</div></div>` : ''}
+      ${trust}${signatures}`;
+
+  const ink = '#2A2622', gold = '#B8955A', goldDk = '#7A5A26', line = '#D9CDB8', cream = '#F4ECDD', muted = '#6E665C';
+  const css = `
+  @page { size: letter; margin: 0.45in 0.5in 0.5in; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body { font-family: 'Source Sans 3', 'Helvetica Neue', Arial, sans-serif; color: ${ink}; font-size: 9.6pt; line-height: 1.42; font-variant-numeric: lining-nums; }
+  .serif { font-family: 'Playfair Display', Georgia, serif; }
+  .a-page { width: 7.5in; margin: 0 auto; }
+  .a-page + .a-page { break-before: page; page-break-before: always; }
+  @media screen {
+    body { background: #E7E2DA; padding: 24px 0; }
+    .a-page { width: 8.5in; min-height: 11in; background: #fff; padding: 0.45in 0.5in 0.5in; margin: 0 auto 24px; box-shadow: 0 2px 18px rgba(0,0,0,.12); }
+  }
+  /* header */
+  .a-hd { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 12px; position: relative; margin-bottom: 8px; }
+  .a-hd::after { content: ''; position: absolute; left: 0; right: 0; bottom: -2px; height: 3px; border-top: 1px solid ${gold}; border-bottom: 1px solid ${gold}; }
+  .a-hd-l { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .a-logo { height: 58px; width: auto; max-width: 110px; object-fit: contain; }
+  .a-co { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 16pt; line-height: 1.1; }
+  .a-co-sub { font-size: 8pt; color: ${muted}; margin-top: 3px; }
+  .a-hd-r { text-align: right; flex-shrink: 0; }
+  .a-doc { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 20pt; line-height: 1; }
+  .a-doc em { font-style: italic; font-weight: 600; color: ${goldDk}; }
+  .a-meta { margin-top: 6px; font-size: 8pt; color: ${muted}; line-height: 1.55; white-space: nowrap; }
+  .a-meta b { color: ${ink}; font-weight: 600; }
+  /* info */
+  .a-info { display: grid; grid-template-columns: 1.1fr 1.3fr 1fr; margin-top: 14px; border-top: 1px solid ${line}; border-bottom: 1px solid ${line}; break-inside: avoid; }
+  .a-info > div { padding: 9px 12px; border-left: 2px solid ${gold}; }
+  .a-info > div + div { margin-left: 10px; }
+  .a-k { font-size: 6.8pt; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: ${goldDk}; margin-bottom: 3px; }
+  .a-v { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 10.5pt; line-height: 1.25; }
+  .a-v2 { font-size: 8.2pt; color: ${muted}; margin-top: 2px; }
+  /* sections */
+  .a-sec { margin-top: 16px; }
+  .a-h2 { font-family: 'Playfair Display', Georgia, serif; font-size: 14pt; font-weight: 700; margin: 0 0 8px; display: flex; align-items: baseline; gap: 10px; break-after: avoid; page-break-after: avoid; }
+  .a-h2::before { content: ''; width: 18px; height: 1px; background: ${gold}; align-self: center; flex-shrink: 0; }
+  .a-h2 small { font-family: 'Source Sans 3', Arial, sans-serif; font-size: 8.5pt; font-weight: 400; color: ${muted}; }
+  .a-h3 { font-family: 'Playfair Display', Georgia, serif; font-size: 12pt; font-weight: 700; margin: 0 0 6px; }
+  /* glance */
+  .a-glance { display: grid; grid-template-columns: 2.3in 1fr; gap: 16px; margin-top: 14px; break-inside: avoid; page-break-inside: avoid; }
+  .a-glance.noimg { grid-template-columns: 1fr; }
+  .a-diag { border: 1px solid ${gold}; padding: 6px; height: 2.1in; display: flex; align-items: center; justify-content: center; background: #fff; }
+  .a-diag img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .a-diag.sat img { width: 100%; height: 100%; object-fit: cover; }
+  .a-glance-r { display: flex; flex-direction: column; }
+  .a-glance .a-h2 { margin-bottom: 8px; }
+  .a-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .a-tile { border-left: 2px solid ${gold}; padding: 4px 10px; background: ${cream}; }
+  .a-tile .n { font-family: 'Playfair Display', Georgia, serif; font-size: 15pt; font-weight: 700; line-height: 1.15; }
+  .a-tile .l { font-size: 6.8pt; color: ${goldDk}; text-transform: uppercase; letter-spacing: .14em; font-weight: 700; margin-top: 1px; }
+  .a-note { margin-top: 10px; font-size: 9pt; color: #4A433B; line-height: 1.5; }
+  /* comparison */
+  .a-cmp { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; break-inside: avoid; page-break-inside: avoid; }
+  .a-cmp col.lab { width: 0.95in; }
+  .a-cmp th, .a-cmp td { padding: 6px 10px; vertical-align: top; border-bottom: 1px solid ${line}; text-align: left; }
+  .a-cmp thead th { padding: 0; border-bottom: 1px solid ${gold}; font-weight: inherit; }
+  .a-oh { padding: 18px 10px 9px; position: relative; }
+  .a-oh .t { font-family: 'Playfair Display', Georgia, serif; font-style: italic; font-weight: 600; font-size: 19pt; line-height: 1.05; }
+  .a-oh .m { font-weight: 700; font-size: 9.6pt; margin-top: 3px; line-height: 1.25; }
+  .a-oh .c { font-size: 8pt; color: ${muted}; margin-top: 1px; }
+  .a-rib { position: absolute; top: 5px; left: 10px; font-size: 6.6pt; font-weight: 700; letter-spacing: .24em; text-transform: uppercase; color: ${goldDk}; }
+  .a-cmp th.mid .a-oh { padding-top: 14px; }
+  .a-cmp th.mid .a-rib { top: 2px; }
+  .a-cmp th.mid { border-top: 4px solid ${gold}; }
+  .a-cmp .mid { background: ${cream}; }
+  .a-cmp td.rk { font-size: 6.8pt; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: ${goldDk}; padding-top: 8px; }
+  .a-cmp td { font-size: 8.7pt; line-height: 1.35; }
+  .a-hi { color: ${goldDk}; font-weight: 700; }
+  .a-cmp tr.price td { padding-top: 10px; border-bottom: 0; }
+  .amt { font-family: 'Playfair Display', Georgia, serif; font-size: 17pt; font-weight: 700; line-height: 1; font-variant-numeric: lining-nums tabular-nums; }
+  .amt-s { font-size: 7.8pt; color: ${muted}; margin-top: 3px; }
+  .a-cmp tr.pay td { border-top: 3px double ${gold}; border-bottom: 0; padding-top: 8px; }
+  .pay-n { font-family: 'Playfair Display', Georgia, serif; font-size: 12.5pt; font-weight: 700; }
+  .a-cmp tr.pick td { border-bottom: 0; padding-top: 10px; font-weight: 700; font-size: 8.8pt; }
+  .a-box { display: inline-block; width: 12px; height: 12px; border: 1.5px solid ${ink}; vertical-align: -2px; margin-right: 6px; }
+  .a-foot-note { font-size: 8pt; color: ${muted}; margin-top: 8px; }
+  /* single system */
+  .a-sys { display: grid; grid-template-columns: 1fr 2.55in; gap: 18px; margin-top: 16px; break-inside: avoid; page-break-inside: avoid; }
+  .a-sys-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .a-sys-n { font-family: 'Playfair Display', Georgia, serif; font-size: 15pt; font-weight: 700; }
+  .a-sys-c { font-size: 8.5pt; color: ${muted}; }
+  .a-feat { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; margin-top: 6px; }
+  .a-feat > div { padding: 6px 0; border-bottom: 1px solid ${line}; font-size: 8.8pt; }
+  .a-feat .a-k { margin-bottom: 1px; }
+  /* cards + payment */
+  .a-card { border: 1px solid ${gold}; padding: 11px 13px; break-inside: avoid; page-break-inside: avoid; align-self: start; }
+  .a-card + .a-card { margin-top: 10px; }
+  .a-inv { width: 100%; border-collapse: collapse; font-size: 8.9pt; }
+  .a-inv td { padding: 5px 0; border-bottom: 1px solid ${line}; vertical-align: top; }
+  .a-inv td.r { text-align: right; font-weight: 600; white-space: nowrap; padding-left: 10px; }
+  .a-inv tr.sub td { color: ${muted}; font-size: 8.2pt; }
+  .a-inv tr.tot td { border-bottom: 0; border-top: 3px double ${gold}; padding-top: 8px; font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 11.5pt; }
+  .a-wl { margin: 0; padding-left: 0; list-style: none; font-size: 8.8pt; }
+  .a-wl li { position: relative; padding-left: 15px; margin-bottom: 4px; }
+  .a-wl li::before { content: '✓'; position: absolute; left: 0; color: ${goldDk}; font-weight: 700; }
+  /* scope */
+  .a-scope-grid { columns: 2; column-gap: 20px; }
+  .a-scope-sec { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px; }
+  .a-scope-grid .a-scope-sec { break-inside: auto; page-break-inside: auto; }
+  .a-scope-h { break-after: avoid; }
+  .a-scope-h { display: flex; justify-content: space-between; font-weight: 700; font-size: 9pt; border-bottom: 1px solid ${line}; padding-bottom: 2px; margin-bottom: 4px; }
+  .a-scope { margin: 0; padding: 0; list-style: none; }
+  .a-scope li { position: relative; padding-left: 14px; margin-bottom: 3.5px; font-size: 8.8pt; line-height: 1.38; break-inside: avoid; }
+  .a-scope li::before { content: ''; position: absolute; left: 2px; top: 5px; width: 5px; height: 5px; background: ${gold}; transform: rotate(45deg); }
+  .a-two { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-top: 16px; align-items: start; }
+  .a-two-s { grid-template-columns: 1fr 1fr; }
+  /* terms, trust, signatures */
+  .a-terms { columns: 2; column-gap: 20px; font-size: 7.8pt; line-height: 1.45; color: #4A433B; }
+  .a-terms p { margin: 0 0 5px; break-inside: avoid; }
+  .a-trust { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; padding: 9px 0; border-top: 1px solid ${line}; border-bottom: 1px solid ${line}; break-inside: avoid; page-break-inside: avoid; }
+  .a-trust div { font-size: 7.6pt; color: ${muted}; line-height: 1.3; }
+  .a-trust b { display: block; color: ${ink}; font-size: 8.3pt; font-family: 'Playfair Display', Georgia, serif; }
+  .a-sig { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 22px; break-inside: avoid; page-break-inside: avoid; }
+  .a-sig .ln { border-bottom: 1.5px solid ${ink}; height: 34px; }
+  .a-sig .cap { display: flex; justify-content: space-between; gap: 8px; font-size: 7.8pt; color: ${muted}; margin-top: 4px; }
+  .a-sig .cap b { color: ${ink}; }
+  .a-agree { font-size: 7.6pt; color: ${muted}; margin-top: 10px; text-align: center; break-before: avoid; }
+  `;
+
+  const title = `Roofing ${docTitle}${j.name ? ' - ' + esc(j.name) : ''}${j.address && j.address !== '—' ? ' - ' + esc(String(j.address).split(',')[0].trim()) : ''}`;
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+${theme.fonts || '<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">'}
+<style>${css}</style></head><body>
+<div class="a-page">${page1}</div>
+<div class="a-page">${page2}</div>
+</body></html>`;
+}
+window.buildQuoteLayoutA = buildQuoteLayoutA;
+
 function openQuotePreview(j, opts){
   opts = opts || {};
+  // Layout A (two-page Heritage proposal) is the default; pass layout:'classic'
+  // for the previous cover-page design.
+  if(opts.layout !== 'classic'){
+    const html = buildQuoteLayoutA(j, opts);
+    if(opts.returnHtml) return html;
+    const w = (opts.win && !opts.win.closed) ? opts.win : window.open('', '_blank');
+    if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    return;
+  }
   const themeKey = opts.theme || 'heritage';
   const theme = (typeof EST_THEMES !== 'undefined' && EST_THEMES[themeKey]) || {};
   const q = getJobQuote(j);
