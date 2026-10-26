@@ -19031,7 +19031,8 @@ function buildQuoteLayoutA(j, opts){
             ${r.q.shingleColor ? `<div class="c">Color: ${esc(r.q.shingleColor)}</div>` : ''}</div></th>`).join('')}</tr></thead>
         <tbody>
           ${rows.map(row => `<tr><td class="rk">${esc(row.k)}</td>${row.cells.map((v, k) => `<td${col(k)}>${hi(v)}</td>`).join('')}</tr>`).join('')}
-          <tr class="price"><td class="rk">Total price</td>${tiered.map((r, k) => `<td${col(k)}><div class="amt">${r.price > 0 ? fmt0(r.price) : '—'}</div><div class="amt-s">installed price</div></td>`).join('')}</tr>
+          <tr class="price"><td class="rk">Total price</td>${tiered.map((r, k) => { const up = r.price > 0 ? r.price - base : 0;
+            return `<td${col(k)}><div class="amt">${r.price > 0 ? fmt0(r.price) : '—'}</div>${up > 0 ? `<div class="amt-up">+${fmt0(up)} upgrade</div>` : `<div class="amt-s">${r.price > 0 ? 'total installed price' : '&nbsp;'}</div>`}</td>`; }).join('')}</tr>
           ${isCash ? '' : `<tr class="pay"><td class="rk">You pay</td>${tiered.map((r, k) => {
             const up = r.price > 0 ? Math.max(0, r.price - base) : 0;
             const pay = isCash ? r.price : dedOf(r) + up;
@@ -19193,6 +19194,7 @@ function buildQuoteLayoutA(j, opts){
   .a-cmp tr.price td { padding-top: 10px; border-bottom: 0; }
   .amt { font-family: 'Playfair Display', Georgia, serif; font-size: 17pt; font-weight: 700; line-height: 1; font-variant-numeric: lining-nums tabular-nums; }
   .amt-s { font-size: 7.8pt; color: ${muted}; margin-top: 3px; }
+  .amt-up { font-size: 8.4pt; font-weight: 700; color: ${goldDk}; margin-top: 3px; }
   .a-cmp tr.pay td { border-top: 3px double ${gold}; border-bottom: 0; padding-top: 8px; }
   .pay-n { font-family: 'Playfair Display', Georgia, serif; font-size: 12.5pt; font-weight: 700; }
   .a-cmp tr.pick td { border-bottom: 0; padding-top: 10px; font-weight: 700; font-size: 8.8pt; }
