@@ -16803,27 +16803,144 @@ function defaultTermsCash(){
 }
 
 function buildQuoteSelector(j, q){
+  // Option bar: one large tab per quote option, the Good / Better / Best brand
+  // menu, and a ⋯ menu for New / Duplicate / Delete.
   const list = getJobQuotes(j);
-  const money = n => { const v=moneyNum(n); return v>0 ? '$'+v.toLocaleString(undefined,{maximumFractionDigits:0}) : ''; };
-  let tabs = '';
-  list.forEach((qq,i)=>{
-    const active = i===j.activeQuote;
-    const lbl = qq.label || ('Option '+String.fromCharCode(65+i));
-    const amt = money(qq.contractAmount);
-    const amtSpan = amt ? '<span style="opacity:0.7;font-weight:600">'+amt+'</span>' : '';
-    tabs += '<button onclick="quoteSelect(\''+j.id+'\','+i+')" style="flex-shrink:0;background:'+(active?'rgba(77,157,224,0.18)':'#1E253A')+';border:1px solid '+(active?'var(--brand-light)':'var(--border)')+';color:'+(active?'var(--brand-light)':'var(--muted)')+';font-size:11px;font-weight:700;padding:6px 11px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:6px;white-space:nowrap">'+escapeHtml(lbl)+amtSpan+'</button>';
-  });
-  const delBtn = list.length>1 ? '<button onclick="quoteDelete(\''+j.id+'\',\''+q._qid+'\')" title="Delete this quote" style="background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;padding:7px 9px;border-radius:6px" onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--muted)\'"><i class="ti ti-trash" style="font-size:14px"></i></button>' : '';
-  return '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;align-items:center">'
-    + tabs
-    + '<button onclick="quoteMakeTiersPick(\''+j.id+'\',this)" title="Create Good / Better / Best shingle options" style="flex-shrink:0;background:rgba(184,149,90,0.14);border:1px solid rgba(184,149,90,0.5);color:#E8D3AE;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;white-space:nowrap"><i class="ti ti-stack-2" style="font-size:12px;margin-right:3px"></i>Good / Better / Best</button>'
-    + '<button onclick="quoteAdd(\''+j.id+'\',false)" title="New blank quote" style="flex-shrink:0;background:rgba(52,211,153,0.1);border:1px dashed rgba(52,211,153,0.4);color:#34D399;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-plus" style="font-size:12px"></i>New</button>'
-    + '<button onclick="quoteAdd(\''+j.id+'\',true)" title="Duplicate this quote" style="flex-shrink:0;background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;font-family:\'Barlow\',sans-serif;display:flex;align-items:center;gap:4px"><i class="ti ti-copy" style="font-size:12px"></i>Duplicate</button>'
-    + '</div>'
-    + '<div style="display:flex;align-items:center;gap:8px">'
-    + '<input value="'+escapeHtml(q.label||'')+'" onchange="quoteRelabel(\''+j.id+'\',\''+q._qid+'\',this.value)" placeholder="Quote label (e.g. Option A — Landmark)" style="flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:\'Barlow\',sans-serif;outline:none">'
-    + delBtn
+  const money = n => { const v=moneyNum(n); return v>0 ? '$'+v.toLocaleString(undefined,{maximumFractionDigits:0}) : '—'; };
+  const tabs = list.map((qq,i)=>{
+    const lbl = String(qq.label || ('Option '+String.fromCharCode(65+i)));
+    const tm = lbl.match(/^\s*(good|better|best)\b\s*[—–-]?\s*(.*)$/i);
+    const tier = tm ? tm[1][0].toUpperCase()+tm[1].slice(1).toLowerCase() : ('Option '+String.fromCharCode(65+i));
+    const name = tm ? (tm[2] || [qq.shingleBrand, qq.shingleModel].filter(Boolean).join(' ')) : (lbl || [qq.shingleBrand, qq.shingleModel].filter(Boolean).join(' '));
+    return '<button type="button" class="qe-opt'+(i===j.activeQuote?' on':'')+'" onclick="window.__quoteFlush&&window.__quoteFlush();quoteSelect(\''+j.id+'\','+i+')">'
+      + '<span class="qe-opt-t">'+escapeHtml(tier)+'</span>'
+      + '<span class="qe-opt-m">'+escapeHtml(name||'—')+'</span>'
+      + '<span class="qe-opt-p"'+(i===j.activeQuote?' id="qeActivePrice"':'')+'>'+money(qq.contractAmount)+'</span></button>';
+  }).join('');
+  const del = list.length>1 ? '<button type="button" class="qe-menu-i danger" onclick="window.__quoteFlush&&window.__quoteFlush();quoteDelete(\''+j.id+'\',\''+q._qid+'\')">Delete this option</button>' : '';
+  return '<div class="qe-ob">'
+    + '<div class="qe-opts">'+tabs+'</div>'
+    + '<button type="button" class="qe-gbb" onclick="window.__quoteFlush&&window.__quoteFlush();quoteMakeTiersPick(\''+j.id+'\',this)" title="Create Good / Better / Best shingle options">Good / Better / Best ▾</button>'
+    + '<div class="qe-more"><button type="button" class="qe-ib" onclick="this.parentNode.classList.toggle(\'open\')" aria-label="More quote actions">⋯</button>'
+    + '<div class="qe-menu">'
+    + '<button type="button" class="qe-menu-i" onclick="window.__quoteFlush&&window.__quoteFlush();quoteAdd(\''+j.id+'\',false)">New blank option</button>'
+    + '<button type="button" class="qe-menu-i" onclick="window.__quoteFlush&&window.__quoteFlush();quoteAdd(\''+j.id+'\',true)">Duplicate this option</button>'
+    + del + '</div></div>'
     + '</div>';
+}
+
+// Styles for the quote editor (injected once)
+const QE_CSS = `
+.qe{padding:14px 16px 0;--qe-card:#141927;--qe-field:#1E253A}
+.qe *{box-sizing:border-box}
+.qe-ob{display:flex;align-items:stretch;gap:8px;margin-bottom:14px}
+.qe-opts{flex:1;display:flex;gap:3px;background:var(--qe-field);border:1px solid var(--border);border-radius:10px;padding:3px;min-width:0}
+.qe-opt{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 11px;border-radius:7px;border:0;background:transparent;cursor:pointer;text-align:left;font-family:inherit}
+.qe-opt-t{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.qe-opt-m{font-size:12.5px;font-weight:700;color:var(--brand);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qe-opt-p{font-size:12px;font-weight:600;color:var(--muted)}
+.qe-opt.on{background:rgba(77,157,224,.16);box-shadow:inset 0 0 0 1px var(--brand-light)}
+.qe-opt.on .qe-opt-t{color:var(--brand-light)}
+.qe-gbb{flex-shrink:0;background:rgba(184,149,90,.14);border:1px solid rgba(184,149,90,.5);color:#E8D3AE;font-size:12px;font-weight:700;padding:0 12px;border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.qe-more{position:relative;flex-shrink:0;display:flex}
+.qe-ib{width:40px;border-radius:9px;border:1px solid var(--border);background:var(--qe-field);color:var(--muted);font-size:18px;font-weight:800;cursor:pointer}
+.qe-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:190px;background:#151B2C;border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 12px 30px rgba(0,0,0,.45)}
+.qe-more.open .qe-menu{display:block}
+.qe-menu-i{display:block;width:100%;text-align:left;background:none;border:0;border-radius:7px;padding:9px 11px;color:var(--brand);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.qe-menu-i:hover{background:rgba(255,255,255,.06)}
+.qe-menu-i.danger{color:var(--danger)}
+.qe-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:14px;align-items:start}
+.qe-main,.qe-sum{min-width:0}
+.qe-sec{background:var(--qe-card);border:1px solid var(--border);border-radius:12px;margin-bottom:12px}
+.qe-sh{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.qe-sec.flat .qe-sh{border-bottom:0}
+.qe-num{width:22px;height:22px;flex-shrink:0;border-radius:50%;background:rgba(77,157,224,.18);color:var(--brand-light);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.qe-ttl{font-size:13px;font-weight:800;color:var(--brand);white-space:nowrap}
+.qe-sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.qe-sp{flex:1}
+.qe-lnk{white-space:nowrap;flex-shrink:0;background:none;border:0;color:var(--brand-light);font-size:11.5px;font-weight:700;cursor:pointer;padding:2px 0;font-family:inherit}
+.qe-lnk.mut{color:var(--muted)}
+.qe-sb{padding:13px 14px}
+.qe-lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:5px;display:block}
+.qe input[type=text],.qe input[type=date],.qe input:not([type]),.qe select,.qe textarea{width:100%;background:var(--qe-field);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--brand);font-family:inherit;outline:none}
+.qe input:focus,.qe textarea:focus,.qe select:focus{border-color:var(--brand-light)}
+.qe textarea{resize:vertical;line-height:1.5}
+.qe #qScopeSelector input[type=text]{width:84px;padding:4px 7px;font-size:11.5px;border-radius:5px}
+.qe-g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.qe-brands{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.qe-chip{padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit}
+.qe-chip.on{background:rgba(77,157,224,.16);border-color:var(--brand-light);color:var(--brand-light)}
+.qe-models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.qe-models .qe-mc{width:auto;min-width:0;margin:0}
+.qe-mc{border:1px solid var(--border);border-radius:9px;padding:9px 11px;background:var(--qe-field);cursor:pointer;text-align:left;font-family:inherit;color:var(--brand)}
+.qe-mc.on{border-color:var(--brand-light);box-shadow:inset 0 0 0 1px var(--brand-light);background:rgba(77,157,224,.08)}
+.qe-mc-t{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.qe-mc-m{font-weight:700;font-size:13px;margin-top:2px}
+.qe-mc-x{font-size:11px;color:var(--muted);margin-top:2px}
+.qe-custom{margin-top:10px}
+.qe-feat{margin-top:12px;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.qe-fr{display:grid;grid-template-columns:92px 1fr;align-items:center;border-bottom:1px solid var(--border)}
+.qe-fr:last-child{border-bottom:0}
+.qe-fr-k{font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;padding:0 0 0 11px}
+.qe .qe-fr textarea{border:0;border-radius:0;background:transparent;padding:9px 11px;resize:none;overflow:hidden;line-height:1.4;display:block;min-height:0}
+.qe .qe-fr textarea:focus{background:rgba(77,157,224,.06)}
+.qe-hint{font-size:10.5px;color:var(--muted);margin-top:5px}
+.qe-hint code{background:rgba(255,255,255,.06);padding:1px 4px;border-radius:3px}
+.qe-collapse{display:none;padding:0 14px 13px}
+.qe-sec.open .qe-collapse{display:block}
+.qe-from{font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.qe-sum{position:sticky;top:0}
+.qe-sc{background:var(--qe-card);border:1px solid var(--border);border-radius:12px;padding:14px}
+.qe-mode{display:flex;background:var(--qe-field);border:1px solid var(--border);border-radius:8px;padding:3px;margin-bottom:12px}
+.qe-mode button{flex:1;border:0;border-radius:6px;padding:7px;background:transparent;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.qe-mode button.on{background:rgba(77,157,224,.18);color:var(--brand-light)}
+.qe-mode button.on.cash{background:rgba(52,211,153,.16);color:var(--success)}
+.qe-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:12.5px;color:var(--brand)}
+.qe-row label{color:var(--brand)}
+.qe-row small{display:block;color:var(--muted);font-size:10.5px}
+.qe .qe-row input{width:118px;flex-shrink:0;text-align:right;font-weight:700;padding:6px 9px}
+.qe .qe-row input[readonly]{opacity:.75}
+.qe-row b{font-weight:700}
+.qe-tot{display:flex;justify-content:space-between;align-items:baseline;padding-top:11px}
+.qe-tot-l{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.qe-tot-n{font-size:26px;font-weight:800;color:var(--success);line-height:1}
+.qe-tsub{font-size:11.5px;color:var(--muted);text-align:right;margin-top:3px}
+.qe-all{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.qe-all .qe-row{border:0;padding:3px 0;font-size:12px}
+.qe-all .qe-row span:first-child{color:var(--muted)}
+.qe-ptoggle{display:flex;gap:6px;margin-top:10px}
+.qe-ptoggle button{flex:1;padding:7px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--qe-field);color:var(--muted);font-family:inherit}
+.qe-ptoggle button.active{border-color:var(--brand-light);background:rgba(77,157,224,.15);color:var(--brand-light)}
+.qe-meta{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.qe-ready{margin-top:10px;font-size:11.5px;color:var(--muted);line-height:1.6}
+.qe-ready b{color:var(--success)}
+.qe-acts{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}
+.qe-btn{border-radius:9px;padding:10px 14px;font-weight:700;font-size:12.5px;border:1px solid var(--border);background:var(--qe-field);color:var(--brand);cursor:pointer;font-family:inherit;white-space:nowrap}
+.qe-btn.pri{background:var(--brand-light);border-color:var(--brand-light);color:#06101F}
+.qe-saved{font-size:11px;color:var(--muted);text-align:center;margin-top:7px;min-height:14px}
+.qe-saved.ok{color:var(--success)}
+.qe-bar{display:none}
+@media (max-width:860px){
+  .qe{padding:12px 12px 0}
+  .qe-grid{grid-template-columns:1fr}
+  .qe-sum{position:static}
+  .qe-opt-m{display:none}
+  .qe-opt-p{font-size:13.5px;font-weight:800;color:var(--brand)}
+  .qe-gbb{font-size:0;padding:0 11px}
+  .qe-gbb::after{content:'G/B/B ▾';font-size:11.5px}
+  .qe-sum .qe-acts{display:none}
+  .qe-bar{display:flex;position:sticky;bottom:0;z-index:20;align-items:center;gap:10px;margin:4px -12px 0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#0F1421;border-top:1px solid var(--border)}
+  .qe-bar-l{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--muted);text-transform:uppercase}
+  .qe-bar-n{font-size:20px;font-weight:800;color:var(--success);line-height:1.1}
+  .qe-models{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .qe-sh .qe-sub{display:none}
+  .qe-fr{grid-template-columns:76px 1fr}
+}
+`;
+function qeEnsureStyles(){
+  if(document.getElementById('qeStyles')) return;
+  const st = document.createElement('style'); st.id = 'qeStyles'; st.textContent = QE_CSS;
+  document.head.appendChild(st);
 }
 
 function renderQuoteTab(j){
@@ -16852,131 +16969,100 @@ function renderQuoteTab(j){
 
   const companyComplete = ci.name && ci.address && ci.phone;
 
+  qeEnsureStyles();
+  const curSys = shingleSystemFor(q);
+  const brandList = [...new Set(SHINGLE_CATALOG.map(x => x.brand))];
+  const tierOrder = { Good:0, Better:1, Best:2 };
+  const isCash = !isInsurance;
+  const termParas = String(q.terms||'').split('\n\n').filter(x => x.trim()).length;
+  const scopeAll = parseScopeSections(q.scope||'').reduce((n, sec) => n + sec.items.length, 0);
+  const scopeOff = (q.scopeExclude||[]).length;
+  const hasDiagram = (j.roofFiles||[]).some(f => jobFileIsPdf(f) || jobFileIsImage(f));
+  const re = j.roofEstimate || {};
+  const reBits = [re.totalSquares || re.dwellingSquares ? (Math.round((re.dwellingSquares||re.totalSquares)*10)/10)+' sq' : '', re.pitch||'', re.facets ? re.facets+' facets' : ''].filter(Boolean).join(' · ');
+  const val = v => escapeHtml(String(v==null?'':v));
+
   body.innerHTML = `
-    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
-      <button onclick="activeTab='overview';renderDetailPanel()" style="align-self:flex-start;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--brand);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:'Barlow',sans-serif"><i class="ti ti-arrow-left" style="font-size:13px"></i>Back to Overview</button>
+    <div class="qe" id="qeRoot">
       ${buildQuoteSelector(j, q)}
-      <!-- Mode toggle -->
-      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:10px">
-        <i class="ti ti-${isInsurance?'shield':'cash'}" style="color:${isInsurance?'#4D9DE0':'#34D399'};font-size:16px"></i>
-        <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Quote Type</span>
-        <div style="flex:1"></div>
-        <div style="display:flex;background:#1E253A;border:1px solid var(--border);border-radius:6px;overflow:hidden">
-          <button id="quoteModeInsurance" style="background:${isInsurance?'rgba(77,157,224,0.18)':'transparent'};color:${isInsurance?'var(--brand-light)':'var(--muted)'};border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-shield" style="font-size:12px;margin-right:4px"></i>Insurance</button>
-          <button id="quoteModeCash" style="background:${!isInsurance?'rgba(52,211,153,0.18)':'transparent'};color:${!isInsurance?'#34D399':'var(--muted)'};border:none;font-size:11px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:'Barlow',sans-serif;border-left:1px solid var(--border)"><i class="ti ti-cash" style="font-size:12px;margin-right:4px"></i>Cash</button>
-        </div>
-      </div>
-
-      <!-- Company Info card -->
-      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <i class="ti ti-building" style="color:var(--brand-light);font-size:14px"></i>
-          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Company Info</span>
-          ${!companyComplete?'<span style="font-size:9px;font-weight:700;color:var(--warn);padding:1px 5px;border:1px solid rgba(245,158,11,0.4);border-radius:3px">SETUP</span>':''}
-          <div style="flex:1"></div>
-          <button id="quoteEditCompanyBtn" style="background:rgba(77,157,224,0.12);border:1px solid rgba(77,157,224,0.3);color:var(--brand-light);font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;cursor:pointer">Edit</button>
-        </div>
-        <div style="font-size:12px;color:var(--brand);line-height:1.5">
-          <strong>${escapeHtml(ci.name)}</strong>
-          ${ci.address?`<br>${escapeHtml(ci.address)}`:''}
-          ${ci.phone?`<br>${escapeHtml(ci.phone)}`:''}
-          ${ci.email?` · ${escapeHtml(ci.email)}`:''}
-          ${ci.website?`<br>${escapeHtml(ci.website)}`:''}
-          ${ci.license?`<br><span style="color:var(--muted);font-size:11px">${escapeHtml(ci.license)}</span>`:''}
-          ${!companyComplete?`<div style="margin-top:6px;font-size:11px;color:var(--warn)"><i class="ti ti-alert-triangle"></i> Click Edit to add company address/phone before generating quotes.</div>`:''}
-        </div>
-      </div>
-
-      <!-- Materials / Job Details -->
-      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <i class="ti ti-package" style="color:var(--brand-light);font-size:14px"></i>
-          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Materials</span>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Shingle System <span style="text-transform:none;letter-spacing:0;opacity:0.8">— fills brand, model &amp; features</span></label><select id="qSystem" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif">${shingleSystemOptions((shingleSystemFor(q)||{}).key)}</select></div>
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Shingle Brand</label><input id="qShingleBrand" value="${escapeHtml(q.shingleBrand||'')}" placeholder="e.g. GAF" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Model</label><input id="qShingleModel" value="${escapeHtml(q.shingleModel||'')}" placeholder="e.g. Timberline HDZ" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-          <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Color</label><input id="qShingleColor" value="${escapeHtml(q.shingleColor||'')}" placeholder="e.g. Weathered Wood" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-          <div style="grid-column:span 2"><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Features <span style="text-transform:none;letter-spacing:0;opacity:0.8">— one per line, shown as checkmarks when the estimate has 2+ options</span></label><textarea id="qFeatures" rows="4" placeholder="e.g. Class 4 impact rating&#10;Lifetime limited warranty" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;resize:vertical">${escapeHtml(q.features||'')}</textarea></div>
-        </div>
-      </div>
-
-      <!-- Scope of Work -->
-      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <i class="ti ti-list-details" style="color:var(--brand-light);font-size:14px"></i>
-          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Scope of Work</span>
-          <div style="flex:1"></div>
-          <button id="quoteResetScopeBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Reset to default scope">Reset</button>
-        </div>
-        <textarea id="qScope" rows="9" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical;line-height:1.5">${escapeHtml(q.scope||'')}</textarea>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">One bullet point per line. Type <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px">## Section Name</code> to start a new section.</div>
-
-        <!-- Include/Exclude panel -->
-        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <i class="ti ti-checkbox" style="color:var(--brand-light);font-size:13px"></i>
-            <span style="font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Include on this Quote</span>
-            <div style="flex:1"></div>
-            <button id="quoteScopeAll"  style="background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.3);color:var(--success);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Select all">All</button>
-            <button id="quoteScopeNone" style="background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.3);color:var(--danger);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Select none">None</button>
+      <div class="qe-grid">
+        <div class="qe-main">
+          <!-- 1. Shingle -->
+          <div class="qe-sec">
+            <div class="qe-sh"><div class="qe-num">1</div><div class="qe-ttl">Shingle</div><div class="qe-sub">fills the feature rows</div><div class="qe-sp"></div><button type="button" class="qe-lnk" id="qeCustomToggle">Custom shingle</button></div>
+            <div class="qe-sb">
+              <div class="qe-brands" id="qeBrands">${brandList.map(b => `<button type="button" class="qe-chip${curSys && curSys.brand===b ? ' on' : ''}" data-qe-brand="${escapeHtml(b)}">${escapeHtml(b)}</button>`).join('')}</div>
+              <div class="qe-models" id="qeModels"></div>
+              <select id="qSystem" style="display:none">${shingleSystemOptions(q.systemKey || (curSys ? curSys.key : ''))}</select>
+              <div class="qe-custom qe-g2" id="qeCustom" style="display:${curSys ? 'none' : 'grid'}">
+                <div><label class="qe-lbl" for="qShingleBrand">Brand</label><input id="qShingleBrand" value="${val(q.shingleBrand)}" placeholder="e.g. GAF"></div>
+                <div><label class="qe-lbl" for="qShingleModel">Model</label><input id="qShingleModel" value="${val(q.shingleModel)}" placeholder="e.g. Timberline HDZ"></div>
+              </div>
+              <div class="qe-g2" style="margin-top:12px">
+                <div><label class="qe-lbl" for="qShingleColor">Color</label><input id="qShingleColor" value="${val(q.shingleColor)}" placeholder="e.g. Weathered Wood"></div>
+                <div><label class="qe-lbl" for="qLabel">Name on quote</label><input id="qLabel" value="${val(q.label)}" placeholder="e.g. Good — GAF Timberline HDZ"></div>
+              </div>
+              <div class="qe-feat" id="qeFeatRows"></div>
+              <div style="display:flex;align-items:center;margin-top:6px"><div class="qe-hint" style="margin:0">Each row prints in the same place on every option, so Good / Better / Best line up.</div><div class="qe-sp"></div><button type="button" class="qe-lnk mut" id="qeFeatText">Edit as text</button></div>
+              <textarea id="qFeatures" rows="6" style="display:none;margin-top:8px" placeholder="Label: value — one per line">${val(q.features)}</textarea>
+            </div>
           </div>
-          <div id="qScopeSelector" style="font-size:11px"></div>
-        </div>
-      </div>
 
-      <!-- Pricing -->
-      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <i class="ti ti-currency-dollar" style="color:var(--brand-light);font-size:14px"></i>
-          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Pricing</span>
-        </div>
-        <div style="display:grid;grid-template-columns:${isInsurance?'1fr 1fr 1fr':'1fr 1fr'};gap:10px">
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Contract Amount${!isInsurance ? ' <span style="color:var(--brand-light);text-transform:none;letter-spacing:0">(auto from sections)</span>' : ''}</label><input id="qContract" type="text" inputmode="decimal" ${!isInsurance ? 'readonly' : ''} value="${escapeHtml(String(q.contractAmount||''))}" placeholder="${!isInsurance ? 'Enter section prices below' : '0.00 (try 800+1200)'}" style="width:100%;background:${!isInsurance ? '#161B28' : '#1E253A'};border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none${!isInsurance ? ';cursor:not-allowed' : ''}"></div>
-          ${isInsurance ? `<div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Deductible</label><input id="qDeductible" type="text" inputmode="decimal" value="${escapeHtml(String(q.deductible||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>` : ''}
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">${isInsurance?'Deposit at Signing':'Deposit <span style="color:var(--brand-light);text-transform:none;letter-spacing:0">(auto 50% of total)</span>'}</label><input id="qDeposit" type="text" inputmode="decimal" value="${escapeHtml(String(q.depositAmount||''))}" placeholder="0.00 (try 800+1200)" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-        </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:6px">${isInsurance?'For insurance jobs, contract amount typically = RCV. Deductible = customer out-of-pocket.':'Cash quote: contract amount is total due. No deductible, no insurance coverage applied.'}</div>
-        ${!isInsurance ? `
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">
-          <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px">Pricing Display on Quote</label>
-          <div style="display:flex;gap:6px">
-            <button type="button" data-qprice-mode="itemized" class="qprice-toggle ${!q.lumpSumOnly?'active':''}" style="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${!q.lumpSumOnly?'var(--brand-light)':'var(--border)'};background:${!q.lumpSumOnly?'rgba(77,157,224,0.15)':'#1E253A'};color:${!q.lumpSumOnly?'var(--brand-light)':'var(--muted)'}">Itemized by Section</button>
-            <button type="button" data-qprice-mode="lump" class="qprice-toggle ${q.lumpSumOnly?'active':''}" style="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${q.lumpSumOnly?'var(--brand-light)':'var(--border)'};background:${q.lumpSumOnly?'rgba(77,157,224,0.15)':'#1E253A'};color:${q.lumpSumOnly?'var(--brand-light)':'var(--muted)'}">Lump Sum Only</button>
+          <!-- 2. Scope -->
+          <div class="qe-sec">
+            <div class="qe-sh"><div class="qe-num">2</div><div class="qe-ttl">Scope of work</div><div class="qe-sub" id="qeScopeCount">${scopeAll - scopeOff} of ${scopeAll} included</div><div class="qe-sp"></div>
+              <button type="button" class="qe-lnk" id="quoteScopeAll" style="color:var(--success)">All</button>
+              <button type="button" class="qe-lnk" id="quoteScopeNone" style="color:var(--danger)">None</button>
+              <button type="button" class="qe-lnk mut" id="qeScopeText">Edit as text</button></div>
+            <div class="qe-sb">
+              <div id="qeScopeTextWrap" style="display:none;margin-bottom:12px">
+                <textarea id="qScope" rows="9">${val(q.scope)}</textarea>
+                <div style="display:flex;align-items:center;margin-top:5px"><div class="qe-hint" style="margin:0">One item per line. <code>## Section Name</code> starts a new section.</div><div class="qe-sp"></div><button type="button" class="qe-lnk mut" id="quoteResetScopeBtn">Reset to default</button></div>
+              </div>
+              <div id="qScopeSelector" style="font-size:11.5px"></div>
+            </div>
           </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:5px">Itemized shows each section's price on the PDF. Lump sum shows only the total.</div>
-        </div>` : ''}
-      </div>
 
-      <!-- Terms -->
-      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <i class="ti ti-file-text" style="color:var(--brand-light);font-size:14px"></i>
-          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Terms &amp; Conditions</span>
-          <div style="flex:1"></div>
-          <button id="quoteResetTermsBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer" title="Reset to default terms">Reset</button>
-        </div>
-        <textarea id="qTerms" rows="6" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;resize:vertical;line-height:1.5">${escapeHtml(q.terms||'')}</textarea>
-      </div>
+          <!-- 3. Terms -->
+          <div class="qe-sec flat" id="qeTermsSec">
+            <div class="qe-sh"><div class="qe-num">3</div><div class="qe-ttl">Terms &amp; conditions</div><div class="qe-sub">${isInsurance ? 'Insurance' : 'Cash'} terms · ${termParas} paragraph${termParas===1?'':'s'}</div><div class="qe-sp"></div><button type="button" class="qe-lnk" onclick="document.getElementById('qeTermsSec').classList.toggle('open')">Edit</button></div>
+            <div class="qe-collapse">
+              <textarea id="qTerms" rows="8" style="font-size:12px">${val(q.terms)}</textarea>
+              <div style="text-align:right;margin-top:5px"><button type="button" class="qe-lnk mut" id="quoteResetTermsBtn">Reset to default</button></div>
+            </div>
+          </div>
 
-      <!-- Signature row -->
-      <div style="background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <i class="ti ti-signature" style="color:var(--brand-light);font-size:14px"></i>
-          <span style="font-weight:700;font-size:12px;color:var(--brand);text-transform:uppercase;letter-spacing:0.04em">Quote Details</span>
+          <!-- From -->
+          <div class="qe-sec flat">
+            <div class="qe-sh" style="flex-wrap:nowrap"><div class="qe-ttl" style="flex-shrink:0">From</div>
+              <div class="qe-from">${companyComplete ? escapeHtml([ci.name, ci.address, ci.phone].filter(Boolean).join(' · ')) : '<span style="color:var(--warn)">Add your company address and phone before sending quotes</span>'}</div>
+              <button type="button" class="qe-lnk" id="quoteEditCompanyBtn" style="flex-shrink:0">${companyComplete ? 'Company info' : 'Set up'}</button></div>
+          </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Quote Date</label><input id="qDate" type="date" value="${escapeHtml(q.quoteDate||'')}" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-          <div><label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:3px">Sales Rep</label><input id="qRep" value="${escapeHtml(q.repName||'')}" placeholder="Your name" style="width:100%;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--brand);outline:none"></div>
-        </div>
-      </div>
 
-      <!-- Action buttons -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="quoteSaveBtn" style="background:rgba(77,157,224,0.15);border:1px solid rgba(77,157,224,0.35);color:var(--brand-light);font-size:12px;font-weight:600;padding:9px 14px;border-radius:7px;cursor:pointer;flex:1;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-device-floppy"></i>Save</button>
-        <button id="quotePreviewBtn" style="background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:var(--success);font-size:12px;font-weight:600;padding:9px 14px;border-radius:7px;cursor:pointer;flex:1;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-eye"></i>Preview &amp; Print</button>
+        <!-- Pricing summary -->
+        <div class="qe-sum">
+          <div class="qe-sc">
+            <div class="qe-mode"><button type="button" id="quoteModeInsurance" class="${isInsurance?'on':''}">Insurance</button><button type="button" id="quoteModeCash" class="${isCash?'on cash':''}">Cash</button></div>
+            <div class="qe-row"><label for="qContract">${isInsurance ? 'Contract (RCV)' : 'Total'}${isCash ? '<small>from section prices</small>' : ''}</label><input id="qContract" type="text" inputmode="decimal" ${isCash ? 'readonly' : ''} value="${val(q.contractAmount)}" placeholder="0.00"></div>
+            ${isInsurance ? `<div class="qe-row"><label for="qDeductible">Deductible</label><input id="qDeductible" type="text" inputmode="decimal" value="${val(q.deductible)}" placeholder="0.00"></div>` : ''}
+            <div class="qe-row"><label for="qDeposit">Deposit at signing${isCash ? '<small>auto 50% unless typed</small>' : ''}</label><input id="qDeposit" type="text" inputmode="decimal" value="${val(q.depositAmount)}" placeholder="0.00"></div>
+            ${isInsurance ? `<div class="qe-row"><span>Insurance pays</span><b id="qeInsPays">—</b></div>` : ''}
+            <div class="qe-tot"><span class="qe-tot-l">Customer pays</span><span class="qe-tot-n" id="qePay">—</span></div>
+            <div class="qe-tsub" id="qePaySub">&nbsp;</div>
+            ${isCash ? `<div class="qe-ptoggle"><button type="button" data-qprice-mode="itemized" class="${!q.lumpSumOnly?'active':''}">Itemized by section</button><button type="button" data-qprice-mode="lump" class="${q.lumpSumOnly?'active':''}">Lump sum only</button></div>` : ''}
+            <div class="qe-all" id="qeAll" style="display:none"></div>
+            <div class="qe-meta">
+              <div><label class="qe-lbl" for="qDate">Quote date</label><input id="qDate" type="date" value="${val(q.quoteDate)}"></div>
+              <div><label class="qe-lbl" for="qRep">Sales rep</label><input id="qRep" value="${val(q.repName)}" placeholder="Your name"></div>
+            </div>
+            <div class="qe-ready">${hasDiagram ? '<b>✓</b> Roof diagram from measurement report' : '<span style="opacity:.8">No measurement report yet — cover uses satellite</span>'}${reBits ? '<br><b>✓</b> '+escapeHtml(reBits) : ''}</div>
+            <div class="qe-acts"><button type="button" class="qe-btn pri" id="quotePreviewBtn">Preview &amp; Print</button><button type="button" class="qe-btn" id="quoteSaveBtn">Save</button></div>
+            <div class="qe-saved" id="qeSaved">Changes save automatically</div>
+          </div>
+        </div>
       </div>
+      <div class="qe-bar"><div><div class="qe-bar-l">Customer pays</div><div class="qe-bar-n" id="qeBarPay">—</div></div><div class="qe-sp"></div><button type="button" class="qe-btn" id="qeBarSave">Save</button><button type="button" class="qe-btn pri" id="qeBarPreview">Preview &amp; Print</button></div>
     </div>
   `;
 
@@ -16995,6 +17081,7 @@ function renderQuoteTab(j){
     qq.terms = $('qTerms').value;
     qq.quoteDate = $('qDate').value;
     qq.repName = $('qRep').value;
+    if($('qLabel')) qq.label = $('qLabel').value;
     return qq;
   }
   $('quoteSaveBtn').addEventListener('click', () => {
@@ -17093,6 +17180,147 @@ function renderQuoteTab(j){
       saveToStorage();
     });
   }
+
+  // ── Shingle picker: brand chips + model cards drive the hidden select ──
+  let qeBrand = curSys ? curSys.brand : (brandList.find(b => b.toLowerCase() === String(q.shingleBrand||'').toLowerCase()) || 'GAF');
+  function qeRenderModels(){
+    const wrap = $('qeModels'); if(!wrap) return;
+    const items = SHINGLE_CATALOG.filter(x => x.brand === qeBrand)
+      .sort((a,b) => (tierOrder[a.tier]??9) - (tierOrder[b.tier]??9));
+    const sel = $('qSystem').value;
+    wrap.innerHTML = items.map(x => {
+      const imp = (x.features.find(f => /^Impact:/i.test(f)) || '').replace(/^Impact:\s*/i,'');
+      const sub = /class\s*4/i.test(imp) ? 'Class 4' : /class\s*3/i.test(imp) ? 'Class 3' : 'Standard impact';
+      return `<button type="button" class="qe-mc${x.key===sel?' on':''}" data-qe-sys="${x.key}"><div class="qe-mc-t">${escapeHtml(x.tier)}</div><div class="qe-mc-m">${escapeHtml(x.model)}</div><div class="qe-mc-x">${escapeHtml(sub)}</div></button>`;
+    }).join('');
+    wrap.querySelectorAll('[data-qe-sys]').forEach(btn => btn.addEventListener('click', () => {
+      const sel = $('qSystem'); sel.value = btn.dataset.qeSys;
+      sel.dispatchEvent(new Event('change'));
+    }));
+    document.querySelectorAll('[data-qe-brand]').forEach(c => c.classList.toggle('on', c.dataset.qeBrand === qeBrand));
+  }
+  document.querySelectorAll('[data-qe-brand]').forEach(c => c.addEventListener('click', () => { qeBrand = c.dataset.qeBrand; qeRenderModels(); }));
+  qeRenderModels();
+  $('qSystem').addEventListener('change', () => {
+    // runs after the fill-in handler above when the panel didn't re-render
+    if(!$('qeRoot')) return;
+    $('qeCustom').style.display = $('qSystem').value ? 'none' : 'grid';
+    qeRenderModels(); qeRenderFeatRows(); qeSchedule();
+  });
+  $('qeCustomToggle').addEventListener('click', () => {
+    const c = $('qeCustom'); c.style.display = c.style.display === 'none' ? 'grid' : 'none';
+  });
+
+  // ── Feature rows: "Label: value" lines edited one row at a time ──
+  function qeRenderFeatRows(){
+    const box = $('qeFeatRows'); if(!box) return;
+    const lines = String($('qFeatures').value||'').split('\n').filter(x => x.trim());
+    if(!lines.length){ box.innerHTML = '<div class="qe-hint" style="padding:10px 11px;margin:0">Pick a shingle above to fill these rows, or use Edit as text.</div>'; return; }
+    box.innerHTML = lines.map((ln, i) => {
+      const m = ln.match(/^([A-Za-z][A-Za-z &/]{1,18}):\s*(.*)$/);
+      return `<div class="qe-fr"><div class="qe-fr-k">${escapeHtml(m ? m[1] : '')}</div><textarea rows="1" data-qe-feat="${i}" data-qe-key="${escapeHtml(m ? m[1] : '')}">${escapeHtml(m ? m[2] : ln)}</textarea></div>`;
+    }).join('');
+    const fit = el => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; };
+    box.querySelectorAll('[data-qe-feat]').forEach(el => { fit(el); requestAnimationFrame(() => fit(el)); });
+    box.querySelectorAll('[data-qe-feat]').forEach(inp => inp.addEventListener('input', () => {
+      fit(inp);
+      const out = [...box.querySelectorAll('[data-qe-feat]')].map(x => x.dataset.qeKey ? x.dataset.qeKey + ': ' + x.value : x.value);
+      $('qFeatures').value = out.join('\n');
+    }));
+  }
+  qeRenderFeatRows();
+  $('qeFeatText').addEventListener('click', () => {
+    const ta = $('qFeatures'), show = ta.style.display === 'none';
+    ta.style.display = show ? 'block' : 'none';
+    $('qeFeatRows').style.display = show ? 'none' : '';
+    $('qeFeatText').textContent = show ? 'Done' : 'Edit as text';
+    if(!show) qeRenderFeatRows();
+  });
+
+  // ── Scope: checklist first, raw text on request ──
+  $('qeScopeText').addEventListener('click', () => {
+    const w = $('qeScopeTextWrap'), show = w.style.display === 'none';
+    w.style.display = show ? 'block' : 'none';
+    $('qeScopeText').textContent = show ? 'Done' : 'Edit as text';
+  });
+  function qeScopeCount(){
+    const qq = getJobQuote(j);
+    const all = parseScopeSections(qq.scope||'').reduce((n, sec) => n + sec.items.length, 0);
+    const off = (qq.scopeExclude||[]).filter(x => parseScopeSections(qq.scope||'').some(sec => sec.items.includes(x))).length;
+    if($('qeScopeCount')) $('qeScopeCount').textContent = (all - off) + ' of ' + all + ' included';
+  }
+  new MutationObserver(qeScopeCount).observe($('qScopeSelector'), { childList:true });
+
+  // ── Live pricing summary ──
+  const fmt0 = n => '$' + Math.round(n).toLocaleString('en-US');
+  function qeUpdateSummary(){
+    if(!$('qeRoot')) return;
+    const list = getJobQuotes(j);
+    const qq = getJobQuote(j);
+    const contract = moneyNum($('qContract').value);
+    const ded = $('qDeductible') ? moneyNum($('qDeductible').value) : 0;
+    const price = (x) => x === qq ? contract : moneyNum(x.contractAmount);
+    const priced = list.map(price).filter(v => v > 0);
+    const base = priced.length > 1 ? Math.min(...priced) : contract;
+    let pay, sub;
+    if(qq.mode === 'cash'){
+      pay = contract; const dep = moneyNum($('qDeposit').value);
+      sub = dep > 0 ? fmt0(dep) + ' due at signing' : 'total due';
+    } else {
+      const up = Math.max(0, contract - base);
+      pay = ded + up; sub = up > 0 ? 'deductible + ' + fmt0(up) + ' upgrade' : 'deductible only';
+      if($('qeInsPays')) $('qeInsPays').textContent = contract > 0 ? fmt0(Math.max(0, base - ded)) : '—';
+    }
+    const txt = (contract > 0 || pay > 0) ? fmt0(pay) : '—';
+    $('qePay').textContent = txt; $('qeBarPay').textContent = txt; $('qePaySub').textContent = contract > 0 ? sub : 'enter a price';
+    if($('qeActivePrice')) $('qeActivePrice').textContent = contract > 0 ? fmt0(contract) : '—';
+    const all = $('qeAll');
+    if(list.length > 1 && qq.mode !== 'cash'){
+      const tiers = quoteTiers(list.map(x => Object.assign({}, x, { contractAmount: String(price(x)) })));
+      all.style.display = '';
+      all.innerHTML = '<div class="qe-lbl">All options · customer pays</div>' + tiers.map(r => {
+        const up = Math.max(0, r.price - base);
+        return `<div class="qe-row"><span>${escapeHtml(r.tier)}${up ? ' (+' + fmt0(up) + ')' : ''}</span><b>${r.price > 0 ? fmt0(ded + up) : '—'}</b></div>`;
+      }).join('');
+    } else { all.style.display = 'none'; }
+  }
+  qeUpdateSummary();
+
+  // ── Auto-save (debounced) — Save button still saves right away ──
+  let qeTimer = null;
+  function qeSetSaved(state){
+    const el = $('qeSaved'); if(!el) return;
+    el.textContent = state === 'saving' ? 'Saving…' : 'Saved ✓ ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+    el.classList.toggle('ok', state !== 'saving');
+  }
+  function qeFlush(){
+    if(!qeTimer) return;
+    clearTimeout(qeTimer); qeTimer = null;
+    if(!$('qeRoot') || !$('qScope')) return;
+    collectQuote(); saveToStorage(); qeSetSaved('saved');
+  }
+  function qeSchedule(){
+    qeSetSaved('saving');
+    clearTimeout(qeTimer);
+    qeTimer = setTimeout(() => { qeTimer = 1; qeFlush(); }, 700);
+  }
+  window.__quoteFlush = qeFlush;
+  const root = $('qeRoot');
+  root.addEventListener('input', e => {
+    if(e.target.id === 'qLabel'){
+      const t = root.querySelector('.qe-opt.on .qe-opt-m'); if(t) t.textContent = e.target.value.replace(/^\s*(good|better|best)\b\s*[—–-]?\s*/i, '') || '—';
+    }
+    qeUpdateSummary(); qeSchedule();
+  });
+  root.addEventListener('change', e => { if(e.target.matches('input,textarea')) qeSchedule(); });
+  $('quoteSaveBtn').addEventListener('click', () => { clearTimeout(qeTimer); qeTimer = null; qeSetSaved('saved'); });
+  $('qeBarSave').addEventListener('click', () => $('quoteSaveBtn').click());
+  $('qeBarPreview').addEventListener('click', () => $('quotePreviewBtn').click());
+  // Close the ⋯ menu on outside click
+  document.addEventListener('click', function qeMenuClose(e){
+    if(!$('qeRoot')){ document.removeEventListener('click', qeMenuClose); return; }
+    if(!e.target.closest('.qe-more')) document.querySelectorAll('.qe-more.open').forEach(m => m.classList.remove('open'));
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
