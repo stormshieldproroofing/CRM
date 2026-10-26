@@ -157,12 +157,7 @@
       const c = cols[k];
       btn.classList.toggle('empty', !c);
       btn.disabled = !c;
-      if (c) {
-        const ci = colInfo(c);
-        btn.querySelector('.rd-sb-nname').textContent = ci.name;
-        btn.querySelector('.rd-sb-ncount').textContent = ci.count;
-        btn.setAttribute('aria-label', (k < i ? 'Previous stage: ' : 'Next stage: ') + ci.name);
-      }
+      if (c) btn.setAttribute('aria-label', (k < i ? 'Previous stage: ' : 'Next stage: ') + colInfo(c).name);
     });
     const segs = stageBar.querySelector('.rd-sb-segs');
     segs.innerHTML = '';
@@ -172,7 +167,7 @@
       s.className = 'rd-sb-seg' + (k === i ? ' on' : '');
       s.setAttribute('aria-label', colInfo(c).name);
       s.innerHTML = '<span></span>';
-      s.firstChild.style.background = colInfo(c).color || 'var(--muted)';
+      if (k === i) s.firstChild.style.background = colInfo(c).color || 'var(--brand-light)';
       s.addEventListener('click', () => goToStage(k));
       segs.appendChild(s);
     });
@@ -201,22 +196,28 @@
     stageBar.className = 'rd-stagebar';
     stageBar.innerHTML =
       '<div class="rd-sb-row">' +
+        '<button type="button" class="rd-sb-prev"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>' +
         '<button type="button" class="rd-sb-cur" aria-haspopup="true">' +
           '<span class="rd-sb-dot"></span><span class="rd-sb-name"></span>' +
-          '<i class="ti ti-chevron-down rd-sb-caret" aria-hidden="true"></i><span class="rd-sb-count"></span>' +
+          '<span class="rd-sb-count"></span><i class="ti ti-chevron-down rd-sb-caret" aria-hidden="true"></i>' +
         '</button>' +
-        '<button type="button" class="rd-sb-check" aria-label="Stage checklist"><i class="ti ti-list-check" aria-hidden="true"></i></button>' +
+        '<button type="button" class="rd-sb-next"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>' +
       '</div>' +
       '<div class="rd-sb-segs"></div>' +
-      '<div class="rd-sb-nav">' +
-        '<button type="button" class="rd-sb-prev"><i class="ti ti-chevron-left" aria-hidden="true"></i><span class="rd-sb-nname"></span><span class="rd-sb-ncount"></span></button>' +
-        '<button type="button" class="rd-sb-next"><span class="rd-sb-nname"></span><span class="rd-sb-ncount"></span><i class="ti ti-chevron-right" aria-hidden="true"></i></button>' +
-      '</div>' +
       '<div class="rd-sb-menu"></div>';
+    // the stage checklist button lives in the toolbar, next to Add Job
+    const addBtn = document.getElementById('addJobBtn');
+    const checkBtn = document.createElement('button');
+    checkBtn.type = 'button';
+    checkBtn.className = 'icon-btn rd-sb-check';
+    checkBtn.title = 'Stage checklist';
+    checkBtn.setAttribute('aria-label', 'Stage checklist');
+    checkBtn.innerHTML = '<i class="ti ti-list-check" aria-hidden="true"></i>';
+    if (addBtn && addBtn.parentNode) addBtn.parentNode.insertBefore(checkBtn, addBtn);
     wrap.parentNode.insertBefore(stageBar, wrap);
     stageBar.querySelector('.rd-sb-prev').addEventListener('click', () => goToStage(targetStageIndex() - 1));
     stageBar.querySelector('.rd-sb-next').addEventListener('click', () => goToStage(targetStageIndex() + 1));
-    stageBar.querySelector('.rd-sb-check').addEventListener('click', e => {
+    checkBtn.addEventListener('click', e => {
       e.stopPropagation();
       const col = boardCols()[Math.min(targetStageIndex(), boardCols().length - 1)];
       const btn = col && col.querySelector('.col-menu-btn');

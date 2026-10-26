@@ -214,7 +214,7 @@ html.ui-new .detail-panel [style*="background: #1A1F2E"]{background:var(--panel-
 /* ==========================================================================
    Part 4: phone board — stage picker, compact toolbar, bottom tab bar
    ========================================================================== */
-html.ui-new .rd-stagebar,html.ui-new .rd-tabbar{display:none}
+html.ui-new .rd-stagebar,html.ui-new .rd-tabbar,html.ui-new .rd-sb-check{display:none}
 
 @media (max-width:760px){
   /* Bottom tab bar replaces the hamburger */
@@ -252,36 +252,28 @@ html.ui-new .rd-stagebar,html.ui-new .rd-tabbar{display:none}
 
 /* Stage picker: phone widths where the board shows one stage per screen */
 @media (max-width:640px){
-  html.ui-new .rd-stagebar{display:block;position:relative;padding:10px 10px 4px}
-  html.ui-new .rd-sb-row{display:flex;gap:10px;align-items:center}
-  /* the title is the button that opens the stage list */
+  html.ui-new .rd-stagebar{display:block;position:relative;padding:8px 10px 2px}
+  html.ui-new #boardsPage .subbar .rd-sb-check{display:flex}
+  /* stage name centered between round arrows; tap the name for every stage */
+  html.ui-new .rd-sb-row{display:flex;gap:8px;align-items:center}
   html.ui-new .rd-sb-cur{
-    flex:1;min-width:0;height:44px;display:flex;align-items:center;gap:8px;padding:0 2px;
-    border:none;background:transparent;color:#fff;font-size:20px;font-weight:800;cursor:pointer;text-align:left
+    flex:1;min-width:0;height:44px;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 2px;
+    border:none;background:transparent;color:#fff;font-size:20px;font-weight:800;cursor:pointer
   }
-  html.ui-new .rd-sb-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+  html.ui-new .rd-sb-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
   html.ui-new .rd-sb-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  html.ui-new .rd-sb-caret{color:var(--muted);font-size:16px;flex-shrink:0;margin-left:-2px}
+  html.ui-new .rd-sb-caret{color:var(--muted);font-size:16px;flex-shrink:0}
   html.ui-new .rd-sb-count{font-size:12.5px;font-weight:700;background:var(--tile);color:var(--text-2);border-radius:999px;padding:2px 9px;flex-shrink:0}
-  html.ui-new .rd-sb-check{
-    width:40px;height:40px;flex-shrink:0;border-radius:11px;border:1px solid var(--line);background:var(--panel);
-    color:var(--text-2);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer
-  }
-  /* color dashes — tap one to jump to that stage */
-  html.ui-new .rd-sb-segs{display:flex;gap:4px;margin-top:8px}
-  html.ui-new .rd-sb-seg{flex:1;height:14px;padding:4px 0;border:none;background:none;cursor:pointer;display:flex}
-  html.ui-new .rd-sb-seg span{flex:1;height:5px;border-radius:3px;opacity:.3}
-  html.ui-new .rd-sb-seg.on span{opacity:1;height:6px}
-  /* stages before / after, small and quiet */
-  html.ui-new .rd-sb-nav{display:flex;justify-content:space-between;gap:8px;margin-top:6px}
   html.ui-new .rd-sb-prev,html.ui-new .rd-sb-next{
-    min-width:0;max-width:48%;height:30px;display:flex;align-items:center;gap:5px;padding:0 10px;border-radius:999px;
-    border:1px solid var(--line);background:transparent;color:var(--text-2);font-size:12.5px;font-weight:500;cursor:pointer
+    width:40px;height:40px;flex-shrink:0;border-radius:50%;border:1px solid var(--line);background:transparent;
+    color:var(--text-2);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0
   }
-  html.ui-new .rd-sb-prev i,html.ui-new .rd-sb-next i{font-size:13px;color:var(--muted);flex-shrink:0}
-  html.ui-new .rd-sb-nname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  html.ui-new .rd-sb-ncount{color:var(--muted);font-weight:600;flex-shrink:0}
   html.ui-new .rd-sb-prev.empty,html.ui-new .rd-sb-next.empty{visibility:hidden}
+  /* small dashes: the current stage is a longer bar in its color — tap one to jump */
+  html.ui-new .rd-sb-segs{display:flex;justify-content:center;gap:0;margin-top:4px}
+  html.ui-new .rd-sb-seg{height:18px;padding:7px 3px;border:none;background:none;cursor:pointer;display:flex}
+  html.ui-new .rd-sb-seg span{width:6px;height:4px;border-radius:2px;background:#2c3445;transition:width .2s}
+  html.ui-new .rd-sb-seg.on span{width:18px}
   html.ui-new .rd-sb-menu{
     display:none;position:absolute;left:10px;right:10px;top:56px;z-index:120;
     background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:6px;
@@ -304,6 +296,9 @@ html.ui-new .rd-stagebar,html.ui-new .rd-tabbar{display:none}
   /* the board already stops above the tab bar, so the page itself doesn't need to scroll */
   html.ui-new body:has(#boardsPage:not([style*="none"]) .rd-stagebar){padding-bottom:0}
   html.ui-new #boardsPage #board > .col{max-height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+  /* no scroll indicator — the stage peeking in at the screen edge showed it as a stray line */
+  html.ui-new #boardsPage #board > .col{scrollbar-width:none}
+  html.ui-new #boardsPage #board > .col::-webkit-scrollbar{display:none;width:0;height:0}
 }
 
 /* Phone: fit the whole toolbar on one row — Add Job becomes a blue + button */
@@ -312,6 +307,11 @@ html.ui-new .rd-stagebar,html.ui-new .rd-tabbar{display:none}
   html.ui-new #boardsPage .subbar .pill-btn,
   html.ui-new #boardsPage .subbar .icon-btn{width:40px;height:40px}
   html.ui-new #boardsPage .add-btn{width:40px;height:40px;padding:0;justify-content:center;font-size:0;gap:0}
+  /* nine buttons (with the stage checklist) on one row */
+  html.ui-new #boardsPage .subbar{gap:4px}
+  html.ui-new #boardsPage .subbar .pill-btn,
+  html.ui-new #boardsPage .subbar .icon-btn,
+  html.ui-new #boardsPage .add-btn{width:36px;height:36px;border-radius:11px}
   html.ui-new #boardsPage .add-btn i{font-size:20px}
 }
 
