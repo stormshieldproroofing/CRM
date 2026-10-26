@@ -17110,14 +17110,33 @@ function renderQuoteTab(j){
     collectQuote();
     saveToStorage();
     const hasReport = (j.roofFiles||[]).some(f=>jobFileIsPdf(f) || jobFileIsImage(f));
-    if(!hasReport){ openQuotePreview(j); return; }
-    // Open the tab now (inside the tap) so iPhone Safari doesn't block it,
-    // then fill it once the roof diagram is rendered from the report.
+    const peek = hasReport ? roofSketchPeek(j) : { done:true, value:null };
+    // Diagram already prepared (or none needed): build and show right away,
+    // all inside the tap, so nothing can stall.
+    if(peek.done){
+      openQuotePreview(j, peek.value ? { coverImg: peek.value } : {});
+      return;
+    }
+    // Still preparing: open the tab now (iPhone Safari only allows it inside
+    // the tap), show a placeholder, then fill it — after 5s at most, using the
+    // satellite view if the diagram isn't ready.
     const win = window.open('', '_blank');
-    if(win){ try { win.document.write('<p style="font-family:sans-serif;padding:24px;color:#555">Preparing estimate…</p>'); } catch(e){} }
+    if(!win){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
+    try {
+      win.document.open();
+      win.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preparing estimate…</title>'
+        + '<p id="m" style="font-family:-apple-system,Segoe UI,sans-serif;padding:24px;color:#555">Preparing estimate…</p>'
+        + '<script>setTimeout(function(){var m=document.getElementById("m");if(m)m.innerHTML="Still preparing… If nothing appears, close this tab and tap <b>Preview &amp; Print</b> again.";},9000)<\/script>');
+      win.document.close();
+    } catch(e){}
     let sketch = null;
-    try { sketch = await roofSketchFromReport(j); } catch(e){ console.warn('[quote] roof diagram', e); }
-    openQuotePreview(j, Object.assign({ win }, sketch ? { coverImg: sketch } : {}));
+    try { sketch = await Promise.race([roofSketchPrefetch(j), new Promise(res => setTimeout(() => res(null), 5000))]); } catch(e){}
+    try {
+      openQuotePreview(j, Object.assign({ win }, sketch ? { coverImg: sketch } : {}));
+    } catch(e){
+      console.error('[quote] preview failed', e);
+      try { win.document.open(); win.document.write('<p style="font-family:sans-serif;padding:24px;color:#B91C1C">Could not build the estimate: ' + escapeHtml(e.message || String(e)) + '</p>'); win.document.close(); } catch(_){}
+    }
   });
   $('quoteEditCompanyBtn').addEventListener('click', openCompanyInfoModal);
   $('quoteResetScopeBtn').addEventListener('click', () => {
@@ -17305,6 +17324,8 @@ function renderQuoteTab(j){
     qeTimer = setTimeout(() => { qeTimer = 1; qeFlush(); }, 700);
   }
   window.__quoteFlush = qeFlush;
+  // Get the roof diagram ready in the background for Preview & Print
+  if((j.roofFiles||[]).some(f => jobFileIsPdf(f) || jobFileIsImage(f))) roofSketchPrefetch(j);
   const root = $('qeRoot');
   root.addEventListener('input', e => {
     if(e.target.id === 'qLabel'){
@@ -18887,6 +18908,34 @@ async function roofSketchFromReport(j){
   return null;
 }
 window.roofSketchFromReport = roofSketchFromReport;
+
+// Prepare the roof diagram ahead of time (when the Quote tab opens) so that
+// Preview & Print can show the estimate immediately. One attempt per job and
+// set of roof files; always settles within 12s, even if a download stalls.
+const __roofSketchJob = new Map();
+function roofSketchJobKey(j){
+  const files = (j && Array.isArray(j.roofFiles)) ? j.roofFiles : [];
+  return (j && j.id || '') + '|' + ((j && j.roofEstimate && j.roofEstimate.reportName) || '') + '|'
+    + files.map(f => f.path || f.name || f.id || '').join(',');
+}
+function roofSketchPrefetch(j){
+  const key = roofSketchJobKey(j);
+  let rec = __roofSketchJob.get(key);
+  if(!rec){
+    rec = { done:false, value:null };
+    const timeout = new Promise(res => setTimeout(() => res(null), 12000));
+    rec.promise = Promise.race([roofSketchFromReport(j).catch(e => { console.warn('[quote] roof diagram', e); return null; }), timeout])
+      .then(v => { rec.done = true; rec.value = v || null; return rec.value; });
+    __roofSketchJob.set(key, rec);
+  }
+  return rec.promise;
+}
+function roofSketchPeek(j){
+  const rec = __roofSketchJob.get(roofSketchJobKey(j));
+  return rec ? { done: rec.done, value: rec.value } : { done:false, value:null };
+}
+window.roofSketchPrefetch = roofSketchPrefetch;
+window.roofSketchPeek = roofSketchPeek;
 
 // ── QUOTE PRINT LAYOUT A ─────────────────────────────────────────────────────
 // Two-page proposal in the Heritage look (Playfair Display + Source Sans 3,
