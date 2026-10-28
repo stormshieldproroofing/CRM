@@ -238,6 +238,10 @@ async function loadAllFromSupabase() {
         photos, contracts:byKind('contract'), checks:byKind('check'),
         lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         signedContractFiles:byKind('signed_contract'),
+        packetFiles:byKind('packet'),
+        // Claim Packet (Contingency Agreement + Third-Party Authorization):
+        // answers + status live in the contract JSON, signed PDFs in job_files.
+        packet: (r.contract && r.contract.__packet && typeof r.contract.__packet === 'object') ? r.contract.__packet : null,
         stageChecklistDone,
       };
     });
@@ -737,6 +741,8 @@ async function pushAllToSupabase() {
           base.__commissions    = Array.isArray(j.commissions)
             ? j.commissions.map(c => ({ name: c.name || '', pct: parseFloat(c.pct || 0) || 0 }))
             : [];
+          // Claim Packet answers + signing status (no dedicated column)
+          base.__packet = (j.packet && typeof j.packet === 'object') ? j.packet : null;
           return base;
         })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
