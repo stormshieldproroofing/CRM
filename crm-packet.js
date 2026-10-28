@@ -203,6 +203,17 @@
 .pk-fld label{font-size:11px;color:var(--muted);font-weight:600}
 .pk-fld input,.pk-fld select{background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box}
 .pk-fld input:disabled,.pk-fld select:disabled{opacity:.7}
+.pk-dt{position:relative;display:flex;gap:8px}
+.pk-dt>input{flex:1}
+.pk-calbtn{position:relative;flex:none;width:44px;border-radius:8px;border:1px solid rgba(77,157,224,.45);background:rgba(77,157,224,.12);color:var(--brand-light,#9DB8F5);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pk-calbtn .pk-native{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;border:0;padding:0;margin:0}
+.pk-calbtn .pk-native::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+.pk-calbtn:focus-within{outline:2px solid #2F6FEB;outline-offset:1px}
+.pk-dchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.pk-dchip{border:1px solid var(--border);background:#1E253A;color:var(--text);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;min-height:32px;display:inline-flex;align-items:center;gap:4px}
+.pk-dchip.storm{background:rgba(139,92,246,.14);border-color:rgba(139,92,246,.45);color:#C4B5FD}
+.pk-dchip.on{background:#1D3A73;border-color:#2F6FEB;color:#fff}
+.pk-dchip:disabled{opacity:.6;cursor:default}
 .pk-q{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .pk-q:last-child{border-bottom:0}
 .pk-yn{display:flex;gap:6px;flex:none}
@@ -339,6 +350,42 @@
     document.head.appendChild(st);
   }
 
+  /* ---------------------------------------------------------------- date fields */
+  // "mm/dd/yyyy" (+ optional "h:mm AM") <-> the <input type=date / datetime-local> value.
+  function nativeVal(text, withTime) {
+    const m = String(text || '').match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])?)?/);
+    if (!m) return '';
+    const d = `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+    if (!withTime) return d;
+    let h = m[4] ? +m[4] : 9; const min = m[5] || '00';
+    if (m[6]) { const pm = /p/i.test(m[6]); if (pm && h < 12) h += 12; if (!pm && h === 12) h = 0; }
+    return `${d}T${String(h).padStart(2, '0')}:${min}`;
+  }
+  function fromNative(v) {
+    const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+    if (!m) return '';
+    const d = `${m[2]}/${m[3]}/${m[1]}`;
+    if (m[4] == null) return d;
+    let h = +m[4]; const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    return `${d} ${h}:${m[5]} ${ap}`;
+  }
+  function chipValue(v) {
+    if (v === 'today') return fmtDate(new Date());
+    if (v === 'yesterday') return fmtDate(new Date(Date.now() - 864e5));
+    if (String(v).indexOf('text:') === 0) return String(v).slice(5);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return fromNative(v);
+    return String(v || '');
+  }
+  // Recent storm dates from the hail map (newest first) as one-tap "Date of loss" choices.
+  function stormChips() {
+    const keys = Object.keys(root.HAIL_SWATHS || {}).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().reverse().slice(0, 3);
+    return keys.map(k => {
+      const [y, m, d] = k.split('-').map(Number);
+      const label = new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) + ' storm';
+      return [k, label, true];
+    });
+  }
+
   /* ---------------------------------------------------------------- Packet tab */
   function renderPacketTab(j) {
     const panel = document.getElementById('dpBody');
@@ -354,6 +401,16 @@
     const yn = (q, label) => `<div class="pk-q"><span>${label}</span><span class="pk-yn">
       <button type="button" class="pk-chip${f[q] === 'yes' ? ' on' : ''}" data-pkyn="${q}" data-val="yes" ${dis}>Yes</button>
       <button type="button" class="pk-chip${f[q] === 'no' ? ' on' : ''}" data-pkyn="${q}" data-val="no" ${dis}>No</button></span></div>`;
+    // Date fields: type mm/dd/yyyy, or tap the calendar for the phone's own date picker, or a shortcut chip.
+    const CAL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>';
+    const dateFld = (k, label, o) => {
+      o = o || {};
+      const chips = (o.chips || []).map(c => `<button type="button" class="pk-dchip${c[2] ? ' storm' : ''}" data-pkd="${k}" data-v="${esc(c[0])}" ${dis}>${c[2] ? '<i class="ti ti-cloud-storm" aria-hidden="true"></i> ' : ''}${esc(c[1])}</button>`).join('');
+      return `<div class="pk-fld"><label for="pk-${k}">${label}</label>
+        <div class="pk-dt"><input id="pk-${k}" data-pk="${k}" value="${v(k)}" placeholder="${o.time ? 'mm/dd/yyyy h:mm PM' : 'mm/dd/yyyy'}" autocomplete="off" ${dis}>
+          <span class="pk-calbtn" aria-hidden="true">${CAL}<input type="${o.time ? 'datetime-local' : 'date'}" class="pk-native" data-pkn="${k}" tabindex="-1" aria-label="Pick ${label.toLowerCase()} from a calendar" value="${nativeVal(f[k], o.time)}" ${dis}></span></div>
+        ${chips ? `<div class="pk-dchips">${chips}</div>` : ''}</div>`;
+    };
     const item = (k, label, unit) => `<div class="pk-item"><label><input type="checkbox" data-pkcb="${k}" ${f[k] === true ? 'checked' : ''} ${dis}>${label}</label>${unit !== null ? `<input type="text" aria-label="${label} ${unit || 'details'}" placeholder="${unit || ''}" data-pk="${k}_detail" value="${v(k + '_detail')}" ${dis}>` : ''}</div>`;
 
     let status;
@@ -423,8 +480,9 @@
 
       <div class="pk-sec"><h4>Insurance &amp; claim</h4><div class="pk-grid">
         ${txt('insurance_company', 'Insurance company')}${txt('policy_number', 'Policy #')}
-        ${txt('claim_number', 'Claim #')}${txt('date_of_loss', 'Date of loss')}
-        ${txt('date_claim_filed', 'Date claim filed')}${txt('appointment', 'Adjuster appointment')}
+        ${txt('claim_number', 'Claim #')}${dateFld('date_of_loss', 'Date of loss', { chips: stormChips() })}
+        ${dateFld('date_claim_filed', 'Date claim filed', { chips: [['today', 'Today'], ['yesterday', 'Yesterday'], ['text:Not filed yet', 'Not filed yet']] })}
+        ${dateFld('appointment', 'Adjuster appointment', { time: true })}
         ${txt('adjuster', 'Adjuster')}${txt('adjuster_phone', 'Adjuster phone', { type: 'tel' })}
         ${txt('deductible', 'Deductible ($)', { type: 'decimal' })}
         <div class="pk-fld"><label>Policy type</label><div class="pk-yn">${chip('policy_acv', 'ACV')}${chip('policy_rcv', 'RCV')}</div></div>
@@ -438,6 +496,29 @@
     if (signed) return;
     const persist = () => { p.updatedAt = new Date().toISOString(); save(); };
     panel.querySelectorAll('[data-pk]').forEach(el => el.addEventListener('input', () => { f[el.dataset.pk] = el.value; persist(); }));
+    // calendar picker → mm/dd/yyyy text (the same format typed dates use)
+    panel.querySelectorAll('[data-pkn]').forEach(nv => {
+      nv.addEventListener('click', () => { try { if (nv.showPicker) nv.showPicker(); } catch (e) { /* phone opens it natively */ } });
+      nv.addEventListener('change', () => {
+        const k = nv.dataset.pkn, txtIn = panel.querySelector(`[data-pk="${k}"]`);
+        const out = fromNative(nv.value);
+        if (!out || !txtIn) return;
+        txtIn.value = out; f[k] = out; persist(); markChips(k);
+      });
+    });
+    panel.querySelectorAll('[data-pkd]').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.pkd, txtIn = panel.querySelector(`[data-pk="${k}"]`);
+      const val = chipValue(b.dataset.v);
+      if (!txtIn) return;
+      txtIn.value = val; f[k] = val; persist(); markChips(k);
+      const nv = panel.querySelector(`[data-pkn="${k}"]`); if (nv) nv.value = nativeVal(val, nv.type === 'datetime-local');
+    }));
+    const markChips = k => panel.querySelectorAll(`[data-pkd="${k}"]`).forEach(b => b.classList.toggle('on', chipValue(b.dataset.v) === f[k]));
+    ['date_of_loss', 'date_claim_filed'].forEach(markChips);
+    panel.querySelectorAll('[data-pk="date_of_loss"],[data-pk="date_claim_filed"],[data-pk="appointment"]').forEach(el => el.addEventListener('input', () => {
+      markChips(el.dataset.pk);
+      const nv = panel.querySelector(`[data-pkn="${el.dataset.pk}"]`); if (nv) nv.value = nativeVal(el.value, nv.type === 'datetime-local');
+    }));
     panel.querySelectorAll('[data-pkcb]').forEach(el => el.addEventListener('change', () => { f[el.dataset.pkcb] = el.checked; persist(); }));
     const exclusive = { policy_acv: 'policy_rcv', policy_rcv: 'policy_acv', existing_mortgage: 'own_outright', own_outright: 'existing_mortgage' };
     panel.querySelectorAll('[data-pkc]').forEach(el => el.addEventListener('click', () => {
