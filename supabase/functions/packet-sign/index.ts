@@ -10,8 +10,8 @@ import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 // The packet code (crm-packet.js — the same file the CRM and sign.html use) and the PDF
 // template are loaded from the GitHub repo at a fixed commit and checked against SHA-256
 // pins, so the server always runs exactly the reviewed code. Run ./pin.sh <commit> to update.
-const ASSETS_REF = "b8c5dfb4f36eb0b744175b7ac90e545d09bfcf13";
-const PACKET_JS_SHA256 = "08a8bf164fbee53a520efe9b913c8c0b3d1b798cb3e9c54e4c5368f133b20247";
+const ASSETS_REF = "d7d5972abc48ec7ace60d33e013bf4d41ad6449c";
+const PACKET_JS_SHA256 = "fe44bb1f7f490cb1f153274eb79ba2e80b7a72f9dd773f90ce09844b72f393ef";
 const TEMPLATE_SHA256 = "1cb199af66fa5d65b3db7b2889b66654dcbbd831d43516b81a43c45766f06f37";
 const ASSET_BASE = `https://raw.githubusercontent.com/stormshieldproroofing/CRM/${ASSETS_REF}/`;
 
