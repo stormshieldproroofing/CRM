@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Sign your claim paperwork · StormShield Pro Roofing</title>
+<link rel="icon" href="favicon-32.png">
+<style>
+  html,body{margin:0;background:#F6F7F9;color:#141A26;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
+  .ss-msg{max-width:520px;margin:0 auto;padding:56px 22px;text-align:center}
+  .ss-msg img{width:96px;height:auto;margin-bottom:18px}
+  .ss-msg h1{font-size:22px;margin:0 0 10px}
+  .ss-msg p{font-size:16px;line-height:1.55;color:#3C4658;margin:0 0 8px}
+  .ss-msg a{color:#1D4ED8}
+  .ss-spin{width:30px;height:30px;border:3px solid #D5DAE3;border-top-color:#1D4ED8;border-radius:50%;margin:30px auto;animation:sp 0.9s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #ss-toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#141A26;color:#fff;padding:10px 16px;border-radius:10px;font-size:15px;z-index:200000;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+  #ss-toast.on{opacity:1}
+</style>
+</head>
+<body>
+<main id="ss-root" class="ss-msg" aria-live="polite"><div class="ss-spin" aria-hidden="true"></div><p>Loading your paperwork…</p></main>
+<div id="ss-toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="crm-packet.js?v=2"></script>
+<script>
+(function () {
+  'use strict';
+  var FN = 'https://lqhdhflsgswctdwmojhd.supabase.co/functions/v1/packet-sign';
+  var ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxaGRoZmxzZ3N3Y3Rkd21vamhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5Mzc2NjcsImV4cCI6MjA5NTUxMzY2N30.1FXt_Q88QSg93MAA3GjdoYzfP1eX3ON6-14nz3m8flI';
+  var HEAD = { apikey: ANON, Authorization: 'Bearer ' + ANON };
+  var PHONE = '832-910-7735';
+  var token = new URLSearchParams(location.search).get('t') || '';
+  // Keep the token out of the address bar / history once read.
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+
+  var toastTimer;
+  window.toast = function (m) {
+    var t = document.getElementById('ss-toast');
+    t.textContent = m; t.classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('on'); }, 2600);
+  };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function message(title, body) {
+    document.getElementById('ss-root').innerHTML = '<img src="favicon-192.png" alt="StormShield Pro Roofing"><h1>' + esc(title) + '</h1><p>' + body + '</p>' +
+      '<p>Questions? Call <a href="tel:' + PHONE.replace(/-/g, '') + '">' + PHONE + '</a>.</p>';
+  }
+  function fmt(d) { return window.crmPacket ? crmPacket.fmtDate(new Date(d)) : new Date(d).toLocaleDateString(); }
+
+  if (!token) { message('Link not found', 'This signing link is incomplete. Please use the full link from your text or email.'); return; }
+
+  fetch(FN + '?t=' + encodeURIComponent(token), { headers: HEAD })
+    .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+    .then(function (res) {
+      var b = res.b || {};
+      if (!res.ok) { message('Link not valid', esc(b.error || 'This signing link isn’t valid.') + ' Ask your StormShield representative to send a new one.'); return; }
+      if (b.state === 'signed') { message('Already signed', 'This paperwork was signed' + (b.signed_at ? ' on ' + esc(fmt(b.signed_at)) : '') + '. Thank you! Your representative has a copy.'); return; }
+      if (b.state === 'void') { message('Link cancelled', 'This link was cancelled. Your StormShield representative may have sent you a newer one.'); return; }
+      if (b.state === 'expired') { message('Link expired', 'This link has expired. Ask your StormShield representative to send a new one.'); return; }
+      document.getElementById('ss-root').innerHTML = '';
+      crmPacket.openSigningFlow({
+        fields: b.fields || {}, mode: 'remote', repName: b.rep_name || '',
+        onFinish: function (result) {
+          return fetch(FN, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, HEAD), body: JSON.stringify({ t: token, result: result }) })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) {
+              if (!x.ok || !x.j.ok) { var e = new Error('sign failed'); e.userMessage = (x.j && x.j.error) || 'Could not save your signature. Please try again.'; throw e; }
+              var bin = atob(x.j.pdf), bytes = new Uint8Array(bin.length);
+              for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+              return { finalBytes: bytes, cancelBy: new Date(x.j.cancelBy), fileName: x.j.fileName };
+            });
+        }
+      });
+    })
+    .catch(function () { message('Can’t connect', 'We couldn’t load your paperwork. Check your internet connection and open the link again.'); });
+})();
+</script>
+</body>
+</html>

@@ -80,13 +80,24 @@
     return out;
   }
 
-  // Add n business days (Mon–Fri). Federal holidays are not skipped.
+  // Dates are shown and counted on Houston time, whatever device/server runs this.
+  const TZ = 'America/Chicago';
+  function tzParts(d) {
+    const parts = {};
+    new Intl.DateTimeFormat('en-US', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+      .formatToParts(d).forEach(x => { parts[x.type] = x.value; });
+    return { y: +parts.year, m: +parts.month, d: +parts.day };
+  }
+
+  // Add n business days (Mon–Fri) to the Houston calendar date of `date`.
+  // Returns noon UTC of the resulting day. Federal holidays are not skipped.
   function addBusinessDays(date, n) {
-    const d = new Date(date.getTime());
+    const t = tzParts(date);
+    const d = new Date(Date.UTC(t.y, t.m - 1, t.d, 12));
     let left = n;
     while (left > 0) {
-      d.setDate(d.getDate() + 1);
-      const wd = d.getDay();
+      d.setUTCDate(d.getUTCDate() + 1);
+      const wd = d.getUTCDay();
       if (wd !== 0 && wd !== 6) left--;
     }
     return d;
@@ -96,7 +107,12 @@
     if (!d) return '';
     const x = (d instanceof Date) ? d : new Date(d);
     if (isNaN(x)) return String(d);
-    return String(x.getMonth() + 1).padStart(2, '0') + '/' + String(x.getDate()).padStart(2, '0') + '/' + x.getFullYear();
+    const t = tzParts(x);
+    return String(t.m).padStart(2, '0') + '/' + String(t.d).padStart(2, '0') + '/' + t.y;
+  }
+
+  function fmtDateTime(d) {
+    return new Date(d).toLocaleString('en-US', { timeZone: TZ, dateStyle: 'medium', timeStyle: 'short' }) + ' CT';
   }
 
   // ISO yyyy-mm-dd → mm/dd/yyyy; anything else passes through
@@ -146,8 +162,8 @@
     return need;
   }
 
-  const api = { TEMPLATE_URL, PACKET_VERSION, TPA_MIRROR, TEXT_FIELDS, CHECK_FIELDS, YES_NO, KEY_TERMS,
-    splitAddress, addBusinessDays, fmtDate, fmtLooseDate, prefillFromJob, pdfValues, missingForSigning };
+  const api = { TEMPLATE_URL, PACKET_VERSION, TPA_MIRROR, TEXT_FIELDS, CHECK_FIELDS, YES_NO, KEY_TERMS, CANCEL_BUSINESS_DAYS,
+    splitAddress, addBusinessDays, fmtDate, fmtDateTime, fmtLooseDate, prefillFromJob, pdfValues, missingForSigning };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   root.crmPacket = api;
 
@@ -299,11 +315,13 @@
       <div class="pk-actions" style="margin-bottom:14px">
         ${signed ? `<button type="button" class="pk-btn" onclick="crmPacket.startOver('${j.id}')"><i class="ti ti-refresh"></i> Start a new packet</button>`
           : `<button type="button" class="pk-btn primary" onclick="crmPacket.startSigning('${j.id}')"><i class="ti ti-signature"></i> Sign in person</button>
+             <button type="button" class="pk-btn primary" onclick="crmPacket.sendForSignature('${j.id}')"><i class="ti ti-send"></i> Send for signature</button>
              <button type="button" class="pk-btn" onclick="crmPacket.preview('${j.id}')"><i class="ti ti-printer"></i> Preview / print</button>`}
         <label class="pk-btn" style="margin:0"><i class="ti ti-upload"></i> Upload signed paper copy
           <input type="file" accept=".pdf,image/*" style="display:none" onchange="crmPacket.uploadPaper('${j.id}', this.files)"></label>
       </div>
       ${files ? `<div class="pk-sec"><h4>Signed packets</h4><div class="pk-files">${files}</div></div>` : ''}
+      <div id="pk-links"></div>
 
       <div class="pk-sec"><h4>Client</h4><div class="pk-grid">
         ${txt('name', 'Owner name(s)', { full: true })}
@@ -349,6 +367,7 @@
       <p class="pk-note">Answers save automatically. Claim # can be left blank and added later on paper.</p></div>
     </div>`;
 
+    renderLinks(j).catch(e => console.warn('[packet] links', e));
     if (signed) return;
     const persist = () => { p.updatedAt = new Date().toISOString(); save(); };
     panel.querySelectorAll('[data-pk]').forEach(el => el.addEventListener('input', () => { f[el.dataset.pk] = el.value; persist(); }));
@@ -373,6 +392,8 @@
 
   /* ---------------------------------------------------------------- PDF building */
   let _templateBytes = null;
+  // The server passes the template in directly (no fetch from the website).
+  function setTemplateBytes(bytes) { _templateBytes = bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes).buffer; }
   async function loadTemplate() {
     if (_templateBytes) return _templateBytes.slice(0);
     const resp = await fetch(TEMPLATE_URL, { cache: 'no-cache' });
@@ -468,9 +489,10 @@
     (audit.signers || []).forEach(s => line(s.role + ': ' + s.name + ' — signed ' + s.at, { indent: 10 }));
     y -= 6;
     line('How it was signed', { bold: true });
-    line('In person on a StormShield device. Each signer agreed to sign electronically, initialed each key term, and drew their own signature.', { indent: 10 });
+    line(audit.how || 'In person on a StormShield device.', { indent: 10 });
+    (audit.details || []).forEach(d => line(d, { indent: 10, color: grey }));
     line('Device: ' + (audit.device || 'unknown'), { indent: 10, color: grey });
-    line('Prepared and witnessed by: ' + (audit.rep || 'StormShield representative'), { indent: 10 });
+    line('StormShield representative: ' + (audit.rep || ''), { indent: 10 });
     y -= 6;
     line('Electronic signature consent', { bold: true });
     line('“' + audit.consent + '” — accepted ' + audit.consentAt, { indent: 10 });
@@ -548,29 +570,56 @@
   /* ---------------------------------------------------------------- signing flow */
   const CONSENT = 'I agree to sign this Claim Packet electronically. My electronic signature and initials have the same effect as signing on paper, and I can ask StormShield Pro Roofing for a paper copy at any time.';
 
-  function startSigning(jobId) {
-    const j = jobById(jobId); if (!j) return;
-    const p = ensurePacket(j);
-    const miss = missingForSigning(p.fields);
-    if (miss.length) { say('Fill in first: ' + miss.join(', ')); return; }
-    if (!root.PDFLib) { say('PDF library still loading — try again in a moment'); return; }
-    loadTemplate().catch(() => {});
-    injectStyles();
+  // Turn a finished signing session into the final PDF (pages 1–2 + record page).
+  // r: result of openSigningFlow; ctx: { signedAt, how, details, device, repName, repSig }
+  async function finalizeSigned(fields, r, ctx) {
+    const signedAt = ctx.signedAt || new Date();
+    const cancelBy = addBusinessDays(signedAt, CANCEL_BUSINESS_DAYS);
+    const repSig = r.sig.sspr || ctx.repSig || null;
+    const sigs = {
+      initials: r.initials, homeowner: r.sig.homeowner, coowner: r.coowner ? r.sig.coowner : null, sspr: repSig,
+      tpa1: r.tpaApplied.homeowner ? r.sig.homeowner : null,
+      tpa2: r.coowner && r.tpaApplied.coowner ? r.sig.coowner : null
+    };
+    const signedBytes = await buildPdf(fields, sigs, { signedAt, homeownerName: r.homeownerName, coownerName: r.coownerName });
+    const hash = await sha256Hex(signedBytes);
+    const signers = [{ role: 'Property owner', name: r.homeownerName, at: fmtDateTime(r.at.homeowner) }];
+    if (sigs.coowner) signers.push({ role: 'Co-owner', name: r.coownerName, at: fmtDateTime(r.at.coowner) });
+    const repName = r.repName || ctx.repName || '';
+    if (repSig) signers.push({ role: 'StormShield representative', name: repName, at: fmtDateTime(r.at.sspr || ctx.repSignedAt || signedAt) });
+    const finalBytes = await addAuditPage(signedBytes, {
+      property: [fields.street, fields.city_state, fields.zip].filter(Boolean).join(', '),
+      signers, how: ctx.how, details: ctx.details || [], device: ctx.device || '', rep: repName,
+      consent: CONSENT, consentAt: fmtDateTime(r.consentAt), hash, cancelBy: fmtDate(cancelBy)
+    });
+    return { finalBytes, hash, cancelBy, sigs };
+  }
 
+  /* Full-screen signing screens, shared by in-person signing (CRM) and the
+     homeowner's remote link (sign.html).
+     opts: { fields, mode:'in_person'|'remote', repName, onFinish:async(r)=>({finalBytes,cancelBy}),
+             onDone:fn (in-person "Done" button), mount: element (default body) } */
+  function openSigningFlow(opts) {
+    injectStyles();
+    const fields = opts.fields || {};
+    const remote = opts.mode === 'remote';
     const st = {
       step: 0, consentAt: null,
-      homeownerName: (p.fields.name || '').split(/\s*(?:&|\band\b|,)\s*/)[0] || p.fields.name || '',
+      homeownerName: (fields.name || '').split(/\s*(?:&|\band\b|,)\s*/)[0] || fields.name || '',
       coowner: false, coownerName: '',
       initials: null, initialed: {},
       sig: {}, tpaApplied: { homeowner: false, coowner: false },
-      repName: me(), at: {}
+      repName: opts.repName || '', at: {}
     };
-    const steps = ['Agree to sign electronically', 'Initial the key terms', 'Sign the agreement', 'Sign the authorization', 'StormShield signature', 'Done'];
+    const steps = remote
+      ? ['Agree to sign electronically', 'Initial the key terms', 'Sign the agreement', 'Sign the authorization']
+      : ['Agree to sign electronically', 'Initial the key terms', 'Sign the agreement', 'Sign the authorization', 'StormShield signature'];
+    const DONE = steps.length;
 
     const ov = document.createElement('div');
     ov.id = 'pkSign';
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Sign claim packet');
-    document.body.appendChild(ov);
+    (opts.mount || document.body).appendChild(ov);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const close = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
@@ -578,14 +627,15 @@
     let pads = {};
     const render = () => {
       const s = st.step;
-      const pct = Math.round((s / (steps.length - 1)) * 100);
-      let body = '', next = 'Continue', canBack = s > 0 && s < 5, nextOk = true;
+      const pct = Math.round((s / DONE) * 100);
+      let body = '', next = 'Continue', canBack = s > 0 && s < DONE, nextOk = true;
       if (s === 0) {
         body = `<h2>Hi ${esc(st.homeownerName || 'there')}</h2>
-          <p class="pks-sub">This is your Contingency Agreement and Third-Party Authorization with StormShield Pro Roofing for <b>${esc(p.fields.street || '')}</b>. It takes about 2 minutes.</p>
-          <div class="pks-card"><button type="button" class="pks-link" data-act="view" style="padding:0"><i class="ti ti-file-text"></i> Read the full agreement (PDF)</button></div>
+          <p class="pks-sub">This is your Contingency Agreement and Third-Party Authorization with StormShield Pro Roofing for <b>${esc(fields.street || '')}</b>. It takes about 2 minutes.</p>
+          <div class="pks-card"><button type="button" class="pks-link" data-act="view" style="padding:0">Read the full agreement (PDF)</button></div>
           <label class="pks-check"><input type="checkbox" data-consent ${st.consentAt ? 'checked' : ''}><span>${esc(CONSENT)}</span></label>`;
         nextOk = !!st.consentAt;
+        canBack = false;
       } else if (s === 1) {
         const allDone = KEY_TERMS.every((_, i) => st.initialed[i]) && st.initialed.ded;
         body = `<h2>Initial each key term</h2>
@@ -596,7 +646,7 @@
           <div class="pks-padbar" style="max-width:300px"><span>Your initials</span><button type="button" class="pks-link" data-clear="initials">Clear</button></div>`}
           ${KEY_TERMS.map((t, i) => `<div class="pks-term"><p><b>${esc(t[0])}.</b> ${esc(t[1])}</p>
             <button type="button" class="pks-ini${st.initialed[i] ? ' on' : ''}" data-ini="${i}" aria-label="Initial: ${esc(t[0])}">${st.initialed[i] && st.initials ? `<img src="${st.initials}" alt="">` : 'Initial'}</button></div>`).join('')}
-          <div class="pks-term"><p><b>Deductible.</b> I understand my insurance deductible${p.fields.deductible ? ' of $' + esc(p.fields.deductible) : ''} is my responsibility.</p>
+          <div class="pks-term"><p><b>Deductible.</b> I understand my insurance deductible${fields.deductible ? ' of $' + esc(fields.deductible) : ''} is my responsibility.</p>
             <button type="button" class="pks-ini${st.initialed.ded ? ' on' : ''}" data-ini="ded" aria-label="Initial: deductible">${st.initialed.ded && st.initials ? `<img src="${st.initials}" alt="">` : 'Initial'}</button></div>`;
         nextOk = allDone;
       } else if (s === 2) {
@@ -608,7 +658,7 @@
           ${st.coowner ? `<div class="pks-fld"><label for="pks-cn">Co-owner full name</label><input id="pks-cn" data-name="coowner" value="${esc(st.coownerName)}"></div>
             <div class="pks-pad" data-pad="coowner"></div>
             <div class="pks-padbar"><span>Co-owner signature</span><span><button type="button" class="pks-link" data-clear="coowner">Clear</button><button type="button" class="pks-link" data-act="nocoowner">Remove co-owner</button></span></div>`
-            : `<button type="button" class="pks-link" data-act="coowner" style="padding:0 0 12px"><i class="ti ti-user-plus"></i> Add a co-owner signature</button>`}
+            : `<button type="button" class="pks-link" data-act="coowner" style="padding:0 0 12px">+ Add a co-owner signature</button>`}
           <p class="pks-legal">NOTICE OF RIGHT TO CANCEL: You, the buyer, may cancel this transaction at any time prior to midnight of the third business day after the date of this transaction.</p>`;
         next = 'Sign agreement';
       } else if (s === 3) {
@@ -620,27 +670,29 @@
             : `<button type="button" class="pks-b go" style="width:100%;margin-bottom:12px" data-tpa="${x.k}">${esc(x.n || 'Homeowner')}: sign the authorization</button>`).join('')}
           <p class="pks-legal">Tapping the button places the signature you just drew on the authorization (page 2).</p>`;
         nextOk = who.every(x => st.tpaApplied[x.k]);
-      } else if (s === 4) {
-        body = `<div class="pks-ok"><i class="ti ti-circle-check" style="font-size:20px"></i> Thank you! Please hand the device back to your StormShield representative.</div>
+        if (remote) next = 'Finish & sign';
+      } else if (s === 4 && !remote) {
+        body = `<div class="pks-ok">✓ Thank you! Please hand the device back to your StormShield representative.</div>
           <h2>StormShield representative</h2>
           <div class="pks-fld"><label for="pks-rn">Representative name</label><input id="pks-rn" data-name="rep" value="${esc(st.repName)}"></div>
           <div class="pks-pad" data-pad="sspr"></div>
           <div class="pks-padbar"><span>Representative signature</span><button type="button" class="pks-link" data-clear="sspr">Clear</button></div>`;
         next = 'Finish & save';
       } else {
-        body = `<div class="pks-ok" data-done><i class="ti ti-loader-2" style="font-size:20px"></i> Saving the signed packet…</div>`;
+        body = `<div class="pks-ok" data-done>Saving the signed packet…</div>`;
         canBack = false;
       }
-      ov.innerHTML = `<div class="pks-top"><b>Claim Packet</b><span>${s < 5 ? 'Step ' + (s + 1) + ' of 5 · ' + esc(steps[s]) : 'Finishing'}</span></div>
+      ov.innerHTML = `<div class="pks-top"><b>StormShield Pro Roofing · Claim Packet</b><span>${s < DONE ? 'Step ' + (s + 1) + ' of ' + DONE : 'Finishing'}</span></div>
         <div class="pks-bar"><i style="width:${pct}%"></i></div>
         <div class="pks-body">${body}</div>
-        ${s < 5 ? `<div class="pks-foot"><div>
-          <button type="button" class="pks-b" data-act="${canBack ? 'back' : 'cancel'}">${canBack ? 'Back' : 'Cancel'}</button>
+        ${s < DONE ? `<div class="pks-foot"><div>
+          ${(canBack || !remote) ? `<button type="button" class="pks-b" data-act="${canBack ? 'back' : 'cancel'}">${canBack ? 'Back' : 'Cancel'}</button>` : ''}
           <button type="button" class="pks-b go" data-act="next" ${nextOk ? '' : 'disabled'}>${next}</button></div></div>` : ''}`;
 
       pads = {};
       ov.querySelectorAll('[data-pad]').forEach(h => { pads[h.dataset.pad] = makePad(h); });
       wire();
+      const bodyEl = ov.querySelector('.pks-body'); if (bodyEl) bodyEl.scrollTop = 0;
     };
 
     const refreshNext = ok => { const b = ov.querySelector('[data-act="next"]'); if (b) b.disabled = !ok; };
@@ -673,10 +725,41 @@
       ov.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
     }
 
+    const result = () => ({
+      consentAt: st.consentAt, homeownerName: st.homeownerName.trim(), coowner: st.coowner, coownerName: st.coownerName.trim(),
+      initials: st.initials, initialed: st.initialed, sig: st.sig, tpaApplied: st.tpaApplied, at: st.at, repName: st.repName.trim()
+    });
+
+    async function runFinish() {
+      st.step = DONE; render();
+      const box = () => ov.querySelector('[data-done]');
+      try {
+        const out = await opts.onFinish(result());
+        const b = box(); if (!b) return;
+        b.innerHTML = remote ? '✓ Signed! Thank you.' : '✓ Signed and saved to the job.';
+        const after = document.createElement('div');
+        after.innerHTML = `<div class="pks-card" style="font-size:14px;line-height:1.6">${remote
+            ? `Your signed copy is ready below. StormShield Pro Roofing has a copy too.<br>You may cancel until midnight on <b>${esc(fmtDate(out.cancelBy))}</b>. Questions? Call 832-910-7735.`
+            : `Cancellation window ends <b>${esc(fmtDate(out.cancelBy))}</b> at midnight.`}</div>
+          <div style="display:flex;gap:10px">${out.finalBytes ? `<button type="button" class="pks-b${remote ? ' go' : ''}" data-v>${remote ? 'Download my copy' : 'View signed PDF'}</button>` : ''}${remote ? '' : '<button type="button" class="pks-b go" data-x>Done</button>'}</div>`;
+        b.parentNode.appendChild(after);
+        const v = after.querySelector('[data-v]');
+        if (v) v.onclick = () => (remote ? downloadBytes(out.finalBytes, out.fileName || 'StormShield Claim Packet (signed).pdf') : openBlob(out.finalBytes));
+        const x = after.querySelector('[data-x]');
+        if (x) x.onclick = () => { close(); if (opts.onDone) opts.onDone(); };
+      } catch (e) {
+        console.error('[packet] finish failed', e);
+        const b = box(); if (!b) return;
+        b.style.background = '#FDECEC'; b.style.color = '#8A1C1C';
+        b.innerHTML = esc(e && e.userMessage ? e.userMessage : 'Could not save the signed packet. Check your connection and try again.') + ' <button type="button" class="pks-link" data-retry>Try again</button>';
+        b.querySelector('[data-retry]').onclick = () => { b.style.background = ''; b.style.color = ''; b.textContent = 'Saving…'; runFinish(); };
+      }
+    }
+
     async function act(a) {
       if (a === 'cancel') { if (root.confirm('Stop signing? Nothing will be saved.')) close(); return; }
       if (a === 'back') { st.step = Math.max(0, st.step - 1); render(); return; }
-      if (a === 'view') { try { openBlob(await buildPdf(p.fields, {}, {})); } catch (e) { say('Could not open the PDF'); } return; }
+      if (a === 'view') { try { openBlob(await buildPdf(fields, {}, {})); } catch (e) { say('Could not open the PDF'); } return; }
       if (a === 'coowner') { st.coowner = true; render(); return; }
       if (a === 'nocoowner') { st.coowner = false; delete st.sig.coowner; st.tpaApplied.coowner = false; render(); return; }
       if (a !== 'next') return;
@@ -692,74 +775,245 @@
           st.sig.coowner = cp; st.at.coowner = new Date().toISOString();
         }
       }
-      if (st.step === 4) {
+      if (st.step === 3 && remote) { await runFinish(); return; }
+      if (st.step === 4 && !remote) {
         if (!st.repName.trim()) { say('Enter the representative name'); return; }
         const rp = pads.sspr && pads.sspr.toPng();
         if (!rp) { say('Representative: please sign'); return; }
         st.sig.sspr = rp; st.at.sspr = new Date().toISOString();
-        st.step = 5; render();
-        try { await finish(); } catch (e) {
-          console.error('[packet] finish failed', e);
-          const box = ov.querySelector('[data-done]');
-          if (box) { box.style.background = '#FDECEC'; box.style.color = '#8A1C1C'; box.innerHTML = 'Could not save the signed packet. Check your connection and try again. <button type="button" class="pks-link" data-retry>Retry</button>'; box.querySelector('[data-retry]').onclick = () => { box.innerHTML = 'Saving…'; finish().catch(err => { console.error(err); box.textContent = 'Still failing — please contact the office.'; }); }; }
-        }
+        await runFinish();
         return;
       }
       st.step++; render();
     }
 
-    async function finish() {
-      const signedAt = new Date();
-      const cancelBy = addBusinessDays(signedAt, CANCEL_BUSINESS_DAYS);
-      const sigs = {
-        initials: st.initials, homeowner: st.sig.homeowner, coowner: st.coowner ? st.sig.coowner : null, sspr: st.sig.sspr,
-        tpa1: st.tpaApplied.homeowner ? st.sig.homeowner : null,
-        tpa2: st.coowner && st.tpaApplied.coowner ? st.sig.coowner : null
-      };
-      const signedBytes = await buildPdf(p.fields, sigs, { signedAt, homeownerName: st.homeownerName.trim(), coownerName: st.coownerName.trim() });
-      const hash = await sha256Hex(signedBytes);
-      const local = d => new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-      const signers = [{ role: 'Property owner', name: st.homeownerName.trim(), at: local(st.at.homeowner) }];
-      if (sigs.coowner) signers.push({ role: 'Co-owner', name: st.coownerName.trim(), at: local(st.at.coowner) });
-      signers.push({ role: 'StormShield representative', name: st.repName.trim(), at: local(st.at.sspr) });
-      const audit = {
-        property: [p.fields.street, p.fields.city_state, p.fields.zip].filter(Boolean).join(', '),
-        signers, device: navigator.userAgent, rep: st.repName.trim() + (me() && me() !== st.repName.trim() ? ' (logged in as ' + me() + ')' : ''),
-        consent: CONSENT, consentAt: local(st.consentAt), hash, cancelBy: fmtDate(cancelBy)
-      };
-      const finalBytes = await addAuditPage(signedBytes, audit);
+    render();
+    return { close };
+  }
 
-      const clean = s2 => String(s2 || '').replace(/[\\/:*?"<>|]+/g, '').trim();
-      const fname = `${clean(p.fields.name) || 'Homeowner'} - ${clean(p.fields.street) || 'Property'} - Claim Packet (signed) - ${signedAt.toISOString().slice(0, 10)}.pdf`;
-      const file = new File([finalBytes], fname, { type: 'application/pdf' });
-      let rec = null;
-      if (typeof root.intakeJobFile === 'function') rec = await root.intakeJobFile(file, 'packet', null);
-      if (!rec) throw new Error('upload failed');
-      if (!Array.isArray(j.packetFiles)) j.packetFiles = [];
-      j.packetFiles.push(rec);
+  function downloadBytes(bytes, name) {
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
 
+  // In person, on the rep's phone or tablet.
+  function startSigning(jobId) {
+    const j = jobById(jobId); if (!j) return;
+    const p = ensurePacket(j);
+    const miss = missingForSigning(p.fields);
+    if (miss.length) { say('Fill in first: ' + miss.join(', ')); return; }
+    if (!root.PDFLib) { say('PDF library still loading — try again in a moment'); return; }
+    loadTemplate().catch(() => {});
+    openSigningFlow({
+      fields: p.fields, mode: 'in_person', repName: me(),
+      onDone: rerender,
+      onFinish: async r => {
+        const signedAt = new Date();
+        const out = await finalizeSigned(p.fields, r, {
+          signedAt, device: navigator.userAgent,
+          how: 'In person on a StormShield device. Each signer agreed to sign electronically, initialed each key term, and drew their own signature.',
+          details: me() && me() !== r.repName ? ['Logged into the CRM as ' + me()] : []
+        });
+        const clean = s2 => String(s2 || '').replace(/[\\/:*?"<>|]+/g, '').trim();
+        const fname = `${clean(p.fields.name) || 'Homeowner'} - ${clean(p.fields.street) || 'Property'} - Claim Packet (signed) - ${fmtDate(signedAt).replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2')}.pdf`;
+        const file = new File([out.finalBytes], fname, { type: 'application/pdf' });
+        let rec = null;
+        if (typeof root.intakeJobFile === 'function') rec = await root.intakeJobFile(file, 'packet', null);
+        if (!rec) throw new Error('upload failed');
+        if (!Array.isArray(j.packetFiles)) j.packetFiles = [];
+        j.packetFiles.push(rec);
+        p.status = 'signed';
+        p.signed = {
+          method: 'in_person', at: signedAt.toISOString(), cancelBy: out.cancelBy.toISOString(), sha256: out.hash,
+          homeowner: { name: r.homeownerName }, coowner: r.coowner ? { name: r.coownerName } : null,
+          rep: { name: r.repName, user: me() }, consentAt: r.consentAt, file: { name: rec.name, path: rec.path || null }
+        };
+        if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet signed', `Contingency Agreement + Third-Party Authorization signed in person by ${r.homeownerName}${r.coowner ? ' and ' + r.coownerName : ''}. Cancellation window ends ${fmtDate(out.cancelBy)}.`);
+        save();
+        return out;
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- remote links (CRM side) */
+  const SIGN_PAGE = 'sign.html';
+  const LINK_DAYS = 7;
+  const db = () => root.sb || null;
+
+  function randomToken() {
+    const b = new Uint8Array(32); crypto.getRandomValues(b);
+    return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function sha256Text(t) { return sha256Hex(new TextEncoder().encode(t)); }
+  function signUrl(token) {
+    const base = root.location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
+    return base + SIGN_PAGE + '?t=' + encodeURIComponent(token);
+  }
+  function smsHref(phone, body) {
+    const num = String(phone || '').replace(/[^\d+]/g, '');
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    return 'sms:' + num + (ios ? '&' : '?') + 'body=' + encodeURIComponent(body);
+  }
+  function linkMessage(f, repName, url) {
+    const first = String(f.name || '').trim().split(/\s+/)[0] || 'there';
+    return `Hi ${first}, this is ${repName || 'your rep'} with StormShield Pro Roofing. Please review and sign your claim paperwork for ${f.street || 'your property'} here (about 2 minutes): ${url}\nQuestions? Call 832-910-7735.`;
+  }
+
+  async function loadLinks(j) {
+    if (!db() || !j._sb) return [];
+    const { data, error } = await db().from('packet_links')
+      .select('id,status,created_at,created_by,expires_at,viewed_at,signed_at,sent_to,signed_summary')
+      .eq('job_id', j.id).order('created_at', { ascending: false });
+    if (error) { console.warn('[packet] links load failed', error.message || error); return []; }
+    return data || [];
+  }
+
+  // A homeowner may have signed by link while this job was open: pick that up.
+  async function reconcile(j, links) {
+    const p = ensurePacket(j);
+    const signedLink = links.find(l => l.status === 'signed');
+    let changed = false;
+    if (signedLink && p.status !== 'signed') {
+      const sm = signedLink.signed_summary || {};
       p.status = 'signed';
-      p.signed = {
-        method: 'in_person', at: signedAt.toISOString(), cancelBy: cancelBy.toISOString(), sha256: hash,
-        homeowner: { name: st.homeownerName.trim() }, coowner: sigs.coowner ? { name: st.coownerName.trim() } : null,
-        rep: { name: st.repName.trim(), user: me() }, consentAt: st.consentAt, file: { name: rec.name, path: rec.path || null }
-      };
-      if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet signed', `Contingency Agreement + Third-Party Authorization signed in person by ${st.homeownerName.trim()}${sigs.coowner ? ' and ' + st.coownerName.trim() : ''}. Cancellation window ends ${fmtDate(cancelBy)}.`);
-      save();
-
-      const box = ov.querySelector('[data-done]');
-      if (box) {
-        box.innerHTML = '<i class="ti ti-circle-check" style="font-size:20px"></i> Signed and saved to the job.';
-        const after = document.createElement('div');
-        after.innerHTML = `<div class="pks-card" style="font-size:14px;line-height:1.6">Cancellation window ends <b>${esc(fmtDate(cancelBy))}</b> at midnight.<br>Send the homeowner their copy from the job’s Packet tab.</div>
-          <div style="display:flex;gap:10px"><button type="button" class="pks-b" data-v>View signed PDF</button><button type="button" class="pks-b go" data-x>Done</button></div>`;
-        box.parentNode.appendChild(after);
-        after.querySelector('[data-v]').onclick = () => openBlob(finalBytes);
-        after.querySelector('[data-x]').onclick = () => { close(); rerender(); };
+      p.signed = Object.assign({ method: 'remote', at: signedLink.signed_at }, sm);
+      changed = true;
+      if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet signed', `Signed remotely by ${(sm.homeowner && sm.homeowner.name) || 'the homeowner'}${sm.coowner ? ' and ' + sm.coowner.name : ''} through a signing link.${sm.cancelBy ? ' Cancellation window ends ' + fmtDate(new Date(sm.cancelBy)) + '.' : ''}`);
+    }
+    if (signedLink && db()) {
+      const { data: rows } = await db().from('job_files').select('id,name,storage_path').eq('job_id', j.id).eq('kind', 'packet');
+      const known = new Set((j.packetFiles || []).map(f => f.path));
+      for (const r of (rows || [])) {
+        if (known.has(r.storage_path)) continue;
+        const { data: su } = await db().storage.from('job-files').createSignedUrl(r.storage_path, 60 * 60 * 24 * 7);
+        j.packetFiles.push({ name: r.name, path: r.storage_path, _id: r.id, url: su && su.signedUrl, isPdf: true });
+        changed = true;
       }
     }
+    if (changed) save();
+    return changed;
+  }
 
-    render();
+  function linkStatus(l) {
+    const expired = l.status !== 'signed' && l.status !== 'void' && new Date(l.expires_at) < new Date();
+    if (l.status === 'signed') return ['Signed ' + fmtDateTime(l.signed_at), '#34D399'];
+    if (l.status === 'void') return ['Cancelled', '#8B94A7'];
+    if (expired) return ['Expired', '#8B94A7'];
+    if (l.viewed_at) return ['Opened ' + fmtDateTime(l.viewed_at), '#F2C46B'];
+    return ['Sent ' + fmtDateTime(l.created_at) + ' — not opened yet', '#9DB8F5'];
+  }
+
+  async function renderLinks(j) {
+    const host = document.getElementById('pk-links'); if (!host) return;
+    const links = await loadLinks(j);
+    if (await reconcile(j, links)) { rerender(); return; }
+    if (!links.length) { host.innerHTML = ''; return; }
+    host.innerHTML = `<div class="pk-sec"><h4>Signing links</h4><div class="pk-files">${links.map(l => {
+      const [txt, color] = linkStatus(l);
+      const live = l.status !== 'signed' && l.status !== 'void' && new Date(l.expires_at) >= new Date();
+      return `<div class="pk-file"><span style="width:9px;height:9px;border-radius:50%;background:${color};flex:none"></span>
+        <span class="pk-fn" style="font-weight:500;color:var(--text)">${esc(txt)}${l.sent_to ? ' · ' + esc(l.sent_to) : ''}</span>
+        ${live ? `<button type="button" onclick="crmPacket.voidLink('${j.id}','${l.id}')">Cancel link</button>` : ''}</div>`;
+    }).join('')}</div><p class="pk-note">A link carries the answers as they were when it was sent. Links expire after ${LINK_DAYS} days. For security a link can't be shown again — send a new one if needed.</p></div>`;
+  }
+
+  async function voidLink(jobId, linkId) {
+    const j = jobById(jobId); if (!j || !db()) return;
+    if (!root.confirm('Cancel this signing link? The homeowner will no longer be able to use it.')) return;
+    const { error } = await db().from('packet_links').update({ status: 'void' }).eq('id', linkId).neq('status', 'signed');
+    if (error) { say('Could not cancel the link'); return; }
+    say('Link cancelled'); renderLinks(j);
+  }
+
+  // Rep signs once, then a private link is created and sent from the rep's phone / email.
+  function sendForSignature(jobId) {
+    const j = jobById(jobId); if (!j) return;
+    const p = ensurePacket(j);
+    const miss = missingForSigning(p.fields);
+    if (miss.length) { say('Fill in first: ' + miss.join(', ')); return; }
+    if (!db() || !j._sb) { say('This job isn’t synced yet — try again in a moment'); return; }
+    injectStyles();
+    const ov = document.createElement('div');
+    ov.id = 'pkSign';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Send claim packet for signature');
+    document.body.appendChild(ov);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const close = () => { ov.remove(); document.body.style.overflow = prevOverflow; renderLinks(j); };
+    let repName = me(), phone = p.fields.cell_phone || '', email = p.fields.email || '';
+
+    const step1 = () => {
+      ov.innerHTML = `<div class="pks-top"><b>Send for signature</b><span>${esc(p.fields.name || '')}</span></div>
+        <div class="pks-body">
+          <h2>Your signature first</h2>
+          <p class="pks-sub">Sign as the StormShield representative. Then a private link is created for the homeowner to review, initial and sign on their own phone.</p>
+          <div class="pks-fld"><label for="pks-rn">Representative name</label><input id="pks-rn" value="${esc(repName)}"></div>
+          <div class="pks-pad" data-pad="sspr"></div>
+          <div class="pks-padbar"><span>Representative signature</span><button type="button" class="pks-link" data-clear>Clear</button></div>
+          <div class="pks-fld"><label for="pks-ph">Homeowner mobile</label><input id="pks-ph" inputmode="tel" value="${esc(phone)}"></div>
+          <div class="pks-fld"><label for="pks-em">Homeowner email</label><input id="pks-em" inputmode="email" value="${esc(email)}"></div>
+        </div>
+        <div class="pks-foot"><div><button type="button" class="pks-b" data-cancel>Cancel</button><button type="button" class="pks-b go" data-create>Create signing link</button></div></div>`;
+      const pad = makePad(ov.querySelector('[data-pad]'));
+      ov.querySelector('[data-clear]').onclick = () => pad.clear();
+      ov.querySelector('[data-cancel]').onclick = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
+      ov.querySelector('[data-create]').onclick = async () => {
+        repName = ov.querySelector('#pks-rn').value.trim();
+        phone = ov.querySelector('#pks-ph').value.trim();
+        email = ov.querySelector('#pks-em').value.trim();
+        const repSig = pad.toPng();
+        if (!repName) { say('Enter the representative name'); return; }
+        if (!repSig) { say('Please sign first'); return; }
+        if (!phone && !email) { say('Enter a mobile number or email'); return; }
+        const btn = ov.querySelector('[data-create]'); btn.disabled = true; btn.textContent = 'Creating…';
+        try {
+          const token = randomToken();
+          const now = new Date();
+          const { error } = await db().from('packet_links').insert({
+            job_id: j.id, token_hash: await sha256Text(token), fields: p.fields,
+            rep_name: repName, rep_sig: repSig, rep_signed_at: now.toISOString(),
+            created_by: me() || repName, sent_to: [phone, email].filter(Boolean).join(' / '),
+            expires_at: new Date(now.getTime() + LINK_DAYS * 864e5).toISOString()
+          });
+          if (error) throw error;
+          if (phone && !p.fields.cell_phone) p.fields.cell_phone = phone;
+          if (email && !p.fields.email) p.fields.email = email;
+          if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet sent for signature', 'Signing link created by ' + repName + (phone || email ? ' for ' + [phone, email].filter(Boolean).join(' / ') : ''));
+          save();
+          step2(signUrl(token));
+        } catch (e) {
+          console.error('[packet] link create failed', e);
+          say('Could not create the link — ' + (e.message || 'try again'));
+          btn.disabled = false; btn.textContent = 'Create signing link';
+        }
+      };
+    };
+
+    const step2 = url => {
+      const msg = linkMessage(p.fields, repName, url);
+      ov.innerHTML = `<div class="pks-top"><b>Send for signature</b><span>${esc(p.fields.name || '')}</span></div>
+        <div class="pks-body">
+          <div class="pks-ok">✓ Link ready — it works for ${LINK_DAYS} days.</div>
+          <h2>Send it to the homeowner</h2>
+          <p class="pks-sub">Text opens your phone’s Messages app with the message filled in — just hit send.</p>
+          ${phone ? `<a class="pks-b go" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-bottom:10px" href="${esc(smsHref(phone, msg))}" data-sent="text">Text from my phone</a>` : ''}
+          ${email ? `<a class="pks-b" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-bottom:10px" href="mailto:${esc(email)}?subject=${encodeURIComponent('Your StormShield claim paperwork — please sign')}&body=${encodeURIComponent(msg)}" data-sent="email">Email it</a>` : ''}
+          <button type="button" class="pks-b" style="width:100%;margin-bottom:12px" data-copy>Copy link</button>
+          <div class="pks-card" style="font-size:13px;color:#3C4658;word-break:break-all">${esc(msg)}</div>
+          <p class="pks-legal">For security this link is shown only now. If it’s lost, cancel it and send a new one.</p>
+        </div>
+        <div class="pks-foot"><div><button type="button" class="pks-b go" data-close>Done</button></div></div>`;
+      ov.querySelectorAll('[data-sent]').forEach(a => a.addEventListener('click', () => {
+        if (typeof root.logContact === 'function') root.logContact(j, 'client', a.dataset.sent, 'Claim packet signing link sent');
+      }));
+      ov.querySelector('[data-copy]').onclick = async () => {
+        try { await navigator.clipboard.writeText(url); say('Link copied'); } catch (e) { root.prompt('Copy this link:', url); }
+      };
+      ov.querySelector('[data-close]').onclick = close;
+    };
+    step1();
   }
 
   /* ---------------------------------------------------------------- other actions */
@@ -799,5 +1053,6 @@
     save(); rerender();
   }
 
-  Object.assign(api, { renderPacketTab, startSigning, preview, uploadPaper, deleteFile, startOver, buildPdf });
+  Object.assign(api, { renderPacketTab, startSigning, preview, uploadPaper, deleteFile, startOver, buildPdf, addAuditPage,
+    finalizeSigned, openSigningFlow, setTemplateBytes, sendForSignature, voidLink, renderLinks, sha256Hex, CONSENT });
 })(typeof window !== 'undefined' ? window : globalThis);
