@@ -873,12 +873,16 @@
   // A homeowner may have signed by link while this job was open: pick that up.
   async function reconcile(j, links) {
     const p = ensurePacket(j);
-    const signedLink = links.find(l => l.status === 'signed');
+    // Only a link signed after the last "Start a new packet" counts, and never one already recorded.
+    const seen = new Set((p.history || []).concat(p.signed ? [p.signed] : []).map(x => x && (x.linkId || x.at)).filter(Boolean));
+    const after = p.restartedAt ? new Date(p.restartedAt) : null;
+    const signedLink = links.find(l => l.status === 'signed' && !seen.has(l.id) &&
+      !seen.has((l.signed_summary || {}).at) && !(after && new Date(l.signed_at) <= after));
     let changed = false;
     if (signedLink && p.status !== 'signed') {
       const sm = signedLink.signed_summary || {};
       p.status = 'signed';
-      p.signed = Object.assign({ method: 'remote', at: signedLink.signed_at }, sm);
+      p.signed = Object.assign({ method: 'remote', at: signedLink.signed_at }, sm, { linkId: signedLink.id });
       changed = true;
       if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet signed', `Signed remotely by ${(sm.homeowner && sm.homeowner.name) || 'the homeowner'}${sm.coowner ? ' and ' + sm.coowner.name : ''} through a signing link.${sm.cancelBy ? ' Cancellation window ends ' + fmtDate(new Date(sm.cancelBy)) + '.' : ''}`);
     }
@@ -1048,8 +1052,11 @@
     const j = jobById(jobId); if (!j) return;
     if (!root.confirm('Start a new packet? The signed copy stays in the job; answers carry over so you can edit them.')) return;
     const p = ensurePacket(j);
-    p.history = (p.history || []).concat(p.signed ? [p.signed] : []);
+    const hist = p.history || [];
+    if (p.signed && !hist.some(h => h && h.at === p.signed.at)) hist.push(p.signed);
+    p.history = hist;
     p.status = 'draft'; p.signed = null;
+    p.restartedAt = new Date().toISOString();
     save(); rerender();
   }
 
