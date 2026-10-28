@@ -1,5 +1,6 @@
 // packet-email — emails a signed Claim Packet PDF through the company's Zoho Mail.
-//   POST { job_id, path, to, cancelBy? }
+//   POST { job_id, path, to }                      -> the signed PDF, after signing
+//   POST { kind:"link", job_id, token, to, signPage? } -> "please sign" email with the private link
 // Called by the CRM after in-person signing (with the signed-in user's token) and by
 // packet-sign after a remote signing (with the service-role key). The PDF must be a
 // `packet` file already saved on that job; the server reads it from storage itself.
@@ -8,7 +9,8 @@
 //   ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET / ZOHO_DC — already set for Zoho Books (same Self Client)
 //   ZOHO_MAIL_REFRESH_TOKEN — refresh token with scopes ZohoMail.messages.CREATE,ZohoMail.accounts.READ
 //   ZOHO_MAIL_FROM (optional) — send-as address; defaults to the Zoho mailbox's primary address
-//   ZOHO_MAIL_BCC  (optional) — office copy, e.g. office@stormshieldproroofing.com
+//   ZOHO_MAIL_BCC  (optional) — extra copy, e.g. office@stormshieldproroofing.com
+// The salesperson assigned to the job (Team) signs the email and gets a BCC copy.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -27,6 +29,15 @@ const json = (body: unknown, status = 200) =>
 
 const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+
+async function sha256(text: string) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function fmtDay(iso: string | null | undefined) {
+  const d = new Date(iso || "");
+  return isNaN(+d) ? "" : d.toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "long", day: "numeric", year: "numeric" });
+}
 
 // ---- Zoho Mail access token (shared cache row 'mail' in zoho_token_cache)
 let mem: { token: string; expiresAt: number } | null = null;
@@ -59,7 +70,7 @@ async function zohoToken(): Promise<string> {
   return tok.access_token;
 }
 
-let acct: { id: string; from: string } | null = null;
+let acct: { id: string; from: string; canSendAs: Set<string> } | null = null;
 async function mailAccount(token: string) {
   if (acct) return acct;
   const r = await fetch(`https://mail.zoho.${DC}/api/accounts`, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
@@ -71,7 +82,7 @@ async function mailAccount(token: string) {
     ...((a.sendMailDetails || []).map((d: any) => d.fromAddress)), ...((a.emailAddress || []).map((e: any) => e.mailId))]
     .filter(Boolean).map((x: string) => x.toLowerCase());
   const a = (want && list.find((x: any) => addrs(x).includes(want))) || list[0];
-  acct = { id: String(a.accountId), from: want || a.primaryEmailAddress || a.mailboxAddress };
+  acct = { id: String(a.accountId), from: want || a.primaryEmailAddress || a.mailboxAddress, canSendAs: new Set(addrs(a)) };
   return acct;
 }
 
@@ -86,11 +97,86 @@ async function zmail(token: string, path: string, init: RequestInit) {
   return out;
 }
 
-function fmtDay(iso: string | null | undefined) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(+d)) return "";
-  return d.toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "2-digit", day: "2-digit", year: "numeric" });
+// Signature built from the CRM Team list: the salesperson assigned to the job, else the company.
+const OFFICE = "8329107735";
+function fmtPhone(v: unknown) {
+  const d = String(v || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  return d.length === 10 ? { href: d, text: `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` } : null;
+}
+function signatureHtml(rep: { name?: string; email?: string; phone?: string } | null) {
+  const a = (href: string, text: string) => `<a href="${href}" style="color:#1F2937;text-decoration:none">${esc(text)}</a>`;
+  const office = fmtPhone(OFFICE)!;
+  const cell = rep ? fmtPhone(rep.phone) : null;
+  const phones = `Office ${a("tel:" + office.href, office.text)}` + (cell && cell.href !== office.href ? ` &nbsp;&middot;&nbsp; Cell ${a("tel:" + cell.href, cell.text)}` : "");
+  const email = rep && EMAIL_RE.test(String(rep.email || "")) ? a("mailto:" + rep.email, String(rep.email)) + " &nbsp;&middot;&nbsp; " : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="${FONT}font-size:14px;line-height:1.6;color:#1F2937">
+    ${rep && rep.name
+      ? `<div style="font-size:16px;font-weight:bold;color:#0F1E3A">${esc(rep.name)}</div><div style="color:#4B5563">Claims Specialist &nbsp;&middot;&nbsp; StormShield Pro Roofing</div>`
+      : `<div style="font-size:16px;font-weight:bold;color:#0F1E3A">StormShield Pro Roofing</div>`}
+    <div style="margin-top:6px">${phones}</div>
+    ${email ? `<div>${email.replace(/ &nbsp;&middot;&nbsp; $/, "")}</div>` : ""}
+    <div><a href="https://stormshieldproroofing.com" style="color:#1D4ED8;text-decoration:none">stormshieldproroofing.com</a> &nbsp;&middot;&nbsp; <span style="color:#4B5563">Serving Houston + surrounding areas</span></div>
+    <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#6B7280">Residential &amp; Commercial Roofing &nbsp;&middot;&nbsp; Storm Damage Restoration &nbsp;&middot;&nbsp; Insurance Claim Assistance &nbsp;&middot;&nbsp; Free Roof Inspections</div>
+  </td></tr></table>`;
+}
+
+// Pinned to the commit that added the logo, so it shows even before the site updates.
+const LOGO_URL = "https://raw.githubusercontent.com/stormshieldproroofing/CRM/3fb29d8517d646ac31ede7674c5a42a916ad5826/email-logo.png";
+const FONT = "font-family:Arial,Helvetica,sans-serif;";
+const para = (t: string) => `<p style="margin:0 0 16px;${FONT}font-size:15px;line-height:1.6;color:#1F2937">${t}</p>`;
+const CALL = 'If you have any questions, just reply to this email or call us at <a href="tel:8329107735" style="color:#1D4ED8;text-decoration:none">832-910-7735</a>.';
+
+// Branded frame shared by every packet email: logo header, body, salesperson signature.
+function shell(title: string, inner: string, signatureHtml: string) {
+  return `<div style="margin:0;padding:0;background:#F3F5F8">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F8"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border:1px solid #E3E7EE;border-radius:10px;overflow:hidden">
+  <tr><td align="center" style="padding:22px 24px 16px;border-bottom:4px solid #0F1E3A">
+    <img src="${LOGO_URL}" width="140" alt="StormShield Pro Roofing" style="display:block;width:140px;max-width:140px;height:auto;border:0">
+  </td></tr>
+  <tr><td style="padding:28px 28px 8px">
+    <h1 style="margin:0 0 18px;${FONT}font-size:22px;line-height:1.3;color:#0F1E3A">${title}</h1>
+    ${inner}
+  </td></tr>
+  <tr><td style="padding:4px 28px 28px;${FONT}font-size:14px;line-height:1.5;color:#1F2937"><div style="margin-bottom:10px">Thank you,</div>${signatureHtml}</td></tr>
+</table>
+</td></tr></table>
+</div>`;
+}
+
+// After signing: the signed PDF is attached.
+function signedEmailHtml(o: { first: string; address: string; insurer: string; signatureHtml: string }) {
+  return shell("Your signed claim paperwork", `
+    ${para("Hi " + esc(o.first) + ",")}
+    ${para("Thank you for choosing StormShield Pro Roofing. Your signed claim paperwork" + (o.address ? " for <b>" + esc(o.address) + "</b>" : "") + " is attached for your records.")}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;background:#F6F8FB;border:1px solid #E3E7EE;border-radius:8px">
+      <tr><td style="padding:14px 16px;${FONT}font-size:14px;line-height:1.6;color:#1F2937">
+        <div style="font-weight:bold;color:#0F1E3A;margin-bottom:4px">Attached: your signed Claim Packet (PDF)</div>
+        &bull; Page 1 &mdash; Contingency Agreement<br>
+        &bull; Page 2 &mdash; Third-Party Authorization${o.insurer ? " for " + esc(o.insurer) : ""}<br>
+        &bull; Page 3 &mdash; Electronic signature record
+      </td></tr>
+    </table>
+    ${para("Our team will keep you updated as your claim moves forward. " + CALL)}`, o.signatureHtml);
+}
+
+// Before signing: a button to the homeowner's private signing link.
+function linkEmailHtml(o: { first: string; address: string; insurer: string; rep: string; url: string; expires: string; signatureHtml: string }) {
+  return shell("Your claim paperwork is ready to sign", `
+    ${para("Hi " + esc(o.first) + ",")}
+    ${para((o.rep ? esc(o.rep) + " with StormShield Pro Roofing has" : "StormShield Pro Roofing has") + " prepared your claim paperwork" + (o.address ? " for <b>" + esc(o.address) + "</b>" : "") + ". You can review and sign it on your phone or computer &mdash; it takes about 3 minutes.")}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;background:#F6F8FB;border:1px solid #E3E7EE;border-radius:8px">
+      <tr><td style="padding:14px 16px;${FONT}font-size:14px;line-height:1.6;color:#1F2937">
+        <div style="font-weight:bold;color:#0F1E3A;margin-bottom:4px">What you&rsquo;ll sign</div>
+        &bull; Contingency Agreement<br>
+        &bull; Third-Party Authorization${o.insurer ? " for " + esc(o.insurer) : ""}
+      </td></tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px"><tr><td align="center" bgcolor="#2563EB" style="border-radius:8px">
+      <a href="${esc(o.url)}" style="display:inline-block;padding:14px 28px;${FONT}font-size:16px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:8px">Review &amp; sign</a>
+    </td></tr></table>
+    <p style="margin:0 0 20px;${FONT}font-size:13px;line-height:1.5;color:#4B5563">This is a private link just for you${o.expires ? " and works until <b>" + esc(o.expires) + "</b>" : ""}. Please don&rsquo;t forward it.</p>
+    ${para(CALL)}`, o.signatureHtml);
 }
 
 async function allowed(req: Request, jobId: string) {
@@ -112,50 +198,80 @@ Deno.serve(async (req) => {
     if (!Deno.env.get("ZOHO_MAIL_REFRESH_TOKEN")) return json({ ok: false, notConfigured: true, error: "Email isn't set up yet" }, 200);
     const body = await req.json().catch(() => ({}));
     const jobId = String(body.job_id || "");
+    const kind = body.kind === "link" ? "link" : "signed";
     const path = String(body.path || "");
     const to = String(body.to || "").trim();
-    if (!/^[0-9a-f-]{36}$/i.test(jobId) || !path) return json({ error: "job_id and path required" }, 400);
+    if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "job_id required" }, 400);
+    if (kind === "signed" && !path) return json({ error: "path required" }, 400);
     if (!EMAIL_RE.test(to) || to.length > 200) return json({ error: "That email address doesn't look right" }, 400);
     if (!(await allowed(req, jobId))) return json({ error: "Not allowed" }, 403);
 
-    const { data: file } = await admin.from("job_files").select("id,name").eq("job_id", jobId).eq("kind", "packet").eq("storage_path", path).maybeSingle();
-    if (!file) return json({ error: "Signed packet not found on this job" }, 404);
-    const { data: job } = await admin.from("jobs").select("name,contract").eq("id", jobId).maybeSingle();
-    const f = (job && job.contract && job.contract.__packet && job.contract.__packet.fields) || {};
-    const { data: blob, error: dlErr } = await admin.storage.from("job-files").download(path);
-    if (dlErr || !blob) return json({ error: "Could not read the signed PDF" }, 500);
-    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const { data: job } = await admin.from("jobs").select("name,contract,assigned_to").eq("id", jobId).maybeSingle();
+    if (!job) return json({ error: "Job not found" }, 404);
+    let rep: { name?: string; email?: string; phone?: string } | null = null;
+    if (job.assigned_to) {
+      const { data } = await admin.from("team_members").select("name,email,phone").eq("id", job.assigned_to).maybeSingle();
+      if (data && data.name) rep = { name: data.name, email: String(data.email || "").trim(), phone: data.phone || "" };
+    }
+    const repEmail = rep && EMAIL_RE.test(rep.email || "") ? rep.email! : "";
+    const packetFields = (job.contract && job.contract.__packet && job.contract.__packet.fields) || {};
 
     const token = await zohoToken();
-    const { id: accountId, from } = await mailAccount(token);
-    const fileName = (file.name || "StormShield Claim Packet (signed).pdf").replace(/[\\/:*?"<>|]+/g, "");
-    const up = await zmail(token, `/accounts/${accountId}/messages/attachments?fileName=${encodeURIComponent(fileName)}`, {
-      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: bytes,
-    });
-    const att = Array.isArray(up.data) ? up.data[0] : up.data;
-    if (!att || !att.storeName) throw new Error("Zoho Mail attachment upload returned no file");
+    const account = await mailAccount(token);
+    const accountId = account.id;
+    // Send as the salesperson when Zoho lets this mailbox send from their address ("Send mail as"); else the office alias.
+    const from = repEmail && account.canSendAs.has(repEmail.toLowerCase()) ? repEmail : account.from;
+    const signature = signatureHtml(rep);
+    const nameOf = (f: any) => String(f.name || job.name || "").trim().split(/\s+/)[0] || "there";
+    const addressOf = (f: any) => [f.street, [f.city_state, f.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 
-    const first = String(f.name || job?.name || "").trim().split(/\s+/)[0] || "there";
-    const street = f.street || "";
-    const cancel = fmtDay(body.cancelBy);
-    const content = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#141A26">
-      <p>Hi ${esc(first)},</p>
-      <p>Attached is your signed Contingency Agreement and Third-Party Authorization with StormShield Pro Roofing${street ? " for " + esc(street) : ""}. Please keep it for your records.</p>
-      ${cancel ? `<p><b>Your right to cancel:</b> you may cancel this agreement at any time before midnight on <b>${esc(cancel)}</b>, as explained in the Notice of Right to Cancel on page 1.</p>` : ""}
-      <p>Questions? Reply to this email or call 832-910-7735.</p>
-      <p>Thank you,<br>StormShield Pro Roofing<br>12111 Forest Sage Ln, Pearland, TX 77584<br>832-910-7735 · stormshieldproroofing.com</p>
-    </div>`;
-    const bcc = (Deno.env.get("ZOHO_MAIL_BCC") || "").trim();
+    let subject = "", content = "", attachments: unknown[] = [];
+    if (kind === "link") {
+      // The raw link token must match an open signing link on this job.
+      const linkToken = String(body.token || "");
+      if (linkToken.length < 30 || linkToken.length > 100) return json({ error: "Missing signing link" }, 400);
+      const { data: link } = await admin.from("packet_links").select("id,job_id,status,expires_at,fields,rep_name")
+        .eq("token_hash", await sha256(linkToken)).maybeSingle();
+      if (!link || link.job_id !== jobId) return json({ error: "Signing link not found on this job" }, 404);
+      if (!["sent", "viewed"].includes(link.status) || new Date(link.expires_at) < new Date()) return json({ error: "This signing link is no longer active" }, 409);
+      const page = typeof body.signPage === "string" && /^https:\/\/[^\s/?#]+\/(?:[^\s?#]*\/)?sign\.html$/.test(body.signPage)
+        ? body.signPage : (Deno.env.get("SIGN_PAGE_URL") || "https://stormshieldproroofing.github.io/CRM/sign.html");
+      const f = link.fields || {};
+      subject = `Please sign: your StormShield claim paperwork${f.street ? " — " + f.street : ""}`;
+      content = linkEmailHtml({
+        first: nameOf(f), address: addressOf(f), insurer: f.insurance_company || "", rep: link.rep_name || "",
+        url: page + "?t=" + encodeURIComponent(linkToken), expires: fmtDay(link.expires_at), signatureHtml: signature,
+      });
+    } else {
+      const { data: file } = await admin.from("job_files").select("id,name").eq("job_id", jobId).eq("kind", "packet").eq("storage_path", path).maybeSingle();
+      if (!file) return json({ error: "Signed packet not found on this job" }, 404);
+      const { data: blob, error: dlErr } = await admin.storage.from("job-files").download(path);
+      if (dlErr || !blob) return json({ error: "Could not read the signed PDF" }, 500);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const fileName = (file.name || "StormShield Claim Packet (signed).pdf").replace(/[\\/:*?"<>|]+/g, "");
+      const up = await zmail(token, `/accounts/${accountId}/messages/attachments?fileName=${encodeURIComponent(fileName)}`, {
+        method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: bytes,
+      });
+      const att = Array.isArray(up.data) ? up.data[0] : up.data;
+      if (!att || !att.storeName) throw new Error("Zoho Mail attachment upload returned no file");
+      attachments = [{ storeName: att.storeName, attachmentPath: att.attachmentPath, attachmentName: att.attachmentName || fileName }];
+      const f = packetFields;
+      subject = `Your signed claim paperwork${f.street ? " — " + f.street : ""}`;
+      content = signedEmailHtml({ first: nameOf(f), address: addressOf(f), insurer: f.insurance_company || "", signatureHtml: signature });
+    }
+
+    // BCC: the job's salesperson, plus the optional office address — never the homeowner twice.
+    const seen = new Set([to.toLowerCase()]);   // the rep still gets a copy even when it is sent as them
+    const bcc = [repEmail, ...(Deno.env.get("ZOHO_MAIL_BCC") || "").split(",")].map((x) => x.trim())
+      .filter((x) => EMAIL_RE.test(x) && !seen.has(x.toLowerCase()) && (seen.add(x.toLowerCase()), true)).join(",");
     await zmail(token, `/accounts/${accountId}/messages`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        fromAddress: from, toAddress: to, ...(bcc && bcc.toLowerCase() !== to.toLowerCase() ? { bccAddress: bcc } : {}),
-        subject: `Your signed claim paperwork${street ? " — " + street : ""}`,
-        content, mailFormat: "html",
-        attachments: [{ storeName: att.storeName, attachmentPath: att.attachmentPath, attachmentName: att.attachmentName || fileName }],
+        fromAddress: from, toAddress: to, ...(bcc ? { bccAddress: bcc } : {}),
+        subject, content, mailFormat: "html", ...(attachments.length ? { attachments } : {}),
       }),
     });
-    return json({ ok: true, to, from });
+    return json({ ok: true, to, from, bcc });
   } catch (e) {
     console.error("packet-email", e);
     return json({ ok: false, error: String((e as Error)?.message || e).slice(0, 300) }, 502);

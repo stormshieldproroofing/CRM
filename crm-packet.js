@@ -1173,6 +1173,22 @@
     });
   }
 
+  // "Please sign" email with the private link, sent from the office's Zoho Mail.
+  async function emailLink(j, token, to, url) {
+    if (!db() || !db().functions) return { ok: false, notConfigured: true };
+    try {
+      const signPage = String(url).split('?')[0];
+      const { data, error } = await db().functions.invoke('packet-email', { body: { kind: 'link', job_id: j.id, token, to, signPage } });
+      if (error) {
+        let msg = error.message || 'send failed';
+        try { const b = await error.context.json(); if (b && b.notConfigured) return { ok: false, notConfigured: true }; if (b && b.error) msg = b.error; } catch (e) {}
+        return { ok: false, error: msg };
+      }
+      if (data && data.ok) return { ok: true };
+      return { ok: false, notConfigured: !!(data && data.notConfigured), error: (data && data.error) || 'send failed' };
+    } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+  }
+
   async function emailPacket(j, path, to, cancelBy) {
     if (!db() || !db().functions) return { ok: false, notConfigured: true };
     try {
@@ -1341,7 +1357,7 @@
           if (email && !p.fields.email) p.fields.email = email;
           if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet sent for signature', 'Signing link created by ' + repName + (phone || email ? ' for ' + [phone, email].filter(Boolean).join(' / ') : ''));
           save();
-          step2(signUrl(token));
+          step2(signUrl(token), token);
         } catch (e) {
           console.error('[packet] link create failed', e);
           say('Could not create the link — ' + (e.message || 'try again'));
@@ -1350,7 +1366,8 @@
       };
     };
 
-    const step2 = url => {
+    const step2 = (url, token) => {
+      const mailto = `mailto:${esc(email)}?subject=${encodeURIComponent('Your StormShield claim paperwork \u2014 please sign')}&body=${encodeURIComponent(linkMessage(p.fields, repName, url))}`;
       const msg = linkMessage(p.fields, repName, url);
       ov.innerHTML = `<div class="pks-top"><b>Send for signature</b><span>${esc(p.fields.name || '')}</span></div>
         <div class="pks-body">
@@ -1358,7 +1375,8 @@
           <h2>Send it to the homeowner</h2>
           <p class="pks-sub">Text opens your phone’s Messages app with the message filled in — just hit send.</p>
           ${phone ? `<a class="pks-b go" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-bottom:10px" href="${esc(smsHref(phone, msg))}" data-sent="text">Text from my phone</a>` : ''}
-          ${email ? `<a class="pks-b" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-bottom:10px" href="mailto:${esc(email)}?subject=${encodeURIComponent('Your StormShield claim paperwork — please sign')}&body=${encodeURIComponent(msg)}" data-sent="email">Email it</a>` : ''}
+          ${email ? `<button type="button" class="pks-b" style="width:100%;margin-bottom:4px" data-zemail>Email it to ${esc(email)}</button>
+            <p class="pks-legal" style="margin:0 0 10px;text-align:center" data-zemail-note>Sends a branded email from the office with a \u201cReview &amp; sign\u201d button. <a href="${mailto}" data-sent="email" style="color:#2F6FEB">Use my email app instead</a></p>` : ''}
           <button type="button" class="pks-b" style="width:100%;margin-bottom:12px" data-copy>Copy link</button>
           <div class="pks-card" style="font-size:13px;color:#3C4658;word-break:break-all">${esc(msg)}</div>
           <p class="pks-legal">For security this link is shown only now. If it’s lost, cancel it and send a new one.</p>
@@ -1367,6 +1385,22 @@
       ov.querySelectorAll('[data-sent]').forEach(a => a.addEventListener('click', () => {
         if (typeof root.logContact === 'function') root.logContact(j, 'client', a.dataset.sent, 'Claim packet signing link sent');
       }));
+      const zb = ov.querySelector('[data-zemail]');
+      if (zb) zb.onclick = async () => {
+        zb.disabled = true; zb.textContent = 'Sending\u2026';
+        const r = await emailLink(j, token, email, url);
+        const note = ov.querySelector('[data-zemail-note]');
+        if (r.ok) {
+          zb.textContent = '\u2713 Emailed to ' + email;
+          if (typeof root.logContact === 'function') root.logContact(j, 'client', 'email', 'Claim packet signing link emailed to ' + email);
+        } else {
+          zb.disabled = false; zb.textContent = 'Email it to ' + email;
+          if (note) note.innerHTML = (r.notConfigured ? 'Office email isn\u2019t set up yet. ' : 'Couldn\u2019t send: ' + esc(r.error || 'try again') + '. ')
+            + `<a href="${mailto}" data-sent="email" style="color:#2F6FEB">Use my email app instead</a>`;
+          const a = note && note.querySelector('[data-sent]');
+          if (a) a.addEventListener('click', () => { if (typeof root.logContact === 'function') root.logContact(j, 'client', 'email', 'Claim packet signing link sent'); });
+        }
+      };
       ov.querySelector('[data-copy]').onclick = async () => {
         try { await navigator.clipboard.writeText(url); say('Link copied'); } catch (e) { root.prompt('Copy this link:', url); }
       };
