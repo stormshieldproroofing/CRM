@@ -268,6 +268,19 @@
 #pkSign .pks-legal{font-size:12px;color:#5A6478;line-height:1.5}
 #pkSign .pks-applied{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #2F6FEB;border-radius:12px;padding:10px 14px;margin-bottom:12px}
 #pkSign .pks-applied img{height:44px;max-width:60%}
+/* phone turned sideways: keep the signing box in view and use the extra width */
+@media (orientation:landscape) and (max-height:520px){
+#pkSign .pks-top{padding-top:8px;padding-bottom:8px}
+#pkSign .pks-body{padding-top:10px}
+#pkSign h2{font-size:17px}
+#pkSign .pks-sub{display:none}
+#pkSign .pks-pad{height:46vh}
+#pkSign .pks-pad.small{height:34vh}
+#pkSign .pkd-in .pks-pad:not(.small){height:42vh}
+#pkSign .pkd-sheet{max-height:78vh}
+#pkSign .pks-foot{padding-top:8px;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+#pkSign .pks-b{height:44px}
+}
 /* in-app PDF viewer + close buttons */
 #pkSign .pkd-x{background:none;border:0;color:#fff;width:40px;height:40px;margin:-8px -8px -8px 4px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;border-radius:8px}
 #pkView{position:fixed;inset:0;z-index:100001;background:#3B4252;display:flex;flex-direction:column;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
@@ -627,34 +640,74 @@
   }
 
   /* ---------------------------------------------------------------- signature pads */
+  // Signature / initials pad. Ink is kept as strokes (fractions of the pad's size), so
+  // turning the phone sideways or resizing the window redraws it in the right place.
   function makePad(host) {
     host.innerHTML = '<canvas></canvas><div class="pks-line"></div><div class="pks-x">×</div>';
     const canvas = host.querySelector('canvas');
-    const ratio = Math.max(1, root.devicePixelRatio || 1);
+    const ctx = canvas.getContext('2d');
+    const small = host.classList.contains('small');
+    let ratio = 1, W = 1, H = 1;
+    const strokes = [];                       // [[{x,y}…]…] in px of the pad size when ink started (refW×refH)
+    let refW = 0, refH = 0;
+    const k = () => (refW ? Math.min(W / refW, H / refH) : 1);   // keep the ink's shape, never stretch it
+    const style = () => { ctx.lineWidth = small ? 4.5 : 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0B1530'; };
+    const redraw = () => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0); style();
+      const f = k();
+      strokes.forEach(st => {
+        if (!st.length) return;
+        ctx.beginPath(); ctx.moveTo(st[0].x * f, st[0].y * f);
+        if (st.length === 1) ctx.lineTo(st[0].x * f + 0.1, st[0].y * f);
+        for (let i = 1; i < st.length; i++) ctx.lineTo(st[i].x * f, st[i].y * f);
+        ctx.stroke();
+      });
+    };
     const size = () => {
       const r = host.getBoundingClientRect();
-      canvas.width = Math.round(r.width * ratio); canvas.height = Math.round(r.height * ratio);
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.lineWidth = host.classList.contains('small') ? 4.5 : 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0B1530';
+      if (!r.width || !r.height) return;
+      ratio = Math.max(1, root.devicePixelRatio || 1);
+      W = r.width; H = r.height;
+      canvas.width = Math.round(W * ratio); canvas.height = Math.round(H * ratio);
+      redraw();
     };
     size();
-    const ctx = canvas.getContext('2d');
-    let drawing = false, last = null, ink = false;
-    const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-    canvas.addEventListener('pointerdown', e => { drawing = true; last = pos(e); canvas.setPointerCapture(e.pointerId); e.preventDefault(); });
-    canvas.addEventListener('pointermove', e => {
-      if (!drawing) return; const p2 = pos(e);
-      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); last = p2; ink = true; e.preventDefault();
+    let lastOrient = root.innerWidth > root.innerHeight;
+    const onSize = () => {
+      size();
+      const o = root.innerWidth > root.innerHeight;
+      if (o !== lastOrient) { lastOrient = o; try { host.scrollIntoView({ block: 'center' }); } catch (e) {} }
+    };
+    if (typeof ResizeObserver === 'function') new ResizeObserver(onSize).observe(host);
+    else root.addEventListener('resize', onSize);
+    let drawing = false, cur = null;
+    // Measure the canvas at every touch, so a rotation mid-session can't skew the ink.
+    const pos = e => { const r = canvas.getBoundingClientRect(), f = k(); return { x: (e.clientX - r.left) / f, y: (e.clientY - r.top) / f }; };
+    canvas.addEventListener('pointerdown', e => {
+      const r = canvas.getBoundingClientRect();
+      if (Math.abs(r.width - W) > 1 || Math.abs(r.height - H) > 1) size();
+      if (!strokes.length) { refW = W; refH = H; }
+      drawing = true; cur = [pos(e)]; strokes.push(cur);
+      canvas.setPointerCapture(e.pointerId); e.preventDefault();
     });
-    const stop = () => { drawing = false; };
+    canvas.addEventListener('pointermove', e => {
+      if (!drawing) return;
+      const p2 = pos(e), last = cur[cur.length - 1], f = k();
+      cur.push(p2);
+      ctx.beginPath(); ctx.moveTo(last.x * f, last.y * f); ctx.lineTo(p2.x * f, p2.y * f); ctx.stroke();
+      e.preventDefault();
+    });
+    const stop = () => { drawing = false; cur = null; };
     canvas.addEventListener('pointerup', stop); canvas.addEventListener('pointercancel', stop);
+    const hasInk = () => strokes.some(st => st.length > 1);
     return {
-      hasInk: () => ink,
-      clear: () => { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); ink = false; },
+      hasInk,
+      clear: () => { strokes.length = 0; refW = refH = 0; redraw(); },
       // Trimmed PNG of the ink only (transparent background)
       toPng: () => {
-        if (!ink) return null;
+        if (!hasInk()) return null;
+        redraw();
         const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
         for (let yy = 0; yy < canvas.height; yy++) for (let xx = 0; xx < canvas.width; xx++) {
@@ -671,6 +724,7 @@
       }
     };
   }
+
 
   /* ---------------------------------------------------------------- signing flow */
   const CONSENT = 'I agree to use electronic records and signatures for this Claim Packet. My electronic initials and signatures have the same effect as signing on paper. I can get a paper copy free, and withdraw this consent, by calling 832-910-7735.';
@@ -783,7 +837,20 @@
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     let release = () => {};
-    const shut = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
+    // Turning the phone re-fits the pages to the new width.
+    let lastW = 0, rT = 0;
+    const onResize = () => {
+      clearTimeout(rT);
+      rT = setTimeout(async () => {
+        const sc = ov.querySelector('[data-scroll]');
+        if (st.phase !== 'doc' || !sc || !pageEls.length || Math.abs(sc.clientWidth - lastW) < 2) return;
+        lastW = sc.clientWidth;
+        await layoutPages();
+        if (st.active) scrollToSpot(st.active);
+      }, 200);
+    };
+    root.addEventListener('resize', onResize);
+    const shut = () => { root.removeEventListener('resize', onResize); ov.remove(); document.body.style.overflow = prevOverflow; };
     const close = () => { release(); shut(); };
     // Phone Back while signing: ask first (in person), never silently lose the signatures.
     const arm = () => {
@@ -909,6 +976,7 @@
 
     async function layoutPages() {
       const sc = ov.querySelector('[data-scroll]'); if (!sc || !pdfDoc) return;
+      lastW = sc.clientWidth;
       const avail = Math.min(sc.clientWidth - 24, 900);
       const w = Math.round(avail * st.zoom);
       for (const p of pageEls) {
