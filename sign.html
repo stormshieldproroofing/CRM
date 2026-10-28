@@ -24,7 +24,7 @@
 <main id="ss-root" class="ss-msg" aria-live="polite"><div class="ss-spin" aria-hidden="true"></div><p>Loading your paperwork…</p></main>
 <div id="ss-toast" role="status"></div>
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-<script src="crm-packet.js?v=4"></script>
+<script src="crm-packet.js?v=5"></script>
 <script>
 (function () {
   'use strict';
@@ -69,7 +69,7 @@
               if (!x.ok || !x.j.ok) { var e = new Error('sign failed'); e.userMessage = (x.j && x.j.error) || 'Could not save your signature. Please try again.'; throw e; }
               var bin = atob(x.j.pdf), bytes = new Uint8Array(bin.length);
               for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-              return { finalBytes: bytes, cancelBy: new Date(x.j.cancelBy), fileName: x.j.fileName };
+              return { finalBytes: bytes, cancelBy: new Date(x.j.cancelBy), fileName: x.j.fileName, emailedTo: x.j.emailedTo || '' };
             });
         }
       });
