@@ -10,8 +10,7 @@
 //   ZOHO_MAIL_REFRESH_TOKEN — refresh token with scopes ZohoMail.messages.CREATE,ZohoMail.accounts.READ
 //   ZOHO_MAIL_FROM (optional) — send-as address; defaults to the Zoho mailbox's primary address
 //   ZOHO_MAIL_BCC  (optional) — extra copy, e.g. office@stormshieldproroofing.com
-//   ZOHO_MAIL_SIGNATURE (optional) — name or id of the Zoho Mail signature to use (default: the first one)
-// The salesperson assigned to the job (team_members.email) always gets a BCC copy.
+// The salesperson assigned to the job (Team) signs the email and gets a BCC copy.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -71,7 +70,7 @@ async function zohoToken(): Promise<string> {
   return tok.access_token;
 }
 
-let acct: { id: string; from: string } | null = null;
+let acct: { id: string; from: string; canSendAs: Set<string> } | null = null;
 async function mailAccount(token: string) {
   if (acct) return acct;
   const r = await fetch(`https://mail.zoho.${DC}/api/accounts`, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
@@ -83,7 +82,7 @@ async function mailAccount(token: string) {
     ...((a.sendMailDetails || []).map((d: any) => d.fromAddress)), ...((a.emailAddress || []).map((e: any) => e.mailId))]
     .filter(Boolean).map((x: string) => x.toLowerCase());
   const a = (want && list.find((x: any) => addrs(x).includes(want))) || list[0];
-  acct = { id: String(a.accountId), from: want || a.primaryEmailAddress || a.mailboxAddress };
+  acct = { id: String(a.accountId), from: want || a.primaryEmailAddress || a.mailboxAddress, canSendAs: new Set(addrs(a)) };
   return acct;
 }
 
@@ -98,22 +97,27 @@ async function zmail(token: string, path: string, init: RequestInit) {
   return out;
 }
 
-// The mailbox's own Zoho Mail signature (ZOHO_MAIL_SIGNATURE = its name or id to pick one; else the first).
-async function zohoSignature(token: string): Promise<string> {
-  try {
-    const r = await fetch(`https://mail.zoho.${DC}/api/accounts/signature`, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
-    const out = await r.json();
-    const list = Array.isArray(out.data) ? out.data : (out.data ? [out.data] : []);
-    if (!list.length) return "";
-    const want = (Deno.env.get("ZOHO_MAIL_SIGNATURE") || "").trim().toLowerCase();
-    const sig = (want && list.find((x: any) => String(x.id) === want || String(x.name || "").toLowerCase() === want)) || list[0];
-    const c = String(sig.content || "").trim();
-    if (!c) return "";
-    return /<[a-z][\s\S]*>/i.test(c) ? c : esc(c).replace(/\n/g, "<br>");
-  } catch (e) {
-    console.warn("signature lookup failed", e);
-    return "";
-  }
+// Signature built from the CRM Team list: the salesperson assigned to the job, else the company.
+const OFFICE = "8329107735";
+function fmtPhone(v: unknown) {
+  const d = String(v || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  return d.length === 10 ? { href: d, text: `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` } : null;
+}
+function signatureHtml(rep: { name?: string; email?: string; phone?: string } | null) {
+  const a = (href: string, text: string) => `<a href="${href}" style="color:#1F2937;text-decoration:none">${esc(text)}</a>`;
+  const office = fmtPhone(OFFICE)!;
+  const cell = rep ? fmtPhone(rep.phone) : null;
+  const phones = `Office ${a("tel:" + office.href, office.text)}` + (cell && cell.href !== office.href ? ` &nbsp;&middot;&nbsp; Cell ${a("tel:" + cell.href, cell.text)}` : "");
+  const email = rep && EMAIL_RE.test(String(rep.email || "")) ? a("mailto:" + rep.email, String(rep.email)) + " &nbsp;&middot;&nbsp; " : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="${FONT}font-size:14px;line-height:1.6;color:#1F2937">
+    ${rep && rep.name
+      ? `<div style="font-size:16px;font-weight:bold;color:#0F1E3A">${esc(rep.name)}</div><div style="color:#4B5563">Claims Specialist &nbsp;&middot;&nbsp; StormShield Pro Roofing</div>`
+      : `<div style="font-size:16px;font-weight:bold;color:#0F1E3A">StormShield Pro Roofing</div>`}
+    <div style="margin-top:6px">${phones}</div>
+    ${email ? `<div>${email.replace(/ &nbsp;&middot;&nbsp; $/, "")}</div>` : ""}
+    <div><a href="https://stormshieldproroofing.com" style="color:#1D4ED8;text-decoration:none">stormshieldproroofing.com</a> &nbsp;&middot;&nbsp; <span style="color:#4B5563">Serving Houston + surrounding areas</span></div>
+    <div style="margin-top:10px;font-size:12px;line-height:1.5;color:#6B7280">Residential &amp; Commercial Roofing &nbsp;&middot;&nbsp; Storm Damage Restoration &nbsp;&middot;&nbsp; Insurance Claim Assistance &nbsp;&middot;&nbsp; Free Roof Inspections</div>
+  </td></tr></table>`;
 }
 
 // Pinned to the commit that added the logo, so it shows even before the site updates.
@@ -122,7 +126,7 @@ const FONT = "font-family:Arial,Helvetica,sans-serif;";
 const para = (t: string) => `<p style="margin:0 0 16px;${FONT}font-size:15px;line-height:1.6;color:#1F2937">${t}</p>`;
 const CALL = 'If you have any questions, just reply to this email or call us at <a href="tel:8329107735" style="color:#1D4ED8;text-decoration:none">832-910-7735</a>.';
 
-// Branded frame shared by every packet email: logo header, body, the mailbox's Zoho signature.
+// Branded frame shared by every packet email: logo header, body, salesperson signature.
 function shell(title: string, inner: string, signatureHtml: string) {
   return `<div style="margin:0;padding:0;background:#F3F5F8">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F8"><tr><td align="center" style="padding:24px 12px">
@@ -134,7 +138,7 @@ function shell(title: string, inner: string, signatureHtml: string) {
     <h1 style="margin:0 0 18px;${FONT}font-size:22px;line-height:1.3;color:#0F1E3A">${title}</h1>
     ${inner}
   </td></tr>
-  <tr><td style="padding:4px 28px 28px;${FONT}font-size:14px;line-height:1.5;color:#1F2937">${signatureHtml || "Thank you,<br><b>StormShield Pro Roofing</b>"}</td></tr>
+  <tr><td style="padding:4px 28px 28px;${FONT}font-size:14px;line-height:1.5;color:#1F2937"><div style="margin-bottom:10px">Thank you,</div>${signatureHtml}</td></tr>
 </table>
 </td></tr></table>
 </div>`;
@@ -204,16 +208,20 @@ Deno.serve(async (req) => {
 
     const { data: job } = await admin.from("jobs").select("name,contract,assigned_to").eq("id", jobId).maybeSingle();
     if (!job) return json({ error: "Job not found" }, 404);
-    let repEmail = "";
+    let rep: { name?: string; email?: string; phone?: string } | null = null;
     if (job.assigned_to) {
-      const { data: rep } = await admin.from("team_members").select("email").eq("id", job.assigned_to).maybeSingle();
-      if (rep && EMAIL_RE.test(String(rep.email || "").trim())) repEmail = String(rep.email).trim();
+      const { data } = await admin.from("team_members").select("name,email,phone").eq("id", job.assigned_to).maybeSingle();
+      if (data && data.name) rep = { name: data.name, email: String(data.email || "").trim(), phone: data.phone || "" };
     }
+    const repEmail = rep && EMAIL_RE.test(rep.email || "") ? rep.email! : "";
     const packetFields = (job.contract && job.contract.__packet && job.contract.__packet.fields) || {};
 
     const token = await zohoToken();
-    const { id: accountId, from } = await mailAccount(token);
-    const signatureHtml = await zohoSignature(token);
+    const account = await mailAccount(token);
+    const accountId = account.id;
+    // Send as the salesperson when Zoho lets this mailbox send from their address ("Send mail as"); else the office alias.
+    const from = repEmail && account.canSendAs.has(repEmail.toLowerCase()) ? repEmail : account.from;
+    const signature = signatureHtml(rep);
     const nameOf = (f: any) => String(f.name || job.name || "").trim().split(/\s+/)[0] || "there";
     const addressOf = (f: any) => [f.street, [f.city_state, f.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 
@@ -232,7 +240,7 @@ Deno.serve(async (req) => {
       subject = `Please sign: your StormShield claim paperwork${f.street ? " — " + f.street : ""}`;
       content = linkEmailHtml({
         first: nameOf(f), address: addressOf(f), insurer: f.insurance_company || "", rep: link.rep_name || "",
-        url: page + "?t=" + encodeURIComponent(linkToken), expires: fmtDay(link.expires_at), signatureHtml,
+        url: page + "?t=" + encodeURIComponent(linkToken), expires: fmtDay(link.expires_at), signatureHtml: signature,
       });
     } else {
       const { data: file } = await admin.from("job_files").select("id,name").eq("job_id", jobId).eq("kind", "packet").eq("storage_path", path).maybeSingle();
@@ -249,11 +257,11 @@ Deno.serve(async (req) => {
       attachments = [{ storeName: att.storeName, attachmentPath: att.attachmentPath, attachmentName: att.attachmentName || fileName }];
       const f = packetFields;
       subject = `Your signed claim paperwork${f.street ? " — " + f.street : ""}`;
-      content = signedEmailHtml({ first: nameOf(f), address: addressOf(f), insurer: f.insurance_company || "", signatureHtml });
+      content = signedEmailHtml({ first: nameOf(f), address: addressOf(f), insurer: f.insurance_company || "", signatureHtml: signature });
     }
 
-    // BCC: the job's salesperson, plus the optional office address — never the homeowner or sender twice.
-    const seen = new Set([to.toLowerCase(), String(from).toLowerCase()]);
+    // BCC: the job's salesperson, plus the optional office address — never the homeowner twice.
+    const seen = new Set([to.toLowerCase()]);   // the rep still gets a copy even when it is sent as them
     const bcc = [repEmail, ...(Deno.env.get("ZOHO_MAIL_BCC") || "").split(",")].map((x) => x.trim())
       .filter((x) => EMAIL_RE.test(x) && !seen.has(x.toLowerCase()) && (seen.add(x.toLowerCase()), true)).join(",");
     await zmail(token, `/accounts/${accountId}/messages`, {
