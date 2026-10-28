@@ -232,7 +232,7 @@
 /* signing overlay (homeowner mode) — light theme, large targets */
 #pkSign{position:fixed;inset:0;z-index:100000;background:#F6F7F9;color:#141A26;display:flex;flex-direction:column;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
 #pkSign *{box-sizing:border-box}
-#pkSign .pks-top{background:#0F1E3A;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+#pkSign .pks-top{background:#0F1E3A;color:#fff;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;gap:10px}
 #pkSign .pks-top b{font-size:15px}
 #pkSign .pks-top span{font-size:12px;color:#C4CBD8}
 #pkSign .pks-bar{height:4px;background:#DDE1E8}
@@ -268,6 +268,17 @@
 #pkSign .pks-legal{font-size:12px;color:#5A6478;line-height:1.5}
 #pkSign .pks-applied{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #2F6FEB;border-radius:12px;padding:10px 14px;margin-bottom:12px}
 #pkSign .pks-applied img{height:44px;max-width:60%}
+/* in-app PDF viewer + close buttons */
+#pkSign .pkd-x{background:none;border:0;color:#fff;width:40px;height:40px;margin:-8px -8px -8px 4px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;border-radius:8px}
+#pkView{position:fixed;inset:0;z-index:100001;background:#3B4252;display:flex;flex-direction:column;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
+#pkView .pkv-top{background:#0F1E3A;color:#fff;padding:10px 12px calc(10px) 16px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;gap:10px}
+#pkView .pkv-top b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#pkView .pkv-top span{display:flex;gap:8px;flex:none}
+#pkView .pkv-b{height:38px;padding:0 12px;border-radius:8px;border:1px solid rgba(255,255,255,.35);background:none;color:#fff;font:600 13px Inter,system-ui,sans-serif;cursor:pointer}
+#pkView .pkv-b.x{background:#fff;color:#0F1E3A;border-color:#fff}
+#pkView .pkv-pages{flex:1;min-height:0;overflow:auto;padding:12px;-webkit-overflow-scrolling:touch}
+#pkView .pkv-page{display:block;width:100%;max-width:900px;height:auto;margin:0 auto 12px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+#pkView .pkv-msg{color:#fff;text-align:center;padding:40px 16px;font-size:14px}
 /* document-view signing */
 #pkSign .pks-top .pkd-toplink{background:none;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:8px;padding:6px 10px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer}
 #pkSign .pkd-prog{background:#fff;border-bottom:1px solid #DDE1E8;display:flex;align-items:center;gap:12px;padding:8px 16px;font-size:13px;color:#4B5565;font-weight:500}
@@ -549,11 +560,62 @@
     return pdf.save();
   }
 
-  function openBlob(bytes) {
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-    const w = root.open(url, '_blank');
-    if (!w) say('Allow pop-ups to view the PDF');
-    return url;
+  /* Full-screen panels sit on top of the CRM. The phone's Back button / swipe should close
+     the panel, not leave the app (installed web apps have no browser Back button). */
+  function trapBack(onBack) {
+    let active = true;
+    try { history.pushState({ pkPanel: Date.now() }, ''); } catch (e) { /* ignore */ }
+    const h = () => { if (!active) return; active = false; root.removeEventListener('popstate', h); onBack(); };
+    root.addEventListener('popstate', h);
+    return () => {                                    // closed from a button: drop our history entry
+      if (!active) return;
+      active = false; root.removeEventListener('popstate', h);
+      try { history.back(); } catch (e) { /* ignore */ }
+    };
+  }
+
+  // PDFs open inside the app (a new tab in an installed web app can't be closed).
+  function openBlob(bytes, name) {
+    viewPdf(bytes, name || 'StormShield Claim Packet.pdf');
+  }
+  function viewPdf(bytes, name) {
+    injectStyles();
+    const ov = document.createElement('div');
+    ov.id = 'pkView';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'PDF viewer');
+    ov.innerHTML = `<div class="pkv-top"><b>${esc(name.replace(/\.pdf$/i, ''))}</b><span>
+        <button type="button" class="pkv-b" data-save>Save / share</button>
+        <button type="button" class="pkv-b x" data-close aria-label="Close">\u2715 Close</button></span></div>
+      <div class="pkv-pages"><div class="pkv-msg">Loading\u2026</div></div>`;
+    document.body.appendChild(ov);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const shut = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
+    const release = trapBack(shut);
+    ov.querySelector('[data-close]').onclick = () => { release(); shut(); };
+    ov.querySelector('[data-save]').onclick = async () => {
+      const file = new File([bytes], name, { type: 'application/pdf' });
+      try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+      downloadBytes(bytes, name);
+    };
+    (async () => {
+      const host = ov.querySelector('.pkv-pages');
+      try {
+        const doc = await openPdfDoc(bytes);
+        host.innerHTML = '';
+        const w = Math.min(host.clientWidth - 24, 900);
+        for (let n = 1; n <= doc.numPages; n++) {
+          if (!ov.isConnected) return;
+          const cv = document.createElement('canvas'); cv.className = 'pkv-page';
+          cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', 'Page ' + n);
+          host.appendChild(cv);
+          await drawPdfPage(doc, n, cv, w);
+        }
+      } catch (e) {
+        console.warn('[packet] viewer', e);
+        host.innerHTML = '<div class="pkv-msg">This PDF can\u2019t be shown here. Use Save / share to open it.</div>';
+      }
+    })();
   }
 
   async function preview(jobId) {
@@ -720,7 +782,17 @@
     (opts.mount || document.body).appendChild(ov);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const close = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
+    let release = () => {};
+    const shut = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
+    const close = () => { release(); shut(); };
+    // Phone Back while signing: ask first (in person), never silently lose the signatures.
+    const arm = () => {
+      release = trapBack(() => {
+        release = () => {};
+        if (st.phase === 'finish' || root.confirm('Stop signing? Nothing will be saved.')) shut(); else arm();
+      });
+    };
+    arm();
 
     // ---- the to-do list, in the order the signer works through the packet
     const tasks = () => {
@@ -795,7 +867,7 @@
 
     /* ---------------- document view: the real pages with spots on them */
     function renderDocShell() {
-      ov.innerHTML = `<div class="pks-top"><b data-title>Contingency Agreement</b><span><button type="button" class="pkd-toplink" data-act="pdf">Open as PDF</button></span></div>
+      ov.innerHTML = `<div class="pks-top"><b data-title>Contingency Agreement</b><span style="display:flex;gap:8px;align-items:center">${remote ? '' : '<button type="button" class="pkd-toplink" data-act="cancel" aria-label="Stop signing">\u2715</button>'}<button type="button" class="pkd-toplink" data-act="pdf">Open as PDF</button></span></div>
         <div class="pkd-prog"><div class="t"><i data-bar></i></div><span data-count></span>
           <button type="button" class="pkd-zoom" data-act="zoom" aria-label="Zoom">Zoom ${st.zoom === 1 ? '+' : '−'}</button></div>
         <div class="pkd-scroll" data-scroll><div class="pkd-loading">Loading your agreement…</div></div>
@@ -1082,7 +1154,7 @@
           <div style="display:flex;gap:10px">${out.finalBytes ? `<button type="button" class="pks-b${remote ? ' go' : ''}" data-v>${remote ? 'Download my copy' : 'View signed PDF'}</button>` : ''}${remote ? '' : '<button type="button" class="pks-b go" data-x>Done</button>'}</div>`;
         b.parentNode.appendChild(after);
         const v = after.querySelector('[data-v]');
-        if (v) v.onclick = () => (remote ? downloadBytes(out.finalBytes, out.fileName || 'StormShield Claim Packet (signed).pdf') : openBlob(out.finalBytes));
+        if (v) v.onclick = () => openBlob(out.finalBytes, out.fileName || 'StormShield Claim Packet (signed).pdf');
         const x = after.querySelector('[data-x]');
         if (x) x.onclick = () => { close(); if (opts.onDone) opts.onDone(); };
       } catch (e) {
@@ -1285,13 +1357,18 @@
     const links = await loadLinks(j);
     if (await reconcile(j, links)) { rerender(); return; }
     if (!links.length) { host.innerHTML = ''; return; }
+    // Resend only while the packet is unsigned, on the newest unsigned link.
+    const canResendId = ensurePacket(j).status !== 'signed' && !links.some(l => l.status === 'signed')
+      ? (links.find(l => l.status !== 'void') || {}).id : null;
     host.innerHTML = `<div class="pk-sec"><h4>Signing links</h4><div class="pk-files">${links.map(l => {
+      const canResend = l.id === canResendId;
       const [txt, color] = linkStatus(l);
       const live = l.status !== 'signed' && l.status !== 'void' && new Date(l.expires_at) >= new Date();
       return `<div class="pk-file"><span style="width:9px;height:9px;border-radius:50%;background:${color};flex:none"></span>
-        <span class="pk-fn" style="font-weight:500;color:var(--text)">${esc(txt)}${l.sent_to ? ' · ' + esc(l.sent_to) : ''}</span>
+        <span class="pk-fn" style="font-weight:500;color:var(--text);white-space:normal;overflow:visible;line-height:1.4">${esc(txt)}${l.sent_to ? ' · ' + esc(l.sent_to) : ''}</span>
+        ${canResend && l.status !== 'signed' && l.status !== 'void' ? `<button type="button" onclick="crmPacket.resendLink('${j.id}','${l.id}')">Resend</button>` : ''}
         ${live ? `<button type="button" onclick="crmPacket.voidLink('${j.id}','${l.id}')">Cancel link</button>` : ''}</div>`;
-    }).join('')}</div><p class="pk-note">A link carries the answers as they were when it was sent. Links expire after ${LINK_DAYS} days. For security a link can't be shown again — send a new one if needed.</p></div>`;
+    }).join('')}</div><p class="pk-note">A link carries the answers as they were when it was sent. Links expire after ${LINK_DAYS} days. For security a link can't be shown again — tap Resend to send a fresh one (the old one stops working).</p></div>`;
   }
 
   async function voidLink(jobId, linkId) {
@@ -1303,7 +1380,9 @@
   }
 
   // Rep signs once, then a private link is created and sent from the rep's phone / email.
-  function sendForSignature(jobId) {
+  // opts.resendFrom = id of an earlier link: replace it with a fresh one, reusing the rep's signature.
+  function sendForSignature(jobId, opts) {
+    opts = opts || {};
     const j = jobById(jobId); if (!j) return;
     const p = ensurePacket(j);
     const miss = missingForSigning(p.fields);
@@ -1316,11 +1395,30 @@
     document.body.appendChild(ov);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const close = () => { ov.remove(); document.body.style.overflow = prevOverflow; renderLinks(j); };
+    const shut = () => { ov.remove(); document.body.style.overflow = prevOverflow; renderLinks(j); };
+    const release = trapBack(shut);                    // phone Back closes this panel
+    const close = () => { release(); shut(); };
+    ov.addEventListener('click', e => { if (e.target.closest('[data-x-close]')) close(); });
     let repName = me(), phone = p.fields.cell_phone || '', email = p.fields.email || '';
 
+    // Store a new link (only its hash) and return the raw token for the message.
+    const createLink = async (repSig, repSignedAt) => {
+      const token = randomToken();
+      const now = new Date();
+      const { error } = await db().from('packet_links').insert({
+        job_id: j.id, token_hash: await sha256Text(token), fields: p.fields,
+        rep_name: repName, rep_sig: repSig, rep_signed_at: repSignedAt || now.toISOString(),
+        created_by: me() || repName, sent_to: [phone, email].filter(Boolean).join(' / '),
+        expires_at: new Date(now.getTime() + LINK_DAYS * 864e5).toISOString()
+      });
+      if (error) throw error;
+      if (phone && !p.fields.cell_phone) p.fields.cell_phone = phone;
+      if (email && !p.fields.email) p.fields.email = email;
+      return token;
+    };
+
     const step1 = () => {
-      ov.innerHTML = `<div class="pks-top"><b>Send for signature</b><span>${esc(p.fields.name || '')}</span></div>
+      ov.innerHTML = `<div class="pks-top"><b>Send for signature</b><span>${esc(p.fields.name || '')}</span><button type="button" class="pkd-x" data-x-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>
         <div class="pks-body">
           <h2>Your signature first</h2>
           <p class="pks-sub">Sign as the StormShield representative. Then a private link is created for the homeowner to review, initial and sign on their own phone.</p>
@@ -1333,7 +1431,7 @@
         <div class="pks-foot"><div><button type="button" class="pks-b" data-cancel>Cancel</button><button type="button" class="pks-b go" data-create>Create signing link</button></div></div>`;
       const pad = makePad(ov.querySelector('[data-pad]'));
       ov.querySelector('[data-clear]').onclick = () => pad.clear();
-      ov.querySelector('[data-cancel]').onclick = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
+      ov.querySelector('[data-cancel]').onclick = close;
       ov.querySelector('[data-create]').onclick = async () => {
         repName = ov.querySelector('#pks-rn').value.trim();
         phone = ov.querySelector('#pks-ph').value.trim();
@@ -1344,17 +1442,7 @@
         if (!phone && !email) { say('Enter a mobile number or email'); return; }
         const btn = ov.querySelector('[data-create]'); btn.disabled = true; btn.textContent = 'Creating…';
         try {
-          const token = randomToken();
-          const now = new Date();
-          const { error } = await db().from('packet_links').insert({
-            job_id: j.id, token_hash: await sha256Text(token), fields: p.fields,
-            rep_name: repName, rep_sig: repSig, rep_signed_at: now.toISOString(),
-            created_by: me() || repName, sent_to: [phone, email].filter(Boolean).join(' / '),
-            expires_at: new Date(now.getTime() + LINK_DAYS * 864e5).toISOString()
-          });
-          if (error) throw error;
-          if (phone && !p.fields.cell_phone) p.fields.cell_phone = phone;
-          if (email && !p.fields.email) p.fields.email = email;
+          const token = await createLink(repSig, null);
           if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet sent for signature', 'Signing link created by ' + repName + (phone || email ? ' for ' + [phone, email].filter(Boolean).join(' / ') : ''));
           save();
           step2(signUrl(token), token);
@@ -1369,9 +1457,9 @@
     const step2 = (url, token) => {
       const mailto = `mailto:${esc(email)}?subject=${encodeURIComponent('Your StormShield claim paperwork \u2014 please sign')}&body=${encodeURIComponent(linkMessage(p.fields, repName, url))}`;
       const msg = linkMessage(p.fields, repName, url);
-      ov.innerHTML = `<div class="pks-top"><b>Send for signature</b><span>${esc(p.fields.name || '')}</span></div>
+      ov.innerHTML = `<div class="pks-top"><b>Send for signature</b><span>${esc(p.fields.name || '')}</span><button type="button" class="pkd-x" data-x-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>
         <div class="pks-body">
-          <div class="pks-ok">✓ Link ready — it works for ${LINK_DAYS} days.</div>
+          <div class="pks-ok">✓ ${opts.resendFrom ? 'New link ready — the old one no longer works. This one' : 'Link ready — it'} works for ${LINK_DAYS} days.</div>
           <h2>Send it to the homeowner</h2>
           <p class="pks-sub">Text opens your phone’s Messages app with the message filled in — just hit send.</p>
           ${phone ? `<a class="pks-b go" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-bottom:10px" href="${esc(smsHref(phone, msg))}" data-sent="text">Text from my phone</a>` : ''}
@@ -1406,8 +1494,38 @@
       };
       ov.querySelector('[data-close]').onclick = close;
     };
-    step1();
+    // Resend: no re-signing — reuse the rep's signature from the earlier link.
+    const resend = async () => {
+      ov.innerHTML = `<div class="pks-top"><b>Resend for signature</b><span>${esc(p.fields.name || '')}</span><button type="button" class="pkd-x" data-x-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>
+        <div class="pks-body"><div class="pks-ok">Creating a new link\u2026</div></div>`;
+      try {
+        const { data: old, error } = await db().from('packet_links')
+          .select('id,status,rep_name,rep_sig,rep_signed_at,sent_to').eq('id', opts.resendFrom).maybeSingle();
+        if (error) throw error;
+        if (!old || old.status === 'signed') { say('That link was already signed'); close(); return; }
+        if (!old.rep_sig) { say('Please sign again to send a new link'); step1(); return; }
+        repName = old.rep_name || repName;
+        String(old.sent_to || '').split(' / ').forEach(x => {
+          x = x.trim(); if (!x) return;
+          if (x.indexOf('@') > 0) { if (!email) email = x; } else if (!phone) phone = x;
+        });
+        if (!phone && !email) { say('Add the homeowner\u2019s mobile or email first'); step1(); return; }
+        const token = await createLink(old.rep_sig, old.rep_signed_at);
+        await db().from('packet_links').update({ status: 'void' }).eq('id', old.id).neq('status', 'signed');
+        if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet signing link resent', 'New signing link created by ' + (me() || repName) + ' for ' + [phone, email].filter(Boolean).join(' / ') + '; the previous link was cancelled');
+        save();
+        step2(signUrl(token), token);
+      } catch (e) {
+        console.error('[packet] resend failed', e);
+        say('Could not resend \u2014 ' + (e.message || 'try again'));
+        close();
+      }
+    };
+
+    if (opts.resendFrom) resend(); else step1();
   }
+
+  function resendLink(jobId, linkId) { sendForSignature(jobId, { resendFrom: linkId }); }
 
   /* ---------------------------------------------------------------- other actions */
   async function uploadPaper(jobId, fileList) {
@@ -1450,5 +1568,5 @@
   }
 
   Object.assign(api, { renderPacketTab, startSigning, preview, uploadPaper, deleteFile, startOver, buildPdf, addAuditPage,
-    finalizeSigned, openSigningFlow, setTemplateBytes, templateSpots, sendForSignature, voidLink, renderLinks, sha256Hex, CONSENT });
+    finalizeSigned, openSigningFlow, setTemplateBytes, templateSpots, sendForSignature, resendLink, voidLink, renderLinks, sha256Hex, CONSENT });
 })(typeof window !== 'undefined' ? window : globalThis);
