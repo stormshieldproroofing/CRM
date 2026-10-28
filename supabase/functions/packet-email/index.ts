@@ -8,7 +8,8 @@
 //   ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET / ZOHO_DC — already set for Zoho Books (same Self Client)
 //   ZOHO_MAIL_REFRESH_TOKEN — refresh token with scopes ZohoMail.messages.CREATE,ZohoMail.accounts.READ
 //   ZOHO_MAIL_FROM (optional) — send-as address; defaults to the Zoho mailbox's primary address
-//   ZOHO_MAIL_BCC  (optional) — office copy, e.g. office@stormshieldproroofing.com
+//   ZOHO_MAIL_BCC  (optional) — extra copy, e.g. office@stormshieldproroofing.com
+// The salesperson assigned to the job (team_members.email) always gets a BCC copy.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -120,7 +121,12 @@ Deno.serve(async (req) => {
 
     const { data: file } = await admin.from("job_files").select("id,name").eq("job_id", jobId).eq("kind", "packet").eq("storage_path", path).maybeSingle();
     if (!file) return json({ error: "Signed packet not found on this job" }, 404);
-    const { data: job } = await admin.from("jobs").select("name,contract").eq("id", jobId).maybeSingle();
+    const { data: job } = await admin.from("jobs").select("name,contract,assigned_to").eq("id", jobId).maybeSingle();
+    let repEmail = "";
+    if (job && job.assigned_to) {
+      const { data: rep } = await admin.from("team_members").select("email").eq("id", job.assigned_to).maybeSingle();
+      if (rep && EMAIL_RE.test(String(rep.email || "").trim())) repEmail = String(rep.email).trim();
+    }
     const f = (job && job.contract && job.contract.__packet && job.contract.__packet.fields) || {};
     const { data: blob, error: dlErr } = await admin.storage.from("job-files").download(path);
     if (dlErr || !blob) return json({ error: "Could not read the signed PDF" }, 500);
@@ -145,17 +151,20 @@ Deno.serve(async (req) => {
       <p>Questions? Reply to this email or call 832-910-7735.</p>
       <p>Thank you,<br>StormShield Pro Roofing<br>12111 Forest Sage Ln, Pearland, TX 77584<br>832-910-7735 · stormshieldproroofing.com</p>
     </div>`;
-    const bcc = (Deno.env.get("ZOHO_MAIL_BCC") || "").trim();
+    // BCC: the job's salesperson, plus the optional office address — never the homeowner or sender twice.
+    const seen = new Set([to.toLowerCase(), String(from).toLowerCase()]);
+    const bcc = [repEmail, ...(Deno.env.get("ZOHO_MAIL_BCC") || "").split(",")].map((x) => x.trim())
+      .filter((x) => EMAIL_RE.test(x) && !seen.has(x.toLowerCase()) && (seen.add(x.toLowerCase()), true)).join(",");
     await zmail(token, `/accounts/${accountId}/messages`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        fromAddress: from, toAddress: to, ...(bcc && bcc.toLowerCase() !== to.toLowerCase() ? { bccAddress: bcc } : {}),
+        fromAddress: from, toAddress: to, ...(bcc ? { bccAddress: bcc } : {}),
         subject: `Your signed claim paperwork${street ? " — " + street : ""}`,
         content, mailFormat: "html",
         attachments: [{ storeName: att.storeName, attachmentPath: att.attachmentPath, attachmentName: att.attachmentName || fileName }],
       }),
     });
-    return json({ ok: true, to, from });
+    return json({ ok: true, to, from, bcc });
   } catch (e) {
     console.error("packet-email", e);
     return json({ ok: false, error: String((e as Error)?.message || e).slice(0, 300) }, 502);
