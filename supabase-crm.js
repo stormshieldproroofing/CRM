@@ -1216,6 +1216,9 @@ async function __rtDoPull(){
   // If the user is mid-edit, defer — try again shortly.
   if (__userIsBusyEditing()) { __rtPendingPull = true; scheduleRtPull(1500); return; }
   if (window.isSaveRunning && window.isSaveRunning()) { scheduleRtPull(1500); return; }
+  // A local edit is still waiting to be saved (debounced). Pulling now would replace it
+  // with the older server copy — e.g. a half-typed "Date claim filed" ending up as "0".
+  if (savePending) { scheduleRtPull(1500); return; }
   __rtPendingPull = false;
   try {
     // Remember what's open so we can restore the view after re-pull.

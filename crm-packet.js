@@ -203,6 +203,17 @@
 .pk-fld label{font-size:11px;color:var(--muted);font-weight:600}
 .pk-fld input,.pk-fld select{background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box}
 .pk-fld input:disabled,.pk-fld select:disabled{opacity:.7}
+.pk-dt{position:relative;display:flex;gap:8px}
+.pk-dt>input{flex:1}
+.pk-calbtn{position:relative;flex:none;width:44px;border-radius:8px;border:1px solid rgba(77,157,224,.45);background:rgba(77,157,224,.12);color:var(--brand-light,#9DB8F5);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pk-calbtn .pk-native{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;border:0;padding:0;margin:0}
+.pk-calbtn .pk-native::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+.pk-calbtn:focus-within{outline:2px solid #2F6FEB;outline-offset:1px}
+.pk-dchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.pk-dchip{border:1px solid var(--border);background:#1E253A;color:var(--text);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;min-height:32px;display:inline-flex;align-items:center;gap:4px}
+.pk-dchip.storm{background:rgba(139,92,246,.14);border-color:rgba(139,92,246,.45);color:#C4B5FD}
+.pk-dchip.on{background:#1D3A73;border-color:#2F6FEB;color:#fff}
+.pk-dchip:disabled{opacity:.6;cursor:default}
 .pk-q{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .pk-q:last-child{border-bottom:0}
 .pk-yn{display:flex;gap:6px;flex:none}
@@ -268,6 +279,19 @@
 #pkSign .pks-legal{font-size:12px;color:#5A6478;line-height:1.5}
 #pkSign .pks-applied{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #2F6FEB;border-radius:12px;padding:10px 14px;margin-bottom:12px}
 #pkSign .pks-applied img{height:44px;max-width:60%}
+/* phone turned sideways: keep the signing box in view and use the extra width */
+@media (orientation:landscape) and (max-height:520px){
+#pkSign .pks-top{padding-top:8px;padding-bottom:8px}
+#pkSign .pks-body{padding-top:10px}
+#pkSign h2{font-size:17px}
+#pkSign .pks-sub{display:none}
+#pkSign .pks-pad{height:46vh}
+#pkSign .pks-pad.small{height:34vh}
+#pkSign .pkd-in .pks-pad:not(.small){height:42vh}
+#pkSign .pkd-sheet{max-height:78vh}
+#pkSign .pks-foot{padding-top:8px;padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+#pkSign .pks-b{height:44px}
+}
 /* in-app PDF viewer + close buttons */
 #pkSign .pkd-x{background:none;border:0;color:#fff;width:40px;height:40px;margin:-8px -8px -8px 4px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;border-radius:8px}
 #pkView{position:fixed;inset:0;z-index:100001;background:#3B4252;display:flex;flex-direction:column;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
@@ -326,6 +350,42 @@
     document.head.appendChild(st);
   }
 
+  /* ---------------------------------------------------------------- date fields */
+  // "mm/dd/yyyy" (+ optional "h:mm AM") <-> the <input type=date / datetime-local> value.
+  function nativeVal(text, withTime) {
+    const m = String(text || '').match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])?)?/);
+    if (!m) return '';
+    const d = `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+    if (!withTime) return d;
+    let h = m[4] ? +m[4] : 9; const min = m[5] || '00';
+    if (m[6]) { const pm = /p/i.test(m[6]); if (pm && h < 12) h += 12; if (!pm && h === 12) h = 0; }
+    return `${d}T${String(h).padStart(2, '0')}:${min}`;
+  }
+  function fromNative(v) {
+    const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+    if (!m) return '';
+    const d = `${m[2]}/${m[3]}/${m[1]}`;
+    if (m[4] == null) return d;
+    let h = +m[4]; const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    return `${d} ${h}:${m[5]} ${ap}`;
+  }
+  function chipValue(v) {
+    if (v === 'today') return fmtDate(new Date());
+    if (v === 'yesterday') return fmtDate(new Date(Date.now() - 864e5));
+    if (String(v).indexOf('text:') === 0) return String(v).slice(5);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return fromNative(v);
+    return String(v || '');
+  }
+  // Recent storm dates from the hail map (newest first) as one-tap "Date of loss" choices.
+  function stormChips() {
+    const keys = Object.keys(root.HAIL_SWATHS || {}).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().reverse().slice(0, 3);
+    return keys.map(k => {
+      const [y, m, d] = k.split('-').map(Number);
+      const label = new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) + ' storm';
+      return [k, label, true];
+    });
+  }
+
   /* ---------------------------------------------------------------- Packet tab */
   function renderPacketTab(j) {
     const panel = document.getElementById('dpBody');
@@ -341,6 +401,16 @@
     const yn = (q, label) => `<div class="pk-q"><span>${label}</span><span class="pk-yn">
       <button type="button" class="pk-chip${f[q] === 'yes' ? ' on' : ''}" data-pkyn="${q}" data-val="yes" ${dis}>Yes</button>
       <button type="button" class="pk-chip${f[q] === 'no' ? ' on' : ''}" data-pkyn="${q}" data-val="no" ${dis}>No</button></span></div>`;
+    // Date fields: type mm/dd/yyyy, or tap the calendar for the phone's own date picker, or a shortcut chip.
+    const CAL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>';
+    const dateFld = (k, label, o) => {
+      o = o || {};
+      const chips = (o.chips || []).map(c => `<button type="button" class="pk-dchip${c[2] ? ' storm' : ''}" data-pkd="${k}" data-v="${esc(c[0])}" ${dis}>${c[2] ? '<i class="ti ti-cloud-storm" aria-hidden="true"></i> ' : ''}${esc(c[1])}</button>`).join('');
+      return `<div class="pk-fld"><label for="pk-${k}">${label}</label>
+        <div class="pk-dt"><input id="pk-${k}" data-pk="${k}" value="${v(k)}" placeholder="${o.time ? 'mm/dd/yyyy h:mm PM' : 'mm/dd/yyyy'}" autocomplete="off" ${dis}>
+          <span class="pk-calbtn" aria-hidden="true">${CAL}<input type="${o.time ? 'datetime-local' : 'date'}" class="pk-native" data-pkn="${k}" tabindex="-1" aria-label="Pick ${label.toLowerCase()} from a calendar" value="${nativeVal(f[k], o.time)}" ${dis}></span></div>
+        ${chips ? `<div class="pk-dchips">${chips}</div>` : ''}</div>`;
+    };
     const item = (k, label, unit) => `<div class="pk-item"><label><input type="checkbox" data-pkcb="${k}" ${f[k] === true ? 'checked' : ''} ${dis}>${label}</label>${unit !== null ? `<input type="text" aria-label="${label} ${unit || 'details'}" placeholder="${unit || ''}" data-pk="${k}_detail" value="${v(k + '_detail')}" ${dis}>` : ''}</div>`;
 
     let status;
@@ -410,8 +480,9 @@
 
       <div class="pk-sec"><h4>Insurance &amp; claim</h4><div class="pk-grid">
         ${txt('insurance_company', 'Insurance company')}${txt('policy_number', 'Policy #')}
-        ${txt('claim_number', 'Claim #')}${txt('date_of_loss', 'Date of loss')}
-        ${txt('date_claim_filed', 'Date claim filed')}${txt('appointment', 'Adjuster appointment')}
+        ${txt('claim_number', 'Claim #')}${dateFld('date_of_loss', 'Date of loss', { chips: stormChips() })}
+        ${dateFld('date_claim_filed', 'Date claim filed', { chips: [['today', 'Today'], ['yesterday', 'Yesterday'], ['text:Not filed yet', 'Not filed yet']] })}
+        ${dateFld('appointment', 'Adjuster appointment', { time: true })}
         ${txt('adjuster', 'Adjuster')}${txt('adjuster_phone', 'Adjuster phone', { type: 'tel' })}
         ${txt('deductible', 'Deductible ($)', { type: 'decimal' })}
         <div class="pk-fld"><label>Policy type</label><div class="pk-yn">${chip('policy_acv', 'ACV')}${chip('policy_rcv', 'RCV')}</div></div>
@@ -425,6 +496,29 @@
     if (signed) return;
     const persist = () => { p.updatedAt = new Date().toISOString(); save(); };
     panel.querySelectorAll('[data-pk]').forEach(el => el.addEventListener('input', () => { f[el.dataset.pk] = el.value; persist(); }));
+    // calendar picker → mm/dd/yyyy text (the same format typed dates use)
+    panel.querySelectorAll('[data-pkn]').forEach(nv => {
+      nv.addEventListener('click', () => { try { if (nv.showPicker) nv.showPicker(); } catch (e) { /* phone opens it natively */ } });
+      nv.addEventListener('change', () => {
+        const k = nv.dataset.pkn, txtIn = panel.querySelector(`[data-pk="${k}"]`);
+        const out = fromNative(nv.value);
+        if (!out || !txtIn) return;
+        txtIn.value = out; f[k] = out; persist(); markChips(k);
+      });
+    });
+    panel.querySelectorAll('[data-pkd]').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.pkd, txtIn = panel.querySelector(`[data-pk="${k}"]`);
+      const val = chipValue(b.dataset.v);
+      if (!txtIn) return;
+      txtIn.value = val; f[k] = val; persist(); markChips(k);
+      const nv = panel.querySelector(`[data-pkn="${k}"]`); if (nv) nv.value = nativeVal(val, nv.type === 'datetime-local');
+    }));
+    const markChips = k => panel.querySelectorAll(`[data-pkd="${k}"]`).forEach(b => b.classList.toggle('on', chipValue(b.dataset.v) === f[k]));
+    ['date_of_loss', 'date_claim_filed'].forEach(markChips);
+    panel.querySelectorAll('[data-pk="date_of_loss"],[data-pk="date_claim_filed"],[data-pk="appointment"]').forEach(el => el.addEventListener('input', () => {
+      markChips(el.dataset.pk);
+      const nv = panel.querySelector(`[data-pkn="${el.dataset.pk}"]`); if (nv) nv.value = nativeVal(el.value, nv.type === 'datetime-local');
+    }));
     panel.querySelectorAll('[data-pkcb]').forEach(el => el.addEventListener('change', () => { f[el.dataset.pkcb] = el.checked; persist(); }));
     const exclusive = { policy_acv: 'policy_rcv', policy_rcv: 'policy_acv', existing_mortgage: 'own_outright', own_outright: 'existing_mortgage' };
     panel.querySelectorAll('[data-pkc]').forEach(el => el.addEventListener('click', () => {
@@ -627,34 +721,74 @@
   }
 
   /* ---------------------------------------------------------------- signature pads */
+  // Signature / initials pad. Ink is kept as strokes (fractions of the pad's size), so
+  // turning the phone sideways or resizing the window redraws it in the right place.
   function makePad(host) {
     host.innerHTML = '<canvas></canvas><div class="pks-line"></div><div class="pks-x">×</div>';
     const canvas = host.querySelector('canvas');
-    const ratio = Math.max(1, root.devicePixelRatio || 1);
+    const ctx = canvas.getContext('2d');
+    const small = host.classList.contains('small');
+    let ratio = 1, W = 1, H = 1;
+    const strokes = [];                       // [[{x,y}…]…] in px of the pad size when ink started (refW×refH)
+    let refW = 0, refH = 0;
+    const k = () => (refW ? Math.min(W / refW, H / refH) : 1);   // keep the ink's shape, never stretch it
+    const style = () => { ctx.lineWidth = small ? 4.5 : 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0B1530'; };
+    const redraw = () => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0); style();
+      const f = k();
+      strokes.forEach(st => {
+        if (!st.length) return;
+        ctx.beginPath(); ctx.moveTo(st[0].x * f, st[0].y * f);
+        if (st.length === 1) ctx.lineTo(st[0].x * f + 0.1, st[0].y * f);
+        for (let i = 1; i < st.length; i++) ctx.lineTo(st[i].x * f, st[i].y * f);
+        ctx.stroke();
+      });
+    };
     const size = () => {
       const r = host.getBoundingClientRect();
-      canvas.width = Math.round(r.width * ratio); canvas.height = Math.round(r.height * ratio);
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.lineWidth = host.classList.contains('small') ? 4.5 : 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0B1530';
+      if (!r.width || !r.height) return;
+      ratio = Math.max(1, root.devicePixelRatio || 1);
+      W = r.width; H = r.height;
+      canvas.width = Math.round(W * ratio); canvas.height = Math.round(H * ratio);
+      redraw();
     };
     size();
-    const ctx = canvas.getContext('2d');
-    let drawing = false, last = null, ink = false;
-    const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-    canvas.addEventListener('pointerdown', e => { drawing = true; last = pos(e); canvas.setPointerCapture(e.pointerId); e.preventDefault(); });
-    canvas.addEventListener('pointermove', e => {
-      if (!drawing) return; const p2 = pos(e);
-      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); last = p2; ink = true; e.preventDefault();
+    let lastOrient = root.innerWidth > root.innerHeight;
+    const onSize = () => {
+      size();
+      const o = root.innerWidth > root.innerHeight;
+      if (o !== lastOrient) { lastOrient = o; try { host.scrollIntoView({ block: 'center' }); } catch (e) {} }
+    };
+    if (typeof ResizeObserver === 'function') new ResizeObserver(onSize).observe(host);
+    else root.addEventListener('resize', onSize);
+    let drawing = false, cur = null;
+    // Measure the canvas at every touch, so a rotation mid-session can't skew the ink.
+    const pos = e => { const r = canvas.getBoundingClientRect(), f = k(); return { x: (e.clientX - r.left) / f, y: (e.clientY - r.top) / f }; };
+    canvas.addEventListener('pointerdown', e => {
+      const r = canvas.getBoundingClientRect();
+      if (Math.abs(r.width - W) > 1 || Math.abs(r.height - H) > 1) size();
+      if (!strokes.length) { refW = W; refH = H; }
+      drawing = true; cur = [pos(e)]; strokes.push(cur);
+      canvas.setPointerCapture(e.pointerId); e.preventDefault();
     });
-    const stop = () => { drawing = false; };
+    canvas.addEventListener('pointermove', e => {
+      if (!drawing) return;
+      const p2 = pos(e), last = cur[cur.length - 1], f = k();
+      cur.push(p2);
+      ctx.beginPath(); ctx.moveTo(last.x * f, last.y * f); ctx.lineTo(p2.x * f, p2.y * f); ctx.stroke();
+      e.preventDefault();
+    });
+    const stop = () => { drawing = false; cur = null; };
     canvas.addEventListener('pointerup', stop); canvas.addEventListener('pointercancel', stop);
+    const hasInk = () => strokes.some(st => st.length > 1);
     return {
-      hasInk: () => ink,
-      clear: () => { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore(); ink = false; },
+      hasInk,
+      clear: () => { strokes.length = 0; refW = refH = 0; redraw(); },
       // Trimmed PNG of the ink only (transparent background)
       toPng: () => {
-        if (!ink) return null;
+        if (!hasInk()) return null;
+        redraw();
         const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
         for (let yy = 0; yy < canvas.height; yy++) for (let xx = 0; xx < canvas.width; xx++) {
@@ -671,6 +805,7 @@
       }
     };
   }
+
 
   /* ---------------------------------------------------------------- signing flow */
   const CONSENT = 'I agree to use electronic records and signatures for this Claim Packet. My electronic initials and signatures have the same effect as signing on paper. I can get a paper copy free, and withdraw this consent, by calling 832-910-7735.';
@@ -783,7 +918,20 @@
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     let release = () => {};
-    const shut = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
+    // Turning the phone re-fits the pages to the new width.
+    let lastW = 0, rT = 0;
+    const onResize = () => {
+      clearTimeout(rT);
+      rT = setTimeout(async () => {
+        const sc = ov.querySelector('[data-scroll]');
+        if (st.phase !== 'doc' || !sc || !pageEls.length || Math.abs(sc.clientWidth - lastW) < 2) return;
+        lastW = sc.clientWidth;
+        await layoutPages();
+        if (st.active) scrollToSpot(st.active);
+      }, 200);
+    };
+    root.addEventListener('resize', onResize);
+    const shut = () => { root.removeEventListener('resize', onResize); ov.remove(); document.body.style.overflow = prevOverflow; };
     const close = () => { release(); shut(); };
     // Phone Back while signing: ask first (in person), never silently lose the signatures.
     const arm = () => {
@@ -909,6 +1057,7 @@
 
     async function layoutPages() {
       const sc = ov.querySelector('[data-scroll]'); if (!sc || !pdfDoc) return;
+      lastW = sc.clientWidth;
       const avail = Math.min(sc.clientWidth - 24, 900);
       const w = Math.round(avail * st.zoom);
       for (const p of pageEls) {
