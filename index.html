@@ -3516,7 +3516,7 @@ function textLeadWithCard(jobId){
   const coName = co.name || 'StormShield Pro Roofing';
 
   // First name of the lead for a friendlier greeting.
-  const firstName = (j.name || '').trim().split(/\s+/)[0] || 'there';
+  const firstName = greetName(j.name);   // "Allen & Linda" for two owners
 
   // Pick the intro that matches the job's current stage (fallback: lead intro).
   const intro = stageTemplateForJob(j)
@@ -3664,7 +3664,7 @@ async function textLeadCardPhoto(jobId){
   const repName = (me.name || '').trim();
   const co = (typeof getCompanyInfo === 'function') ? getCompanyInfo() : {};
   const coName = co.name || 'StormShield Pro Roofing';
-  const firstName = (j.name || '').trim().split(/\s+/)[0] || 'there';
+  const firstName = greetName(j.name);   // "Allen & Linda" for two owners
   const body = `Hi ${firstName}, this is ${repName || 'your rep'} with ${coName}. Thank you for your time today — here\u2019s my card so you can reach me anytime!`;
 
   // Real card (front + back) if this rep has one; otherwise the generated card.
@@ -9985,9 +9985,9 @@ function openEditJob(id){
   resetJobForm();
 
   // Name: split combined name into first / last
-  const parts=(j.name||'').trim().split(/\s+/);
-  $('f-firstname').value = parts.shift() || '';
-  $('f-lastname').value  = parts.join(' ');
+  const nm = splitPersonName(j.name);
+  $('f-firstname').value = nm.first;
+  $('f-lastname').value  = nm.last;
 
   $('f-phone').value = (j.phone&&j.phone!=='—')?j.phone:'';
   $('f-email').value = (j.email&&j.email!=='—')?j.email:'';
@@ -10116,13 +10116,44 @@ function qlFmtPhone(v){
 function qlDist(a,b,c,d){ const R=6371000, t=x=>x*Math.PI/180; const dl=t(c-a), dg=t(d-b); const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dg/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 function qlTitle(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()).replace(/\b(Ln|St|Dr|Ct|Rd|Ave|Blvd|Pkwy|Cir|Way|Tx)\b/gi, m=>m[0].toUpperCase()+m.slice(1).toLowerCase()).replace(/\bTx\b/,'TX'); }
 function qlOwnerName(s){
-  // property records are "LAST FIRST" or "LAST FIRST & FIRST"; show it readable
+  // Property records are "LAST FIRST [MIDDLE]" or "LAST FIRST [M] & FIRST2 [M2]".
+  // One owner → "Patricia Villagomez"; two owners → "Allen & Linda Brown" (first names together).
   const raw = String(s||'').trim(); if(!raw) return '';
-  if(/\b(LLC|INC|TRUST|ESTATE|CORP|LTD|LP)\b/i.test(raw)) return raw;   // companies: leave as is
+  if(/\b(LLC|INC|TRUST|ESTATE|CORP|LTD|LP|L\.P\.)\b/i.test(raw)) return raw;   // companies: leave as is
   const cap = w => w.length>2 && w===w.toUpperCase() ? w[0]+w.slice(1).toLowerCase() : w;
-  const t = raw.split(/\s+/).map(cap);
-  return t.length > 1 ? [...t.slice(1), t[0]].join(' ') : t[0];   // "VILLAGOMEZ PATRICIA" → "Patricia Villagomez"
+  const groups = raw.split(/\s+(?:&|AND)\s+/i).map(g => g.trim().split(/\s+/).filter(Boolean).map(cap)).filter(g => g.length);
+  if(!groups.length) return '';
+  const head = groups[0];
+  if(head.length < 2 && groups.length === 1) return head[0];
+  const last = head[0];
+  const given = [head.slice(1)].concat(groups.slice(1)).filter(g => g.length);
+  if(given.length === 1) return [...given[0], last].join(' ');               // "VILLAGOMEZ PATRICIA" → "Patricia Villagomez"
+  const isSuffix = w => /^(jr|sr|ii|iii|iv)\.?$/i.test(w);
+  const names = given.map(g => {
+    const w = g.filter(x => x.toLowerCase() !== last.toLowerCase() && !isSuffix(x));
+    return w.find(x => x.replace(/\./g,'').length > 1) || w[0] || '';        // skip middle initials
+  }).filter(Boolean);
+  const joined = names.length <= 2 ? names.join(' & ') : names.slice(0,-1).join(', ') + ' & ' + names[names.length-1];
+  return joined + ' ' + last;
 }
+// "Allen & Linda Brown" → first "Allen & Linda", last "Brown"; "Maria Gonzales" → "Maria" / "Gonzales".
+function splitPersonName(full){
+  const t = String(full||'').trim().replace(/\s+/g,' ');
+  if(!t) return { first:'', last:'' };
+  if(/\b(LLC|INC|TRUST|ESTATE|CORP|LTD|LP|L\.P\.)\b/i.test(t)) return { first: t, last: '' };   // companies stay whole
+  const parts = t.split(' ');
+  if(parts.length > 2 && /\s(?:&|and)\s/i.test(' '+t+' ')) return { first: parts.slice(0,-1).join(' '), last: parts[parts.length-1] };
+  if(parts.length > 2 && /^[A-Za-z]\.?$/.test(parts[1])) return { first: parts.slice(0,2).join(' '), last: parts.slice(2).join(' ') };   // "Maria E Gonzales"
+  return { first: parts.shift(), last: parts.join(' ') };
+}
+window.splitPersonName = splitPersonName;
+// Name for "Hi ___": both first names for couples, otherwise just the first name.
+function greetName(full){
+  const f = splitPersonName(full).first;
+  if(!f) return 'there';
+  return /\s(?:&|and)\s|,/i.test(' '+f+' ') ? f : f.split(' ')[0];
+}
+window.greetName = greetName;
 function qlRender(){
   const box = qlEl('qlBody'); if(!box) return;
   if(QL.savedId){
@@ -10258,8 +10289,7 @@ function qlFullForm(){
   const name = (qlEl('qlName')?.value||'').trim(), phone = (qlEl('qlPhone')?.value||'').trim();
   closeQuickLead();
   openAddJobModal();
-  const parts = name.split(/\s+/);
-  if(name){ $('f-firstname').value = parts.shift(); $('f-lastname').value = parts.join(' '); }
+  if(name){ const nm = splitPersonName(name); $('f-firstname').value = nm.first; $('f-lastname').value = nm.last; }
   if(phone) $('f-phone').value = phone;
   const street = QL.typed ? QL.street : QL.addr?.street;
   if(street){
