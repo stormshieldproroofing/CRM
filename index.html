@@ -630,6 +630,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
 <script src="supabase-crm.js"></script>
+<script src="crm-packet.js?v=2"></script>
 
 <div style="position:relative;overflow:hidden">
 
@@ -4439,6 +4440,7 @@ function renameJobFile(file, kind, section){
   const typeMap = {
     photo: { before:'Before Photo', during:'During Photo', after:'After Photo' },
     contract: 'Contract',
+    packet: 'Claim Packet (signed)',
     check: 'Check',
     loss: 'Loss Statement',
     roof: 'Measurement',
@@ -4459,6 +4461,7 @@ function renameJobFile(file, kind, section){
   let existing = 0;
   if(kind==='photo') existing = (j.photos?.[section]||[]).length;
   else if(kind==='contract') existing = (j.contracts||[]).length;
+  else if(kind==='packet') existing = (j.packetFiles||[]).length;
   else if(kind==='check') existing = (j.checks||[]).length;
   else if(kind==='loss') existing = (j.lossFiles||[]).length;
   else if(kind==='roof') existing = (j.roofFiles||[]).length;
@@ -6026,6 +6029,7 @@ function renderDetailPanel(){
   const tabs=[
     {id:'overview',icon:'ti-layout-2',label:'Overview'},
     {id:'photos',icon:'ti-camera',label:'Photos'},
+    {id:'packet',icon:'ti-file-certificate',label:'Packet'},
     {id:'contract',icon:'ti-writing',label:'Contract'},
     {id:'checks',icon:'ti-writing-sign',label:'Checks'},
     {id:'loss',icon:'ti-file-alert',label:'Loss Statement'},
@@ -6082,6 +6086,7 @@ function jobDocCounts(j){
   if(j.photos && typeof j.photos === 'object') Object.values(j.photos).forEach(a => { photos += len(a); });
   return {
     photos,
+    packet: len(j.packetFiles),
     contract: len(j.signedContractFiles) + len(j.contracts),
     checks: len(j.checks),
     loss: len(j.lossFiles),
@@ -8539,6 +8544,9 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
   } else if(activeTab==='quote'){
     renderQuoteTab(j);
+  } else if(activeTab==='packet'){
+    if(window.crmPacket && window.crmPacket.renderPacketTab) window.crmPacket.renderPacketTab(j);
+    else body.innerHTML='<div style="padding:20px;color:var(--muted)">Packet module failed to load — refresh the page.</div>';
   } else if(activeTab==='contract'){
     renderContractTab(j);
 
