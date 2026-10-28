@@ -268,6 +268,49 @@
 #pkSign .pks-legal{font-size:12px;color:#5A6478;line-height:1.5}
 #pkSign .pks-applied{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #2F6FEB;border-radius:12px;padding:10px 14px;margin-bottom:12px}
 #pkSign .pks-applied img{height:44px;max-width:60%}
+/* document-view signing */
+#pkSign .pks-top .pkd-toplink{background:none;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:8px;padding:6px 10px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer}
+#pkSign .pkd-prog{background:#fff;border-bottom:1px solid #DDE1E8;display:flex;align-items:center;gap:12px;padding:8px 16px;font-size:13px;color:#4B5565;font-weight:500}
+#pkSign .pkd-prog .t{flex:1;height:6px;border-radius:3px;background:#E3E7EE;overflow:hidden}
+#pkSign .pkd-prog .t i{display:block;height:6px;width:0;background:#2563EB;transition:width .25s}
+#pkSign .pkd-zoom{border:1px solid #C9CFDA;background:#fff;border-radius:8px;height:34px;padding:0 10px;font:600 13px Inter,system-ui,sans-serif;color:#0F1E3A;cursor:pointer}
+#pkSign .pkd-scroll{flex:1;min-height:0;overflow:auto;background:#DDE2EA;padding:12px;-webkit-overflow-scrolling:touch}
+#pkSign .pkd-loading{padding:40px 16px;text-align:center;color:#4B5565;font-size:14px}
+#pkSign .pkd-page{position:relative;overflow:hidden;margin:0 auto 14px;background:#fff;box-shadow:0 1px 4px rgba(15,30,58,.25)}
+#pkSign .pkd-page canvas{display:block;width:100%;height:100%}
+#pkSign .pkd-layer{position:absolute;inset:0}
+#pkSign .pkd-spot{position:absolute;padding:0;margin:0;border:1.5px solid #CA8A04;background:rgba(250,204,21,.45);border-radius:3px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;overflow:visible;min-width:0}
+#pkSign .pkd-spot.on{background:rgba(250,204,21,.8);border:2.5px solid #A16207;box-shadow:0 0 0 5px rgba(250,204,21,.35)}
+#pkSign .pkd-spot.done{background:transparent;border-color:transparent;box-shadow:none}
+#pkSign .pkd-spot.done.on{border-color:#A16207}
+#pkSign .pkd-spot img{max-width:100%;max-height:180%;object-fit:contain;pointer-events:none}
+#pkSign .pkd-auto{position:absolute;color:#1E3A8A;background:rgba(219,234,254,.85);border-radius:2px;display:flex;align-items:center;padding:0 .25em;overflow:hidden;white-space:nowrap;pointer-events:none;font-family:Helvetica,Arial,sans-serif}
+#pkSign .pkd-pill{position:absolute;background:#FACC15;color:#422006;font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;box-shadow:0 2px 6px rgba(66,32,6,.3);white-space:nowrap;pointer-events:none;z-index:2;line-height:1.2}
+#pkSign .pkd-pill.above{transform:translateY(-100%)}
+#pkSign .pkd-sheet{flex:none;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -6px 20px rgba(15,30,58,.18);padding:0 16px calc(14px + env(safe-area-inset-bottom));max-height:62vh;overflow:auto;position:relative;z-index:3}
+#pkSign .pkd-in{max-width:720px;margin:0 auto}
+#pkSign .pkd-in .pks-pad:not(.small){height:130px}
+#pkSign .pkd-grab{display:block;width:100%;height:22px;border:0;background:none;cursor:pointer;padding:0}
+#pkSign .pkd-grab i{display:block;width:40px;height:4px;border-radius:2px;background:#C5CCD8;margin:0 auto}
+#pkSign .pkd-k{font-size:12px;font-weight:600;color:#4B5565;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
+#pkSign .pkd-h{font-size:17px;font-weight:700;margin-bottom:6px}
+#pkSign .pkd-p{margin:0 0 12px;font-size:14px;line-height:1.5;color:#2B3445}
+#pkSign .pkd-row{display:flex;gap:12px;align-items:flex-end;margin-bottom:12px}
+#pkSign .pkd-row .pks-pad.small{flex:none;width:180px;height:84px}
+#pkSign .pkd-side{display:flex;flex-direction:column;font-size:12px;color:#4B5565;line-height:1.4}
+#pkSign .pkd-thumbs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 12px}
+#pkSign .pkd-thumbs figure{margin:0;background:#fff;border:1px solid #DDE1E8;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+#pkSign .pkd-thumb{display:block;width:100%;height:150px;overflow:hidden;border:1px solid #E3E7EE;border-radius:6px;background:#F4F6F9;padding:0;cursor:pointer}
+#pkSign .pkd-thumbs.big .pkd-thumb{height:240px}
+#pkSign .pkd-thumb canvas{display:block;width:100%;height:auto}
+#pkSign .pkd-thumbs figcaption{display:flex;flex-direction:column;gap:2px;font-size:13px}
+#pkSign .pkd-thumbs figcaption span{font-size:12px;color:#4B5565}
+#pkSign .pkd-thumbs figcaption span.ok{color:#166534}
+#pkSign .pkd-counts{display:flex;gap:10px;margin-bottom:12px}
+#pkSign .pkd-counts div{flex:1;background:#fff;border:1px solid #DDE1E8;border-radius:10px;padding:10px;text-align:center;font-size:13px;color:#2B3445}
+#pkSign .pkd-counts b{display:block;font-size:18px}
+#pkSign .pkd-disc{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.5;color:#3C4658}
+#pkSign .pkd-disc li{margin-bottom:4px}
 `;
     document.head.appendChild(st);
   }
@@ -568,7 +611,7 @@
   }
 
   /* ---------------------------------------------------------------- signing flow */
-  const CONSENT = 'I agree to sign this Claim Packet electronically. My electronic signature and initials have the same effect as signing on paper, and I can ask StormShield Pro Roofing for a paper copy at any time.';
+  const CONSENT = 'I agree to use electronic records and signatures for this Claim Packet. My electronic initials and signatures have the same effect as signing on paper. I can get a paper copy free, and withdraw this consent, by calling 832-910-7735.';
 
   // Turn a finished signing session into the final PDF (pages 1–2 + record page).
   // r: result of openSigningFlow; ctx: { signedAt, how, details, device, repName, repSig }
@@ -589,32 +632,87 @@
     if (repSig) signers.push({ role: 'StormShield representative', name: repName, at: fmtDateTime(r.at.sspr || ctx.repSignedAt || signedAt) });
     const finalBytes = await addAuditPage(signedBytes, {
       property: [fields.street, fields.city_state, fields.zip].filter(Boolean).join(', '),
-      signers, how: ctx.how, details: ctx.details || [], device: ctx.device || '', rep: repName,
+      signers, how: ctx.how, device: ctx.device || '', rep: repName,
+      details: (r.reviewedAt ? ['Signed on the filled-in pages shown on screen; reviewed the completed, signed pages ' + fmtDateTime(r.reviewedAt) + ' before submitting'] : []).concat(ctx.details || []),
       consent: CONSENT, consentAt: fmtDateTime(r.consentAt), hash, cancelBy: fmtDate(cancelBy)
     });
     return { finalBytes, hash, cancelBy, sigs };
   }
 
-  /* Full-screen signing screens, shared by in-person signing (CRM) and the
-     homeowner's remote link (sign.html).
-     opts: { fields, mode:'in_person'|'remote', repName, onFinish:async(r)=>({finalBytes,cancelBy}),
+  /* Full-screen signing, shared by in-person signing (CRM) and the homeowner's
+     remote link (sign.html). The signer sees the real, filled-in packet and
+     initials / signs on the spots where the ink will land.
+     opts: { fields, mode:'in_person'|'remote', repName, onFinish:async(r)=>({finalBytes,cancelBy,fileName}),
              onDone:fn (in-person "Done" button), mount: element (default body) } */
+  const PDFJS_VER = '3.11.174';
+  let _pdfjs = null;
+  function loadPdfJs() {
+    if (root.pdfjsLib) return Promise.resolve(root.pdfjsLib);
+    if (_pdfjs) return _pdfjs;
+    const base = root.PDFJS_BASE || ('https://cdn.jsdelivr.net/npm/pdfjs-dist@' + PDFJS_VER + '/build/');
+    _pdfjs = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = base + 'pdf.min.js';
+      s.onload = () => { root.pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js'; res(root.pdfjsLib); };
+      s.onerror = () => { _pdfjs = null; rej(new Error('PDF viewer did not load')); };
+      document.head.appendChild(s);
+    });
+    return _pdfjs;
+  }
+  async function openPdfDoc(bytes) {
+    const lib = await loadPdfJs();
+    return lib.getDocument({ data: new Uint8Array(bytes).slice(0) }).promise;
+  }
+  async function drawPdfPage(doc, n, canvas, cssW) {
+    const page = await doc.getPage(n);
+    const vp1 = page.getViewport({ scale: 1 });
+    const dpr = Math.min(2.5, root.devicePixelRatio || 1);
+    const vp = page.getViewport({ scale: (cssW * dpr) / vp1.width });
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  }
+
+  // Where each initial / signature / auto-filled value sits on the template (PDF points).
+  const SPOT_FIELDS = ['key_initial_1', 'key_initial_2', 'key_initial_3', 'key_initial_4', 'key_initial_5', 'deductible_initials',
+    'sig_homeowner', 'homeowner_date', 'sig_coowner', 'coowner_date', 'sig_sspr', 'sspr_date',
+    'tpa_sig_insured1', 'tpa_insured1_printed_name', 'tpa_insured1_date', 'tpa_sig_insured2', 'tpa_insured2_printed_name', 'tpa_insured2_date'];
+  let _spots = null;
+  async function templateSpots() {
+    if (_spots) return _spots;
+    const pdf = await root.PDFLib.PDFDocument.load(await loadTemplate());
+    const pages = pdf.getPages(), form = pdf.getForm(), out = {};
+    SPOT_FIELDS.forEach(n => {
+      try {
+        const r = form.getTextField(n).acroField.getWidgets()[0].getRectangle();
+        const pi = n.indexOf('tpa_') === 0 ? 1 : 0, pg = pages[pi];
+        out[n] = { page: pi, x: r.x, y: r.y, w: r.width, h: r.height, pw: pg.getWidth(), ph: pg.getHeight() };
+      } catch (e) { /* missing field */ }
+    });
+    _spots = out;
+    return out;
+  }
+
+  const DISCLOSURE = [
+    'You can get this agreement on paper instead, at no charge. Ask your StormShield representative or call 832-910-7735.',
+    'You can withdraw this consent any time before you finish signing. After that, ask us and we will give you paper copies.',
+    'This consent covers only this Claim Packet.',
+    'To read and keep your copy you need a phone or computer with an up-to-date web browser that can open PDF files. You can download your signed copy at the end, and ask us to email or mail one.',
+    'Let us know at 832-910-7735 if your phone number or email changes.'
+  ];
+
   function openSigningFlow(opts) {
     injectStyles();
     const fields = opts.fields || {};
     const remote = opts.mode === 'remote';
     const st = {
-      step: 0, consentAt: null,
+      phase: 'welcome', consentAt: null, showDisclosure: false,
       homeownerName: (fields.name || '').split(/\s*(?:&|\band\b|,)\s*/)[0] || fields.name || '',
       coowner: false, coownerName: '',
       initials: null, initialed: {},
       sig: {}, tpaApplied: { homeowner: false, coowner: false },
-      repName: opts.repName || '', at: {}
+      repName: opts.repName || '', at: {},
+      active: null, sheetMin: false, redraw: {}, zoom: 1, reviewedAt: null
     };
-    const steps = remote
-      ? ['Agree to sign electronically', 'Initial the key terms', 'Sign the agreement', 'Sign the authorization']
-      : ['Agree to sign electronically', 'Initial the key terms', 'Sign the agreement', 'Sign the authorization', 'StormShield signature'];
-    const DONE = steps.length;
 
     const ov = document.createElement('div');
     ov.id = 'pkSign';
@@ -624,118 +722,352 @@
     document.body.style.overflow = 'hidden';
     const close = () => { ov.remove(); document.body.style.overflow = prevOverflow; };
 
-    let pads = {};
-    const render = () => {
-      const s = st.step;
-      const pct = Math.round((s / DONE) * 100);
-      let body = '', next = 'Continue', canBack = s > 0 && s < DONE, nextOk = true;
-      if (s === 0) {
-        body = `<h2>Hi ${esc(st.homeownerName || 'there')}</h2>
-          <p class="pks-sub">This is your Contingency Agreement and Third-Party Authorization with StormShield Pro Roofing for <b>${esc(fields.street || '')}</b>. It takes about 2 minutes.</p>
-          <div class="pks-card"><button type="button" class="pks-link" data-act="view" style="padding:0">Read the full agreement (PDF)</button></div>
-          <label class="pks-check"><input type="checkbox" data-consent ${st.consentAt ? 'checked' : ''}><span>${esc(CONSENT)}</span></label>`;
-        nextOk = !!st.consentAt;
-        canBack = false;
-      } else if (s === 1) {
-        const allDone = KEY_TERMS.every((_, i) => st.initialed[i]) && st.initialed.ded;
-        body = `<h2>Initial each key term</h2>
-          <p class="pks-sub">Draw your initials once, then tap each box to place them.</p>
-          ${st.initials
-            ? `<div class="pks-applied" style="max-width:300px"><img src="${st.initials}" alt="Your initials"><button type="button" class="pks-link" data-clear="initials">Redo initials</button></div>`
-            : `<div class="pks-pad small" data-pad="initials"></div>
-          <div class="pks-padbar" style="max-width:300px"><span>Your initials</span><button type="button" class="pks-link" data-clear="initials">Clear</button></div>`}
-          ${KEY_TERMS.map((t, i) => `<div class="pks-term"><p><b>${esc(t[0])}.</b> ${esc(t[1])}</p>
-            <button type="button" class="pks-ini${st.initialed[i] ? ' on' : ''}" data-ini="${i}" aria-label="Initial: ${esc(t[0])}">${st.initialed[i] && st.initials ? `<img src="${st.initials}" alt="">` : 'Initial'}</button></div>`).join('')}
-          <div class="pks-term"><p><b>Deductible.</b> I understand my insurance deductible${fields.deductible ? ' of $' + esc(fields.deductible) : ''} is my responsibility.</p>
-            <button type="button" class="pks-ini${st.initialed.ded ? ' on' : ''}" data-ini="ded" aria-label="Initial: deductible">${st.initialed.ded && st.initials ? `<img src="${st.initials}" alt="">` : 'Initial'}</button></div>`;
-        nextOk = allDone;
-      } else if (s === 2) {
-        body = `<h2>Sign the agreement</h2>
-          <p class="pks-sub">You agree to all terms of the Contingency Agreement. You may cancel within 3 business days.</p>
+    // ---- the to-do list, in the order the signer works through the packet
+    const tasks = () => {
+      // page order: the deductible "HO initials" box sits above the key terms
+      const t = [{ id: 'ded', kind: 'initial', idx: 'ded', field: 'deductible_initials' }]
+        .concat(KEY_TERMS.map((k, i) => ({ id: 'ini' + i, kind: 'initial', idx: i, field: 'key_initial_' + (i + 1) })));
+      t.push({ id: 'sign', kind: 'sign', field: 'sig_homeowner' });
+      t.push({ id: 'tpa', kind: 'tpa', who: 'homeowner', field: 'tpa_sig_insured1' });
+      if (st.coowner) t.push({ id: 'tpa2', kind: 'tpa', who: 'coowner', field: 'tpa_sig_insured2' });
+      if (!remote) t.push({ id: 'rep', kind: 'rep', field: 'sig_sspr' });
+      return t;
+    };
+    const isDone = t => {
+      if (t.kind === 'initial') return !!st.initialed[t.idx] && !!st.initials;
+      if (t.kind === 'sign') return !!st.sig.homeowner && (!st.coowner || !!st.sig.coowner);
+      if (t.kind === 'tpa') return !!st.tpaApplied[t.who];
+      if (t.kind === 'rep') return !!st.sig.sspr;
+      return false;
+    };
+    const nextTask = () => tasks().find(t => !isDone(t)) || null;
+    const counts = () => { const all = tasks(); return { done: all.filter(isDone).length, total: all.length }; };
+    const undo = t => {
+      if (t.kind === 'initial') delete st.initialed[t.idx];
+      if (t.kind === 'sign') { delete st.sig.homeowner; delete st.sig.coowner; st.tpaApplied = { homeowner: false, coowner: false }; }
+      if (t.kind === 'tpa') st.tpaApplied[t.who] = false;
+      if (t.kind === 'rep') delete st.sig.sspr;
+    };
+
+    let docBytes = null, pdfDoc = null, spots = null, pageEls = [], pads = {};
+    const docReady = (async () => {
+      docBytes = await buildPdf(fields, {}, {});
+      spots = await templateSpots();
+      try { pdfDoc = await openPdfDoc(docBytes); } catch (e) { console.warn('[packet] viewer', e); pdfDoc = null; }
+    })();
+
+    /* ---------------- welcome: what this is + e-sign consent */
+    async function renderWelcome() {
+      const c = counts();
+      ov.innerHTML = `<div class="pks-top"><b>StormShield Pro Roofing</b><span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Secure signing</span></div>
+        <div class="pks-body">
+          <p class="pks-sub" style="margin:0 0 2px">Hi ${esc((st.homeownerName || '').trim().split(/\s+/)[0] || 'there')},</p>
+          <h2>Your claim paperwork is ready to sign</h2>
+          <p class="pks-sub">${st.repName ? 'Sent by ' + esc(st.repName) + ', StormShield Pro Roofing' : 'From StormShield Pro Roofing'}${fields.street ? ', for ' + esc(fields.street) : ''}.</p>
+          <div class="pkd-thumbs">
+            <figure><div class="pkd-thumb" data-thumb="1"></div><figcaption><b>Contingency Agreement</b><span>Page 1</span></figcaption></figure>
+            <figure><div class="pkd-thumb" data-thumb="2"></div><figcaption><b>Third-Party Authorization</b><span>Page 2</span></figcaption></figure>
+          </div>
+          <div class="pkd-counts"><div><b>2</b>pages to read</div><div><b>${KEY_TERMS.length + 1}</b>initials</div><div><b>${c.total - KEY_TERMS.length - 1}</b>signatures</div></div>
+          <div class="pks-card">
+            <div style="font-weight:600;font-size:14px;margin-bottom:8px">Signing electronically</div>
+            <label class="pks-check" style="border:0;padding:0;margin:0"><input type="checkbox" data-consent ${st.consentAt ? 'checked' : ''}><span>${esc(CONSENT)}</span></label>
+            <button type="button" class="pks-link" data-act="disclosure" style="padding:8px 0 0">${st.showDisclosure ? 'Hide' : 'Read'} the full disclosure</button>
+            ${st.showDisclosure ? `<ul class="pkd-disc">${DISCLOSURE.map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
+          </div>
+        </div>
+        <div class="pks-foot"><div>
+          ${remote ? '' : '<button type="button" class="pks-b" data-act="cancel">Cancel</button>'}
+          <button type="button" class="pks-b go" data-act="start" ${st.consentAt ? '' : 'disabled'}>Review the document</button></div></div>`;
+      const cb = ov.querySelector('[data-consent]');
+      cb.addEventListener('change', () => { st.consentAt = cb.checked ? new Date().toISOString() : null; ov.querySelector('[data-act="start"]').disabled = !st.consentAt; });
+      ov.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+      try {
+        await docReady;
+        if (!pdfDoc || st.phase !== 'welcome') return;
+        for (const n of [1, 2]) {
+          const host = ov.querySelector(`[data-thumb="${n}"]`); if (!host) return;
+          const cv = document.createElement('canvas'); host.appendChild(cv);
+          await drawPdfPage(pdfDoc, n, cv, host.clientWidth || 160);
+        }
+      } catch (e) { /* thumbnails are optional */ }
+    }
+
+    /* ---------------- document view: the real pages with spots on them */
+    function renderDocShell() {
+      ov.innerHTML = `<div class="pks-top"><b data-title>Contingency Agreement</b><span><button type="button" class="pkd-toplink" data-act="pdf">Open as PDF</button></span></div>
+        <div class="pkd-prog"><div class="t"><i data-bar></i></div><span data-count></span>
+          <button type="button" class="pkd-zoom" data-act="zoom" aria-label="Zoom">Zoom ${st.zoom === 1 ? '+' : '−'}</button></div>
+        <div class="pkd-scroll" data-scroll><div class="pkd-loading">Loading your agreement…</div></div>
+        <div class="pkd-sheet" data-sheet></div>`;
+      ov.querySelectorAll('.pks-top [data-act], .pkd-prog [data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+      const sc = ov.querySelector('[data-scroll]');
+      sc.addEventListener('scroll', () => {
+        const p2 = pageEls[1]; if (!p2) return;
+        const onTwo = p2.el.getBoundingClientRect().top < sc.getBoundingClientRect().top + sc.clientHeight / 2;
+        const t = ov.querySelector('[data-title]'); if (t) t.textContent = onTwo ? 'Third-Party Authorization' : 'Contingency Agreement';
+      }, { passive: true });
+      buildPages();
+      renderSheet();
+    }
+
+    async function buildPages() {
+      await docReady;
+      const sc = ov.querySelector('[data-scroll]'); if (!sc) return;
+      if (!pdfDoc) {
+        sc.innerHTML = `<div class="pks-card" style="margin:16px"><b>The page preview didn’t load.</b><p class="pks-legal">You can still read the full agreement as a PDF, then sign below.</p>
+          <button type="button" class="pks-b" data-act="pdf" style="width:100%">Open the agreement (PDF)</button></div>`;
+        sc.querySelector('[data-act]').onclick = () => act('pdf');
+        return;
+      }
+      sc.innerHTML = '';
+      pageEls = [];
+      for (const n of [1, 2]) {
+        const ref = Object.values(spots).find(s => s.page === n - 1) || { pw: 612, ph: 1008 };
+        const el = document.createElement('div');
+        el.className = 'pkd-page';
+        el.style.aspectRatio = ref.pw + ' / ' + ref.ph;
+        el.innerHTML = `<canvas aria-label="Page ${n} of the claim packet" role="img"></canvas><div class="pkd-layer" data-layer="${n - 1}"></div>`;
+        sc.appendChild(el);
+        pageEls.push({ el, n, pw: ref.pw, ph: ref.ph });
+      }
+      await layoutPages();
+      paintSpots();
+    }
+
+    async function layoutPages() {
+      const sc = ov.querySelector('[data-scroll]'); if (!sc || !pdfDoc) return;
+      const avail = Math.min(sc.clientWidth - 24, 900);
+      const w = Math.round(avail * st.zoom);
+      for (const p of pageEls) {
+        p.el.style.width = w + 'px';
+        p.el.style.fontSize = (w / p.pw) + 'px';        // 1em = 1 PDF point
+        await drawPdfPage(pdfDoc, p.n, p.el.querySelector('canvas'), w);
+      }
+    }
+
+    const box = s => `left:${(s.x / s.pw * 100).toFixed(3)}%;top:${((s.ph - s.y - s.h) / s.ph * 100).toFixed(3)}%;width:${(s.w / s.pw * 100).toFixed(3)}%;height:${(s.h / s.ph * 100).toFixed(3)}%`;
+    function paintSpots() {
+      if (!spots || !pageEls.length) return;
+      const today = fmtDate(new Date());
+      const all = tasks(), act0 = st.active;
+      const layers = [0, 1].map(i => ov.querySelector(`[data-layer="${i}"]`));
+      if (!layers[0]) return;
+      layers.forEach(l => { l.innerHTML = ''; });
+      const add = (field, html) => { const s = spots[field]; if (!s) return; layers[s.page].insertAdjacentHTML('beforeend', html(s)); };
+      const imgFor = t => t.kind === 'initial' ? st.initials : t.kind === 'sign' ? st.sig.homeowner : t.kind === 'tpa' ? (t.who === 'coowner' ? st.sig.coowner : st.sig.homeowner) : st.sig.sspr;
+      all.forEach(t => {
+        const done = isDone(t), on = act0 === t.id;
+        const fieldsFor = t.kind === 'sign' && st.coowner ? [t.field, 'sig_coowner'] : [t.field];
+        fieldsFor.forEach((f, k) => add(f, s => {
+          const img = done ? (k === 1 ? st.sig.coowner : imgFor(t)) : null;
+          const label = t.kind === 'initial' ? 'Initial here' : 'Sign here';
+          return `<button type="button" class="pkd-spot${on ? ' on' : ''}${done ? ' done' : ''}" style="${box(s)}" data-spot="${t.id}" aria-label="${esc(done ? 'Done: ' + label + ' (tap to redo)' : label)}">${img ? `<img src="${img}" alt="">` : ''}</button>
+            ${on && k === 0 ? `<span class="pkd-pill above" style="${s.x > s.pw * 0.55 ? `right:${((s.pw - s.x - s.w) / s.pw * 100).toFixed(3)}%` : `left:${(s.x / s.pw * 100).toFixed(3)}%`};top:calc(${((s.ph - s.y - s.h) / s.ph * 100).toFixed(3)}% - 6px)">${label} ▾</span>` : ''}`;
+        }));
+      });
+      // dates and printed names fill in as each person signs
+      const auto = (field, text) => text && add(field, s => `<span class="pkd-auto" style="${box(s)};font-size:${Math.min(8, s.h * 0.62).toFixed(1)}em">${esc(text)}</span>`);
+      if (st.sig.homeowner) auto('homeowner_date', today);
+      if (st.coowner && st.sig.coowner) auto('coowner_date', today);
+      if (st.sig.sspr) auto('sspr_date', today);
+      if (st.tpaApplied.homeowner) { auto('tpa_insured1_printed_name', st.homeownerName); auto('tpa_insured1_date', today); }
+      if (st.coowner && st.tpaApplied.coowner) { auto('tpa_insured2_printed_name', st.coownerName); auto('tpa_insured2_date', today); }
+      ov.querySelectorAll('[data-spot]').forEach(b => b.addEventListener('click', () => tapSpot(b.dataset.spot)));
+      const c = counts();
+      const bar = ov.querySelector('[data-bar]'); if (bar) bar.style.width = Math.round(c.done / c.total * 100) + '%';
+      const cnt = ov.querySelector('[data-count]'); if (cnt) cnt.textContent = c.done + ' of ' + c.total + ' done';
+    }
+
+    function scrollToSpot(field) {
+      const sc = ov.querySelector('[data-scroll]');
+      const el = ov.querySelector(`[data-spot="${field}"]`);
+      if (!sc || !el) return;
+      const r = el.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+      sc.scrollTo({
+        top: sc.scrollTop + (r.top - sr.top) - sc.clientHeight * 0.4,
+        left: st.zoom > 1 ? sc.scrollLeft + (r.left - sr.left) - 24 : 0,
+        behavior: 'smooth'
+      });
+    }
+
+    function tapSpot(id) {
+      const t = tasks().find(x => x.id === id); if (!t) return;
+      if (isDone(t)) {
+        if (!root.confirm('Redo this ' + (t.kind === 'initial' ? 'initial' : 'signature') + '?')) return;
+        undo(t);
+      }
+      setActive(id);
+    }
+
+    function setActive(id) {
+      st.active = id; st.sheetMin = false; pads = {};
+      paintSpots(); renderSheet();
+      if (id) requestAnimationFrame(() => scrollToSpot(id));
+    }
+
+    function advance() {
+      const n = nextTask();
+      if (n) { setActive(n.id); return; }
+      st.active = null; paintSpots();
+      st.phase = 'review'; renderReview();
+    }
+
+    /* ---------------- the bottom sheet for the current spot */
+    function renderSheet() {
+      const sh = ov.querySelector('[data-sheet]'); if (!sh) return;
+      const t = tasks().find(x => x.id === st.active) || null;
+      const grab = `<button type="button" class="pkd-grab" data-act="min" aria-label="${st.sheetMin ? 'Show' : 'Hide'} signing panel"><i></i></button>`;
+      if (st.sheetMin) {
+        sh.innerHTML = grab + `<div class="pkd-in"><button type="button" class="pks-b" data-act="min" style="width:100%">${t ? 'Back to ' + (t.kind === 'initial' ? 'initialing' : 'signing') : 'Show signing steps'}</button></div>`;
+      } else if (!t) {
+        const c = counts();
+        sh.innerHTML = grab + `<div class="pkd-in">
+          <p class="pkd-p">This is your actual agreement, filled in. Scroll to read both pages${st.zoom === 1 ? ' (tap Zoom to enlarge)' : ''}. The <b>${c.total - c.done} yellow spots</b> are where you initial or sign.</p>
+          <button type="button" class="pks-b go" style="width:100%" data-act="begin">${c.done ? 'Continue' : 'Start: first initial'}</button></div>`;
+      } else if (t.kind === 'initial') {
+        const ded = t.idx === 'ded';
+        const term = ded ? ['Deductible', 'I understand my insurance deductible' + (fields.deductible ? ' of $' + fields.deductible : '') + ' is my responsibility.'] : KEY_TERMS[t.idx];
+        const drawing = !st.initials || st.redraw.initials;
+        sh.innerHTML = grab + `<div class="pkd-in">
+          <div class="pkd-k">${ded ? 'Initial · deductible' : 'Key term ' + (t.idx + 1) + ' of ' + KEY_TERMS.length}</div>
+          <div class="pkd-h">${esc(term[0])}</div>
+          <p class="pkd-p">${esc(term[1])}</p>
+          ${drawing ? `<div class="pkd-row"><div class="pks-pad small" data-pad="initials"></div>
+              <div class="pkd-side"><span>Draw your initials once — we’ll reuse them.</span><button type="button" class="pks-link" data-clear="initials" style="padding:6px 0">Clear</button></div></div>`
+            : `<div class="pks-applied"><img src="${st.initials}" alt="Your initials"><button type="button" class="pks-link" data-act="redraw-initials">Draw again</button></div>`}
+          <button type="button" class="pks-b go" style="width:100%" data-act="do">Initial this ${ded ? 'box' : 'term'}</button></div>`;
+      } else if (t.kind === 'sign') {
+        const cancelBy = fmtDate(addBusinessDays(new Date(), CANCEL_BUSINESS_DAYS));
+        sh.innerHTML = grab + `<div class="pkd-in">
+          <div class="pkd-h">Sign the agreement</div>
+          <p class="pkd-p">You agree to everything on page 1. You can cancel until midnight on <b>${esc(cancelBy)}</b>.</p>
           <div class="pks-fld"><label for="pks-hn">Your full name</label><input id="pks-hn" data-name="homeowner" value="${esc(st.homeownerName)}" autocomplete="name"></div>
           <div class="pks-pad" data-pad="homeowner"></div>
           <div class="pks-padbar"><span>Sign with your finger</span><button type="button" class="pks-link" data-clear="homeowner">Clear</button></div>
           ${st.coowner ? `<div class="pks-fld"><label for="pks-cn">Co-owner full name</label><input id="pks-cn" data-name="coowner" value="${esc(st.coownerName)}"></div>
             <div class="pks-pad" data-pad="coowner"></div>
             <div class="pks-padbar"><span>Co-owner signature</span><span><button type="button" class="pks-link" data-clear="coowner">Clear</button><button type="button" class="pks-link" data-act="nocoowner">Remove co-owner</button></span></div>`
-            : `<button type="button" class="pks-link" data-act="coowner" style="padding:0 0 12px">+ Add a co-owner signature</button>`}
-          <p class="pks-legal">NOTICE OF RIGHT TO CANCEL: You, the buyer, may cancel this transaction at any time prior to midnight of the third business day after the date of this transaction.</p>`;
-        next = 'Sign agreement';
-      } else if (s === 3) {
-        const who = [{ k: 'homeowner', n: st.homeownerName }].concat(st.coowner ? [{ k: 'coowner', n: st.coownerName }] : []);
-        body = `<h2>Third-Party Authorization</h2>
-          <p class="pks-sub">This lets your insurance company discuss the claim with StormShield Pro Roofing and its staff, and share claim status, coverage decisions, estimates, photos, supplements and payment status. StormShield is not a public adjuster and will not negotiate or settle your claim. It stays in effect through any denial, re-inspection, supplement, appeal or appraisal until you revoke it in writing.</p>
-          ${who.map(x => st.tpaApplied[x.k]
-            ? `<div class="pks-applied"><img src="${st.sig[x.k]}" alt=""><span style="font-size:14px">${esc(x.n)} — signed</span></div>`
-            : `<button type="button" class="pks-b go" style="width:100%;margin-bottom:12px" data-tpa="${x.k}">${esc(x.n || 'Homeowner')}: sign the authorization</button>`).join('')}
-          <p class="pks-legal">Tapping the button places the signature you just drew on the authorization (page 2).</p>`;
-        nextOk = who.every(x => st.tpaApplied[x.k]);
-        if (remote) next = 'Finish & sign';
-      } else if (s === 4 && !remote) {
-        body = `<div class="pks-ok">✓ Thank you! Please hand the device back to your StormShield representative.</div>
-          <h2>StormShield representative</h2>
+            : `<button type="button" class="pks-link" data-act="coowner" style="padding:0 0 12px">+ Add a co-owner</button>`}
+          <button type="button" class="pks-b go" style="width:100%" data-act="do">Sign page 1</button></div>`;
+      } else if (t.kind === 'tpa') {
+        const co = t.who === 'coowner';
+        const sigImg = co ? st.sig.coowner : st.sig.homeowner;
+        const drawing = st.redraw[t.who];
+        sh.innerHTML = grab + `<div class="pkd-in">
+          <div class="pkd-k">${co ? esc(st.coownerName || 'Co-owner') : esc(st.homeownerName || 'Homeowner')}</div>
+          <div class="pkd-h">Let StormShield talk to ${esc(fields.insurance_company || 'your insurance company')}</div>
+          <p class="pkd-p">Your insurance company may discuss this claim with StormShield Pro Roofing and its staff. StormShield is not a public adjuster and won’t negotiate or settle your claim. This stays in effect through any denial, appeal or appraisal until you revoke it in writing.</p>
+          ${drawing ? `<div class="pks-pad" data-pad="tpa"></div><div class="pks-padbar"><span>Sign with your finger</span><button type="button" class="pks-link" data-clear="tpa">Clear</button></div>`
+            : `<div class="pks-applied"><img src="${sigImg}" alt="Your signature"><span style="font-size:13px;color:#5A6478">Your signature from page 1</span></div>
+               <button type="button" class="pks-link" data-act="redraw-tpa" style="padding:0 0 10px">Draw it again instead</button>`}
+          <button type="button" class="pks-b go" style="width:100%" data-act="do">Sign page 2</button></div>`;
+      } else if (t.kind === 'rep') {
+        sh.innerHTML = grab + `<div class="pkd-in">
+          <div class="pks-ok">✓ Thank you! Please hand the device back to your StormShield representative.</div>
+          <div class="pkd-h">StormShield representative</div>
           <div class="pks-fld"><label for="pks-rn">Representative name</label><input id="pks-rn" data-name="rep" value="${esc(st.repName)}"></div>
           <div class="pks-pad" data-pad="sspr"></div>
-          <div class="pks-padbar"><span>Representative signature</span><button type="button" class="pks-link" data-clear="sspr">Clear</button></div>`;
-        next = 'Finish & save';
-      } else {
-        body = `<div class="pks-ok" data-done>Saving the signed packet…</div>`;
-        canBack = false;
+          <div class="pks-padbar"><span>Representative signature</span><button type="button" class="pks-link" data-clear="sspr">Clear</button></div>
+          <button type="button" class="pks-b go" style="width:100%" data-act="do">Sign as representative</button></div>`;
       }
-      ov.innerHTML = `<div class="pks-top"><b>StormShield Pro Roofing · Claim Packet</b><span>${s < DONE ? 'Step ' + (s + 1) + ' of ' + DONE : 'Finishing'}</span></div>
-        <div class="pks-bar"><i style="width:${pct}%"></i></div>
-        <div class="pks-body">${body}</div>
-        ${s < DONE ? `<div class="pks-foot"><div>
-          ${(canBack || !remote) ? `<button type="button" class="pks-b" data-act="${canBack ? 'back' : 'cancel'}">${canBack ? 'Back' : 'Cancel'}</button>` : ''}
-          <button type="button" class="pks-b go" data-act="next" ${nextOk ? '' : 'disabled'}>${next}</button></div></div>` : ''}`;
-
       pads = {};
-      ov.querySelectorAll('[data-pad]').forEach(h => { pads[h.dataset.pad] = makePad(h); });
-      wire();
-      const bodyEl = ov.querySelector('.pks-body'); if (bodyEl) bodyEl.scrollTop = 0;
-    };
-
-    const refreshNext = ok => { const b = ov.querySelector('[data-act="next"]'); if (b) b.disabled = !ok; };
-
-    function wire() {
-      const c = ov.querySelector('[data-consent]');
-      if (c) c.addEventListener('change', () => { st.consentAt = c.checked ? new Date().toISOString() : null; refreshNext(!!st.consentAt); });
-      ov.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => {
-        const k = b.dataset.clear; if (pads[k]) pads[k].clear();
-        if (k === 'initials') { st.initials = null; st.initialed = {}; render(); }
-      }));
-      ov.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('input', () => {
+      sh.querySelectorAll('[data-pad]').forEach(h => { pads[h.dataset.pad] = makePad(h); });
+      sh.querySelectorAll('[data-clear]').forEach(b => b.addEventListener('click', () => { const p = pads[b.dataset.clear]; if (p) p.clear(); }));
+      sh.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('input', () => {
         const k = inp.dataset.name;
         if (k === 'homeowner') st.homeownerName = inp.value; else if (k === 'coowner') st.coownerName = inp.value; else st.repName = inp.value;
       }));
-      ov.querySelectorAll('[data-ini]').forEach(b => b.addEventListener('click', () => {
-        if (!st.initials) {
+      sh.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+    }
+
+    function complete() {
+      const t = tasks().find(x => x.id === st.active); if (!t) return;
+      const now = new Date().toISOString();
+      if (t.kind === 'initial') {
+        if (!st.initials || st.redraw.initials) {
           const png = pads.initials && pads.initials.toPng();
           if (!png) { say('Draw your initials in the box first'); return; }
-          st.initials = png;
+          st.initials = png; st.redraw.initials = false;
         }
-        const k = b.dataset.ini === 'ded' ? 'ded' : Number(b.dataset.ini);
-        st.initialed[k] = !st.initialed[k];
-        st.at['initial_' + k] = new Date().toISOString();
-        render();
-      }));
-      ov.querySelectorAll('[data-tpa]').forEach(b => b.addEventListener('click', () => {
-        st.tpaApplied[b.dataset.tpa] = true; st.at['tpa_' + b.dataset.tpa] = new Date().toISOString(); render();
-      }));
+        st.initialed[t.idx] = true; st.at['initial_' + t.idx] = now;
+      } else if (t.kind === 'sign') {
+        if (!st.homeownerName.trim()) { say('Enter your full name'); return; }
+        const hp = pads.homeowner && pads.homeowner.toPng();
+        if (!hp) { say('Please sign in the box'); return; }
+        let cp = null;
+        if (st.coowner) {
+          if (!st.coownerName.trim()) { say('Enter the co-owner’s name'); return; }
+          cp = pads.coowner && pads.coowner.toPng();
+          if (!cp) { say('Co-owner: please sign in the box'); return; }
+        }
+        st.sig.homeowner = hp; st.at.homeowner = now;
+        if (cp) { st.sig.coowner = cp; st.at.coowner = now; }
+      } else if (t.kind === 'tpa') {
+        if (st.redraw[t.who]) {
+          const p = pads.tpa && pads.tpa.toPng();
+          if (!p) { say('Please sign in the box'); return; }
+          st.sig[t.who] = p; st.redraw[t.who] = false;   // one signature per person, on both pages
+        }
+        st.tpaApplied[t.who] = true; st.at['tpa_' + t.who] = now;
+      } else if (t.kind === 'rep') {
+        if (!st.repName.trim()) { say('Enter the representative name'); return; }
+        const rp = pads.sspr && pads.sspr.toPng();
+        if (!rp) { say('Representative: please sign'); return; }
+        st.sig.sspr = rp; st.at.sspr = now;
+      }
+      advance();
+    }
+
+    /* ---------------- review: the finished pages before anything is saved */
+    async function renderReview() {
+      const cancelBy = fmtDate(addBusinessDays(new Date(), CANCEL_BUSINESS_DAYS));
+      ov.innerHTML = `<div class="pks-top"><b>Review &amp; ${remote ? 'submit' : 'save'}</b><span>${counts().total} of ${counts().total} done</span></div>
+        <div class="pks-body">
+          <h2>Check your signed packet</h2>
+          <p class="pks-sub">This is exactly what will be saved. Tap a page to look closer.</p>
+          <div class="pkd-thumbs big">
+            <figure><button type="button" class="pkd-thumb" data-open="1" aria-label="Open signed page 1"></button><figcaption><b>Page 1 · Agreement</b><span class="ok">${KEY_TERMS.length + 1} initials · signed</span></figcaption></figure>
+            <figure><button type="button" class="pkd-thumb" data-open="2" aria-label="Open signed page 2"></button><figcaption><b>Page 2 · Authorization</b><span class="ok">Signed</span></figcaption></figure>
+          </div>
+          <div class="pks-card pks-legal" style="font-size:13px">${remote ? 'You’ll be able to download your signed copy on the next screen. StormShield Pro Roofing keeps a copy too. ' : ''}You may cancel until midnight on <b style="color:#141A26">${esc(cancelBy)}</b>.</div>
+        </div>
+        <div class="pks-foot"><div style="flex-direction:column">
+          <button type="button" class="pks-b go" style="flex:none;width:100%" data-act="submit">${remote ? 'Submit signed packet' : 'Finish & save'}</button>
+          <button type="button" class="pks-b" style="flex:none;width:100%;height:46px" data-act="back-doc">Go back and change something</button></div></div>`;
       ov.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+      const r = result();
+      let bytes = null;
+      try {
+        bytes = await buildPdf(fields, {
+          initials: r.initials, homeowner: r.sig.homeowner, coowner: r.coowner ? r.sig.coowner : null, sspr: r.sig.sspr || opts.repSig || null,
+          tpa1: r.tpaApplied.homeowner ? r.sig.homeowner : null, tpa2: r.coowner && r.tpaApplied.coowner ? r.sig.coowner : null
+        }, { signedAt: new Date(), homeownerName: r.homeownerName, coownerName: r.coownerName });
+        ov.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openBlob(bytes)));
+        const doc = await openPdfDoc(bytes);
+        for (const n of [1, 2]) {
+          const host = ov.querySelector(`[data-open="${n}"]`); if (!host) return;
+          const cv = document.createElement('canvas'); host.appendChild(cv);
+          await drawPdfPage(doc, n, cv, host.clientWidth || 170);
+        }
+      } catch (e) { console.warn('[packet] review preview', e); }
+      st.reviewedAt = new Date().toISOString();
     }
 
     const result = () => ({
       consentAt: st.consentAt, homeownerName: st.homeownerName.trim(), coowner: st.coowner, coownerName: st.coownerName.trim(),
-      initials: st.initials, initialed: st.initialed, sig: st.sig, tpaApplied: st.tpaApplied, at: st.at, repName: st.repName.trim()
+      initials: st.initials, initialed: st.initialed, sig: st.sig, tpaApplied: st.tpaApplied, at: st.at, repName: st.repName.trim(),
+      reviewedAt: st.reviewedAt
     });
 
     async function runFinish() {
-      st.step = DONE; render();
-      const box = () => ov.querySelector('[data-done]');
+      st.phase = 'finish';
+      ov.innerHTML = `<div class="pks-top"><b>StormShield Pro Roofing · Claim Packet</b><span>Finishing</span></div>
+        <div class="pks-body"><div class="pks-ok" data-done>Saving the signed packet…</div></div>`;
+      const box2 = () => ov.querySelector('[data-done]');
       try {
         const out = await opts.onFinish(result());
-        const b = box(); if (!b) return;
+        const b = box2(); if (!b) return;
         b.innerHTML = remote ? '✓ Signed! Thank you.' : '✓ Signed and saved to the job.';
         const after = document.createElement('div');
         after.innerHTML = `<div class="pks-card" style="font-size:14px;line-height:1.6">${remote
@@ -749,45 +1081,36 @@
         if (x) x.onclick = () => { close(); if (opts.onDone) opts.onDone(); };
       } catch (e) {
         console.error('[packet] finish failed', e);
-        const b = box(); if (!b) return;
+        const b = box2(); if (!b) return;
         b.style.background = '#FDECEC'; b.style.color = '#8A1C1C';
         b.innerHTML = esc(e && e.userMessage ? e.userMessage : 'Could not save the signed packet. Check your connection and try again.') + ' <button type="button" class="pks-link" data-retry>Try again</button>';
-        b.querySelector('[data-retry]').onclick = () => { b.style.background = ''; b.style.color = ''; b.textContent = 'Saving…'; runFinish(); };
+        b.querySelector('[data-retry]').onclick = runFinish;
       }
     }
 
     async function act(a) {
       if (a === 'cancel') { if (root.confirm('Stop signing? Nothing will be saved.')) close(); return; }
-      if (a === 'back') { st.step = Math.max(0, st.step - 1); render(); return; }
-      if (a === 'view') { try { openBlob(await buildPdf(fields, {}, {})); } catch (e) { say('Could not open the PDF'); } return; }
-      if (a === 'coowner') { st.coowner = true; render(); return; }
-      if (a === 'nocoowner') { st.coowner = false; delete st.sig.coowner; st.tpaApplied.coowner = false; render(); return; }
-      if (a !== 'next') return;
-      if (st.step === 2) {
-        if (!st.homeownerName.trim()) { say('Enter your full name'); return; }
-        const hp = pads.homeowner && pads.homeowner.toPng();
-        if (!hp) { say('Please sign in the box'); return; }
-        st.sig.homeowner = hp; st.at.homeowner = new Date().toISOString();
-        if (st.coowner) {
-          if (!st.coownerName.trim()) { say('Enter the co-owner’s name'); return; }
-          const cp = pads.coowner && pads.coowner.toPng();
-          if (!cp) { say('Co-owner: please sign in the box'); return; }
-          st.sig.coowner = cp; st.at.coowner = new Date().toISOString();
-        }
-      }
-      if (st.step === 3 && remote) { await runFinish(); return; }
-      if (st.step === 4 && !remote) {
-        if (!st.repName.trim()) { say('Enter the representative name'); return; }
-        const rp = pads.sspr && pads.sspr.toPng();
-        if (!rp) { say('Representative: please sign'); return; }
-        st.sig.sspr = rp; st.at.sspr = new Date().toISOString();
-        await runFinish();
+      if (a === 'disclosure') { st.showDisclosure = !st.showDisclosure; renderWelcome(); return; }
+      if (a === 'start') { if (!st.consentAt) return; st.phase = 'doc'; renderDocShell(); return; }
+      if (a === 'pdf') { try { await docReady; openBlob(docBytes); } catch (e) { say('Could not open the PDF'); } return; }
+      if (a === 'zoom') {
+        st.zoom = st.zoom === 1 ? 1.7 : 1;
+        const zb = ov.querySelector('[data-act="zoom"]'); if (zb) zb.textContent = 'Zoom ' + (st.zoom === 1 ? '+' : '−');
+        await layoutPages(); if (st.active) scrollToSpot(st.active);
         return;
       }
-      st.step++; render();
+      if (a === 'begin') { advance(); return; }
+      if (a === 'min') { st.sheetMin = !st.sheetMin; renderSheet(); return; }
+      if (a === 'do') { complete(); return; }
+      if (a === 'redraw-initials') { st.redraw.initials = true; renderSheet(); return; }
+      if (a === 'redraw-tpa') { const t = tasks().find(x => x.id === st.active); if (t) { st.redraw[t.who] = true; renderSheet(); } return; }
+      if (a === 'coowner') { st.coowner = true; renderSheet(); paintSpots(); return; }
+      if (a === 'nocoowner') { st.coowner = false; delete st.sig.coowner; st.tpaApplied.coowner = false; renderSheet(); paintSpots(); return; }
+      if (a === 'back-doc') { st.phase = 'doc'; st.active = null; renderDocShell(); return; }
+      if (a === 'submit') { await runFinish(); return; }
     }
 
-    render();
+    renderWelcome();
     return { close };
   }
 
@@ -1061,5 +1384,5 @@
   }
 
   Object.assign(api, { renderPacketTab, startSigning, preview, uploadPaper, deleteFile, startOver, buildPdf, addAuditPage,
-    finalizeSigned, openSigningFlow, setTemplateBytes, sendForSignature, voidLink, renderLinks, sha256Hex, CONSENT });
+    finalizeSigned, openSigningFlow, setTemplateBytes, templateSpots, sendForSignature, voidLink, renderLinks, sha256Hex, CONSENT });
 })(typeof window !== 'undefined' ? window : globalThis);
