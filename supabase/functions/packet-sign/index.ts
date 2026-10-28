@@ -179,10 +179,28 @@ Deno.serve(async (req) => {
       await sb.from("jobs").update({ contract: c }).eq("id", l.job_id);
     }
 
+    // Email the homeowner their copy (and the office) through Zoho Mail, if it's set up.
+    let emailedTo = "";
+    const copyTo = str(r.copyEmail, 200);
+    if (/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(copyTo)) {
+      try {
+        const er = await fetch(Deno.env.get("SUPABASE_URL") + "/functions/v1/packet-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") },
+          body: JSON.stringify({ job_id: l.job_id, path, to: copyTo, cancelBy: out.cancelBy.toISOString() }),
+        });
+        const eo = await er.json().catch(() => ({}));
+        if (eo.ok) emailedTo = copyTo;
+        if (eo.ok || !eo.notConfigured) {
+          await sb.from("packet_links").update({ signed_summary: { ...summary, emailedTo: emailedTo || null, emailError: eo.ok ? null : (eo.error || "send failed") } }).eq("id", l.id);
+        }
+      } catch (e) { console.error("packet-email call failed", e); }
+    }
+
     let b64 = "";
     const bytes = out.finalBytes as Uint8Array;
     for (let i = 0; i < bytes.length; i += 0x8000) b64 += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return json({ ok: true, cancelBy: out.cancelBy.toISOString(), fileName: name, pdf: btoa(b64) });
+    return json({ ok: true, cancelBy: out.cancelBy.toISOString(), fileName: name, emailedTo, pdf: btoa(b64) });
   } catch (e) {
     console.error("packet-sign error", e);
     return fail("Something went wrong. Please try again or call 832-910-7735.", 500);

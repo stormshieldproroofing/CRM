@@ -710,7 +710,7 @@
       coowner: false, coownerName: '',
       initials: null, initialed: {},
       sig: {}, tpaApplied: { homeowner: false, coowner: false },
-      repName: opts.repName || '', at: {},
+      repName: opts.repName || '', at: {}, copyEmail: fields.email || '',
       active: null, sheetMin: false, redraw: {}, zoom: 1, reviewedAt: null
     };
 
@@ -1030,12 +1030,18 @@
             <figure><button type="button" class="pkd-thumb" data-open="1" aria-label="Open signed page 1"></button><figcaption><b>Page 1 · Agreement</b><span class="ok">${KEY_TERMS.length + 1} initials · signed</span></figcaption></figure>
             <figure><button type="button" class="pkd-thumb" data-open="2" aria-label="Open signed page 2"></button><figcaption><b>Page 2 · Authorization</b><span class="ok">Signed</span></figcaption></figure>
           </div>
-          <div class="pks-card pks-legal" style="font-size:13px">${remote ? 'You’ll be able to download your signed copy on the next screen. StormShield Pro Roofing keeps a copy too. ' : ''}You may cancel until midnight on <b style="color:#141A26">${esc(cancelBy)}</b>.</div>
+          <div class="pks-card">
+            <div class="pks-fld" style="margin-bottom:8px"><label for="pks-em">Email ${remote ? 'my' : 'the homeowner a'} signed copy to</label>
+              <input id="pks-em" type="email" inputmode="email" autocomplete="email" data-copyemail value="${esc(st.copyEmail)}" placeholder="name@example.com"></div>
+            <p class="pks-legal" style="margin:0">${remote ? 'You can also download it on the next screen. StormShield Pro Roofing keeps a copy too. ' : 'The office gets a copy too. '}You may cancel until midnight on <b style="color:#141A26">${esc(cancelBy)}</b>.</p>
+          </div>
         </div>
         <div class="pks-foot"><div style="flex-direction:column">
           <button type="button" class="pks-b go" style="flex:none;width:100%" data-act="submit">${remote ? 'Submit signed packet' : 'Finish & save'}</button>
           <button type="button" class="pks-b" style="flex:none;width:100%;height:46px" data-act="back-doc">Go back and change something</button></div></div>`;
       ov.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+      const em = ov.querySelector('[data-copyemail]');
+      if (em) em.addEventListener('input', () => { st.copyEmail = em.value.trim(); });
       const r = result();
       let bytes = null;
       try {
@@ -1057,7 +1063,7 @@
     const result = () => ({
       consentAt: st.consentAt, homeownerName: st.homeownerName.trim(), coowner: st.coowner, coownerName: st.coownerName.trim(),
       initials: st.initials, initialed: st.initialed, sig: st.sig, tpaApplied: st.tpaApplied, at: st.at, repName: st.repName.trim(),
-      reviewedAt: st.reviewedAt
+      reviewedAt: st.reviewedAt, copyEmail: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(st.copyEmail || '') ? st.copyEmail.trim() : ''
     });
 
     async function runFinish() {
@@ -1071,8 +1077,8 @@
         b.innerHTML = remote ? '✓ Signed! Thank you.' : '✓ Signed and saved to the job.';
         const after = document.createElement('div');
         after.innerHTML = `<div class="pks-card" style="font-size:14px;line-height:1.6">${remote
-            ? `Your signed copy is ready below. StormShield Pro Roofing has a copy too.<br>You may cancel until midnight on <b>${esc(fmtDate(out.cancelBy))}</b>. Questions? Call 832-910-7735.`
-            : `Cancellation window ends <b>${esc(fmtDate(out.cancelBy))}</b> at midnight.`}</div>
+            ? `${out.emailedTo ? `We emailed your signed copy to <b>${esc(out.emailedTo)}</b>. You can also download it below.` : 'Your signed copy is ready below.'} StormShield Pro Roofing has a copy too.<br>You may cancel until midnight on <b>${esc(fmtDate(out.cancelBy))}</b>. Questions? Call 832-910-7735.`
+            : `${out.emailedTo ? `Emailed a copy to <b>${esc(out.emailedTo)}</b>.<br>` : out.emailError ? `<span style="color:#8A1C1C">Couldn’t email the copy: ${esc(out.emailError)}</span><br>` : ''}Cancellation window ends <b>${esc(fmtDate(out.cancelBy))}</b> at midnight.`}</div>
           <div style="display:flex;gap:10px">${out.finalBytes ? `<button type="button" class="pks-b${remote ? ' go' : ''}" data-v>${remote ? 'Download my copy' : 'View signed PDF'}</button>` : ''}${remote ? '' : '<button type="button" class="pks-b go" data-x>Done</button>'}</div>`;
         b.parentNode.appendChild(after);
         const v = after.querySelector('[data-v]');
@@ -1155,9 +1161,35 @@
         };
         if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Claim packet signed', `Contingency Agreement + Third-Party Authorization signed in person by ${r.homeownerName}${r.coowner ? ' and ' + r.coownerName : ''}. Cancellation window ends ${fmtDate(out.cancelBy)}.`);
         save();
+        // Email the signed PDF to the homeowner (and the office) through Zoho Mail.
+        if (r.copyEmail && rec.path) {
+          const em = await emailPacket(j, rec.path, r.copyEmail, out.cancelBy);
+          if (em.ok) { out.emailedTo = r.copyEmail; p.signed.emailedTo = r.copyEmail; }
+          else if (!em.notConfigured) { out.emailError = em.error; p.signed.emailError = em.error; }
+          save();
+        }
         return out;
       }
     });
+  }
+
+  async function emailPacket(j, path, to, cancelBy) {
+    if (!db() || !db().functions) return { ok: false, notConfigured: true };
+    try {
+      const { data, error } = await db().functions.invoke('packet-email', {
+        body: { job_id: j.id, path, to, cancelBy: cancelBy ? new Date(cancelBy).toISOString() : null }
+      });
+      if (error) {
+        let msg = error.message || 'send failed';
+        try { const b = await error.context.json(); if (b && b.notConfigured) return { ok: false, notConfigured: true }; if (b && b.error) msg = b.error; } catch (e) {}
+        return { ok: false, error: msg };
+      }
+      if (data && data.ok) {
+        if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Signed claim packet emailed', 'Sent to ' + to);
+        return { ok: true };
+      }
+      return { ok: false, notConfigured: !!(data && data.notConfigured), error: (data && data.error) || 'send failed' };
+    } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
   }
 
   /* ---------------------------------------------------------------- remote links (CRM side) */
