@@ -9,6 +9,7 @@
 //   ZOHO_MAIL_REFRESH_TOKEN — refresh token with scopes ZohoMail.messages.CREATE,ZohoMail.accounts.READ
 //   ZOHO_MAIL_FROM (optional) — send-as address; defaults to the Zoho mailbox's primary address
 //   ZOHO_MAIL_BCC  (optional) — extra copy, e.g. office@stormshieldproroofing.com
+//   ZOHO_MAIL_SIGNATURE (optional) — name or id of the Zoho Mail signature to use (default: the first one)
 // The salesperson assigned to the job (team_members.email) always gets a BCC copy.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
@@ -87,11 +88,53 @@ async function zmail(token: string, path: string, init: RequestInit) {
   return out;
 }
 
-function fmtDay(iso: string | null | undefined) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(+d)) return "";
-  return d.toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "2-digit", day: "2-digit", year: "numeric" });
+// The mailbox's own Zoho Mail signature (ZOHO_MAIL_SIGNATURE = its name or id to pick one; else the first).
+async function zohoSignature(token: string): Promise<string> {
+  try {
+    const r = await fetch(`https://mail.zoho.${DC}/api/accounts/signature`, { headers: { Authorization: `Zoho-oauthtoken ${token}` } });
+    const out = await r.json();
+    const list = Array.isArray(out.data) ? out.data : (out.data ? [out.data] : []);
+    if (!list.length) return "";
+    const want = (Deno.env.get("ZOHO_MAIL_SIGNATURE") || "").trim().toLowerCase();
+    const sig = (want && list.find((x: any) => String(x.id) === want || String(x.name || "").toLowerCase() === want)) || list[0];
+    const c = String(sig.content || "").trim();
+    if (!c) return "";
+    return /<[a-z][\s\S]*>/i.test(c) ? c : esc(c).replace(/\n/g, "<br>");
+  } catch (e) {
+    console.warn("signature lookup failed", e);
+    return "";
+  }
+}
+
+// Pinned to the commit that added the logo, so it shows even before the site updates.
+const LOGO_URL = "https://raw.githubusercontent.com/stormshieldproroofing/CRM/3fb29d8517d646ac31ede7674c5a42a916ad5826/email-logo.png";
+function emailHtml(o: { first: string; address: string; insurer: string; signatureHtml: string }) {
+  const font = "font-family:Arial,Helvetica,sans-serif;";
+  const p = (t: string) => `<p style="margin:0 0 16px;${font}font-size:15px;line-height:1.6;color:#1F2937">${t}</p>`;
+  return `<div style="margin:0;padding:0;background:#F3F5F8">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F8"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border:1px solid #E3E7EE;border-radius:10px;overflow:hidden">
+  <tr><td align="center" style="padding:22px 24px 16px;border-bottom:4px solid #0F1E3A">
+    <img src="${LOGO_URL}" width="140" alt="StormShield Pro Roofing" style="display:block;width:140px;max-width:140px;height:auto;border:0">
+  </td></tr>
+  <tr><td style="padding:28px 28px 8px">
+    <h1 style="margin:0 0 18px;${font}font-size:22px;line-height:1.3;color:#0F1E3A">Your signed claim paperwork</h1>
+    ${p("Hi " + esc(o.first) + ",")}
+    ${p("Thank you for choosing StormShield Pro Roofing. Your signed claim paperwork" + (o.address ? " for <b>" + esc(o.address) + "</b>" : "") + " is attached for your records.")}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;background:#F6F8FB;border:1px solid #E3E7EE;border-radius:8px">
+      <tr><td style="padding:14px 16px;${font}font-size:14px;line-height:1.6;color:#1F2937">
+        <div style="font-weight:bold;color:#0F1E3A;margin-bottom:4px">Attached: your signed Claim Packet (PDF)</div>
+        &bull; Page 1 &mdash; Contingency Agreement<br>
+        &bull; Page 2 &mdash; Third-Party Authorization${o.insurer ? " for " + esc(o.insurer) : ""}<br>
+        &bull; Page 3 &mdash; Electronic signature record
+      </td></tr>
+    </table>
+    ${p('Our team will keep you updated as your claim moves forward. If you have any questions, just reply to this email or call us at <a href="tel:8329107735" style="color:#1D4ED8;text-decoration:none">832-910-7735</a>.')}
+  </td></tr>
+  <tr><td style="padding:4px 28px 28px;${font}font-size:14px;line-height:1.5;color:#1F2937">${o.signatureHtml || "Thank you,<br><b>StormShield Pro Roofing</b>"}</td></tr>
+</table>
+</td></tr></table>
+</div>`;
 }
 
 async function allowed(req: Request, jobId: string) {
@@ -143,14 +186,9 @@ Deno.serve(async (req) => {
 
     const first = String(f.name || job?.name || "").trim().split(/\s+/)[0] || "there";
     const street = f.street || "";
-    const cancel = fmtDay(body.cancelBy);
-    const content = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#141A26">
-      <p>Hi ${esc(first)},</p>
-      <p>Attached is your signed Contingency Agreement and Third-Party Authorization with StormShield Pro Roofing${street ? " for " + esc(street) : ""}. Please keep it for your records.</p>
-      ${cancel ? `<p><b>Your right to cancel:</b> you may cancel this agreement at any time before midnight on <b>${esc(cancel)}</b>, as explained in the Notice of Right to Cancel on page 1.</p>` : ""}
-      <p>Questions? Reply to this email or call 832-910-7735.</p>
-      <p>Thank you,<br>StormShield Pro Roofing<br>12111 Forest Sage Ln, Pearland, TX 77584<br>832-910-7735 · stormshieldproroofing.com</p>
-    </div>`;
+    const address = [f.street, [f.city_state, f.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    const signatureHtml = await zohoSignature(token);
+    const content = emailHtml({ first, address, insurer: f.insurance_company || "", signatureHtml });
     // BCC: the job's salesperson, plus the optional office address — never the homeowner or sender twice.
     const seen = new Set([to.toLowerCase(), String(from).toLowerCase()]);
     const bcc = [repEmail, ...(Deno.env.get("ZOHO_MAIL_BCC") || "").split(",")].map((x) => x.trim())
