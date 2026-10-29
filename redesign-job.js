@@ -543,7 +543,7 @@
     L.net = line({ label: 'Net profit', header: $id('profitHeader'), body: $id('profitPrintBtn'), parts: [$id('profitPrintBtn')], cls: 'net' });
     const ovEditable = !!$id('ovChev');
     L.over = line({ label: 'Overhead', header: ovEditable ? $id('ovHeader') : null, body: $id('ovBody'), parts: [$id('ovBody')] });
-    L.comm = line({ label: 'Commission', header: $id('commAccHeader'), body: $id('jobCommBody'), parts: [$id('jobCommBody')] });
+    L.comm = line({ label: 'Commission', header: $id('commAccHeader'), body: $id('jobCommBody'), parts: [$id('jobCommBody')], cls: 'comm' });
 
     const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
     const draw = () => {
