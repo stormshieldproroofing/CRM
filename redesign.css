@@ -819,3 +819,60 @@ html.ui-new .rd-stmt-row{min-height:36px;font-size:13px}
 html.ui-new .rd-stmt-row.total{min-height:40px;font-size:13px}
 /* Commission amount in sky blue (same as "Commission YTD" on the Summary page) */
 html.ui-new .rd-fin-item.comm > .rd-fin-row .rd-fin-v:not(.zero){color:#60C4FF;font-weight:700}
+
+/* ── Money panels: one style for every opened line ─────────────────────────
+   Lists are plain rows split by thin lines (no filled boxes), every "+ Add"
+   is the same blue dashed button, statuses are pills, totals are a line with
+   a rule above, and notify / print buttons have the icon on the left. */
+html.ui-new .rd-fin-slot .rd-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px!important;font-weight:600;letter-spacing:0;color:var(--pc,var(--muted));border:1px solid color-mix(in srgb,var(--pc,#8B93A3) 40%,transparent);background:color-mix(in srgb,var(--pc,#8B93A3) 12%,transparent);vertical-align:1px;margin-left:4px}
+/* list rows: checks, expense categories */
+html.ui-new .rd-fin-slot #depList [id^="dep-card-"],
+html.ui-new .rd-fin-slot #expCatList > div{background:transparent!important;border:none!important;border-bottom:1px solid rgba(255,255,255,0.06)!important;border-radius:0!important;margin:0!important}
+html.ui-new .rd-fin-slot #depList [id^="dep-card-"]:last-child,
+html.ui-new .rd-fin-slot #expCatList > div:last-child{border-bottom:none!important}
+html.ui-new .rd-fin-slot #depList [id^="dep-view-"]{padding:10px 0!important}
+html.ui-new .rd-fin-slot #expCatList > div > div[onclick^="expToggleCat"]{background:transparent!important;padding:0 0!important;min-height:44px}
+html.ui-new .rd-fin-slot #expCatList > div > div[onclick^="expToggleCat"] span{font-size:13px!important}
+html.ui-new .rd-fin-slot #expCatList > div > div[onclick^="expToggleCat"] > div:first-child span:nth-child(2){color:var(--brand)!important;font-weight:600!important}
+html.ui-new .rd-fin-slot #expCatList [id^="exp-row-"]{border-top:1px solid rgba(255,255,255,0.05)!important}
+html.ui-new .rd-fin-slot #expCatList [id^="exp-view-"]{padding:8px 0 8px 14px!important}
+html.ui-new .rd-fin-slot [id^="supp-view-"]{min-height:44px;padding:8px 0!important}
+html.ui-new .rd-fin-slot [id^="supp-view-"] > div > div:first-child{font-size:13px!important}
+html.ui-new .rd-fin-slot [id^="supp-view-"] > div > div + div{font-size:12px!important}
+/* every "+ Add …" button looks the same */
+html.ui-new .rd-fin-slot :is(#depAddToggle,#expAddToggle,#commAddSplit,#suppAddToggle){min-height:40px!important;border:1px dashed rgba(143,180,255,0.4)!important;background:transparent!important;color:#8FB4FF!important;font-size:13px!important;font-weight:600!important;border-radius:10px!important}
+html.ui-new .rd-fin-slot :is(#depAddToggle,#expAddToggle,#commAddSplit,#suppAddToggle):hover{background:rgba(143,180,255,0.06)!important}
+/* the supplement form matches the check / expense forms */
+html.ui-new .rd-fin-slot #suppAddForm{margin-top:10px;padding:12px;border-radius:12px;background:#0E1219;border:1px solid var(--line)}
+html.ui-new .rd-fin-slot #suppAddForm > *{margin-top:10px!important}
+html.ui-new .rd-fin-slot #suppAddForm > *:first-child{margin-top:0!important}
+html.ui-new .rd-fin-slot div:has(> #suppSaveNew){display:flex!important;gap:8px!important}
+html.ui-new .rd-fin-slot #suppSaveNew{flex:1;min-height:44px!important;background:#2F6FEB!important;border:none!important;color:#fff!important}
+html.ui-new .rd-fin-slot #suppCancelNew{min-height:44px!important;padding:0 18px!important;background:transparent!important;border:1px solid rgba(255,255,255,0.1)!important;color:var(--text-2)!important}
+/* totals: a line with a rule above, no tinted box */
+html.ui-new .rd-fin-slot div:has(> #commTotalAmt),
+html.ui-new .rd-fin-slot div:has(> #cpBreakdownTotal){background:transparent!important;border:none!important;border-top:1px solid rgba(255,255,255,0.08)!important;border-radius:0!important;padding:10px 0 0!important;margin:10px 0!important}
+html.ui-new .rd-fin-slot div:has(> #commTotalAmt) > span:first-child,
+html.ui-new .rd-fin-slot div:has(> #cpBreakdownTotal) > span:first-child{font-size:13px!important;font-weight:600!important;color:var(--brand)!important;text-transform:none!important;letter-spacing:0!important}
+html.ui-new .rd-fin-slot :is(#commTotalAmt,#cpBreakdownTotal){font-size:13px!important}
+/* commission rep line reads like the other rows */
+html.ui-new .rd-fin-slot #jobCommBody > div:first-child > div:first-child > span{font-size:13px!important}
+html.ui-new .rd-fin-slot #jobCommBody .user-dot{width:26px!important;height:26px!important;font-size:10px!important}
+/* notify / print / receipt buttons: icon on the left */
+html.ui-new .rd-fin-slot :is(#payrollNotifyBtn,#invoiceReadyBtn,#profitPrintBtn,button[onclick*="openCommVoucher"]){justify-content:flex-start!important;gap:10px!important;padding:0 12px!important;text-align:left!important}
+/* list text: same 13px everywhere */
+html.ui-new .rd-fin-slot [id^="dep-view-"] span[style*="font-size:13px"]{font-size:13px!important}
+html.ui-new .rd-fin-slot [id^="dep-view-"] span[style*="font-size:11px"],
+html.ui-new .rd-fin-slot [id^="dep-view-"] span[style*="font-size:10px"]{font-size:12px!important}
+html.ui-new .rd-fin-slot [id^="exp-view-"] > span:first-child{font-size:13px!important}
+html.ui-new .rd-fin-slot [id^="exp-view-"] > div span[style*="font-weight:600"]{font-size:13px!important}
+/* Paid / Unpaid read like the other status pills */
+html.ui-new .rd-fin-slot [onclick^="expTogglePaid"]{display:inline-block;text-transform:lowercase;letter-spacing:0!important}
+html.ui-new .rd-fin-slot [onclick^="expTogglePaid"]::first-letter{text-transform:uppercase}
+/* overhead % box matches the $ box beside it */
+html.ui-new .rd-fin-slot #ovPctBox{background:#0E1219!important;border:1px solid rgba(255,255,255,0.1)!important;border-radius:10px!important}
+html.ui-new .rd-fin-slot #ovPctBox > input{background:transparent!important;border:none!important;box-shadow:none!important}
+/* breakdown total uses the same blue as the statement total */
+html.ui-new .rd-fin-slot #cpBreakdownTotal{color:#8FB4FF!important}
+html.ui-new .rd-fin-slot #ovPctBox{height:46px!important;min-height:0!important;padding:0 12px!important;box-sizing:border-box}
+html.ui-new .rd-fin-slot #ovPctBox > input{height:auto!important;min-height:0!important;padding:0!important}

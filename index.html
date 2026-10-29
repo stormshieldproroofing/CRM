@@ -631,7 +631,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=39">'
+    +'<link rel="stylesheet" href="redesign.css?v=40">'
     +'<script src="redesign.js?v=10"><\/script>'
     +'<script src="redesign-job.js?v=18"><\/script>');
 }catch(e){}})();
@@ -6479,7 +6479,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     return `<div id="supp-view-${s._sid}" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
                       <span style="width:7px;height:7px;border-radius:50%;background:${stColor};flex-shrink:0"></span>
                       <div style="flex:1;min-width:0">
-                        <div style="font-size:12px;font-weight:600;color:#fff">$${(parseFloat(s.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:10px;font-weight:600;color:${stColor}">· ${s.status}</span></div>
+                        <div style="font-size:12px;font-weight:600;color:#fff">$${(parseFloat(s.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} <span class="rd-pill" style="--pc:${stColor}">${s.status}</span></div>
                         ${s.note?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(s.note)}</div>`:''}
                       </div>
                       <button onclick="suppEditOpen('${s._sid}')" title="Edit" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;flex-shrink:0" onmouseover="this.style.color='var(--brand-light)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-pencil" style="font-size:13px"></i></button>
@@ -6502,8 +6502,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                       </div>
                     </div>`;
                   }).join('') : `<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No supplements yet</div>`}
-                  <!-- Add form -->
-                  <div style="display:flex;gap:6px;margin-top:9px;align-items:center">
+                  <!-- Add form (opens from the "Add supplement" button, like checks and expenses) -->
+                  <button id="suppAddToggle" type="button" onclick="this.style.display='none';document.getElementById('suppAddForm').style.display='block';document.getElementById('suppAddAmt').focus()" style="display:flex;width:100%;margin-top:9px;padding:8px;border-radius:7px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif"><i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add supplement</button>
+                  <div id="suppAddForm" style="display:none">
+                                    <div style="display:flex;gap:6px;margin-top:9px;align-items:center">
                     <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;gap:3px;width:100px">
                       <span style="font-size:11px;color:var(--muted)">$</span>
                       <input id="suppAddAmt" type="number" step="0.01" min="0" placeholder="0.00" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none">
@@ -6513,7 +6515,11 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     </select>
                   </div>
                   <input id="suppAddNote" type="text" placeholder="Description / note (e.g. gutters, code items)" style="width:100%;margin-top:6px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
-                  <button onclick="suppAdd('${j.id}')" style="width:100%;margin-top:6px;padding:7px;border-radius:6px;border:1px dashed rgba(52,211,153,0.4);background:rgba(52,211,153,0.06);color:#34D399;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px"><i class="ti ti-plus" style="font-size:13px"></i>Add supplement</button>
+                  <div style="display:flex;gap:6px;margin-top:8px">
+                    <button id="suppSaveNew" class="btn-primary" onclick="suppAdd('${j.id}')" style="flex:1;font-size:12px;padding:7px">Add supplement</button>
+                    <button id="suppCancelNew" type="button" class="btn-cancel" onclick="document.getElementById('suppAddForm').style.display='none';document.getElementById('suppAddToggle').style.display='flex'" style="font-size:12px;padding:7px">Cancel</button>
+                  </div>
+                  </div>
                   ${pending?`<div style="font-size:9px;color:#FBBF24;margin-top:8px"><i class="ti ti-clock" style="font-size:10px"></i> A supplement is pending — hold invoice until all are approved or denied.</div>`:(approved>0?`<div style="font-size:9px;color:var(--muted);margin-top:8px">Approved supplements are added to the insurance invoice amount.</div>`:'')}
                 </div>`;
               })()}
@@ -6532,7 +6538,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <!-- Add Deposit button -->
                 <div id="depAddFormWrap" style="margin-top:4px">
                   <button id="depAddToggle" style="width:100%;padding:9px;border-radius:7px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif;transition:border-color 0.12s,background 0.12s" onmouseover="this.style.borderColor='var(--brand-light)';this.style.background='rgba(77,157,224,0.06)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='none'">
-                    <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add Deposit
+                    <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add check
                   </button>
                   <div id="depAddForm" style="display:none;margin-top:8px;padding:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px">
                     <!-- Check photo (saved to the Checks tab and linked to this deposit) -->
@@ -6564,7 +6570,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                       </div>
                     </div>
                     <div style="display:flex;gap:6px">
-                      <button id="depSaveNew" class="btn-primary" style="flex:1;font-size:12px;padding:7px">Add Deposit</button>
+                      <button id="depSaveNew" class="btn-primary" style="flex:1;font-size:12px;padding:7px">Add check</button>
                       <button id="depCancelNew" class="btn-cancel" style="font-size:12px;padding:7px">Cancel</button>
                     </div>
                   </div>
