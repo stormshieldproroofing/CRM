@@ -325,12 +325,18 @@ html.ui-new body:has(.ph-overlay.open) .rd-tabbar{display:none}
    Job screen clean-up (redesign-job.js): header, tabs, ⋯ menu, new Overview
    ========================================================================== */
 /* Header */
-html.ui-new .rd-job .dp-name-row{align-items:flex-start;gap:12px}
-html.ui-new .rd-job .dp-title-group{flex-direction:column;align-items:flex-start;gap:8px}
+html.ui-new .rd-job .dp-name-row{align-items:flex-start;gap:12px;position:relative}
+/* Name + address centered */
+html.ui-new .rd-job .dp-title-group{flex-direction:column;align-items:center;text-align:center;gap:8px;flex:1;min-width:0}
 html.ui-new .rd-job .dp-title-group .dp-name{max-width:100%}
+/* Desktop: Edit Job / ⋯ / close sit in the corner so the name is centered on the whole window */
+@media (min-width:761px){
+  html.ui-new .rd-job .dp-name-row > div:last-child{position:absolute;right:0;top:50%;transform:translateY(-50%)}
+  html.ui-new .rd-job .dp-title-group{padding:0 184px}
+}
 html.ui-new .rd-sub{font-size:13px;color:var(--muted);margin-top:-6px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Job header: pipeline + stage centered under the name, tinted in the stage's color */
-html.ui-new .dp-status-group.rd-status-center{display:flex;justify-content:flex-start;flex-wrap:wrap;width:100%;margin:10px 0 2px}
+html.ui-new .dp-status-group.rd-status-center{display:flex;justify-content:center;flex-wrap:wrap;width:100%;margin:10px 0 2px}
 html.ui-new .dp-header-area.rd-tint{background:linear-gradient(180deg,var(--rd-stage-soft),var(--rd-stage-none) 75%),var(--panel);border-top:3px solid var(--rd-stage)}
 html.ui-new .rd-more-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);color:var(--brand);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0}
 html.ui-new .rd-more-btn:hover{background:#1F2533}
