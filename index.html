@@ -5359,7 +5359,8 @@ function renderBoardSalesSummary(){
   };
   // Sales by agent always shows every agent, so everyone can see where they
   // rank — even in one agent's view. The viewed agent is marked "You".
-  const pipelineJobs=jobs.filter(j=>(j.pipeline||'insurance')===currentPipelineId);
+  // Totals cover ALL pipelines, not just the one being viewed.
+  const pipelineJobs=jobs.slice();
   const agentRows=(USERS||[]).map(agent=>{
     const agentJobs=pipelineJobs.filter(j=>j.user===agent.id);
     return {
@@ -5378,16 +5379,16 @@ function renderBoardSalesSummary(){
   const teamView = (typeof canSeeJobDetails === 'function') && !canSeeJobDetails() && !!(window.sb && window.sb.rpc);
   if(teamView){
     const ts = window.__teamSales;
-    const fresh = ts && ts.pipeline === currentPipelineId && (Date.now() - ts.at) < 60000;
+    const fresh = ts && ts.pipeline === '__all' && (Date.now() - ts.at) < 60000;
     if(!fresh && !(ts && ts.loading)){
       window.__teamSales = Object.assign({}, ts || {}, { loading:true });
-      window.sb.rpc('team_sales_by_agent', { p_pipeline: currentPipelineId }).then(({ data, error }) => {
-        window.__teamSales = { pipeline: currentPipelineId, at: Date.now(), rows: error ? null : (data || []), loading:false };
+      window.sb.rpc('team_sales_by_agent', { p_pipeline: null }).then(({ data, error }) => {
+        window.__teamSales = { pipeline: '__all', at: Date.now(), rows: error ? null : (data || []), loading:false };
         if(error) console.warn('team sales totals unavailable', error);
         else if(document.getElementById('summaryPage')?.style.display !== 'none') renderBoardSalesSummary();
-      }).catch(() => { window.__teamSales = { pipeline: currentPipelineId, at: Date.now(), rows: null, loading:false }; });
+      }).catch(() => { window.__teamSales = { pipeline: '__all', at: Date.now(), rows: null, loading:false }; });
     }
-    const rows = (window.__teamSales && window.__teamSales.pipeline === currentPipelineId) ? window.__teamSales.rows : null;
+    const rows = (window.__teamSales && window.__teamSales.pipeline === '__all') ? window.__teamSales.rows : null;
     if(rows && rows.length){
       const meId = window.currentMember && window.currentMember.id;
       agentRows.length = 0;
@@ -5532,7 +5533,7 @@ function renderBoardSalesSummary(){
   const agentsHtml = `
     <section class="sm-panel">
       <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-users"></i>Sales by agent</div>
-      <div class="sm-panel-sub">Signed contracts and total revenue · ${escapeHtml(currentPipeline().name)}</div></div></div>
+      <div class="sm-panel-sub">Signed contracts and total revenue · All pipelines</div></div></div>
       ${agentRows.length ? `<div class="sm-ag-list">${agentRows.map((row,i) => `
         <div class="sm-ag-item">
           <div class="sm-ag-row">
