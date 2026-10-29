@@ -162,8 +162,25 @@
     return need;
   }
 
+  /* ---------------------------------------------------------------- Packet tab: what's still blank */
+  // Per form section, the answers still missing. Only for the "Done / N missing" badges —
+  // signing itself is only blocked by missingForSigning().
+  function sectionMissing(fields) {
+    const f = fields || {};
+    const blank = k => !String(f[k] == null ? '' : f[k]).trim();
+    const out = {
+      client: ['name', 'street', 'city_state', 'zip', 'cell_phone'].filter(blank),
+      project: ['changed_insurance', 'prior_claim', 'other_properties'].filter(q => f[q] !== 'yes' && f[q] !== 'no'),
+      loss: f.roof_wind === true || f.roof_hail === true ? [] : ['roof_loss'],
+      insurance: ['insurance_company', 'policy_number', 'date_of_loss'].filter(blank)
+    };
+    if (f.changed_insurance === 'yes' && blank('prior_insurance')) out.project.push('prior_insurance');
+    if (f.prior_claim === 'yes' && blank('prior_claim_allocated')) out.project.push('prior_claim_allocated');
+    return out;
+  }
+
   const api = { TEMPLATE_URL, PACKET_VERSION, TPA_MIRROR, TEXT_FIELDS, CHECK_FIELDS, YES_NO, KEY_TERMS, CANCEL_BUSINESS_DAYS,
-    splitAddress, addBusinessDays, fmtDate, fmtDateTime, fmtLooseDate, prefillFromJob, pdfValues, missingForSigning };
+    splitAddress, addBusinessDays, fmtDate, fmtDateTime, fmtLooseDate, prefillFromJob, pdfValues, missingForSigning, sectionMissing };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   root.crmPacket = api;
 
@@ -190,10 +207,6 @@
     st.id = 'pk-styles';
     st.textContent = `
 .pk-wrap{padding:4px 2px 40px;color:var(--text)}
-.pk-status{display:flex;align-items:flex-start;gap:12px;background:var(--card,#161B26);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px}
-.pk-status .pk-st-ico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;font-size:18px}
-.pk-status h3{margin:0 0 3px;font-size:15px;color:var(--brand)}
-.pk-status p{margin:0;font-size:12px;color:var(--muted);line-height:1.5}
 .pk-sec{background:var(--card,#161B26);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
 .pk-sec h4{margin:0 0 10px;font-size:12px;letter-spacing:.04em;color:var(--brand);text-transform:uppercase}
 .pk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
@@ -203,44 +216,61 @@
 .pk-fld label{font-size:11px;color:var(--muted);font-weight:600}
 .pk-fld input,.pk-fld select{background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box}
 .pk-fld input:disabled,.pk-fld select:disabled{opacity:.7}
-.pk-card{background:var(--card,#161B26);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
-.pk-hero{display:flex;gap:12px;align-items:flex-start}
-.pk-hero h3{margin:2px 0 3px;font-size:17px;color:var(--text)}
-.pk-hero p{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
-.pk-hero .pk-st-ico{width:40px;height:40px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center}
-.pk-acts3{position:relative;display:flex;gap:8px;margin-top:14px}
-.pk-acts3>.pk-btn{flex:1;justify-content:center;display:inline-flex;align-items:center;gap:7px;min-height:44px}
-.pk-acts3>.pk-moreb{flex:none;width:46px;padding:0}
-.pk-acts3 .pk-btn:disabled{opacity:.5}
-.pk-more{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:240px;background:#1E253A;border:1px solid #33405A;border-radius:12px;box-shadow:0 14px 30px rgba(0,0,0,.5);overflow:hidden}
+.pk-trk{position:relative;background:var(--card,#161B26);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.pk-hd{display:flex;gap:12px;align-items:center}
+.pk-hd-ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
+.pk-hd h3{margin:0;font-size:16px;font-weight:700;color:var(--brand)}
+.pk-hd p{margin:2px 0 0;font-size:12px;color:#8B94A7;line-height:1.4}
+.pk-sa{position:relative;display:flex;justify-content:space-between;margin:16px 0 2px;max-width:640px}
+.pk-sa::before{content:"";position:absolute;left:38px;right:38px;top:10px;height:3px;border-radius:2px;background:#283044}
+.pk-sa-f{position:absolute;left:38px;top:10px;height:3px;border-radius:2px}
+.pk-st{position:relative;width:76px;text-align:center;font-size:12px;color:#8B94A7;line-height:1.3}
+.pk-st i{display:flex;width:23px;height:23px;border-radius:50%;background:#283044;margin:0 auto 6px;align-items:center;justify-content:center;color:#0A0D13;border:3px solid var(--card,#161B26);box-sizing:content-box}
+.pk-st span{display:block}
+.pk-st.d{color:var(--brand)}
+.pk-st small{display:block;font-size:11px;color:#8B94A7;margin-top:1px}
+.pk-acts{position:relative;display:flex;gap:8px;margin-top:14px;max-width:640px}
+.pk-b{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;gap:7px;padding:0 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--brand);font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
+.pk-b:hover{border-color:var(--brand-mid)}
+.pk-b.primary{background:#2F6FEB;border-color:#2F6FEB;color:#fff}
+.pk-b:disabled{opacity:.5;cursor:not-allowed}
+.pk-b.pk-mb{flex:none;width:46px;padding:0}
+.pk-b.pk-mb[aria-expanded="true"]{border-color:#5B7BD6;box-shadow:0 0 0 2px rgba(91,123,214,.25)}
+.pk-more{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:240px;background:#1E253A;border:1px solid #33405A;border-radius:12px;box-shadow:0 14px 30px rgba(0,0,0,.55);overflow:hidden}
 .pk-more[hidden]{display:none}
-.pk-more>button,.pk-more>label{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;min-height:46px;box-sizing:border-box;border:0;border-top:1px solid #2A3346;background:none;color:var(--text);font-family:inherit;font-size:14px;font-weight:500;line-height:1.3;text-align:left;cursor:pointer;margin:0}
+.pk-more>button,.pk-more>label{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;min-height:46px;box-sizing:border-box;border:0;border-top:1px solid #2A3346;background:none;color:var(--brand);font-family:inherit;font-size:14px;font-weight:500;line-height:1.3;text-align:left;cursor:pointer;margin:0}
 .pk-more>:first-child{border-top:0}
 .pk-more>button:hover,.pk-more>label:hover{background:#26304A}
-.pk-more>button:disabled{opacity:.45;cursor:default}
 .pk-more .danger{color:#F87171}
-.pk-rows{padding:2px 14px}
-.pk-drow{border-top:1px solid var(--border)}
-.pk-drow:first-child{border-top:0}
-.pk-drow>summary{display:flex;align-items:center;gap:12px;padding:13px 0;cursor:pointer;list-style:none}
-.pk-drow>summary::-webkit-details-marker{display:none}
-.pk-ri{display:flex;flex:none}
-.pk-rt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.pk-rt b{font-size:14px;font-weight:600;color:var(--text)}
-.pk-rt small{font-size:12px;color:var(--muted);line-height:1.4}
-.pk-chev{color:var(--muted);flex:none;transition:transform .15s}
-.pk-drow[open] .pk-chev{transform:rotate(90deg)}
-.pk-rowbody{padding:0 0 14px}
-.pk-answers .pk-calbtn{display:none}
-.pk-answers .pk-sec{background:none;border:0;padding:8px 0 0;margin:0}
-.pk-tl{position:relative;padding-left:18px;margin:2px 0 10px}
-.pk-tl::before{content:"";position:absolute;left:5px;top:12px;bottom:12px;width:2px;background:var(--border)}
-.pk-tl>div{position:relative;padding:5px 0;font-size:13px;color:var(--text)}
-.pk-tl>div::before{content:"";position:absolute;left:-17px;top:10px;width:8px;height:8px;border-radius:50%;background:#3A4560}
-.pk-tl>div.g::before{background:#34D399}
-.pk-tl small{color:var(--muted);margin-left:4px}
-.pk-kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:13px;color:var(--text)}
-.pk-kv>span{color:var(--muted)}
+.pk-xf{position:relative;display:flex;align-items:center;gap:6px;margin-top:12px;max-width:640px;background:#0F141E;border:1px solid var(--border);border-radius:10px}
+.pk-xf-main{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:9px 12px;background:none;border:0;color:var(--brand);font-family:inherit;text-align:left;cursor:pointer}
+.pk-xf-ico{width:26px;height:32px;border-radius:5px;background:rgba(127,166,245,.14);color:#7FA6F5;font-size:8px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
+.pk-xf-t{min-width:0;display:flex;flex-direction:column}
+.pk-xf-t b{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk-xf-t small{font-size:11px;color:#8B94A7}
+.pk-xf-m{flex:none;width:40px;height:40px;margin-right:4px;border:0;background:none;color:#8B94A7;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px}
+.pk-formbar{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 12px;padding:13px 14px;border:1px solid var(--border);border-radius:11px;background:#141927;color:var(--brand);font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;text-align:left}
+.pk-formbar[aria-expanded="true"]{border-color:#33405A}
+.pk-fb-t{flex:1}
+.pk-fb-c{display:flex;color:#8B94A7;transition:transform .15s}
+.pk-formbar[aria-expanded="true"] .pk-fb-c{transform:rotate(180deg)}
+.pk-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;letter-spacing:0;text-transform:none}
+.pk-badge.ok{background:rgba(52,211,153,.14);color:#34D399}
+.pk-badge.need{background:rgba(242,196,107,.14);color:#F2C46B}
+.pk-badge.lock{background:#1E2538;color:#8B94A7}
+.pk-badge.opt{background:none;color:#5A6580;font-weight:600}
+.pk-sec h4{display:flex;align-items:center;gap:8px}
+.pk-sec h4 .pk-badge{margin-left:auto}
+.pk-fld input.miss,.pk-dt>input.miss{border-color:rgba(242,196,107,.65)}
+.pk-follow{margin:2px 0 6px}
+.pk-follow[hidden]{display:none}
+[data-pkloss].miss .pk-chip[data-pkc="roof_wind"],[data-pkloss].miss .pk-chip[data-pkc="roof_hail"]{border-color:rgba(242,196,107,.65)}
+.pk-seg{display:flex;flex:none;background:#1E253A;border:1px solid var(--border);border-radius:10px;padding:3px}
+.pk-seg.miss{border-color:rgba(242,196,107,.65)}
+.pk-seg button{border:0;background:none;color:#8B94A7;font-family:inherit;font-size:13px;font-weight:600;padding:7px 14px;border-radius:7px;cursor:pointer;min-height:32px}
+.pk-seg button.on{background:#34405C;color:#fff}
+.pk-seg button:disabled{cursor:default}
+.pk-locked .pk-calbtn{display:none}
 .pk-dt{position:relative;display:flex;gap:8px}
 .pk-sec{overflow:visible}
 .pk-dt>input{flex:1}
@@ -285,7 +315,8 @@
 .pk-file .pk-fn{flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--brand);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pk-file button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:6px}
 .pk-note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:8px}
-@media (max-width:640px){.pk-grid,.pk-grid3{grid-template-columns:1fr}.pk-q{flex-wrap:wrap}}
+@media (max-width:640px){.pk-grid:not(.pk-keep2),.pk-grid3{grid-template-columns:1fr}}
+.pk-q>span:first-child{flex:1;min-width:0;line-height:1.35}
 
 /* signing overlay (homeowner mode) — light theme, large targets */
 #pkSign{position:fixed;inset:0;z-index:100000;background:#F6F7F9;color:#141A26;display:flex;flex-direction:column;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
@@ -434,128 +465,189 @@
     });
   }
 
-  /* ---------------------------------------------------------------- signed view */
+  /* ---------------------------------------------------------------- Packet tab: status card */
+  const SVG = (w, body, fill) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="${fill ? 'currentColor' : 'none'}" stroke="${fill ? 'none' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   const ICON = {
-    eye: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>',
-    send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg>',
-    dots: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>',
-    check: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12l3 3 5-6"></path></svg>',
-    list: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"></path></svg>',
-    form: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"></rect><path d="M8 8h8M8 12h8M8 16h5"></path></svg>',
-    file: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path></svg>',
-    chev: '<svg class="pk-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>',
-    refresh: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>',
-    upload: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"></path><path d="M4 20h16"></path></svg>',
-    download: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5"></path><path d="M4 20h16"></path></svg>',
-    trash: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>'
+    pen: SVG(18, '<path d="M4 20h4L19 9l-4-4L4 16z"></path>'),
+    clock: SVG(20, '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>'),
+    check: SVG(20, '<circle cx="12" cy="12" r="9"></circle><path d="M8 12l3 3 5-6"></path>'),
+    tick: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>',
+    sign: SVG(16, '<path d="M4 20h4L19 9l-4-4L4 16z"></path>'),
+    send: SVG(16, '<path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path>'),
+    eye: SVG(16, '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle>'),
+    dots: SVG(18, '<circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle>', true),
+    doc: SVG(16, '<path d="M14 3v4a1 1 0 0 0 1 1h4"></path><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path><path d="M9 13h6M9 17h4"></path>'),
+    caret: SVG(14, '<path d="M6 9l6 6 6-6"></path>'),
+    upload: SVG(16, '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M17 8l-5-5-5 5M12 3v12"></path>'),
+    printer: SVG(16, '<path d="M6 9V3h12v6"></path><rect x="6" y="14" width="12" height="7"></rect><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>'),
+    download: SVG(16, '<path d="M12 4v12M7 11l5 5 5-5"></path><path d="M4 20h16"></path>'),
+    refresh: SVG(16, '<path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path>'),
+    trash: SVG(16, '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path>'),
+    x: SVG(16, '<path d="M6 6l12 12M18 6L6 18"></path>')
   };
-  const METHOD = { remote: 'by text/email link', in_person: 'in person', paper: 'paper copy uploaded' };
-  const signerNames = s => [s.homeowner && s.homeowner.name, s.coowner && s.coowner.name].filter(Boolean).join(' & ');
+  const linkCache = new Map();          // job id -> packet_links rows (newest first); not saved with the job
+  const formOpen = {};                  // job id -> is the answers form expanded
   const shortTime = d => new Date(d).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+  const shortDay = d => new Date(d).toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric' });
 
-  function signedLayout(j, p, files, formHtml) {
-    const s = p.signed || {};
+  // Which saved file is the signed packet; everything else (paper scans, earlier copies) is "extra".
+  function packetFileSplit(j, p) {
+    const all = j.packetFiles || [];
+    let main = -1;
+    if (p.status === 'signed') {
+      const sf = (p.signed && p.signed.file) || null;
+      if (sf) main = all.findIndex(x => (sf.path && x.path === sf.path) || (sf.name && x.name === sf.name));
+      if (main < 0 && all.length) main = all.length - 1;
+    }
+    return { main, extras: all.map((x, i) => ({ x, i })).filter(o => o.i !== main) };
+  }
+
+  // What the status card shows: title, line under it, the Sent / Opened / Signed steps, buttons, ••• menu.
+  function trackState(j, p) {
+    const links = linkCache.get(String(j.id)) || [];
     const f = p.fields || {};
-    const who = signerNames(s);
-    const nFiles = (j.packetFiles || []).length;
-    const ans = ['Locked after signing', f.insurance_company, f.date_of_loss ? 'Loss ' + f.date_of_loss : ''].filter(Boolean).join(' · ');
-    const inPersonBody = s.method === 'in_person'
-      ? signDetailsHtml(s, null) : s.method === 'paper' ? '<p class="pk-note" style="margin:0">Signed on paper; the scan is under Files.</p>' : '<p class="pk-note" style="margin:0">Loading…</p>';
-    return `<div class="pk-wrap">
-      <div class="pk-card">
-        <div class="pk-hero"><div class="pk-st-ico" style="background:rgba(52,211,153,.14);color:#34D399">${ICON.check}</div>
-          <div><h3>Packet signed</h3><p>${s.at ? esc(fmtDateTime(s.at).replace(/, (\d{4}), /, ', $1 · ')) : ''}${who || s.method ? '<br>' : ''}${esc(who)}${who && METHOD[s.method] ? ' · ' : ''}${esc(METHOD[s.method] || '')}</p></div></div>
-        <div class="pk-acts3">
-          <button type="button" class="pk-btn primary" data-pkact="view" ${nFiles ? '' : 'disabled'}>${ICON.eye} View PDF</button>
-          <button type="button" class="pk-btn" data-pkact="send" ${nFiles ? '' : 'disabled'}>${ICON.send} Send copy</button>
-          <button type="button" class="pk-btn pk-moreb" data-pkmore aria-haspopup="menu" aria-expanded="false" aria-label="More actions">${ICON.dots}</button>
-          <div class="pk-more" role="menu" data-pkmorem hidden>
-            <button type="button" role="menuitem" data-pkact="new">${ICON.refresh} Start a new packet</button>
-            <label role="menuitem">${ICON.upload} Upload signed paper copy<input type="file" accept=".pdf,image/*" style="display:none" onchange="crmPacket.uploadPaper('${j.id}', this.files)"></label>
-            <button type="button" role="menuitem" data-pkact="download" ${nFiles ? '' : 'disabled'}>${ICON.download} Download PDF</button>
-            <button type="button" role="menuitem" class="danger" data-pkact="delete" ${nFiles ? '' : 'disabled'}>${ICON.trash} Delete signed PDF…</button>
-          </div>
-        </div>
-      </div>
-      <div class="pk-card pk-rows">
-        <details class="pk-drow"><summary><span class="pk-ri" style="color:#7FA6F5">${ICON.list}</span><span class="pk-rt"><b>Signing details</b><small data-sigsum>${esc(s.method === 'in_person' ? 'Signed in person' + (s.at ? ' · ' + shortTime(s.at) : '') : s.method === 'paper' ? 'Paper copy' : 'Signed by link')}</small></span>${ICON.chev}</summary>
-          <div class="pk-rowbody" data-sigbody>${inPersonBody}</div></details>
-        <details class="pk-drow"><summary><span class="pk-ri" style="color:#7FA6F5">${ICON.form}</span><span class="pk-rt"><b>Packet answers</b><small>${esc(ans)}</small></span>${ICON.chev}</summary>
-          <div class="pk-rowbody pk-answers">${formHtml}</div></details>
-        <details class="pk-drow"><summary><span class="pk-ri" style="color:#F87171">${ICON.file}</span><span class="pk-rt"><b>Files</b><small>${nFiles === 1 ? '1 signed packet (PDF)' : nFiles + ' files'}</small></span>${ICON.chev}</summary>
-          <div class="pk-rowbody">${files ? `<div class="pk-files">${files}</div>` : '<p class="pk-note" style="margin:0">No files.</p>'}</div></details>
-      </div>
-      <div id="pk-links" hidden></div>
-    </div>`;
+    if (p.status === 'signed') {
+      const s = p.signed || {};
+      const names = [s.homeowner && s.homeowner.name, s.coowner && s.coowner.name].filter(Boolean).join(' & ') || f.name || '';
+      const link = s.method === 'remote' ? (links.find(l => l.id === s.linkId) || links.find(l => l.status === 'signed')) : null;
+      const steps = s.method === 'remote'
+        ? [['Sent', link && link.created_at], ['Opened', link && (link.viewed_at || link.signed_at)], ['Signed', s.at]]
+        : s.method === 'paper' ? [['Signed on paper', null], ['Uploaded', s.at]]
+        : [['Filled out', null], ['Signed in person', s.at]];
+      return { kind: 'done', color: '#34D399', bg: 'rgba(52,211,153,.14)', icon: ICON.check, title: 'Packet signed',
+        sub: [names, s.at ? shortDay(s.at) : ''].filter(Boolean).join(' · '), steps: steps.map(x => [x[0], x[1], true]) };
+    }
+    const after = p.restartedAt ? new Date(p.restartedAt) : null;
+    const open = links.find(l => (l.status === 'sent' || l.status === 'viewed') && !(after && new Date(l.created_at) <= after));
+    if (open && new Date(open.expires_at) >= new Date()) {
+      const to = String(open.sent_to || '').split(' / ').filter(Boolean).join(' and ');
+      return { kind: 'wait', link: open, color: '#F2C46B', bg: 'rgba(242,196,107,.14)', icon: ICON.clock, title: 'Waiting for homeowner',
+        sub: [to ? 'Sent to ' + to : 'Link sent', 'link expires ' + shortDay(open.expires_at)].join(' · '),
+        steps: [['Sent', open.created_at, true], ['Opened', open.viewed_at, !!open.viewed_at], ['Signed', null, false]] };
+    }
+    return { kind: 'ready', color: '#7FA6F5', bg: 'rgba(47,111,235,.14)', icon: ICON.pen, title: 'Not signed yet',
+      sub: open ? 'The last link expired ' + shortDay(open.expires_at) + ' — send a new one' : 'Sign in person, or text/email a link',
+      steps: [['Sent', null, false], ['Opened', null, false], ['Signed', null, false]] };
   }
 
-  // Timeline + facts for the "Signing details" row. link = the signed packet_links row (remote), else null.
-  function signDetailsHtml(s, link) {
-    const steps = [];
-    if (link) {
-      steps.push(['Link sent' + (link.created_by ? ' by ' + link.created_by : ''), link.created_at]);
-      if (link.viewed_at) steps.push(['Opened by homeowner', link.viewed_at]);
-      steps.push([(s.emailedTo ? 'Signed & emailed copy' : 'Signed'), link.signed_at || s.at, true]);
+  const menuHtml = (id, items) => `<div class="pk-more" role="menu" data-pkmorem="${id}" hidden>${items.join('')}</div>`;
+  const mItem = (act, icon, label, extra) => `<button type="button" role="menuitem" data-pkact="${act}"${extra || ''}>${icon}<span>${label}</span></button>`;
+  const uploadItem = jobId => `<label role="menuitem">${ICON.upload}<span>Upload signed paper copy</span><input type="file" accept=".pdf,image/*" style="display:none" onchange="crmPacket.uploadPaper('${jobId}', this.files)"></label>`;
+
+  function trackerHtml(j, p) {
+    const t = trackState(j, p);
+    const done = t.steps.filter(x => x[2]).length;
+    const fill = t.steps.length < 2 || done < 2 ? 0 : (done - 1) / (t.steps.length - 1);
+    const steps = `<div class="pk-sa" style="--n:${t.steps.length}"><div class="pk-sa-f" style="background:${t.color};width:calc((100% - 76px) * ${fill})"></div>${t.steps.map(x => `
+      <div class="pk-st${x[2] ? ' d' : ''}"><i style="${x[2] ? 'background:' + t.color : ''}">${x[2] ? ICON.tick : ''}</i><span>${esc(x[0])}</span><small>${x[1] ? esc(shortTime(x[1])) : x[2] ? '&nbsp;' : '—'}</small></div>`).join('')}</div>`;
+    const more = `<button type="button" class="pk-b pk-mb" data-pkmore="trk" aria-haspopup="menu" aria-expanded="false" aria-label="More actions">${ICON.dots}</button>`;
+    const fs = packetFileSplit(j, p);
+    let btns, menu;
+    if (t.kind === 'done') {
+      const has = fs.main >= 0;
+      btns = `<button type="button" class="pk-b primary" data-pkact="view" ${has ? '' : 'disabled'}>${ICON.eye} View PDF</button>
+        <button type="button" class="pk-b" data-pkact="sendcopy" ${has ? '' : 'disabled'}>${ICON.send} Send copy</button>`;
+      menu = [has ? mItem('download', ICON.download, 'Download PDF') : '', uploadItem(j.id), mItem('new', ICON.refresh, 'Start a new packet'),
+        has ? mItem('delete', ICON.trash, 'Delete signed PDF…', ' class="danger"') : ''];
+    } else if (t.kind === 'wait') {
+      btns = `<button type="button" class="pk-b" data-pkact="resend" data-link="${esc(t.link.id)}">${ICON.send} Resend</button>
+        <button type="button" class="pk-b" data-pkact="sign">${ICON.sign} Sign in person</button>`;
+      menu = [mItem('preview', ICON.printer, 'Preview / print'), uploadItem(j.id), mItem('cancel', ICON.x, 'Cancel link', ` class="danger" data-link="${esc(t.link.id)}"`)];
     } else {
-      steps.push(['Signed in person' + (s.rep && s.rep.name ? ' with ' + s.rep.name : ''), s.at, true]);
-      if (s.emailedTo) steps.push(['Copy emailed', s.at]);
+      btns = `<button type="button" class="pk-b primary" data-pkact="sign">${ICON.sign} Sign in person</button>
+        <button type="button" class="pk-b" data-pkact="send">${ICON.send} Send link</button>`;
+      menu = [mItem('preview', ICON.printer, 'Preview / print'), uploadItem(j.id)];
     }
-    const kv = [];
-    if (link && link.sent_to) kv.push(['Sent to', String(link.sent_to).split(' / ').map(esc).join('<br>')]);
-    kv.push(['Method', esc(link ? 'Text/email link, homeowner’s own device' : s.method === 'in_person' ? 'In person' + (s.rep && s.rep.name ? ' on ' + s.rep.name + '’s device' : '') : (METHOD[s.method] || ''))]);
-    if (s.emailedTo) kv.push(['Copy emailed to', esc(s.emailedTo)]);
-    if (s.sha256) kv.push(['Fingerprint', `<span style="color:var(--muted)">${esc(String(s.sha256).slice(0, 12))}…</span>`]);
-    return `<div class="pk-tl">${steps.map(x => `<div class="${x[2] ? 'g' : ''}">${esc(x[0])}${x[1] ? ` <small>${esc(fmtDateTime(x[1]))}</small>` : ''}</div>`).join('')}</div>
-      <div class="pk-kv">${kv.map(x => `<span>${x[0]}</span><div>${x[1]}</div>`).join('')}</div>`;
+    // Extra files (paper scans, copies from an earlier packet) only show when there are some.
+    const extras = fs.extras.map(({ x, i }) => {
+      const ext = (String(x.name || '').match(/\.([a-z0-9]+)$/i) || [])[1] || (x.isPdf ? 'pdf' : 'file');
+      const label = t.kind === 'done' ? 'Paper copy' : 'Earlier signed copy';
+      return `<div class="pk-xf"><button type="button" class="pk-xf-main" data-pkact="fview" data-i="${i}"><span class="pk-xf-ico">${esc(ext.toUpperCase().slice(0, 4))}</span>
+        <span class="pk-xf-t"><b>${esc(x.name || label)}</b><small>${esc([label, x.date].filter(Boolean).join(' · '))}</small></span></button>
+        <button type="button" class="pk-xf-m" data-pkmore="f${i}" aria-haspopup="menu" aria-expanded="false" aria-label="More for ${esc(x.name || 'file')}">${ICON.dots}</button>
+        ${menuHtml('f' + i, [mItem('fview', ICON.eye, 'View', ` data-i="${i}"`), mItem('fdownload', ICON.download, 'Download', ` data-i="${i}"`), mItem('fdelete', ICON.trash, 'Delete…', ` class="danger" data-i="${i}"`)])}</div>`;
+    }).join('');
+    return `<div class="pk-hd"><div class="pk-hd-ico" style="background:${t.bg};color:${t.color}">${t.icon}</div><div><h3>${esc(t.title)}</h3><p>${esc(t.sub)}</p></div></div>
+      ${steps}
+      <div class="pk-acts">${btns}${more}${menuHtml('trk', menu.filter(Boolean))}</div>
+      ${extras}`;
   }
 
-  function latestFile(j) { const a = j.packetFiles || []; return a.length ? { rec: a[a.length - 1], i: a.length - 1 } : null; }
+  function renderTracker(j) {
+    const host = document.getElementById('pk-trk');
+    if (!host || String(host.dataset.job) !== String(j.id)) return;
+    host.innerHTML = trackerHtml(j, ensurePacket(j));
+  }
+
   async function fileBytes(rec) {
-    let url = rec && rec.url;
-    if ((!url || /^blob:/.test(url) === false && !/^https?:/.test(url)) && rec && rec.path && db()) {
-      const { data } = await db().storage.from('job-files').createSignedUrl(rec.path, 600); url = data && data.signedUrl;
-    }
-    let r = url ? await fetch(url) : null;
-    if ((!r || !r.ok) && rec && rec.path && db()) {
+    const fetchOk = async u => { try { const r = await fetch(u); return r.ok ? r : null; } catch (e) { return null; } };
+    let r = rec && rec.url && /^(https?:|blob:|data:)/.test(rec.url) ? await fetchOk(rec.url) : null;
+    if (!r && rec && rec.path && db()) {
       const { data } = await db().storage.from('job-files').createSignedUrl(rec.path, 600);
-      r = data && data.signedUrl ? await fetch(data.signedUrl) : null;
+      if (data && data.signedUrl) r = await fetchOk(data.signedUrl);
     }
-    if (!r || !r.ok) throw new Error('Could not load the PDF');
+    if (!r) throw new Error('Could not load the file');
     return new Uint8Array(await r.arrayBuffer());
   }
 
-  function wireSignedLayout(panel, j) {
-    const p = ensurePacket(j), s = p.signed || {};
-    const menu = panel.querySelector('[data-pkmorem]'), more = panel.querySelector('[data-pkmore]');
-    const closeMore = () => { if (menu) menu.hidden = true; if (more) more.setAttribute('aria-expanded', 'false'); };
-    if (more) more.addEventListener('click', e => { e.stopPropagation(); const open = menu.hidden; menu.hidden = !open; more.setAttribute('aria-expanded', String(open)); });
-    if (!root.__pkMoreWired) {
-      root.__pkMoreWired = true;
-      document.addEventListener('click', e => { if (!e.target.closest('[data-pkmorem],[data-pkmore]')) { const m = document.querySelector('[data-pkmorem]'), b = document.querySelector('[data-pkmore]'); if (m) m.hidden = true; if (b) b.setAttribute('aria-expanded', 'false'); } });
-    }
-    panel.querySelectorAll('[data-pkact]').forEach(b => b.addEventListener('click', async e => {
-      e.stopPropagation(); closeMore();
-      const a = b.dataset.pkact, lf = latestFile(j);
-      if (a === 'new') { startOver(j.id); return; }
-      if (!lf) return;
-      if (a === 'view') { if (typeof root.previewJobFile === 'function') root.previewJobFile('packetFiles', lf.i); return; }
-      if (a === 'delete') { deleteFile(j.id, lf.i); return; }
-      if (a === 'download') {
-        try { say('Preparing PDF…'); downloadBytes(await fileBytes(lf.rec), lf.rec.name || 'Claim Packet (signed).pdf'); }
+  // One click handler for the whole tab (buttons and ••• menus are redrawn, the panel isn't).
+  function wirePanel(panel) {
+    if (panel.__pkWired) return;
+    panel.__pkWired = true;
+    const closeMenus = keep => panel.querySelectorAll('[data-pkmorem]').forEach(m => {
+      if (m === keep) return;
+      m.hidden = true;
+      const b = panel.querySelector(`[data-pkmore="${m.dataset.pkmorem}"]`); if (b) b.setAttribute('aria-expanded', 'false');
+    });
+    document.addEventListener('click', e => { if (!panel.contains(e.target) || !e.target.closest('[data-pkmorem],[data-pkmore]')) closeMenus(); });
+    panel.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
+    panel.addEventListener('click', async e => {
+      const mb = e.target.closest('[data-pkmore]');
+      if (mb) {
+        const m = panel.querySelector(`[data-pkmorem="${mb.dataset.pkmore}"]`); if (!m) return;
+        const open = m.hidden; closeMenus(m); m.hidden = !open; mb.setAttribute('aria-expanded', String(open));
+        return;
+      }
+      const fb = e.target.closest('[data-pkform]');
+      if (fb) {
+        const id = panel.__pkJob, body = panel.querySelector('[data-pkformbody]');
+        formOpen[id] = !(body && !body.hidden);
+        if (body) body.hidden = !formOpen[id];
+        fb.setAttribute('aria-expanded', String(formOpen[id]));
+        return;
+      }
+      const b = e.target.closest('[data-pkact]'); if (!b || b.disabled) return;
+      closeMenus();
+      const j = jobById(panel.__pkJob); if (!j) return;
+      const p = ensurePacket(j), a = b.dataset.pkact, fs = packetFileSplit(j, p);
+      const idx = b.dataset.i != null ? +b.dataset.i : fs.main;
+      const rec = (j.packetFiles || [])[idx];
+      if (a === 'sign') return startSigning(j.id);
+      if (a === 'send') return sendForSignature(j.id);
+      if (a === 'resend') return resendLink(j.id, b.dataset.link);
+      if (a === 'cancel') return voidLink(j.id, b.dataset.link);
+      if (a === 'preview') return preview(j.id);
+      if (a === 'new') return startOver(j.id);
+      if (!rec) return;
+      if (a === 'view' || a === 'fview') { if (typeof root.previewJobFile === 'function') root.previewJobFile('packetFiles', idx); return; }
+      if (a === 'delete' || a === 'fdelete') return deleteFile(j.id, idx);
+      if (a === 'download' || a === 'fdownload') {
+        try { say('Preparing…'); downloadBytes(await fileBytes(rec), rec.name || 'Claim Packet (signed).pdf'); }
         catch (er) { say(er.message || 'Could not download'); }
         return;
       }
-      if (a === 'send') {
-        if (!lf.rec.path) { say('This file isn’t synced yet'); return; }
+      if (a === 'sendcopy') {
+        if (!rec.path) { say('This file isn’t synced yet'); return; }
+        const s = p.signed || {};
         const to = (root.prompt('Email the signed packet to:', (p.fields && p.fields.email) || s.emailedTo || '') || '').trim();
         if (!to) return;
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { say('That email address doesn’t look right'); return; }
         b.disabled = true; say('Sending…');
-        const r = await emailPacket(j, lf.rec.path, to, s.cancelBy);
+        const r = await emailPacket(j, rec.path, to, s.cancelBy);
         b.disabled = false;
         say(r.ok ? 'Sent to ' + to : r.notConfigured ? 'Office email isn’t set up yet' : 'Couldn’t send: ' + (r.error || 'try again'));
       }
-    }));
+    });
   }
 
   /* ---------------------------------------------------------------- Packet tab */
@@ -568,11 +660,13 @@
     const signed = p.status === 'signed';
     const dis = signed ? 'disabled' : '';
     const v = k => esc(f[k] == null ? '' : f[k]);
-    const txt = (k, label, extra) => `<div class="pk-fld${extra && extra.full ? ' full' : ''}"><label for="pk-${k}">${label}</label><input id="pk-${k}" data-pk="${k}" value="${v(k)}" ${extra && extra.type ? 'inputmode="' + extra.type + '"' : ''} ${dis}></div>`;
+    const miss = sectionMissing(f);
+    const badge = sec => signed ? '' : `<span class="pk-badge ${miss[sec].length ? 'need' : 'ok'}" data-pkbadge="${sec}">${miss[sec].length ? miss[sec].length + ' missing' : 'Done'}</span>`;
+    const txt = (k, label, extra) => `<div class="pk-fld${extra && extra.full ? ' full' : ''}"><label for="pk-${k}">${label}</label><input id="pk-${k}" data-pk="${k}" value="${v(k)}" ${extra && extra.type ? 'inputmode="' + extra.type + '"' : ''} ${extra && extra.ph && !signed ? 'placeholder="' + extra.ph + '"' : ''} ${dis}></div>`;
     const chip = (k, label) => `<button type="button" class="pk-chip${f[k] === true ? ' on' : ''}" data-pkc="${k}" aria-pressed="${f[k] === true}" ${dis}>${label}</button>`;
-    const yn = (q, label) => `<div class="pk-q"><span>${label}</span><span class="pk-yn">
-      <button type="button" class="pk-chip${f[q] === 'yes' ? ' on' : ''}" data-pkyn="${q}" data-val="yes" ${dis}>Yes</button>
-      <button type="button" class="pk-chip${f[q] === 'no' ? ' on' : ''}" data-pkyn="${q}" data-val="no" ${dis}>No</button></span></div>`;
+    const yn = (q, label) => `<div class="pk-q"><span>${label}</span><span class="pk-seg" data-pkseg="${q}" role="group" aria-label="${esc(label)}">
+      <button type="button" class="${f[q] === 'yes' ? 'on' : ''}" data-pkyn="${q}" data-val="yes" aria-pressed="${f[q] === 'yes'}" ${dis}>Yes</button>
+      <button type="button" class="${f[q] === 'no' ? 'on' : ''}" data-pkyn="${q}" data-val="no" aria-pressed="${f[q] === 'no'}" ${dis}>No</button></span></div>`;
     // Date fields: type mm/dd/yyyy, or tap the calendar button for a short menu of likely dates
     // (recent storms, Today/Yesterday…) ending in "Pick from calendar…" (the phone's own picker).
     const CAL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>';
@@ -595,84 +689,77 @@
     };
     const item = (k, label, unit) => `<div class="pk-item"><label><input type="checkbox" data-pkcb="${k}" ${f[k] === true ? 'checked' : ''} ${dis}>${label}</label>${unit !== null ? `<input type="text" aria-label="${label} ${unit || 'details'}" placeholder="${unit || ''}" data-pk="${k}_detail" value="${v(k + '_detail')}" ${dis}>` : ''}</div>`;
 
-    let status = '';
-    if (signed) {
-      // signed layout is built below (summary card + collapsible rows)
-    } else {
-      const miss = missingForSigning(f);
-      status = `<div class="pk-status"><div class="pk-st-ico" style="background:rgba(242,196,107,.15);color:#F2C46B"><i class="ti ti-file-certificate"></i></div><div>
-        <h3>Claim Packet — not signed yet</h3>
-        <p>Contingency Agreement (front) + Third-Party Authorization (back). Filled from this job — finish the rest, then have the homeowner sign.${miss.length ? ` <b style="color:#F2C46B">Still needed: ${esc(miss.join(', '))}.</b>` : ''}</p></div></div>`;
-    }
-
-    const files = (j.packetFiles || []).map((x, i) => `<div class="pk-file"><i class="ti ti-file-type-pdf" style="color:#F87171;font-size:18px"></i>
-      <span class="pk-fn">${esc(x.name || 'Claim packet')}</span>
-      <button type="button" onclick="previewJobFile('packetFiles',${i})"><i class="ti ti-eye"></i> View</button>
-      <button type="button" onclick="crmPacket.deleteFile('${j.id}',${i})" aria-label="Delete file"><i class="ti ti-trash"></i></button></div>`).join('');
-
     const formHtml = `
-      <div class="pk-sec"><h4>Client</h4><div class="pk-grid">
+      <div class="pk-sec"><h4>Client${badge('client')}</h4><div class="pk-grid pk-keep2">
         ${txt('name', 'Owner name(s)', { full: true })}
         ${txt('street', 'Street', { full: true })}
         ${txt('city_state', 'City, State')}${txt('zip', 'Zip', { type: 'numeric' })}
-        ${txt('cell_phone', 'Cell', { type: 'tel' })}${txt('home_phone', 'Home phone', { type: 'tel' })}
+        ${txt('cell_phone', 'Cell', { type: 'tel' })}${txt('home_phone', 'Home phone', { type: 'tel', ph: 'Optional' })}
         ${txt('email', 'E-mail', { full: true, type: 'email' })}
       </div></div>
 
-      <div class="pk-sec"><h4>Project information</h4>
+      <div class="pk-sec"><h4>Project information${badge('project')}</h4>
         ${yn('changed_insurance', 'Changed insurance companies in the last 12 months?')}
-        <div class="pk-grid" style="margin:6px 0 4px">${txt('prior_insurance', 'Prior insurance co.', { full: true })}</div>
+        <div class="pk-grid pk-follow" data-pkfollow="changed_insurance" ${f.changed_insurance === 'yes' ? '' : 'hidden'}>${txt('prior_insurance', 'Prior insurance co.', { full: true })}</div>
         ${yn('prior_claim', 'Ever paid by homeowner’s insurance, or a claim under the deductible?')}
-        <div class="pk-grid" style="margin:6px 0 4px">${txt('prior_claim_allocated', 'List what was allocated', { full: true })}</div>
+        <div class="pk-grid pk-follow" data-pkfollow="prior_claim" ${f.prior_claim === 'yes' ? '' : 'hidden'}>${txt('prior_claim_allocated', 'List what was allocated', { full: true })}</div>
         ${yn('other_properties', 'Own any other residential properties?')}
-        <div class="pk-grid" style="margin-top:8px">${txt('hoa_company', 'HOA management company', { full: true })}${txt('pa_name', 'Public adjuster', { full: true })}</div>
+        <div class="pk-grid" style="margin-top:10px">${txt('hoa_company', 'HOA management company', { full: true, ph: 'Optional' })}${txt('pa_name', 'Public adjuster', { full: true, ph: 'Optional' })}</div>
       </div>
 
-      <div class="pk-sec"><h4>Type of loss — roof</h4>
+      <div class="pk-sec"><h4>Type of loss — roof${badge('loss')}</h4><div data-pkloss>
         <div class="pk-row"><span class="pk-lbl">Wind</span>${chip('roof_wind', 'Wind damage')}${chip('wind_slope_north', 'N')}${chip('wind_slope_south', 'S')}${chip('wind_slope_east', 'E')}${chip('wind_slope_west', 'W')}</div>
         <div class="pk-row"><span class="pk-lbl">Hail</span>${chip('roof_hail', 'Hail damage')}${chip('hail_slope_north', 'N')}${chip('hail_slope_south', 'S')}${chip('hail_slope_east', 'E')}${chip('hail_slope_west', 'W')}</div>
-      </div>
+      </div></div>
 
-      <div class="pk-sec"><h4>Exterior</h4>
+      <div class="pk-sec"><h4>Exterior<span class="pk-badge opt">Optional</span></h4>
         ${item('ext_ac_units', 'Comb. AC units', 'Qty.')}${item('ext_window_beads', 'Window beads', 'Qty.')}
         ${item('ext_window_screens', 'Window screens', 'Qty.')}${item('ext_gutters', 'Gutters', 'Type')}
         ${item('ext_fence', 'Fence', 'LF')}${item('ext_other', 'Other', 'Describe')}
       </div>
-      <div class="pk-sec"><h4>Interior</h4>
+      <div class="pk-sec"><h4>Interior<span class="pk-badge opt">Optional</span></h4>
         ${item('int_ceiling_stains', 'Ceiling stains', '# rooms')}${item('int_sheetrock', 'Sheetrock damage', '# rooms')}${item('int_other', 'Other', 'Describe')}
       </div>
 
-      <div class="pk-sec"><h4>Insurance &amp; claim</h4><div class="pk-grid">
+      <div class="pk-sec"><h4>Insurance &amp; claim${badge('insurance')}</h4><div class="pk-grid">
         ${txt('insurance_company', 'Insurance company')}${txt('policy_number', 'Policy #')}
-        ${txt('claim_number', 'Claim #')}${dateFld('date_of_loss', 'Date of loss', { chips: stormChips(), head: stormChips().length ? 'Recent storms' : '' })}
+        ${txt('claim_number', 'Claim #', { ph: 'Can be left blank' })}${dateFld('date_of_loss', 'Date of loss', { chips: stormChips(), head: stormChips().length ? 'Recent storms' : '' })}
         ${dateFld('date_claim_filed', 'Date claim filed', { chips: [['today', 'Today'], ['yesterday', 'Yesterday'], ['text:Not filed yet', 'Not filed yet']] })}
-        ${dateFld('appointment', 'Adjuster appointment', { time: true, chips: [['tmr:9:00 AM', 'Tomorrow \u00b7 9:00 AM'], ['tmr:1:00 PM', 'Tomorrow \u00b7 1:00 PM']] })}
+        ${dateFld('appointment', 'Adjuster appointment', { time: true, chips: [['tmr:9:00 AM', 'Tomorrow · 9:00 AM'], ['tmr:1:00 PM', 'Tomorrow · 1:00 PM']] })}
         ${txt('adjuster', 'Adjuster')}${txt('adjuster_phone', 'Adjuster phone', { type: 'tel' })}
         ${txt('deductible', 'Deductible ($)', { type: 'decimal' })}
         <div class="pk-fld"><label>Policy type</label><div class="pk-yn">${chip('policy_acv', 'ACV')}${chip('policy_rcv', 'RCV')}</div></div>
         <div class="pk-fld"><label>Mortgage</label><div class="pk-yn">${chip('existing_mortgage', 'Existing mortgage')}${chip('own_outright', 'Own')}</div></div>
         ${txt('mortgage_company', 'Mortgage company')}
-      </div>
-      ${signed ? '' : '<p class="pk-note">Answers save automatically. Claim # can be left blank and added later on paper.</p>'}</div>`;
-    panel.innerHTML = signed ? signedLayout(j, p, files, formHtml) : `<div class="pk-wrap">
-      ${status}
-      <div class="pk-actions" style="margin-bottom:14px">
-        ${signed ? `<button type="button" class="pk-btn" onclick="crmPacket.startOver('${j.id}')"><i class="ti ti-refresh"></i> Start a new packet</button>`
-          : `<button type="button" class="pk-btn primary" onclick="crmPacket.startSigning('${j.id}')"><i class="ti ti-signature"></i> Sign in person</button>
-             <button type="button" class="pk-btn primary" onclick="crmPacket.sendForSignature('${j.id}')"><i class="ti ti-send"></i> Send for signature</button>
-             <button type="button" class="pk-btn" onclick="crmPacket.preview('${j.id}')"><i class="ti ti-printer"></i> Preview / print</button>`}
-        <label class="pk-btn" style="margin:0"><i class="ti ti-upload"></i> Upload signed paper copy
-          <input type="file" accept=".pdf,image/*" style="display:none" onchange="crmPacket.uploadPaper('${j.id}', this.files)"></label>
-      </div>
-      ${files ? `<div class="pk-sec"><h4>Signed packets</h4><div class="pk-files">${files}</div></div>` : ''}
-      <div id="pk-links"></div>
+      </div></div>
+      ${signed ? '' : '<p class="pk-note">Answers save automatically.</p>'}`;
 
-      ${formHtml}
+    const total = Object.values(miss).reduce((n, a) => n + a.length, 0);
+    const isOpen = formOpen[j.id] !== undefined ? formOpen[j.id] : !signed;
+    panel.__pkJob = j.id;
+    panel.innerHTML = `<div class="pk-wrap${signed ? ' pk-locked' : ''}">
+      <div class="pk-trk" id="pk-trk" data-job="${esc(j.id)}">${trackerHtml(j, p)}</div>
+      <button type="button" class="pk-formbar" data-pkform aria-expanded="${isOpen}">${ICON.doc}<span class="pk-fb-t">${signed ? 'Authorization answers' : 'Fill out authorization'}</span>
+        ${signed ? '<span class="pk-badge lock">Locked</span>' : `<span class="pk-badge ${total ? 'need' : 'ok'}" data-pktotal>${total ? total + ' missing' : 'All filled'}</span>`}
+        <span class="pk-fb-c">${ICON.caret}</span></button>
+      <div data-pkformbody ${isOpen ? '' : 'hidden'}>${formHtml}</div>
     </div>`;
 
+    wirePanel(panel);
     renderLinks(j).catch(e => console.warn('[packet] links', e));
-    if (signed) { wireSignedLayout(panel, j); return; }
-    const persist = () => { p.updatedAt = new Date().toISOString(); save(); };
+    if (signed) return;
+    const persist = () => { p.updatedAt = new Date().toISOString(); save(); refreshMissing(); };
+    // Badges + amber outlines follow the answers as they're typed.
+    const refreshMissing = () => {
+      const m = sectionMissing(f), all = [].concat(...Object.values(m));
+      Object.keys(m).forEach(sec => { const b = panel.querySelector(`[data-pkbadge="${sec}"]`); if (b) { b.className = 'pk-badge ' + (m[sec].length ? 'need' : 'ok'); b.textContent = m[sec].length ? m[sec].length + ' missing' : 'Done'; } });
+      const t = panel.querySelector('[data-pktotal]'); if (t) { t.className = 'pk-badge ' + (all.length ? 'need' : 'ok'); t.textContent = all.length ? all.length + ' missing' : 'All filled'; }
+      panel.querySelectorAll('[data-pk]').forEach(el => el.classList.toggle('miss', all.indexOf(el.dataset.pk) >= 0));
+      panel.querySelectorAll('[data-pkseg]').forEach(el => el.classList.toggle('miss', all.indexOf(el.dataset.pkseg) >= 0));
+      const loss = panel.querySelector('[data-pkloss]'); if (loss) loss.classList.toggle('miss', m.loss.length > 0);
+      panel.querySelectorAll('[data-pkfollow]').forEach(el => { el.hidden = f[el.dataset.pkfollow] !== 'yes'; });
+    };
+    refreshMissing();
     panel.querySelectorAll('[data-pk]').forEach(el => el.addEventListener('input', () => { f[el.dataset.pk] = el.value; persist(); }));
     // Date menus: calendar button opens a short list; picking anything fills mm/dd/yyyy text.
     const closeMenus = except => panel.querySelectorAll('[data-pkdd]').forEach(dd => {
@@ -733,7 +820,7 @@
     panel.querySelectorAll('[data-pkyn]').forEach(el => el.addEventListener('click', () => {
       const q = el.dataset.pkyn, val = el.dataset.val;
       f[q] = f[q] === val ? '' : val;
-      panel.querySelectorAll(`[data-pkyn="${q}"]`).forEach(b => b.classList.toggle('on', f[q] === b.dataset.val));
+      panel.querySelectorAll(`[data-pkyn="${q}"]`).forEach(b => { b.classList.toggle('on', f[q] === b.dataset.val); b.setAttribute('aria-pressed', String(f[q] === b.dataset.val)); });
       persist();
     }));
   }
@@ -1692,44 +1779,12 @@
     return changed;
   }
 
-  function linkStatus(l) {
-    const expired = l.status !== 'signed' && l.status !== 'void' && new Date(l.expires_at) < new Date();
-    if (l.status === 'signed') return ['Signed ' + fmtDateTime(l.signed_at), '#34D399'];
-    if (l.status === 'void') return ['Cancelled', '#8B94A7'];
-    if (expired) return ['Expired', '#8B94A7'];
-    if (l.viewed_at) return ['Opened ' + fmtDateTime(l.viewed_at), '#F2C46B'];
-    return ['Sent ' + fmtDateTime(l.created_at) + ' — not opened yet', '#9DB8F5'];
-  }
-
+  // Load this job's signing links, pick up a remote signature, then redraw the status card.
   async function renderLinks(j) {
-    const host = document.getElementById('pk-links'); if (!host) return;
     const links = await loadLinks(j);
+    linkCache.set(String(j.id), links);
     if (await reconcile(j, links)) { rerender(); return; }
-    const pk = ensurePacket(j);
-    if (pk.status === 'signed') {
-      // Signed: the links list is folded into the "Signing details" row.
-      host.innerHTML = '';
-      const sl = links.find(l => l.status === 'signed');
-      const body = document.querySelector('[data-sigbody]'), sum = document.querySelector('[data-sigsum]');
-      if (sl && body) {
-        body.innerHTML = signDetailsHtml(pk.signed || {}, sl);
-        if (sum) sum.textContent = ['Sent ' + shortTime(sl.created_at), sl.viewed_at ? 'Opened ' + shortTime(sl.viewed_at) : '', 'Signed ' + shortTime(sl.signed_at || pk.signed.at)].filter(Boolean).join(' \u00b7 ');
-      } else if (body && pk.signed && pk.signed.method === 'remote') body.innerHTML = signDetailsHtml(pk.signed, null);
-      return;
-    }
-    if (!links.length) { host.innerHTML = ''; return; }
-    // Resend only while the packet is unsigned, on the newest unsigned link.
-    const canResendId = ensurePacket(j).status !== 'signed' && !links.some(l => l.status === 'signed')
-      ? (links.find(l => l.status !== 'void') || {}).id : null;
-    host.innerHTML = `<div class="pk-sec"><h4>Signing links</h4><div class="pk-files">${links.map(l => {
-      const canResend = l.id === canResendId;
-      const [txt, color] = linkStatus(l);
-      const live = l.status !== 'signed' && l.status !== 'void' && new Date(l.expires_at) >= new Date();
-      return `<div class="pk-file"><span style="width:9px;height:9px;border-radius:50%;background:${color};flex:none"></span>
-        <span class="pk-fn" style="font-weight:500;color:var(--text);white-space:normal;overflow:visible;line-height:1.4">${esc(txt)}${l.sent_to ? ' · ' + esc(l.sent_to) : ''}</span>
-        ${canResend && l.status !== 'signed' && l.status !== 'void' ? `<button type="button" onclick="crmPacket.resendLink('${j.id}','${l.id}')">Resend</button>` : ''}
-        ${live ? `<button type="button" onclick="crmPacket.voidLink('${j.id}','${l.id}')">Cancel link</button>` : ''}</div>`;
-    }).join('')}</div><p class="pk-note">A link carries the answers as they were when it was sent. Links expire after ${LINK_DAYS} days. For security a link can't be shown again — tap Resend to send a fresh one (the old one stops working).</p></div>`;
+    renderTracker(j);
   }
 
   async function voidLink(jobId, linkId) {
@@ -1929,5 +1984,5 @@
   }
 
   Object.assign(api, { renderPacketTab, startSigning, preview, uploadPaper, deleteFile, startOver, buildPdf, addAuditPage,
-    finalizeSigned, openSigningFlow, signDetailsHtml, setTemplateBytes, templateSpots, sendForSignature, resendLink, voidLink, renderLinks, sha256Hex, CONSENT });
+    finalizeSigned, openSigningFlow, setTemplateBytes, templateSpots, sendForSignature, resendLink, voidLink, renderLinks, sha256Hex, CONSENT });
 })(typeof window !== 'undefined' ? window : globalThis);
