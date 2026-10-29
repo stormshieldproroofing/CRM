@@ -1209,6 +1209,8 @@ function __userIsBusyEditing(){
   if (openForm) return true;
   // Invoice import preview is showing.
   if (document.getElementById('abcConfirm')) return true;
+  // A Packet tab menu (date choices, •••) or the signing / PDF screens are open.
+  if (document.querySelector('.pk-dd:not([hidden]), .pk-more:not([hidden]), #pkSign, #pkView')) return true;
   return false;
 }
 
