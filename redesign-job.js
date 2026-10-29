@@ -693,6 +693,20 @@
 
     // 2. Customer & claim (Save to phone contacts is the green icon on the name row)
     const cust = section(ov, 'Customer & claim');
+    // "Save to contacts" sits on the title line, right-aligned
+    if (typeof saveJobContactToPhone === 'function') {
+      const t = cust.querySelector('.rd-sec-title');
+      const head = document.createElement('div');
+      head.className = 'rd-sec-head';
+      cust.insertBefore(head, t);
+      head.appendChild(t);
+      const sv = document.createElement('button');
+      sv.type = 'button';
+      sv.className = 'rd-sec-save';
+      sv.innerHTML = ICON('ti-user-plus') + '<span>Save to contacts</span>';
+      sv.addEventListener('click', e => { e.stopPropagation(); saveJobContactToPhone(j.id); });
+      head.appendChild(sv);
+    }
     if (contact) cust.appendChild(contact);
 
     // 3. Next step

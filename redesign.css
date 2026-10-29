@@ -378,6 +378,11 @@ html.ui-new .rd-menu-cancel{height:50px;margin-top:8px;border-radius:14px;border
 html.ui-new .rd-ov{display:flex;flex-direction:column;gap:22px}
 html.ui-new .rd-sec{display:flex;flex-direction:column;gap:10px;min-width:0}
 html.ui-new .rd-sec-title{margin:0;padding:0 2px;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+html.ui-new .rd-sec-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+html.ui-new .rd-sec-save{flex-shrink:0;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:1px solid rgba(52,211,153,0.3);border-radius:6px;background:transparent;color:#34D399;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;position:relative}
+html.ui-new .rd-sec-save i{font-size:13px}
+html.ui-new .rd-sec-save:hover{background:rgba(52,211,153,0.10)}
+html.ui-new .rd-sec-save::after{content:'';position:absolute;inset:-10px -4px}
 html.ui-new .rd-sec > .dp-card,html.ui-new .rd-sec > .accordion,html.ui-new .rd-sec > .checklist-box,
 html.ui-new .rd-tools-body > *{margin:0!important}
 html.ui-new .rd-hidden{display:none!important}
