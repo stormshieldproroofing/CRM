@@ -98,4 +98,17 @@ test('every field the packet writes exists in the PDF template', () => {
   assert.deepStrictEqual(missing, []);
 });
 
+test('sectionMissing counts blanks per section and follow-ups only when Yes', () => {
+  const empty = pk.sectionMissing({});
+  assert.deepStrictEqual(empty.client, ['name', 'street', 'city_state', 'zip', 'cell_phone']);
+  assert.strictEqual(empty.project.length, 3);
+  assert.deepStrictEqual(empty.loss, ['roof_loss']);
+  const f = { name: 'A', street: 'B', city_state: 'C', zip: '1', cell_phone: '2', changed_insurance: 'yes', prior_claim: 'no', other_properties: 'no',
+    roof_hail: true, insurance_company: 'SF', policy_number: '9', date_of_loss: '09/18/2026' };
+  const m = pk.sectionMissing(f);
+  assert.deepStrictEqual(m, { client: [], project: ['prior_insurance'], loss: [], insurance: [] });
+  f.prior_insurance = 'Allstate';
+  assert.deepStrictEqual(pk.sectionMissing(f).project, []);
+});
+
 console.log(passed + ' passed');
