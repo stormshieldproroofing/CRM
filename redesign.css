@@ -334,6 +334,8 @@ html.ui-new .rd-job .dp-title-group .dp-name{max-width:100%}
 @media (min-width:761px){
   html.ui-new .rd-job .dp-name-row > div:last-child{position:absolute;right:0;top:50%;transform:translateY(-50%)}
   html.ui-new .rd-job .dp-title-group{padding:0 184px}
+  /* close matches the ⋯ button next to it */
+  html.ui-new .rd-job #dpClose{background:var(--panel-2);border-color:var(--line);color:var(--brand)}
 }
 html.ui-new .rd-sub{font-size:13px;color:var(--muted);margin-top:-6px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Job header: pipeline + stage centered under the name, tinted in the stage's color */
@@ -432,11 +434,12 @@ html.ui-new .rd-actionbar #dpMove i{font-size:18px}
   html.ui-new .detail-overlay:has(.rd-job){padding:0!important}
   html.ui-new .detail-panel.rd-job{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;border:none}
   html.ui-new .rd-job .dp-header-area{border-radius:0;padding:10px 12px 0}
-  html.ui-new .rd-job .dp-name-row{align-items:flex-start;gap:6px;padding-top:4px}
+  html.ui-new .rd-job .dp-name-row{align-items:center;gap:6px;padding-top:4px}
   html.ui-new .rd-job .dp-name-row > div:last-child{display:contents!important}
-  html.ui-new .rd-job #dpClose{order:-1;width:44px;height:44px;margin:-6px 0 0 -6px;border:none;background:transparent;color:var(--text-2);font-size:24px}
+  /* Close and ⋯ match: same 44px rounded square, level with the name + address */
+  html.ui-new .rd-job #dpClose{order:-1;width:44px;height:44px;margin:0;border:1px solid var(--line);background:var(--panel-2);border-radius:12px;color:var(--brand);font-size:20px;flex-shrink:0}
   html.ui-new .rd-job .dp-title-group{order:0;flex:1;min-width:0}
-  html.ui-new .rd-job .rd-more-btn{order:1;width:44px;height:44px;border-radius:12px}
+  html.ui-new .rd-job .rd-more-btn{order:1;width:44px;height:44px;border-radius:12px;font-size:20px}
   html.ui-new .rd-job #dpEdit{display:none}
   html.ui-new .rd-job .dp-name{font-size:20px}
   html.ui-new .rd-job .dp-status-group.rd-status-center{margin:12px 0 2px;justify-content:center}
