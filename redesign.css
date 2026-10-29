@@ -817,3 +817,5 @@ html.ui-new .rd-fin-item.net .rd-fin-item.nested .rd-fin-v{font-size:13px}
 html.ui-new .rd-fin-cat{font-size:13px}
 html.ui-new .rd-stmt-row{min-height:36px;font-size:13px}
 html.ui-new .rd-stmt-row.total{min-height:40px;font-size:13px}
+/* Commission amount in sky blue (same as "Commission YTD" on the Summary page) */
+html.ui-new .rd-fin-item.comm > .rd-fin-row .rd-fin-v:not(.zero){color:#60C4FF;font-weight:700}
