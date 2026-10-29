@@ -725,7 +725,7 @@
         ${txt('insurance_company', 'Insurance company')}${txt('policy_number', 'Policy #')}
         ${txt('claim_number', 'Claim #', { ph: 'Can be left blank' })}${dateFld('date_of_loss', 'Date of loss', { chips: stormChips(), head: stormChips().length ? 'Recent storms' : '' })}
         ${dateFld('date_claim_filed', 'Date claim filed', { chips: [['today', 'Today'], ['yesterday', 'Yesterday'], ['text:Not filed yet', 'Not filed yet']] })}
-        ${dateFld('appointment', 'Adjuster appointment', { time: true, chips: [['tmr:9:00 AM', 'Tomorrow · 9:00 AM'], ['tmr:1:00 PM', 'Tomorrow · 1:00 PM']] })}
+        ${dateFld('appointment', 'Adjuster appointment', { time: true, chips: [['tmr:9:00 AM', 'Tomorrow · 9:00 AM'], ['tmr:1:00 PM', 'Tomorrow · 1:00 PM'], ['text:TBD', 'TBD']] })}
         ${txt('adjuster', 'Adjuster')}${txt('adjuster_phone', 'Adjuster phone', { type: 'tel' })}
         ${txt('deductible', 'Deductible ($)', { type: 'decimal' })}
         <div class="pk-fld"><label>Policy type</label><div class="pk-yn">${chip('policy_acv', 'ACV')}${chip('policy_rcv', 'RCV')}</div></div>
@@ -782,11 +782,15 @@
     }));
     panel.querySelectorAll('[data-pkn]').forEach(nv => {
       nv.addEventListener('click', e => { e.stopPropagation(); try { if (nv.showPicker) nv.showPicker(); } catch (er) { /* phones open it natively */ } });
+      // Date + time: phones fill in a value as soon as the picker opens and update it as the
+      // wheels move, so keep the menu (and the picker) open until the picker is dismissed.
+      const withTime = nv.type === 'datetime-local';
       nv.addEventListener('change', () => {
         const out = fromNative(nv.value);
         if (out) setDate(nv.dataset.pkn, out);
-        closeMenus();
+        if (!withTime) closeMenus();
       });
+      if (withTime) nv.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== nv) closeMenus(); }, 150));
     });
     panel.querySelectorAll('[data-pkd]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
@@ -797,7 +801,7 @@
     // tap anywhere else (or Escape) closes an open menu
     if (!panel.__pkDdWired) {
       panel.__pkDdWired = true;
-      panel.addEventListener('click', e => { if (!e.target.closest('.pk-dd')) panel.querySelectorAll('[data-pkdd]:not([hidden])').forEach(dd => { dd.hidden = true; const b = panel.querySelector(`[data-pkmenu="${dd.dataset.pkdd}"]`); if (b) b.setAttribute('aria-expanded', 'false'); }); });
+      document.addEventListener('click', e => { if (!e.target.closest('.pk-dd') && !e.target.closest('[data-pkmenu]')) panel.querySelectorAll('[data-pkdd]:not([hidden])').forEach(dd => { dd.hidden = true; const b = panel.querySelector(`[data-pkmenu="${dd.dataset.pkdd}"]`); if (b) b.setAttribute('aria-expanded', 'false'); }); });
       panel.addEventListener('keydown', e => { if (e.key === 'Escape') panel.querySelectorAll('[data-pkdd]:not([hidden])').forEach(dd => { dd.hidden = true; const b = panel.querySelector(`[data-pkmenu="${dd.dataset.pkdd}"]`); if (b) { b.setAttribute('aria-expanded', 'false'); b.focus(); } }); });
     }
     const markChips = k => panel.querySelectorAll(`[data-pkd="${k}"]`).forEach(b => b.classList.toggle('on', chipValue(b.dataset.v) === f[k]));
