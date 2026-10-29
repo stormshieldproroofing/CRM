@@ -197,9 +197,6 @@ button.cc-copy{background:none;border:0;border-radius:8px;color:var(--muted);cur
 button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,224,0.12)}
 .cc-plain{background:none;border:0;padding:0;text-align:left;cursor:pointer;font-family:inherit}
 .cc-sep{height:1px;background:rgba(255,255,255,0.06);margin:6px 8px 6px 0}
-.cc-savebar{display:flex;align-items:center;justify-content:center;gap:7px;width:calc(100% - 8px);min-height:40px;margin:0 0 2px;border:0;border-radius:10px;background:transparent;color:#34D399;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-.cc-savebar i{font-size:16px}
-.cc-savebar:hover{background:rgba(52,211,153,0.10)}
 .meta-table{width:100%;font-size:12px;border-collapse:collapse}
 .meta-table td{padding:6px 0;border-bottom:1px solid var(--border);vertical-align:middle}
 .meta-table tr:last-child td{border-bottom:none}
@@ -634,9 +631,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=36">'
+    +'<link rel="stylesheet" href="redesign.css?v=37">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=16"><\/script>');
+    +'<script src="redesign-job.js?v=17"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -6262,8 +6259,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <div class="cc-sep"></div>
             <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum) ? `${(()=>{const h=(typeof carrierClaimsHref==='function')?carrierClaimsHref(j.carrier):'';return h?`<a class="cc-val" href="${h}" title="Call claims line"><strong>${escapeHtml(j.carrier||'')}</strong>${j.claimNum?`<span class="cc-mute">${j.carrier?' · ':''}#${escapeHtml(j.claimNum)}</span>`:''}</a>`:`<button type="button" class="cc-val cc-plain" title="Add the carrier's claims phone" onclick="openEditJob('${j.id}')"><strong>${escapeHtml(j.carrier||'')}</strong>${j.claimNum?`<span class="cc-mute">${j.carrier?' · ':''}#${escapeHtml(j.claimNum)}</span>`:''}</button>`;})()}${j.claimNum?`<button type="button" class="cc-copy" aria-label="Copy claim #" title="Copy claim #" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"><i class="ti ti-copy" aria-hidden="true"></i></button>`:'<span class="cc-copy"></span>'}` : `<button type="button" class="cc-val cc-add" onclick="openEditJob('${j.id}')">Add insurance info</button><span class="cc-copy"></span>`}</div>
             ${(j.adjName||j.adjPhone)?`<div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6"/><circle cx="18" cy="17" r="3"/></svg><span class="cc-val">${j.adjName?`<strong>${escapeHtml(j.adjName)}</strong>`:'<span class="cc-mute">Adjuster</span>'}${j.adjName&&j.adjPhone?'<span class="cc-mute"> · </span>':''}${j.adjPhone?`<a href="${adjusterTelHref(j.adjPhone)}">${escapeHtml(formatAdjusterPhone(j.adjPhone))}</a>`:''}</span>${j.adjPhone?`<button type="button" class="cc-copy" aria-label="Copy adjuster phone" title="Copy adjuster phone" onclick="copyToClipboard(${JSON.stringify(j.adjPhone||'').replace(/"/g,'&quot;')}, 'Adjuster phone')"><i class="ti ti-copy" aria-hidden="true"></i></button>`:'<span class="cc-copy"></span>'}</div>`:''}
-            <div class="cc-sep"></div>
-            <button type="button" class="cc-savebar" onclick="saveJobContactToPhone('${j.id}')"><i class="ti ti-user-plus" aria-hidden="true"></i>Save to contacts</button>
           </div>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
             <button onclick="textLeadWithCard('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(77,157,224,0.14);border:1px solid rgba(77,157,224,0.4);color:var(--brand-light);font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-message-2" style="font-size:15px"></i>Text Lead</button>
