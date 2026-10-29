@@ -804,3 +804,16 @@ html.ui-new #addJobModal .rf-f .addr-autocomplete-wrap{position:relative}
   html.ui-new #addJobModal .rf-top{padding-top:calc(14px + env(safe-area-inset-top))!important}
   html.ui-new #addJobModal .rf-foot{padding-bottom:calc(14px + env(safe-area-inset-bottom))!important}
 }
+
+/* ── Overview type scale: Money + Roof match the Customer & claim card (13px rows) ── */
+html.ui-new .rd-tile-l,html.ui-new .rd-roof-l,html.ui-new .rd-roof-s{font-size:11px}
+html.ui-new .rd-tile-v,html.ui-new .rd-roof-v{font-size:15px}
+html.ui-new .rd-tile,html.ui-new .rd-roof-tile{padding:10px 12px}
+html.ui-new .rd-fin-item .rd-fin-row{min-height:40px;font-size:13px}
+html.ui-new .rd-fin-item.nested > .rd-fin-row{min-height:38px;font-size:13px}
+html.ui-new .rd-fin-item.net > .rd-fin-row{min-height:40px}
+html.ui-new .rd-fin-item.net > .rd-fin-row .rd-fin-v,
+html.ui-new .rd-fin-item.net .rd-fin-item.nested .rd-fin-v{font-size:13px}
+html.ui-new .rd-fin-cat{font-size:13px}
+html.ui-new .rd-stmt-row{min-height:36px;font-size:13px}
+html.ui-new .rd-stmt-row.total{min-height:40px;font-size:13px}
