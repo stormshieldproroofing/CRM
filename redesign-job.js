@@ -676,7 +676,6 @@
     const contact = leftCol.querySelector(':scope > .dp-card');
     const textBtn = q('button[onclick^="textLeadWithCard"]');
     const btnRow = textBtn ? textBtn.parentElement : null;
-    const saveBtn = q('button[onclick^="saveJobContactToPhone"]');
     const logBtn = q('button[onclick^="openLogContact"]');
     const lastContact = logBtn ? logBtn.closest('.dp-card') : null;
     const zoho = q('#zohoSyncBtn') ? q('#zohoSyncBtn').closest('.dp-card') : null;
@@ -692,12 +691,9 @@
     body.insertBefore(ov, body.firstChild);   // in the page from the start, so lookups by id keep working
 
 
-    // 2. Customer & claim (+ Save to phone contacts)
+    // 2. Customer & claim (Save to phone contacts is the green icon on the name row)
     const cust = section(ov, 'Customer & claim');
-    if (contact) {
-      cust.appendChild(contact);
-      if (saveBtn) { saveBtn.classList.add('rd-save-contact'); contact.appendChild(saveBtn); }
-    }
+    if (contact) cust.appendChild(contact);
 
     // 3. Next step
     const next = section(ov, 'Next step');
