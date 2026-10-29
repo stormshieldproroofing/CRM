@@ -187,12 +187,49 @@
     sheetCancel(menu);
   }
 
+  // ── Call: homeowner, adjuster or the carrier's claims line ──────────
+  function carrierFor(j) {
+    const norm = String(j.carrier || '').toLowerCase().trim();
+    if (!norm || !Array.isArray(window.insCarriers)) return null;
+    return window.insCarriers.find(c => {
+      const cn = String(c.name || '').toLowerCase().trim();
+      return cn && (cn === norm || norm.includes(cn) || cn.includes(norm));
+    }) || null;
+  }
+  function callTargets(j) {
+    const out = [];
+    const home = String(j.phone || '').replace(/[^\d+]/g, '');
+    if (home) out.push({ icon: 'ti-home', label: 'Homeowner' + (j.name ? ' · ' + j.name : ''), note: (typeof formatPhone === 'function' && formatPhone(j.phone)) || j.phone, href: 'tel:' + home });
+    if (j.adjPhone && typeof adjusterTelHref === 'function' && adjusterTelHref(j.adjPhone) !== '#') {
+      out.push({ icon: 'ti-user', label: 'Adjuster' + (j.adjName ? ' · ' + j.adjName : ''), note: typeof formatAdjusterPhone === 'function' ? formatAdjusterPhone(j.adjPhone) : j.adjPhone, href: adjusterTelHref(j.adjPhone) });
+    }
+    const c = carrierFor(j);
+    if (c && c.phone && typeof fmtPhoneTel === 'function') {
+      out.push({ icon: 'ti-shield-check', label: c.name + ' claims', note: (typeof fmtPhoneDisplay === 'function' ? fmtPhoneDisplay(c.phone) : c.phone) + (j.claimNum ? ' · copies claim #' : ''), href: fmtPhoneTel(c.phone), claimNum: j.claimNum || '' });
+    }
+    return out;
+  }
+  function dial(t) {
+    if (t.claimNum && navigator.clipboard) { try { navigator.clipboard.writeText(String(t.claimNum)).catch(() => {}); } catch (e) {} }
+    window.location.href = t.href;
+  }
+  function openCallMenu(j) {
+    const targets = callTargets(j);
+    if (targets.length === 1) { dial(targets[0]); return; }
+    const menu = sheet('Call', 'Call', targets.length ? (j.name || '') : 'No phone numbers on this job yet');
+    if (!menu) return;
+    targets.forEach(t => sheetItem(menu, t.icon, t.label, () => dial(t), { now: true, note: t.note }));
+    sheetCancel(menu);
+  }
+
   // ── Overview pieces ──────────────────────────────────────────────────
   function quickActions(j) {
-    const phone = String(j.phone || '').replace(/[^\d+]/g, '');
+    if (j.carrier && !Array.isArray(window.insCarriers) && typeof loadInsuranceCarriers === 'function') {
+      try { loadInsuranceCarriers(); } catch (e) {}
+    }
     const addr = (j.address && j.address !== '—') ? j.address : '';
     const acts = [
-      { label: 'Call', icon: 'ti-phone', tone: 'green', href: phone ? 'tel:' + phone : '' },
+      { label: 'Call', icon: 'ti-phone', tone: 'green', fn: (callTargets(j).length || j.carrier) ? () => openCallMenu(j) : null },
       { label: 'Text', icon: 'ti-message-2', tone: 'blue', fn: typeof textLeadWithCard === 'function' ? () => textLeadWithCard(j.id) : null },
       { label: 'Directions', icon: 'ti-navigation', href: addr ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(addr) : '', newTab: true },
       { label: 'Upload', icon: 'ti-upload', tone: 'primary', fn: () => openUpload(j) },
