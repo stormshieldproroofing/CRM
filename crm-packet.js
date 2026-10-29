@@ -204,16 +204,25 @@
 .pk-fld input,.pk-fld select{background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box}
 .pk-fld input:disabled,.pk-fld select:disabled{opacity:.7}
 .pk-dt{position:relative;display:flex;gap:8px}
+.pk-sec{overflow:visible}
 .pk-dt>input{flex:1}
-.pk-calbtn{position:relative;flex:none;width:44px;border-radius:8px;border:1px solid rgba(77,157,224,.45);background:rgba(77,157,224,.12);color:var(--brand-light,#9DB8F5);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.pk-calbtn .pk-native{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;border:0;padding:0;margin:0}
-.pk-calbtn .pk-native::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
-.pk-calbtn:focus-within{outline:2px solid #2F6FEB;outline-offset:1px}
-.pk-dchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.pk-dchip{border:1px solid var(--border);background:#1E253A;color:var(--text);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;min-height:32px;display:inline-flex;align-items:center;gap:4px}
-.pk-dchip.storm{background:rgba(139,92,246,.14);border-color:rgba(139,92,246,.45);color:#C4B5FD}
-.pk-dchip.on{background:#1D3A73;border-color:#2F6FEB;color:#fff}
-.pk-dchip:disabled{opacity:.6;cursor:default}
+.pk-calbtn{flex:none;width:44px;border-radius:8px;border:1px solid rgba(77,157,224,.45);background:rgba(77,157,224,.12);color:var(--brand-light,#9DB8F5);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.pk-calbtn[aria-expanded="true"]{background:#1D3A73;border-color:#2F6FEB;color:#fff}
+.pk-calbtn:disabled{opacity:.6;cursor:default}
+.pk-dd{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;background:#1E253A;border:1px solid #33405A;border-radius:10px;box-shadow:0 14px 30px rgba(0,0,0,.5);overflow:hidden}
+.pk-dd[hidden]{display:none}
+.pk-ddh{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:9px 14px 7px}
+.pk-ddi{position:relative;display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;min-height:46px;box-sizing:border-box;border:0;border-top:1px solid #2A3346;background:none;color:var(--text);font:500 14px inherit;font-family:inherit;text-align:left;cursor:pointer}
+.pk-ddh+.pk-ddi,.pk-dd>.pk-ddi:first-child{border-top:0}
+.pk-ddi:hover,.pk-ddi:focus-visible{background:#26304A;outline:none}
+.pk-ddi span{display:flex;align-items:center;gap:7px}
+.pk-ddi small{color:var(--muted);font-size:12px;flex:none}
+.pk-ddi.storm span{color:#D8CCFF}
+.pk-ddi.storm svg{color:#A78BFA}
+.pk-ddi.on{background:#1D3A73}
+.pk-ddi.pick{justify-content:flex-start;color:#9DB8F5;font-weight:600}
+.pk-ddi.pick .pk-native{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px;border:0;padding:0;margin:0}
+.pk-ddi.pick .pk-native::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
 .pk-q{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .pk-q:last-child{border-bottom:0}
 .pk-yn{display:flex;gap:6px;flex:none}
@@ -372,6 +381,7 @@
   function chipValue(v) {
     if (v === 'today') return fmtDate(new Date());
     if (v === 'yesterday') return fmtDate(new Date(Date.now() - 864e5));
+    if (String(v).indexOf('tmr:') === 0) return fmtDate(new Date(Date.now() + 864e5)) + ' ' + String(v).slice(4);
     if (String(v).indexOf('text:') === 0) return String(v).slice(5);
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return fromNative(v);
     return String(v || '');
@@ -401,15 +411,25 @@
     const yn = (q, label) => `<div class="pk-q"><span>${label}</span><span class="pk-yn">
       <button type="button" class="pk-chip${f[q] === 'yes' ? ' on' : ''}" data-pkyn="${q}" data-val="yes" ${dis}>Yes</button>
       <button type="button" class="pk-chip${f[q] === 'no' ? ' on' : ''}" data-pkyn="${q}" data-val="no" ${dis}>No</button></span></div>`;
-    // Date fields: type mm/dd/yyyy, or tap the calendar for the phone's own date picker, or a shortcut chip.
+    // Date fields: type mm/dd/yyyy, or tap the calendar button for a short menu of likely dates
+    // (recent storms, Today/Yesterday…) ending in "Pick from calendar…" (the phone's own picker).
     const CAL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>';
+    const STORM = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.6 4.4 0 0 1 0-9h.5A5.5 5.5 0 0 1 18 9a4 4 0 0 1 .5 8"></path><path d="M13 14l-2 4h3l-2 4"></path></svg>';
     const dateFld = (k, label, o) => {
       o = o || {};
-      const chips = (o.chips || []).map(c => `<button type="button" class="pk-dchip${c[2] ? ' storm' : ''}" data-pkd="${k}" data-v="${esc(c[0])}" ${dis}>${c[2] ? '<i class="ti ti-cloud-storm" aria-hidden="true"></i> ' : ''}${esc(c[1])}</button>`).join('');
+      const opts = (o.chips || []).map(c => {
+        const val = chipValue(c[0]);
+        const sub = /^\d{2}\/\d{2}\/\d{4}/.test(val) ? val.slice(0, 10) : '';
+        return `<button type="button" class="pk-ddi${c[2] ? ' storm' : ''}" role="menuitem" data-pkd="${k}" data-v="${esc(c[0])}"><span>${c[2] ? STORM : ''}${esc(c[1])}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
+      }).join('');
       return `<div class="pk-fld"><label for="pk-${k}">${label}</label>
         <div class="pk-dt"><input id="pk-${k}" data-pk="${k}" value="${v(k)}" placeholder="${o.time ? 'mm/dd/yyyy h:mm PM' : 'mm/dd/yyyy'}" autocomplete="off" ${dis}>
-          <span class="pk-calbtn" aria-hidden="true">${CAL}<input type="${o.time ? 'datetime-local' : 'date'}" class="pk-native" data-pkn="${k}" tabindex="-1" aria-label="Pick ${label.toLowerCase()} from a calendar" value="${nativeVal(f[k], o.time)}" ${dis}></span></div>
-        ${chips ? `<div class="pk-dchips">${chips}</div>` : ''}</div>`;
+          <button type="button" class="pk-calbtn" data-pkmenu="${k}" aria-haspopup="menu" aria-expanded="false" aria-label="Choose ${label.toLowerCase()}" ${dis}>${CAL}</button>
+          <div class="pk-dd" role="menu" data-pkdd="${k}" hidden>
+            ${o.head ? `<div class="pk-ddh">${esc(o.head)}</div>` : ''}${opts}
+            <label class="pk-ddi pick">${CAL.replace('width="20" height="20"', 'width="16" height="16"')}<span>${o.time ? 'Pick date &amp; time\u2026' : 'Pick from calendar\u2026'}</span>
+              <input type="${o.time ? 'datetime-local' : 'date'}" class="pk-native" data-pkn="${k}" aria-label="Pick ${label.toLowerCase()} from a calendar" value="${nativeVal(f[k], o.time)}"></label>
+          </div></div></div>`;
     };
     const item = (k, label, unit) => `<div class="pk-item"><label><input type="checkbox" data-pkcb="${k}" ${f[k] === true ? 'checked' : ''} ${dis}>${label}</label>${unit !== null ? `<input type="text" aria-label="${label} ${unit || 'details'}" placeholder="${unit || ''}" data-pk="${k}_detail" value="${v(k + '_detail')}" ${dis}>` : ''}</div>`;
 
@@ -480,9 +500,9 @@
 
       <div class="pk-sec"><h4>Insurance &amp; claim</h4><div class="pk-grid">
         ${txt('insurance_company', 'Insurance company')}${txt('policy_number', 'Policy #')}
-        ${txt('claim_number', 'Claim #')}${dateFld('date_of_loss', 'Date of loss', { chips: stormChips() })}
+        ${txt('claim_number', 'Claim #')}${dateFld('date_of_loss', 'Date of loss', { chips: stormChips(), head: stormChips().length ? 'Recent storms' : '' })}
         ${dateFld('date_claim_filed', 'Date claim filed', { chips: [['today', 'Today'], ['yesterday', 'Yesterday'], ['text:Not filed yet', 'Not filed yet']] })}
-        ${dateFld('appointment', 'Adjuster appointment', { time: true })}
+        ${dateFld('appointment', 'Adjuster appointment', { time: true, chips: [['tmr:9:00 AM', 'Tomorrow \u00b7 9:00 AM'], ['tmr:1:00 PM', 'Tomorrow \u00b7 1:00 PM']] })}
         ${txt('adjuster', 'Adjuster')}${txt('adjuster_phone', 'Adjuster phone', { type: 'tel' })}
         ${txt('deductible', 'Deductible ($)', { type: 'decimal' })}
         <div class="pk-fld"><label>Policy type</label><div class="pk-yn">${chip('policy_acv', 'ACV')}${chip('policy_rcv', 'RCV')}</div></div>
@@ -496,25 +516,47 @@
     if (signed) return;
     const persist = () => { p.updatedAt = new Date().toISOString(); save(); };
     panel.querySelectorAll('[data-pk]').forEach(el => el.addEventListener('input', () => { f[el.dataset.pk] = el.value; persist(); }));
-    // calendar picker → mm/dd/yyyy text (the same format typed dates use)
-    panel.querySelectorAll('[data-pkn]').forEach(nv => {
-      nv.addEventListener('click', () => { try { if (nv.showPicker) nv.showPicker(); } catch (e) { /* phone opens it natively */ } });
-      nv.addEventListener('change', () => {
-        const k = nv.dataset.pkn, txtIn = panel.querySelector(`[data-pk="${k}"]`);
-        const out = fromNative(nv.value);
-        if (!out || !txtIn) return;
-        txtIn.value = out; f[k] = out; persist(); markChips(k);
-      });
+    // Date menus: calendar button opens a short list; picking anything fills mm/dd/yyyy text.
+    const closeMenus = except => panel.querySelectorAll('[data-pkdd]').forEach(dd => {
+      if (dd.dataset.pkdd === except) return;
+      dd.hidden = true;
+      const b = panel.querySelector(`[data-pkmenu="${dd.dataset.pkdd}"]`); if (b) b.setAttribute('aria-expanded', 'false');
     });
-    panel.querySelectorAll('[data-pkd]').forEach(b => b.addEventListener('click', () => {
-      const k = b.dataset.pkd, txtIn = panel.querySelector(`[data-pk="${k}"]`);
-      const val = chipValue(b.dataset.v);
-      if (!txtIn) return;
+    const setDate = (k, val) => {
+      const txtIn = panel.querySelector(`[data-pk="${k}"]`); if (!txtIn) return;
       txtIn.value = val; f[k] = val; persist(); markChips(k);
       const nv = panel.querySelector(`[data-pkn="${k}"]`); if (nv) nv.value = nativeVal(val, nv.type === 'datetime-local');
+    };
+    panel.querySelectorAll('[data-pkmenu]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      const k = b.dataset.pkmenu, dd = panel.querySelector(`[data-pkdd="${k}"]`); if (!dd) return;
+      const open = dd.hidden;
+      closeMenus(k);
+      dd.hidden = !open; b.setAttribute('aria-expanded', String(open));
+      if (open) { const first = dd.querySelector('[data-pkd], .pk-native'); if (first && first.focus) first.focus({ preventScroll: true }); }
     }));
+    panel.querySelectorAll('[data-pkn]').forEach(nv => {
+      nv.addEventListener('click', e => { e.stopPropagation(); try { if (nv.showPicker) nv.showPicker(); } catch (er) { /* phones open it natively */ } });
+      nv.addEventListener('change', () => {
+        const out = fromNative(nv.value);
+        if (out) setDate(nv.dataset.pkn, out);
+        closeMenus();
+      });
+    });
+    panel.querySelectorAll('[data-pkd]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      setDate(b.dataset.pkd, chipValue(b.dataset.v));
+      closeMenus();
+      const t = panel.querySelector(`[data-pkmenu="${b.dataset.pkd}"]`); if (t) t.focus({ preventScroll: true });
+    }));
+    // tap anywhere else (or Escape) closes an open menu
+    if (!panel.__pkDdWired) {
+      panel.__pkDdWired = true;
+      panel.addEventListener('click', e => { if (!e.target.closest('.pk-dd')) panel.querySelectorAll('[data-pkdd]:not([hidden])').forEach(dd => { dd.hidden = true; const b = panel.querySelector(`[data-pkmenu="${dd.dataset.pkdd}"]`); if (b) b.setAttribute('aria-expanded', 'false'); }); });
+      panel.addEventListener('keydown', e => { if (e.key === 'Escape') panel.querySelectorAll('[data-pkdd]:not([hidden])').forEach(dd => { dd.hidden = true; const b = panel.querySelector(`[data-pkmenu="${dd.dataset.pkdd}"]`); if (b) { b.setAttribute('aria-expanded', 'false'); b.focus(); } }); });
+    }
     const markChips = k => panel.querySelectorAll(`[data-pkd="${k}"]`).forEach(b => b.classList.toggle('on', chipValue(b.dataset.v) === f[k]));
-    ['date_of_loss', 'date_claim_filed'].forEach(markChips);
+    ['date_of_loss', 'date_claim_filed', 'appointment'].forEach(markChips);
     panel.querySelectorAll('[data-pk="date_of_loss"],[data-pk="date_claim_filed"],[data-pk="appointment"]').forEach(el => el.addEventListener('input', () => {
       markChips(el.dataset.pk);
       const nv = panel.querySelector(`[data-pkn="${el.dataset.pk}"]`); if (nv) nv.value = nativeVal(el.value, nv.type === 'datetime-local');
