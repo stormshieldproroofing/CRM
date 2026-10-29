@@ -468,11 +468,11 @@
   /* ---------------------------------------------------------------- Packet tab: status card */
   const SVG = (w, body, fill) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="${fill ? 'currentColor' : 'none'}" stroke="${fill ? 'none' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   const ICON = {
-    pen: SVG(18, '<path d="M4 20h4L19 9l-4-4L4 16z"></path>'),
+    pen: SVG(18, '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path>'),
     clock: SVG(20, '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>'),
     check: SVG(20, '<circle cx="12" cy="12" r="9"></circle><path d="M8 12l3 3 5-6"></path>'),
     tick: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>',
-    sign: SVG(16, '<path d="M4 20h4L19 9l-4-4L4 16z"></path>'),
+    sign: SVG(16, '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path>'),
     send: SVG(16, '<path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path>'),
     eye: SVG(16, '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle>'),
     dots: SVG(18, '<circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle>', true),
@@ -550,12 +550,12 @@
       menu = [has ? mItem('download', ICON.download, 'Download PDF') : '', uploadItem(j.id), mItem('new', ICON.refresh, 'Start a new packet'),
         has ? mItem('delete', ICON.trash, 'Delete signed PDF…', ' class="danger"') : ''];
     } else if (t.kind === 'wait') {
-      btns = `<button type="button" class="pk-b" data-pkact="resend" data-link="${esc(t.link.id)}">${ICON.send} Resend</button>
-        <button type="button" class="pk-b" data-pkact="sign">${ICON.sign} Sign in person</button>`;
+      btns = `<button type="button" class="pk-b" data-pkact="sign">${ICON.sign} Sign in person</button>
+        <button type="button" class="pk-b" data-pkact="resend" data-link="${esc(t.link.id)}">${ICON.send} Resend</button>`;
       menu = [mItem('preview', ICON.printer, 'Preview / print'), uploadItem(j.id), mItem('cancel', ICON.x, 'Cancel link', ` class="danger" data-link="${esc(t.link.id)}"`)];
     } else {
-      btns = `<button type="button" class="pk-b primary" data-pkact="sign">${ICON.sign} Sign in person</button>
-        <button type="button" class="pk-b" data-pkact="send">${ICON.send} Send link</button>`;
+      btns = `<button type="button" class="pk-b" data-pkact="sign">${ICON.sign} Sign in person</button>
+        <button type="button" class="pk-b primary" data-pkact="send">${ICON.send} Send link</button>`;
       menu = [mItem('preview', ICON.printer, 'Preview / print'), uploadItem(j.id)];
     }
     // Extra files (paper scans, copies from an earlier packet) only show when there are some.
