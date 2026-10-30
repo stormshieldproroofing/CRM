@@ -112,8 +112,8 @@ const para = (t: string) => `<p style="margin:0 0 16px;${FONT}font-size:15px;lin
 const CALL = 'If you have any questions, just reply to this email or call us at <a href="tel:8329107735" style="color:#1D4ED8;text-decoration:none">832-910-7735</a>.';
 
 // Branded frame shared by every packet email: logo header, body, salesperson signature.
-function shell(title: string, inner: string, signatureHtml: string) {
-  return `<div style="margin:0;padding:0;background:#F3F5F8">
+function shell(title: string, inner: string, signatureHtml: string, preheader = "") {
+  return `<div style="margin:0;padding:0;background:#F3F5F8">${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">${preheader}&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;</div>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F8"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border:1px solid #E3E7EE;border-radius:10px;overflow:hidden">
   <tr><td align="center" style="padding:22px 24px 16px;border-bottom:4px solid #0F1E3A">
@@ -196,8 +196,13 @@ function build(template: string, s: Summary, note: string, signature: string) {
   const count = (s.options || []).length;
   const countWord = ["", "one", "two", "three", "four"][count] || String(count);
   const addr = s.address ? ` for <b>${esc(s.address)}</b>` : "";
+  const street = s.address ? s.address.split(",")[0].trim() : "";
+  const docName = multi ? "Roofing Proposal" : "Roofing Estimate";
+  const preheader = multi
+    ? `Thank you for meeting with me. Your proposal with ${countWord} options is attached.`
+    : "Thank you for meeting with me. Your roofing estimate is attached.";
   return {
-    subject: `Your roofing estimate${s.address ? " — " + s.address.split(",")[0] : ""}`,
+    subject: `StormShield Pro Roofing | ${docName}${street ? " for " + street : ""}`,
     html: shell("Your roofing estimate", `
       ${para("Hi " + first + ",")}
       ${noteHtml}
@@ -206,7 +211,7 @@ function build(template: string, s: Summary, note: string, signature: string) {
       ${claim ? para(claim) : ""}
       ${para("At StormShield Pro Roofing, we take pride in quality workmanship and high-grade materials, and we never cut corners. Our goal is a roof that&rsquo;s built to last.")}
       ${para("If you&rsquo;re comparing estimates, I&rsquo;d encourage you to look beyond price at the materials, installation details and warranties each contractor offers.")}
-      ${para("Please don&rsquo;t hesitate to reach out with any questions. I&rsquo;d appreciate the opportunity to earn your business!")}`, signature),
+      ${para("Please don&rsquo;t hesitate to reach out with any questions. I&rsquo;d appreciate the opportunity to earn your business!")}`, signature, esc(preheader)),
   };
 }
 
