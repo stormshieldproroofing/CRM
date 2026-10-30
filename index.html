@@ -19477,10 +19477,10 @@ window.buildQuoteLayoutA = buildQuoteLayoutA;
 // Letter-size PDF of the estimate pages (html2canvas + jsPDF, loaded on demand).
 // Used by the preview's Save PDF and by Email estimate.
 function quoteLoadScript(src){ return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(sc); }); }
-async function quotePdfFromDoc(doc, o){
+// Render each estimate page to a canvas INSIDE the estimate page, so the
+// canvases use the same web fonts (Playfair Display, Source Sans 3).
+async function quoteRenderPages(doc, o){
   o = o || {};
-  // Load and run the PDF tools INSIDE the estimate page so they draw with the
-  // same web fonts (Playfair Display, Source Sans 3) the page is laid out with.
   const win = doc.defaultView;
   const loadIn = (src, name) => win[name] ? Promise.resolve() : new Promise((res, rej) => {
     const sc = doc.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); doc.head.appendChild(sc);
@@ -19495,19 +19495,30 @@ async function quotePdfFromDoc(doc, o){
   doc.documentElement.classList.add('qpv-cap');
   await new Promise(r => win.requestAnimationFrame(() => win.requestAnimationFrame(r)));
   try {
-    const pdf = new win.jspdf.jsPDF({ unit:'in', format:'letter', orientation:'portrait', compress:true });
+    const out = [];
     const pages = doc.querySelectorAll('.a-page, .q-cover, .q-page');
-    for(let i = 0; i < pages.length; i++){
-      const el = pages[i], shadow = el.style.boxShadow; el.style.boxShadow = 'none';
-      const c = await win.html2canvas(el, { scale: o.scale || 2, useCORS:true, backgroundColor:'#ffffff', windowWidth:900, logging:false });
+    for(const el of pages){
+      const shadow = el.style.boxShadow; el.style.boxShadow = 'none';
+      out.push(await win.html2canvas(el, { scale: o.scale || 2, useCORS:true, backgroundColor:'#ffffff', windowWidth:900, logging:false }));
       el.style.boxShadow = shadow;
-      let w = 8.5, h = c.height / c.width * 8.5; if(h > 11){ w = 8.5 * 11 / h; h = 11; }
-      if(i) pdf.addPage('letter', 'portrait');
-      pdf.addImage(c.toDataURL('image/jpeg', o.quality || 0.92), 'JPEG', (8.5 - w) / 2, 0, w, h);
     }
-    const name = ((doc.title || 'Roofing Estimate').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Roofing Estimate') + '.pdf';
-    return new File([pdf.output('blob')], name, { type:'application/pdf' });
+    return out;
   } finally { doc.documentElement.classList.remove('qpv-cap'); }
+}
+function quotePdfFromCanvases(doc, canvases, o){
+  o = o || {};
+  const win = doc.defaultView;
+  const pdf = new win.jspdf.jsPDF({ unit:'in', format:'letter', orientation:'portrait', compress:true });
+  canvases.forEach((c, i) => {
+    let w = 8.5, h = c.height / c.width * 8.5; if(h > 11){ w = 8.5 * 11 / h; h = 11; }
+    if(i) pdf.addPage('letter', 'portrait');
+    pdf.addImage(c.toDataURL('image/jpeg', o.quality || 0.92), 'JPEG', (8.5 - w) / 2, 0, w, h);
+  });
+  const name = ((doc.title || 'Roofing Estimate').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Roofing Estimate') + '.pdf';
+  return new File([pdf.output('blob')], name, { type:'application/pdf' });
+}
+async function quotePdfFromDoc(doc, o){
+  return quotePdfFromCanvases(doc, await quoteRenderPages(doc, o), o);
 }
 // Render estimate HTML off-screen and turn it into a PDF
 function quotePdfFromHtml(html, o){
@@ -19668,6 +19679,11 @@ function quotePreviewOverlay(){
 #qpvOverlay .qpv-msg{font:13px -apple-system,'Segoe UI',sans-serif;color:#E8D3AE;text-align:center;padding:6px 10px;background:#3A342E;display:none}
 #qpvOverlay .qpv-msg.on{display:block}
 #qpvOverlay iframe{flex:1;width:100%;border:0;background:#E7E2DA}
+#qpvOverlay iframe.qpv-off{position:fixed;left:-10000px;top:0;width:900px;height:1200px;flex:none;opacity:0;pointer-events:none}
+#qpvOverlay .qpv-pages{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 8px 24px;box-sizing:border-box}
+#qpvOverlay .qpv-pages img{display:block;width:100%;height:auto;background:#fff;margin:0 auto 10px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+#qpvOverlay .qpv-pages.zoom img{width:200%;max-width:none}
+#qpvOverlay .qpv-hint{font:12px -apple-system,'Segoe UI',sans-serif;color:#6E665C;text-align:center;margin:-2px 0 10px}
 #qpvOverlay .qpv-wait{flex:1;display:flex;align-items:center;justify-content:center;font:15px -apple-system,'Segoe UI',sans-serif;color:#5C544A;padding:24px;text-align:center}
 @media (max-width:520px){#qpvOverlay .qpv-t{display:none}#qpvOverlay .qpv-bar{justify-content:space-between}}`;
     document.head.appendChild(st);
@@ -19697,20 +19713,49 @@ function quotePreviewOverlay(){
   try { history.pushState({ qpv: 1 }, ''); pushed = true; window.addEventListener('popstate', onPop); } catch(e){}
   ov.__close = close;
 
+  // Phones/narrow screens: show the pages as rendered images — exactly what the
+  // PDF will contain. (A live page inside the preview stretches to 8.5" on
+  // iPhone and Safari enlarges small text, so it didn't match the PDF.)
+  const narrow = () => Math.min(window.innerWidth, (screen && screen.width) || window.innerWidth) < 860;
+  let pageCanvases = null;
   function setHtml(html){
     if(closed) return;
     clearTimeout(waitTimer);
-    // Fit the letter-size pages to narrow screens (screen only, never print)
-    const fit = '<style>@media screen{html:not(.qpv-cap) body{zoom:var(--qpv-z,1)}}</style><script>(function(){function f(){var w=document.documentElement.clientWidth;var z=Math.min(1,(w-8)/(8.5*96+16));document.documentElement.style.setProperty("--qpv-z",z);}f();addEventListener("resize",f);})()<\/script>';
-    html = String(html).replace(/<\/head>/i, fit + '</head>');
-    const wait = ov.querySelector('.qpv-wait'); if(wait) wait.remove();
+    const asImages = narrow();
+    // Desktop: fit the letter pages to the window (screen only, never print)
+    const fit = '<style>html{-webkit-text-size-adjust:100%;text-size-adjust:100%}@media screen{html:not(.qpv-cap) body{zoom:var(--qpv-z,1)}}</style><script>(function(){function f(){var w=document.documentElement.clientWidth;var z=Math.min(1,(w-8)/(8.5*96+16));document.documentElement.style.setProperty("--qpv-z",z);}f();addEventListener("resize",f);})()<\/script>';
+    html = String(html).replace(/<\/head>/i, (asImages ? '<style>html{-webkit-text-size-adjust:100%;text-size-adjust:100%}</style>' : fit) + '</head>');
+    let wait = ov.querySelector('.qpv-wait');
+    if(asImages){ if(wait) wait.textContent = 'Preparing preview…'; }
+    else if(wait) wait.remove();
     frame = document.createElement('iframe'); frame.title = 'Estimate preview';
+    if(asImages) frame.className = 'qpv-off';
     frame.srcdoc = html;
-    frame.addEventListener('load', () => {
-      try { titleEl.textContent = frame.contentDocument.title || 'Estimate'; } catch(e){ titleEl.textContent = 'Estimate'; }
-      pdfBtn.disabled = false; printBtn.disabled = false;
+    frame.addEventListener('load', async () => {
+      let doc = null;
+      try { doc = frame.contentDocument; titleEl.textContent = doc.title || 'Estimate'; } catch(e){ titleEl.textContent = 'Estimate'; }
       // Hide any print button inside the page — the bar above has one
-      try { frame.contentDocument.querySelectorAll('.q-print-btn,.a-bar').forEach(b => b.style.display = 'none'); } catch(e){}
+      try { doc.querySelectorAll('.q-print-btn,.a-bar').forEach(b => b.style.display = 'none'); } catch(e){}
+      if(asImages && doc){
+        try {
+          pageCanvases = await quoteRenderPages(doc, { scale: 2 });
+          if(closed) return;
+          const box = document.createElement('div'); box.className = 'qpv-pages';
+          box.innerHTML = '<div class="qpv-hint">Tap a page to zoom in</div>';
+          pageCanvases.forEach((c, i) => { const im = new Image(); im.alt = 'Page ' + (i + 1); im.src = c.toDataURL('image/jpeg', 0.9); box.appendChild(im); });
+          box.addEventListener('click', e => { if(e.target.tagName === 'IMG') box.classList.toggle('zoom'); });
+          wait = ov.querySelector('.qpv-wait'); if(wait) wait.remove();
+          ov.appendChild(box);
+        } catch(err){
+          // Fall back to the live page if rendering fails
+          console.warn('[quote] page images failed, showing live page', err);
+          pageCanvases = null;
+          wait = ov.querySelector('.qpv-wait'); if(wait) wait.remove();
+          frame.className = '';
+          try { const st = doc.createElement('style'); st.textContent = 'html{zoom:' + Math.min(1, (window.innerWidth - 8) / (8.5 * 96 + 16)) + '}'; doc.head.appendChild(st); } catch(_){}
+        }
+      }
+      pdfBtn.disabled = false; printBtn.disabled = false;
     });
     ov.appendChild(frame);
   }
@@ -19720,7 +19765,8 @@ function quotePreviewOverlay(){
     titleEl.textContent = 'Estimate';
   }
 
-  const makePdf = () => quotePdfFromDoc(frame.contentDocument);
+  // Reuse the page images already shown on phones, so Save PDF is instant and identical
+  const makePdf = () => pageCanvases ? Promise.resolve(quotePdfFromCanvases(frame.contentDocument, pageCanvases)) : quotePdfFromDoc(frame.contentDocument);
   const isTouch = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
   async function shareOrDownload(file){
     if(isTouch && navigator.canShare && navigator.canShare({ files:[file] })){
