@@ -181,7 +181,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .info-row .copy-ic{font-size:13px;color:var(--muted);margin-left:auto;cursor:pointer;padding:4px;border-radius:4px;transition:color 0.1s, background 0.1s}
 .info-row .copy-ic:hover{color:var(--brand-light);background:rgba(77,157,224,0.12)}
 .info-row a{transition:color 0.1s}
-.math-keys{position:fixed;z-index:3000;display:none;gap:6px;padding:5px;border-radius:12px;background:#1A1F29;border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.45)}
+.math-keys{position:fixed;z-index:4000;display:none;gap:6px;padding:5px;border-radius:12px;background:#1A1F29;border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.45)}
 .math-keys button{width:48px;height:40px;border:0;border-radius:9px;background:#252C3A;color:#E8ECF3;font-size:20px;font-weight:600;line-height:1;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent}
 .math-keys button:active{background:#2F6FEB}
 /* Customer & claim card: one text size, icons in a column, copy + action buttons lined up on the right */
@@ -634,9 +634,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=39">'
+    +'<link rel="stylesheet" href="redesign.css?v=41">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=18"><\/script>');
+    +'<script src="redesign-job.js?v=19"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -4340,7 +4340,7 @@ function evalMathExpr(s){
 
 // Phones: the iPhone number pad has no + or − keys, so when a money box
 // (inputmode="decimal") is focused on a touch screen, show a small row of
-// + − × ÷ keys right under it. Tapping one types it at the cursor; the box
+// + − × ÷ keys just above the keyboard. Tapping one types it at the cursor; the box
 // keeps focus, and the existing math-on-blur turns "16000-500" into 15500.
 (function attachMathKeys(){
   if(!(window.matchMedia && matchMedia('(pointer:coarse)').matches)) return;
@@ -4371,12 +4371,16 @@ function evalMathExpr(s){
     });
     document.body.appendChild(bar);
   }
+  // Sits just above the on-screen keyboard (bottom of the visible area), centered,
+  // so it never covers the next box in a form.
   function place(){
     if(!bar || !cur) return;
-    const r = cur.getBoundingClientRect();
-    if(!r.width){ hide(); return; }
-    bar.style.left = Math.max(8, Math.min(r.left, window.innerWidth - bar.offsetWidth - 8)) + 'px';
-    bar.style.top = (r.bottom + 6) + 'px';
+    if(!cur.getBoundingClientRect().width){ hide(); return; }
+    const vv = window.visualViewport;
+    const vw = vv ? vv.width : window.innerWidth, vh = vv ? vv.height : window.innerHeight;
+    const ox = vv ? vv.offsetLeft : 0, oy = vv ? vv.offsetTop : 0;
+    bar.style.left = (ox + Math.max(8, (vw - bar.offsetWidth) / 2)) + 'px';
+    bar.style.top = (oy + vh - bar.offsetHeight - 8) + 'px';
   }
   function hide(){ if(bar) bar.style.display = 'none'; cur = null; }
   document.addEventListener('focusin', e => {
@@ -4389,7 +4393,7 @@ function evalMathExpr(s){
   document.addEventListener('focusout', e => { if(e.target === cur) setTimeout(() => { if(document.activeElement !== cur) hide(); }, 0); });
   window.addEventListener('scroll', place, true);
   window.addEventListener('resize', place);
-  if(window.visualViewport) visualViewport.addEventListener('resize', place);
+  if(window.visualViewport){ visualViewport.addEventListener('resize', place); visualViewport.addEventListener('scroll', place); }
 })();
 
 function moneyText(v){
@@ -6492,7 +6496,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Break down the contract price into its parts.</div>
                 <!-- Net Claim -->
                 <div style="margin-bottom:8px">
-                  <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Net Claim</label>
+                  <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Net claim</label>
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
                     <input id="cpNetClaim" type="text" inputmode="decimal" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
@@ -6516,7 +6520,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
                 <!-- Live total -->
                 <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(77,157,224,0.08);border:1px solid rgba(77,157,224,0.2);border-radius:7px;padding:8px 11px;margin-bottom:10px">
-                  <span style="font-size:11px;font-weight:600;color:var(--muted)">Total Contract Price</span>
+                  <span style="font-size:11px;font-weight:600;color:var(--muted)">Total contract price</span>
                   <span style="font-size:14px;font-weight:700;color:var(--brand-light)" id="cpBreakdownTotal">$${parseFloat(j.potVal).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
                 </div>
                 <div style="display:flex;gap:6px">
@@ -6544,7 +6548,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     return `<div id="supp-view-${s._sid}" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
                       <span style="width:7px;height:7px;border-radius:50%;background:${stColor};flex-shrink:0"></span>
                       <div style="flex:1;min-width:0">
-                        <div style="font-size:12px;font-weight:600;color:#fff">$${(parseFloat(s.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:10px;font-weight:600;color:${stColor}">· ${s.status}</span></div>
+                        <div style="font-size:12px;font-weight:600;color:#fff">$${(parseFloat(s.amount)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} <span class="rd-pill" style="--pc:${stColor}">${s.status}</span></div>
                         ${s.note?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(s.note)}</div>`:''}
                       </div>
                       <button onclick="suppEditOpen('${s._sid}')" title="Edit" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;flex-shrink:0" onmouseover="this.style.color='var(--brand-light)'" onmouseout="this.style.color='var(--muted)'"><i class="ti ti-pencil" style="font-size:13px"></i></button>
@@ -6567,8 +6571,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                       </div>
                     </div>`;
                   }).join('') : `<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No supplements yet</div>`}
-                  <!-- Add form -->
-                  <div style="display:flex;gap:6px;margin-top:9px;align-items:center">
+                  <!-- Add form (opens from the "Add supplement" button, like checks and expenses) -->
+                  <button id="suppAddToggle" type="button" onclick="this.style.display='none';document.getElementById('suppAddForm').style.display='block';document.getElementById('suppAddAmt').focus()" style="display:flex;width:100%;margin-top:9px;padding:8px;border-radius:7px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:11px;font-weight:600;cursor:pointer;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif"><i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add supplement</button>
+                  <div id="suppAddForm" style="display:none">
+                                    <div style="display:flex;gap:6px;margin-top:9px;align-items:center">
                     <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;gap:3px;width:100px">
                       <span style="font-size:11px;color:var(--muted)">$</span>
                       <input id="suppAddAmt" type="text" inputmode="decimal" placeholder="0.00" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none">
@@ -6578,7 +6584,11 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     </select>
                   </div>
                   <input id="suppAddNote" type="text" placeholder="Description / note (e.g. gutters, code items)" style="width:100%;margin-top:6px;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none">
-                  <button onclick="suppAdd('${j.id}')" style="width:100%;margin-top:6px;padding:7px;border-radius:6px;border:1px dashed rgba(52,211,153,0.4);background:rgba(52,211,153,0.06);color:#34D399;font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px"><i class="ti ti-plus" style="font-size:13px"></i>Add supplement</button>
+                  <div style="display:flex;gap:6px;margin-top:8px">
+                    <button id="suppSaveNew" class="btn-primary" onclick="suppAdd('${j.id}')" style="flex:1;font-size:12px;padding:7px">Add supplement</button>
+                    <button id="suppCancelNew" type="button" class="btn-cancel" onclick="document.getElementById('suppAddForm').style.display='none';document.getElementById('suppAddToggle').style.display='flex'" style="font-size:12px;padding:7px">Cancel</button>
+                  </div>
+                  </div>
                   ${pending?`<div style="font-size:9px;color:#FBBF24;margin-top:8px"><i class="ti ti-clock" style="font-size:10px"></i> A supplement is pending — hold invoice until all are approved or denied.</div>`:(approved>0?`<div style="font-size:9px;color:var(--muted);margin-top:8px">Approved supplements are added to the insurance invoice amount.</div>`:'')}
                 </div>`;
               })()}
@@ -6597,7 +6607,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 <!-- Add Deposit button -->
                 <div id="depAddFormWrap" style="margin-top:4px">
                   <button id="depAddToggle" style="width:100%;padding:9px;border-radius:7px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif;transition:border-color 0.12s,background 0.12s" onmouseover="this.style.borderColor='var(--brand-light)';this.style.background='rgba(77,157,224,0.06)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='none'">
-                    <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add Deposit
+                    <i class="ti ti-plus" style="font-size:13px" aria-hidden="true"></i>Add check
                   </button>
                   <div id="depAddForm" style="display:none;margin-top:8px;padding:10px;background:#1A1F2E;border:1px solid var(--border);border-radius:8px">
                     <!-- Check photo (saved to the Checks tab and linked to this deposit) -->
@@ -6629,7 +6639,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                       </div>
                     </div>
                     <div style="display:flex;gap:6px">
-                      <button id="depSaveNew" class="btn-primary" style="flex:1;font-size:12px;padding:7px">Add Deposit</button>
+                      <button id="depSaveNew" class="btn-primary" style="flex:1;font-size:12px;padding:7px">Add check</button>
                       <button id="depCancelNew" class="btn-cancel" style="font-size:12px;padding:7px">Cancel</button>
                     </div>
                   </div>
