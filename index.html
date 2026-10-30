@@ -181,6 +181,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--brand);min
 .info-row .copy-ic{font-size:13px;color:var(--muted);margin-left:auto;cursor:pointer;padding:4px;border-radius:4px;transition:color 0.1s, background 0.1s}
 .info-row .copy-ic:hover{color:var(--brand-light);background:rgba(77,157,224,0.12)}
 .info-row a{transition:color 0.1s}
+.math-keys{position:fixed;z-index:3000;display:none;gap:6px;padding:5px;border-radius:12px;background:#1A1F29;border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.45)}
+.math-keys button{width:48px;height:40px;border:0;border-radius:9px;background:#252C3A;color:#E8ECF3;font-size:20px;font-weight:600;line-height:1;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent}
+.math-keys button:active{background:#2F6FEB}
 /* Customer & claim card: one text size, icons in a column, copy + action buttons lined up on the right */
 .cust-card{padding:6px 6px 6px 14px}
 .cc-row{display:flex;align-items:center;gap:10px;min-height:34px;font-size:13px;color:var(--text-2,#C4CBD8)}
@@ -4335,6 +4338,60 @@ function evalMathExpr(s){
   }, true);
 })();
 
+// Phones: the iPhone number pad has no + or − keys, so when a money box
+// (inputmode="decimal") is focused on a touch screen, show a small row of
+// + − × ÷ keys right under it. Tapping one types it at the cursor; the box
+// keeps focus, and the existing math-on-blur turns "16000-500" into 15500.
+(function attachMathKeys(){
+  if(!(window.matchMedia && matchMedia('(pointer:coarse)').matches)) return;
+  let bar = null, cur = null;
+  const isMoney = el => el && el.tagName === 'INPUT' && el.type === 'text'
+    && (el.getAttribute('inputmode') === 'decimal') && el.dataset.noCalc !== 'true'
+    && !/phone|tel/i.test((el.id||'') + ' ' + (el.name||'') + ' ' + (el.placeholder||''));
+  function build(){
+    bar = document.createElement('div');
+    bar.className = 'math-keys';
+    bar.setAttribute('role', 'toolbar');
+    bar.setAttribute('aria-label', 'Math keys');
+    [['+','+','Plus'],['−','-','Minus'],['×','*','Times'],['÷','/','Divide']].forEach(([label, ch, name]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = label; b.setAttribute('aria-label', name);
+      // keep focus in the box so the keyboard stays up
+      b.addEventListener('pointerdown', e => e.preventDefault());
+      b.addEventListener('mousedown', e => e.preventDefault());
+      b.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        if(!cur) return;
+        const v = cur.value, st = cur.selectionStart != null ? cur.selectionStart : v.length, en = cur.selectionEnd != null ? cur.selectionEnd : v.length;
+        cur.value = v.slice(0, st) + ch + v.slice(en);
+        try { cur.setSelectionRange(st + 1, st + 1); } catch(_){}
+        cur.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      bar.appendChild(b);
+    });
+    document.body.appendChild(bar);
+  }
+  function place(){
+    if(!bar || !cur) return;
+    const r = cur.getBoundingClientRect();
+    if(!r.width){ hide(); return; }
+    bar.style.left = Math.max(8, Math.min(r.left, window.innerWidth - bar.offsetWidth - 8)) + 'px';
+    bar.style.top = (r.bottom + 6) + 'px';
+  }
+  function hide(){ if(bar) bar.style.display = 'none'; cur = null; }
+  document.addEventListener('focusin', e => {
+    if(!isMoney(e.target)) return;
+    cur = e.target;
+    if(!bar) build();
+    bar.style.display = 'flex';
+    place();
+  });
+  document.addEventListener('focusout', e => { if(e.target === cur) setTimeout(() => { if(document.activeElement !== cur) hide(); }, 0); });
+  window.addEventListener('scroll', place, true);
+  window.addEventListener('resize', place);
+  if(window.visualViewport) visualViewport.addEventListener('resize', place);
+})();
+
 function moneyText(v){
   return '$'+moneyValue(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
@@ -6438,7 +6495,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Net Claim</label>
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpNetClaim" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                    <input id="cpNetClaim" type="text" inputmode="decimal" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
                 <!-- Deductible -->
@@ -6446,7 +6503,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Deductible</label>
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpDeductible" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                    <input id="cpDeductible" type="text" inputmode="decimal" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
                 <!-- Depreciation -->
@@ -6454,7 +6511,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Depreciation</label>
                   <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;gap:4px">
                     <span style="font-size:12px;color:var(--muted);flex-shrink:0">$</span>
-                    <input id="cpDepreciation" type="number" step="0.01" min="0" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                    <input id="cpDepreciation" type="text" inputmode="decimal" placeholder="0.00 (try 800+1200)" oninput="cpRecalc()" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                   </div>
                 </div>
                 <!-- Live total -->
@@ -6514,7 +6571,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <div style="display:flex;gap:6px;margin-top:9px;align-items:center">
                     <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 8px;gap:3px;width:100px">
                       <span style="font-size:11px;color:var(--muted)">$</span>
-                      <input id="suppAddAmt" type="number" step="0.01" min="0" placeholder="0.00" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none">
+                      <input id="suppAddAmt" type="text" inputmode="decimal" placeholder="0.00" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:#34D399;font-weight:600;width:100%;background:none">
                     </div>
                     <select id="suppAddStatus" style="flex:1;background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 6px;font-size:11px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;cursor:pointer">
                       ${['Submitted','Approved','Partial','Denied'].map(o=>`<option value="${o}">${o}</option>`).join('')}
@@ -7057,7 +7114,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Amount</label>
                     <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:5px;padding:5px 8px;gap:3px">
                       <span style="font-size:11px;color:var(--muted);flex-shrink:0">$</span>
-                      <input id="dep-edit-amt-${i}" type="number" step="0.01" min="0" value="${d.amount}" style="border:none;outline:none;font-size:11px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                      <input id="dep-edit-amt-${i}" type="text" inputmode="decimal" value="${d.amount}" style="border:none;outline:none;font-size:11px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                     </div>
                   </div>
                   <div>
@@ -7324,7 +7381,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.depEditSave=function(i){
       const j2=curJob();
       const d=j2.deposits[i];
-      const amt=parseFloat(document.getElementById('dep-edit-amt-'+i).value||0);
+      const amt=moneyNum(document.getElementById('dep-edit-amt-'+i).value);
       if(isNaN(amt)||amt<0){toast('Invalid amount');return;}
       const desc=document.getElementById('dep-edit-desc-'+i).value;
       const dateVal=document.getElementById('dep-edit-date-'+i).value;
@@ -7481,7 +7538,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                     <label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Amount</label>
                     <div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:5px;padding:5px 7px;gap:3px">
                       <span style="font-size:11px;color:var(--muted);flex-shrink:0">$</span>
-                      <input id="exp-edit-amt-${e.origIdx}" type="number" step="0.01" min="0" value="${e.amount}" style="border:none;outline:none;font-size:11px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
+                      <input id="exp-edit-amt-${e.origIdx}" type="text" inputmode="decimal" value="${e.amount}" style="border:none;outline:none;font-size:11px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none">
                     </div>
                   </div>
                 </div>
@@ -7645,7 +7702,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.expEditSave=function(i){
       const j2=curJob();
       const e=j2.expenses[i];
-      const amt=parseFloat(document.getElementById('exp-edit-amt-'+i).value||0);
+      const amt=moneyNum(document.getElementById('exp-edit-amt-'+i).value);
       if(isNaN(amt)||amt<0){toast('Invalid amount');return;}
       e.cat=document.getElementById('exp-edit-cat-'+i).value;
       e.desc=document.getElementById('exp-edit-desc-'+i).value.trim()||e.cat;
@@ -8081,10 +8138,14 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     // Contract Price expander toggle (accordion) with breakdown fields
     const cpEditRowEl=$('cpEditRow'), cpHeaderEl=$('cpAccHeader');
     // Recalculate the live total from the three breakdown fields
+    // Amount in a breakdown box; understands math like 16000-500 while still typing
+    function cpAmt(id){
+      const raw=String(($(id)||{}).value||'');
+      const m=(typeof evalMathExpr==='function')?evalMathExpr(raw):null;
+      return m!=null?m:(parseFloat(raw.replace(/[,$]/g,''))||0);
+    }
     window.cpRecalc=function(){
-      const n=parseFloat(($('cpNetClaim')||{}).value||0)||0;
-      const d=parseFloat(($('cpDeductible')||{}).value||0)||0;
-      const p=parseFloat(($('cpDepreciation')||{}).value||0)||0;
+      const n=cpAmt('cpNetClaim'), d=cpAmt('cpDeductible'), p=cpAmt('cpDepreciation');
       const t=n+d+p;
       const bt=$('cpBreakdownTotal'); if(bt) bt.textContent='$'+fmtMoney(t);
       return t;
@@ -8135,9 +8196,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     $('cpSaveBtn')&&$('cpSaveBtn').addEventListener('click',function(e){
       e.stopPropagation();
       const j2=curJob();
-      const n=parseFloat($('cpNetClaim').value||0)||0;
-      const d=parseFloat($('cpDeductible').value||0)||0;
-      const p=parseFloat($('cpDepreciation').value||0)||0;
+      const n=cpAmt('cpNetClaim'), d=cpAmt('cpDeductible'), p=cpAmt('cpDepreciation');
       const total=n+d+p;
       j2.cpNetClaim=n.toFixed(2);
       j2.cpDeductible=d.toFixed(2);
@@ -14027,7 +14086,16 @@ window.laborBreakdownSummary = laborBreakdownSummary;
 // Shows deductible collected, net-claim (ACV) check collected, and the recoverable
 // depreciation balance due. Lets you pick completion photos, generates one printable
 // PDF (invoice + photos), and drafts a mailto email to the insurance carrier.
-function moneyNum(v){ const n = parseFloat(String(v??'').replace(/[^0-9.\-]/g,'')); return isFinite(n)?n:0; }
+function moneyNum(v){
+  const str = String(v??'');
+  // Typed math (16000-500, 800+1200): on iPhone, tapping Save doesn't always
+  // leave the box first, so work it out here too.
+  if(/\d\s*[+\-*\/×x÷−]\s*[\d(.]/.test(str) && typeof evalMathExpr === 'function'){
+    const m = evalMathExpr(str);
+    if(m != null) return Math.round(m * 100) / 100;
+  }
+  const n = parseFloat(str.replace(/[^0-9.\-]/g,'')); return isFinite(n)?n:0;
+}
 
 // ── RETAIL / CASH INVOICE — simple homeowner bill ──
 // Work performed, total, deposit(s) paid, balance due. No insurance/RCV/
