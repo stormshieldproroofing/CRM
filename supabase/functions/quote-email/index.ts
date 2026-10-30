@@ -200,10 +200,8 @@ function build(template: string, s: Summary, note: string, signature: string) {
       ${noteHtml}
       ${para("Thank you for choosing StormShield Pro Roofing. Your estimate" + at + " is attached." + (multi ? ` We&rsquo;ve included ${(s.options || []).length} options so you can compare them side by side:` : ""))}
       ${compare}
-      ${claim || lock ? para([claim, lock].filter(Boolean).join(" ")) : ""}
-      ${cash ? para("Payment is 50% at signing with the balance due when the job is complete.") : ""}
-      ${attached}
-      ${para(nextStep + " " + CALL)}`, signature),
+      ${claim ? para(claim) : ""}
+      ${para('Feel free to reply or call us at <a href="tel:8329107735" style="color:#1D4ED8;text-decoration:none">832-910-7735</a> with any questions or concerns.')}`, signature),
   };
 }
 
