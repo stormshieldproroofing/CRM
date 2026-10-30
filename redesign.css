@@ -876,3 +876,18 @@ html.ui-new .rd-fin-slot #ovPctBox > input{background:transparent!important;bord
 html.ui-new .rd-fin-slot #cpBreakdownTotal{color:#8FB4FF!important}
 html.ui-new .rd-fin-slot #ovPctBox{height:46px!important;min-height:0!important;padding:0 12px!important;box-sizing:border-box}
 html.ui-new .rd-fin-slot #ovPctBox > input{height:auto!important;min-height:0!important;padding:0!important}
+
+/* ── Contract price: edit the breakdown in place ──────────────────────────
+   The edit form's rows look like the breakdown list (label left, amount box
+   right), so nothing shows twice. One total, one math tip, Save / Cancel. */
+html.ui-new .rd-fin-slot #cpEditRow{padding:0!important}
+html.ui-new .rd-fin-slot #cpEditRow > div:first-child:not(:has(input)){display:none!important}
+html.ui-new .rd-fin-slot #cpEditRow > div:has(> label){display:grid!important;grid-template-columns:minmax(0,1fr) 150px;align-items:center;column-gap:12px;min-height:52px;margin:0!important;border-bottom:1px solid rgba(255,255,255,0.06)}
+html.ui-new .rd-fin-slot #cpEditRow > div:has(> label) > label{margin:0!important;font-size:13px!important;font-weight:400!important;color:var(--text-2)!important;text-transform:none!important;letter-spacing:0!important}
+html.ui-new .rd-fin-slot #cpEditRow > div:has(> label) > div:has(> input){height:40px!important;min-height:0!important;padding:0 10px!important;border-radius:9px!important;background:#0E1219!important;border:1px solid rgba(255,255,255,0.12)!important;box-sizing:border-box}
+html.ui-new .rd-fin-slot #cpEditRow > div:has(> label) > div:has(> input:focus){border-color:#3B7BF0!important}
+html.ui-new .rd-fin-slot #cpEditRow > div:has(> label) > div:has(> input) > input{text-align:right!important;font-size:16px!important;font-weight:600!important;height:auto!important;min-height:0!important;padding:0!important;background:transparent!important;border:none!important}
+html.ui-new .rd-fin-slot #cpEditRow .rd-hint{display:none!important}
+html.ui-new .rd-fin-slot #cpEditRow div:has(> #cpSaveBtn){flex-wrap:wrap!important;margin-top:4px}
+html.ui-new .rd-fin-slot #cpEditRow div:has(> #cpSaveBtn)::before{content:"You can type math, like 800+1200.";flex:0 0 100%;font-size:12px;color:var(--muted);margin-bottom:4px}
+html.ui-new .rd-fin-slot #cpEditRow > div:has(> label):has(+ div:not(:has(> label))){border-bottom:none}

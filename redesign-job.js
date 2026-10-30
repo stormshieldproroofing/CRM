@@ -445,7 +445,14 @@
       const job = currentJob() || j;
       // "Edit breakdown" shows whenever the CRM's edit form is closed
       const row = $id('cpEditRow');
-      edit.style.display = (row && row.style.display !== 'none') ? 'none' : '';
+      const editing = !!(row && row.style.display !== 'none');
+      edit.style.display = editing ? 'none' : '';
+      // Editing happens in place: the form's own rows replace the read-only list
+      rows.style.display = editing ? 'none' : '';
+      if (row && !row.dataset.rdWatched) {
+        row.dataset.rdWatched = '1';
+        new MutationObserver(() => draw()).observe(row, { attributes: true, attributeFilter: ['style'] });
+      }
       const parts = [['Net claim', job.cpNetClaim], ['Deductible', job.cpDeductible], ['Depreciation', job.cpDepreciation]]
         .filter(p => p[1] != null && p[1] !== '' && !isNaN(parseFloat(p[1])));
       const key = parts.map(p => p.join(':')).join('|') + '|' + job.potVal;
