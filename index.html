@@ -2042,7 +2042,7 @@ html.ql-lock,html.ql-lock body{overflow:hidden}
         <!-- Adjuster name + phone -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <input id="f-adjname" style="background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--warn)'" onblur="this.style.borderColor='var(--border)'" placeholder="Adjuster name">
-          <input id="f-adjphone" style="background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--warn)'" onblur="this.style.borderColor='var(--border)'" placeholder="Adjuster phone">
+          <input id="f-adjphone" data-no-calc="true" autocomplete="off" style="background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--warn)'" onblur="this.style.borderColor='var(--border)'" placeholder="Adjuster phone">
         </div>
 
         <!-- Insurance / depreciation email -->
@@ -4059,8 +4059,12 @@ function splitAdjusterPhone(raw){
 // Display form: pretty-print the main number, keep the extension readable.
 function formatAdjusterPhone(raw){
   const { number, ext } = splitAdjusterPhone(raw);
-  const pretty = (typeof formatPhone === 'function' && formatPhone(number)) || number;
-  return ext ? `${pretty} ×${ext}` : pretty;
+  let main = String(number||'');
+  const d = main.replace(/\D/g,'');
+  if(d.length === 11 && d[0] === '1') main = d.slice(1);          // 1-800-555-1234 → (800) 555-1234
+  const pretty = d.length >= 10 ? ((typeof formatPhone === 'function' && formatPhone(main)) || main) : main;
+  if(!ext) return pretty;
+  return pretty ? `${pretty} ×${ext}` : `Ext. ${ext} (main number missing)`;
 }
 window.formatAdjusterPhone = formatAdjusterPhone;
 
@@ -4313,6 +4317,10 @@ function evalMathExpr(s){
     const raw = t.value || '';
     if(!/[+\-*/()]/.test(raw)) return;     // not an expression
     if(t.dataset.noCalc === 'true') return; // opt-out flag
+    // Never treat a phone number as math: "713-555-1234" is not 713 minus 555 minus 1234.
+    if(type === 'tel') return;
+    if(/phone|tel|fax|mobile|cell/i.test([t.id, t.name, t.placeholder, t.getAttribute('aria-label'), t.autocomplete].join(' '))) return;
+    if(/^\s*\+?1?[\s.\-]?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}(\D|$)/.test(raw)) return;
     const result = evalMathExpr(raw);
     if(result == null) return;
     // Round to 2 decimals for currency-like values
@@ -8914,7 +8922,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div><label class="ins-label">Adjuster Name</label><input class="ins-field" id="li-adjName" value="${ins.adjName}" placeholder="Adjuster full name" oninput="lossSyncField('adjName',this.value)"></div>
-          <div><label class="ins-label">Adjuster Phone</label><input class="ins-field" id="li-adjPhone" value="${ins.adjPhone}" placeholder="Adjuster phone" oninput="lossSyncField('adjPhone',this.value)"></div>
+          <div><label class="ins-label">Adjuster Phone</label><input class="ins-field" id="li-adjPhone" data-no-calc="true" value="${ins.adjPhone}" placeholder="Adjuster phone" oninput="lossSyncField('adjPhone',this.value)"></div>
         </div>
         <div><label class="ins-label">Damage Description / Claim Notes</label><textarea class="ins-field" rows="3" style="resize:vertical;font-size:12px" id="li-claimNotes" oninput="lossSyncField('claimNotes',this.value)" placeholder="Describe damage, scope of loss, special instructions…">${ins.claimNotes}</textarea></div>
       </div>
