@@ -193,15 +193,20 @@ function build(template: string, s: Summary, note: string, signature: string) {
         ${para(CALL)}`, signature),
     };
   }
+  const count = (s.options || []).length;
+  const countWord = ["", "one", "two", "three", "four"][count] || String(count);
+  const addr = s.address ? ` for <b>${esc(s.address)}</b>` : "";
   return {
     subject: `Your roofing estimate${s.address ? " — " + s.address.split(",")[0] : ""}`,
     html: shell("Your roofing estimate", `
       ${para("Hi " + first + ",")}
       ${noteHtml}
-      ${para("Thank you for choosing StormShield Pro Roofing. Your estimate" + at + " is attached." + (multi ? ` We&rsquo;ve included ${(s.options || []).length} options so you can compare them side by side:` : ""))}
+      ${para("Thank you for taking the time to meet with me. Attached is your roofing estimate" + addr + "." + (multi ? ` As discussed, I&rsquo;ve included <b>${countWord} options</b> so you can choose what best fits your needs and budget.` : ""))}
       ${compare}
       ${claim ? para(claim) : ""}
-      ${para('Feel free to reply or call us at <a href="tel:8329107735" style="color:#1D4ED8;text-decoration:none">832-910-7735</a> with any questions or concerns.')}`, signature),
+      ${para("At StormShield Pro Roofing, we take pride in quality workmanship and high-grade materials, and we never cut corners. Our goal is a roof that&rsquo;s built to last.")}
+      ${para("If you&rsquo;re comparing estimates, I&rsquo;d encourage you to look beyond price at the materials, installation details and warranties each contractor offers.")}
+      ${para("Please don&rsquo;t hesitate to reach out with any questions. I&rsquo;d appreciate the opportunity to earn your business!")}`, signature),
   };
 }
 
