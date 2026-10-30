@@ -17120,11 +17120,17 @@ const QE_CSS = `
   /* feature rows: label on top, value full width */
   .qe-fr{grid-template-columns:1fr}
   .qe-fr-k{padding:9px 12px 0}
-  .qe .qe-fr textarea{padding:2px 12px 10px;font-size:15px;line-height:1.4}
+  .qe .qe-fr textarea{padding:2px 12px 10px;line-height:1.4}
   /* scope: flatter list, bigger tap targets */
   #qScopeSelector > div{background:transparent!important;border:0!important;padding:0!important;margin-bottom:6px!important}
   #qScopeSelector label{padding:7px 0!important;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)}
   #qScopeSelector input[type=checkbox]{width:18px;height:18px}
+  /* Fields match the 14px text around them. The CRM's phone-wide 16px rule
+     exists to stop iPhone zooming on tap; the page's viewport setting
+     (maximum-scale=1) already prevents that, so it isn't needed here. */
+  .qe input:not([type=checkbox]):not([type=radio]),.qe select,.qe textarea{font-size:14px!important}
+  .qe input[type=text],.qe input[type=date],.qe input:not([type]),.qe select{padding:9px 11px}
+  .qe .qe-row input{font-size:14.5px!important}
   /* bottom bar */
   .qe-bar{gap:8px}
   .qe-bar-l{white-space:nowrap}
