@@ -19541,19 +19541,29 @@ function quotePreviewOverlay(){
     titleEl.textContent = 'Estimate';
   }
 
-  const loadScript = src => new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(sc); });
+  // The PDF tools run INSIDE the estimate page so they draw with the same web
+  // fonts (Playfair Display, Source Sans 3) the page is laid out with. Run from
+  // the CRM page they fell back to other fonts and the text overlapped.
+  const loadIn = (doc, src, name) => doc.defaultView[name] ? Promise.resolve() : new Promise((res, rej) => {
+    const sc = doc.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); doc.head.appendChild(sc);
+  });
   async function makePdf(){
-    if(!window.html2canvas) await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
-    if(!window.jspdf) await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
-    const doc = frame.contentDocument;
-    if(doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+    const doc = frame.contentDocument, win = doc.defaultView;
+    await loadIn(doc, 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', 'html2canvas');
+    await loadIn(doc, 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', 'jspdf');
+    if(doc.fonts){
+      const faces = ['700 16px "Playfair Display"', '600 16px "Playfair Display"', 'italic 600 16px "Playfair Display"', '400 16px "Source Sans 3"', '600 16px "Source Sans 3"', '700 16px "Source Sans 3"'];
+      try { await Promise.race([Promise.all(faces.map(f => doc.fonts.load(f))), new Promise(r => setTimeout(r, 4000))]); } catch(e){}
+      if(doc.fonts.ready) await doc.fonts.ready;
+    }
     doc.documentElement.classList.add('qpv-cap');
+    await new Promise(r => win.requestAnimationFrame(() => win.requestAnimationFrame(r)));
     try {
-      const pdf = new window.jspdf.jsPDF({ unit:'in', format:'letter', orientation:'portrait', compress:true });
+      const pdf = new win.jspdf.jsPDF({ unit:'in', format:'letter', orientation:'portrait', compress:true });
       const pages = doc.querySelectorAll('.a-page, .q-cover, .q-page');
       for(let i = 0; i < pages.length; i++){
         const el = pages[i], shadow = el.style.boxShadow; el.style.boxShadow = 'none';
-        const c = await window.html2canvas(el, { scale:2, useCORS:true, backgroundColor:'#ffffff', windowWidth:900, logging:false });
+        const c = await win.html2canvas(el, { scale:2, useCORS:true, backgroundColor:'#ffffff', windowWidth:900, logging:false });
         el.style.boxShadow = shadow;
         let w = 8.5, h = c.height / c.width * 8.5; if(h > 11){ w = 8.5 * 11 / h; h = 11; }
         if(i) pdf.addPage('letter', 'portrait');
