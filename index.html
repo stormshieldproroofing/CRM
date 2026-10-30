@@ -17197,12 +17197,12 @@ function renderQuoteTab(j){
               <div><label class="qe-lbl" for="qRep">Sales rep</label><input id="qRep" value="${val(q.repName)}" placeholder="Your name"></div>
             </div>
             <div class="qe-ready">${hasDiagram ? '<b>✓</b> Roof diagram from measurement report' : '<span style="opacity:.8">No measurement report yet — cover uses satellite</span>'}${reBits ? '<br><b>✓</b> '+escapeHtml(reBits) : ''}</div>
-            <div class="qe-acts"><button type="button" class="qe-btn pri" id="quotePreviewBtn">Preview &amp; Print</button><button type="button" class="qe-btn" id="quoteSaveBtn">Save</button></div>
+            <div class="qe-acts"><button type="button" class="qe-btn pri" id="quotePreviewBtn">Preview &amp; Print</button><button type="button" class="qe-btn" id="quoteSaveBtn">Save</button><button type="button" class="qe-btn" id="quoteEmailBtn" style="grid-column:1/-1"><i class="ti ti-mail" aria-hidden="true"></i> Email estimate</button></div>
             <div class="qe-saved" id="qeSaved">Changes save automatically</div>
           </div>
         </div>
       </div>
-      <div class="qe-bar"><div><div class="qe-bar-l">Customer pays</div><div class="qe-bar-n" id="qeBarPay">—</div></div><div class="qe-sp"></div><button type="button" class="qe-btn" id="qeBarSave">Save</button><button type="button" class="qe-btn pri" id="qeBarPreview">Preview &amp; Print</button></div>
+      <div class="qe-bar"><div><div class="qe-bar-l">Customer pays</div><div class="qe-bar-n" id="qeBarPay">—</div></div><div class="qe-sp"></div><button type="button" class="qe-btn" id="qeBarEmail" aria-label="Email estimate"><i class="ti ti-mail" aria-hidden="true"></i></button><button type="button" class="qe-btn" id="qeBarSave">Save</button><button type="button" class="qe-btn pri" id="qeBarPreview">Preview &amp; Print</button></div>
     </div>
   `;
 
@@ -17468,6 +17468,9 @@ function renderQuoteTab(j){
   root.addEventListener('change', e => { if(e.target.matches('input,textarea')) qeSchedule(); });
   $('quoteSaveBtn').addEventListener('click', () => { clearTimeout(qeTimer); qeTimer = null; qeSetSaved('saved'); });
   $('qeBarSave').addEventListener('click', () => $('quoteSaveBtn').click());
+  const qeEmail = () => { if(window.__quoteFlush) window.__quoteFlush(); collectQuote(); saveToStorage(); openQuoteEmailDialog(j); };
+  $('quoteEmailBtn').addEventListener('click', qeEmail);
+  $('qeBarEmail').addEventListener('click', qeEmail);
   $('qeBarPreview').addEventListener('click', () => $('quotePreviewBtn').click());
   // Close the ⋯ menu on outside click
   document.addEventListener('click', function qeMenuClose(e){
@@ -19470,6 +19473,182 @@ ${theme.fonts || '<link href="https://fonts.googleapis.com/css2?family=Playfair+
 }
 window.buildQuoteLayoutA = buildQuoteLayoutA;
 
+// ── QUOTE PDF ───────────────────────────────────────────────────────────────
+// Letter-size PDF of the estimate pages (html2canvas + jsPDF, loaded on demand).
+// Used by the preview's Save PDF and by Email estimate.
+function quoteLoadScript(src){ return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(sc); }); }
+async function quotePdfFromDoc(doc, o){
+  o = o || {};
+  // Load and run the PDF tools INSIDE the estimate page so they draw with the
+  // same web fonts (Playfair Display, Source Sans 3) the page is laid out with.
+  const win = doc.defaultView;
+  const loadIn = (src, name) => win[name] ? Promise.resolve() : new Promise((res, rej) => {
+    const sc = doc.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); doc.head.appendChild(sc);
+  });
+  await loadIn('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', 'html2canvas');
+  await loadIn('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', 'jspdf');
+  if(doc.fonts){
+    const faces = ['700 16px "Playfair Display"', '600 16px "Playfair Display"', 'italic 600 16px "Playfair Display"', '400 16px "Source Sans 3"', '600 16px "Source Sans 3"', '700 16px "Source Sans 3"'];
+    try { await Promise.race([Promise.all(faces.map(f => doc.fonts.load(f))), new Promise(r => setTimeout(r, 4000))]); } catch(e){}
+    if(doc.fonts.ready) await doc.fonts.ready;
+  }
+  doc.documentElement.classList.add('qpv-cap');
+  await new Promise(r => win.requestAnimationFrame(() => win.requestAnimationFrame(r)));
+  try {
+    const pdf = new win.jspdf.jsPDF({ unit:'in', format:'letter', orientation:'portrait', compress:true });
+    const pages = doc.querySelectorAll('.a-page, .q-cover, .q-page');
+    for(let i = 0; i < pages.length; i++){
+      const el = pages[i], shadow = el.style.boxShadow; el.style.boxShadow = 'none';
+      const c = await win.html2canvas(el, { scale: o.scale || 2, useCORS:true, backgroundColor:'#ffffff', windowWidth:900, logging:false });
+      el.style.boxShadow = shadow;
+      let w = 8.5, h = c.height / c.width * 8.5; if(h > 11){ w = 8.5 * 11 / h; h = 11; }
+      if(i) pdf.addPage('letter', 'portrait');
+      pdf.addImage(c.toDataURL('image/jpeg', o.quality || 0.92), 'JPEG', (8.5 - w) / 2, 0, w, h);
+    }
+    const name = ((doc.title || 'Roofing Estimate').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Roofing Estimate') + '.pdf';
+    return new File([pdf.output('blob')], name, { type:'application/pdf' });
+  } finally { doc.documentElement.classList.remove('qpv-cap'); }
+}
+// Render estimate HTML off-screen and turn it into a PDF
+function quotePdfFromHtml(html, o){
+  return new Promise((resolve, reject) => {
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;opacity:0;pointer-events:none';
+    const done = (fn, v) => { setTimeout(() => f.remove(), 0); fn(v); };
+    f.onload = async () => { try { done(resolve, await quotePdfFromDoc(f.contentDocument, o)); } catch(e){ done(reject, e); } };
+    f.srcdoc = html;
+    document.body.appendChild(f);
+  });
+}
+window.quotePdfFromHtml = quotePdfFromHtml;
+
+// ── EMAIL ESTIMATE → ZOHO DRAFTS ────────────────────────────────────────────
+// Builds the estimate PDF and saves a branded email (same look as the signing
+// emails) to Zoho Mail → Drafts through the quote-email function. Nothing is
+// sent: the rep reviews it in Zoho and clicks Send.
+function quoteEmailSummary(j){
+  const q = getJobQuote(j), ci = getCompanyInfo();
+  const num = v => moneyNum(v);
+  const isCash = q.mode === 'cash';
+  const list = getJobQuotes(j);
+  const days = Math.max(1, parseInt(ci.quoteValidDays, 10) || 30);
+  const vu = new Date((q.quoteDate || new Date().toISOString().slice(0,10)) + 'T00:00:00'); vu.setDate(vu.getDate() + days);
+  const out = {
+    mode: isCash ? 'cash' : 'insurance',
+    first: String(j.name || '').trim().split(/\s+/)[0] || '',
+    address: String(j.address || '').replace(/^—$/, ''),
+    carrier: isCash ? '' : (j.carrier || ''),
+    validUntil: vu.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' }),
+    options: [],
+  };
+  if(list.length > 1){
+    const tiers = quoteTiers(list);
+    const prices = tiers.map(r => r.price).filter(p => p > 0);
+    const base = prices.length ? Math.min(...prices) : 0;
+    out.options = tiers.map(r => {
+      const up = r.price > 0 ? Math.max(0, r.price - base) : 0;
+      const ded = num(r.q.deductible) || num(q.deductible);
+      return { tier: r.tier, name: [r.q.shingleBrand, r.q.shingleModel].filter(Boolean).join(' ') || r.q.label || '', price: r.price, up, pay: isCash ? r.price : ded + up };
+    });
+  } else {
+    const price = num(q.contractAmount), dep = num(q.depositAmount);
+    out.single = { name: [q.shingleBrand, q.shingleModel].filter(Boolean).join(' '), price, pay: isCash ? price : num(q.deductible), deposit: isCash ? (dep > 0 ? dep : Math.round(price * 50) / 100) : 0 };
+  }
+  return out;
+}
+function openQuoteEmailDialog(j){
+  const esc = s => escapeHtml(String(s == null ? '' : s));
+  if(!document.getElementById('qmlStyles')){
+    const st = document.createElement('style'); st.id = 'qmlStyles';
+    st.textContent = `
+#qmlOv{position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+@media(min-width:640px){#qmlOv{align-items:center}}
+#qmlOv .qml{width:100%;max-width:520px;max-height:92vh;overflow:auto;background:var(--surface,#161B24);color:var(--brand,#E8ECF3);border:1px solid var(--border,#252B38);border-radius:16px 16px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+@media(min-width:640px){#qmlOv .qml{border-radius:16px}}
+#qmlOv h3{margin:0 0 4px;font-size:17px}#qmlOv .sub{font-size:12.5px;color:var(--muted,#8B94A7);margin-bottom:14px}
+#qmlOv label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#8B94A7);margin:12px 0 5px}
+#qmlOv input,#qmlOv textarea{width:100%;box-sizing:border-box;background:#1E253A;border:1px solid var(--border,#252B38);border-radius:8px;padding:9px 11px;font:inherit;font-size:14px;color:inherit;outline:none}
+#qmlOv textarea{min-height:70px;resize:vertical}
+#qmlOv .tpl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#qmlOv .tpl button{text-align:left;border:1px solid var(--border,#252B38);background:#1E253A;color:inherit;border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit}
+#qmlOv .tpl button b{display:block;font-size:13.5px}#qmlOv .tpl button span{font-size:11.5px;color:var(--muted,#8B94A7)}
+#qmlOv .tpl button.on{border-color:var(--brand-light,#3B7BF0);box-shadow:inset 0 0 0 1px var(--brand-light,#3B7BF0);background:rgba(59,123,240,.10)}
+#qmlOv .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+#qmlOv .acts button{border-radius:9px;padding:11px 14px;font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;border:1px solid var(--border,#252B38);background:#1E253A;color:inherit}
+#qmlOv .acts .pri{flex:1;background:var(--brand-light,#3B7BF0);border-color:var(--brand-light,#3B7BF0);color:#fff}
+#qmlOv .msg{font-size:13px;margin-top:12px;line-height:1.45;min-height:18px}
+#qmlOv .msg.err{color:var(--danger,#F87171)}#qmlOv .msg.ok{color:var(--success,#34D399)}
+#qmlOv .msg a{color:var(--brand-light,#3B7BF0);font-weight:700}
+#qmlOv iframe{width:100%;height:420px;border:1px solid var(--border,#252B38);border-radius:10px;background:#F3F5F8;margin-top:12px;display:none}`;
+    document.head.appendChild(st);
+  }
+  const old = document.getElementById('qmlOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id = 'qmlOv';
+  const sentBefore = (Array.isArray(j.timeline) ? j.timeline : []).some(a => /estimate email/i.test(String(a.label || '')));
+  let tpl = sentBefore ? 'followup' : 'estimate';
+  ov.innerHTML = `<div class="qml" role="dialog" aria-label="Email estimate">
+    <h3>Email estimate</h3>
+    <div class="sub">Saves a draft with the estimate PDF attached to <b>Zoho Mail → Drafts</b>. Review it there, then click Send.</div>
+    <label for="qmlTo">To</label><input id="qmlTo" type="email" inputmode="email" autocomplete="off" value="${esc(j.email && j.email !== '—' ? j.email : '')}" placeholder="homeowner@email.com">
+    <label>Template</label>
+    <div class="tpl"><button type="button" data-t="estimate"><b>Estimate</b><span>First send — options, prices, what they pay</span></button><button type="button" data-t="followup"><b>Follow-up</b><span>Checking in — estimate attached again</span></button></div>
+    <label for="qmlNote">Personal note <span style="text-transform:none;letter-spacing:0;font-weight:400">(optional)</span></label>
+    <textarea id="qmlNote" placeholder="e.g. Great meeting you today — the Better option is what I'd put on my own house."></textarea>
+    <div class="acts"><button type="button" data-a="cancel">Cancel</button><button type="button" data-a="preview">Preview email</button><button type="button" class="pri" data-a="draft">Save to Zoho Drafts</button></div>
+    <div class="msg"></div><iframe title="Email preview"></iframe></div>`;
+  document.body.appendChild(ov);
+  const $q = sel => ov.querySelector(sel), msg = $q('.msg');
+  const say = (t, cls) => { msg.className = 'msg' + (cls ? ' ' + cls : ''); msg.innerHTML = t || ''; };
+  const setTpl = t => { tpl = t; ov.querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t)); };
+  setTpl(tpl);
+  const close = () => ov.remove();
+  const call = async (body) => {
+    if(!window.sb || !window.sb.functions) throw new Error('Not connected to the CRM database — refresh and try again');
+    const { data, error } = await window.sb.functions.invoke('quote-email', { body });
+    if(error){ let m = error.message || String(error); try { const b = await error.context.json(); if(b && b.error) m = b.error; } catch(_){} throw new Error(m); }
+    if(data && data.ok === false) throw new Error(data.notConfigured ? 'Email isn’t set up yet (Zoho Mail)' : (data.error || 'Something went wrong'));
+    return data || {};
+  };
+  ov.addEventListener('click', async e => {
+    if(e.target === ov) return close();
+    const t = e.target.closest('[data-t]'); if(t) return setTpl(t.dataset.t);
+    const b = e.target.closest('[data-a]'); if(!b || b.disabled) return;
+    const note = $q('#qmlNote').value.trim(), to = $q('#qmlTo').value.trim();
+    if(b.dataset.a === 'cancel') return close();
+    if(!j._sb){ return say('This job isn’t saved to the CRM yet — wait for it to sync, then try again.', 'err'); }
+    if(b.dataset.a === 'preview'){
+      b.disabled = true; say('Building preview…');
+      try {
+        const d = await call({ preview:true, job_id:j.id, template:tpl, note, summary: quoteEmailSummary(j) });
+        const f = $q('iframe'); f.style.display = 'block'; f.srcdoc = d.html; say('Subject: <b>' + esc(d.subject) + '</b>');
+      } catch(err){ say(esc(err.message), 'err'); }
+      b.disabled = false; return;
+    }
+    if(b.dataset.a === 'draft'){
+      if(!/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(to)) return say('Enter the homeowner’s email address.', 'err');
+      ov.querySelectorAll('[data-a]').forEach(x => x.disabled = true);
+      try {
+        say('Creating the estimate PDF…');
+        const html = openQuotePreview(j, { returnHtml:true, coverImg: (typeof roofSketchPeek === 'function' && roofSketchPeek(j).value) || undefined });
+        const file = await quotePdfFromHtml(html, { scale:1.6, quality:0.85 });
+        const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = () => rej(new Error('Could not read the PDF')); r.readAsDataURL(file); });
+        say('Saving draft to Zoho Mail…');
+        const d = await call({ job_id:j.id, to, template:tpl, note, pdf_base64:b64, file_name:file.name, summary: quoteEmailSummary(j) });
+        if(typeof logActivity === 'function') logActivity(j, 'quote', tpl === 'followup' ? 'Estimate email follow-up drafted' : 'Estimate email drafted', 'To ' + to + ' · Zoho Drafts');
+        if(!j.email || j.email === '—'){ j.email = to; if(typeof saveToStorage === 'function') saveToStorage(); }
+        say('✓ Draft saved to Zoho Mail → Drafts' + (d.from ? ' (from ' + esc(d.from) + ')' : '') + '. <a href="' + esc(d.draftsUrl || 'https://mail.zoho.com/zm/#mail/folder/drafts') + '" target="_blank" rel="noopener">Open Zoho Drafts</a> to review and send.', 'ok');
+        ov.querySelectorAll('[data-a]').forEach(x => x.disabled = false);
+        const act = ov.querySelector('[data-a=draft]'); act.textContent = 'Done'; act.dataset.a = 'cancel';
+        return;
+      } catch(err){ console.error('[quote-email]', err); say(esc(err.message || String(err)), 'err'); }
+      ov.querySelectorAll('[data-a]').forEach(x => x.disabled = false);
+    }
+  });
+  setTimeout(() => { const to = $q('#qmlTo'); if(to && !to.value) to.focus(); }, 50);
+}
+window.openQuoteEmailDialog = openQuoteEmailDialog;
+
 // ── QUOTE PREVIEW SCREEN ────────────────────────────────────────────────────
 // Shows the estimate inside the CRM (full screen) instead of a new tab, so the
 // home-screen web app and phones always have Close, Save PDF and Print, and the
@@ -19541,28 +19720,7 @@ function quotePreviewOverlay(){
     titleEl.textContent = 'Estimate';
   }
 
-  const loadScript = src => new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(sc); });
-  async function makePdf(){
-    if(!window.html2canvas) await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
-    if(!window.jspdf) await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
-    const doc = frame.contentDocument;
-    if(doc.fonts && doc.fonts.ready) await doc.fonts.ready;
-    doc.documentElement.classList.add('qpv-cap');
-    try {
-      const pdf = new window.jspdf.jsPDF({ unit:'in', format:'letter', orientation:'portrait', compress:true });
-      const pages = doc.querySelectorAll('.a-page, .q-cover, .q-page');
-      for(let i = 0; i < pages.length; i++){
-        const el = pages[i], shadow = el.style.boxShadow; el.style.boxShadow = 'none';
-        const c = await window.html2canvas(el, { scale:2, useCORS:true, backgroundColor:'#ffffff', windowWidth:900, logging:false });
-        el.style.boxShadow = shadow;
-        let w = 8.5, h = c.height / c.width * 8.5; if(h > 11){ w = 8.5 * 11 / h; h = 11; }
-        if(i) pdf.addPage('letter', 'portrait');
-        pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', (8.5 - w) / 2, 0, w, h);
-      }
-      const name = ((doc.title || 'Roofing Estimate').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Roofing Estimate') + '.pdf';
-      return new File([pdf.output('blob')], name, { type:'application/pdf' });
-    } finally { doc.documentElement.classList.remove('qpv-cap'); }
-  }
+  const makePdf = () => quotePdfFromDoc(frame.contentDocument);
   const isTouch = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
   async function shareOrDownload(file){
     if(isTouch && navigator.canShare && navigator.canShare({ files:[file] })){
