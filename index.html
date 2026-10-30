@@ -16963,6 +16963,7 @@ function buildQuoteSelector(j, q){
     + '<button type="button" class="qe-gbb" onclick="window.__quoteFlush&&window.__quoteFlush();quoteMakeTiersPick(\''+j.id+'\',this)" title="Create Good / Better / Best shingle options">Good / Better / Best ▾</button>'
     + '<div class="qe-more"><button type="button" class="qe-ib" onclick="this.parentNode.classList.toggle(\'open\')" aria-label="More quote actions">⋯</button>'
     + '<div class="qe-menu">'
+    + '<button type="button" class="qe-menu-i mob-only" onclick="this.closest(\'.qe-more\').classList.remove(\'open\');window.__quoteFlush&&window.__quoteFlush();quoteMakeTiersPick(\''+j.id+'\',this.closest(\'.qe-more\'))">Good / Better / Best…</button>'
     + '<button type="button" class="qe-menu-i" onclick="window.__quoteFlush&&window.__quoteFlush();quoteAdd(\''+j.id+'\',false)">New blank option</button>'
     + '<button type="button" class="qe-menu-i" onclick="window.__quoteFlush&&window.__quoteFlush();quoteAdd(\''+j.id+'\',true)">Duplicate this option</button>'
     + del + '</div></div>'
@@ -17060,6 +17061,7 @@ const QE_CSS = `
 .qe-saved{font-size:11px;color:var(--muted);text-align:center;margin-top:7px;min-height:14px}
 .qe-saved.ok{color:var(--success)}
 .qe-bar{display:none}
+.qe-mob-h,.qe-msum,.qe-chev,.qe-menu-i.mob-only{display:none}
 @media (max-width:860px){
   .qe{padding:12px 12px 0}
   .qe-grid{grid-template-columns:1fr}
@@ -17075,6 +17077,64 @@ const QE_CSS = `
   .qe-models{grid-template-columns:repeat(2,minmax(0,1fr))}
   .qe-sh .qe-sub{display:none}
   .qe-fr{grid-template-columns:76px 1fr}
+  /* ---- Roomier phone layout ---- */
+  .qe{padding:10px 8px 0}
+  .qe-ob{margin-bottom:10px;gap:6px}
+  .qe-gbb{display:none}
+  .qe-menu-i.mob-only{display:block}
+  .qe-opt{padding:8px 10px}
+  /* one column: Shingle → Price → Scope → Terms → From */
+  .qe-grid{display:flex;flex-direction:column;gap:0;align-items:stretch}
+  .qe-grid > *, .qe-main > *{min-width:0;max-width:100%}
+  .qe-sec .qe-sh{overflow:hidden}
+  .qe-main{display:contents}
+  .qe-ord-1{order:1}.qe-sum{order:2;margin-bottom:10px}.qe-ord-3{order:3}.qe-ord-4{order:4}.qe-ord-5{order:5}
+  .qe-sec{margin-bottom:10px;border-radius:14px}
+  /* accordion: tap a header to open that section */
+  .qe-acc > .qe-sh{cursor:pointer;padding:14px 14px;min-height:52px}
+  .qe-acc > .qe-sh .qe-lnk,.qe-acc > .qe-sh .qe-sub{display:none}
+  .qe-acc:not(.mob-open) > :not(.qe-sh){display:none!important}
+  .qe-acc:not(.mob-open) > .qe-sh{border-bottom:0}
+  .qe-acc:not(.mob-open) > .qe-sh .qe-sp{display:none}
+  .qe-acc > .qe-sh .qe-ttl{flex-shrink:0}
+  .qe-acc.mob-open > .qe-sh .qe-lnk{display:inline-block}
+  .qe-acc.mob-open .qe-collapse{display:block;padding-top:12px}
+  .qe-msum{display:block;flex:1;min-width:0;text-align:right;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qe-acc.mob-open .qe-msum{display:none}
+  .qe-chev{display:inline-block;width:18px;text-align:center;color:var(--muted);font-size:13px;transition:transform .15s;flex-shrink:0}
+  .qe-acc.mob-open .qe-chev{transform:rotate(180deg)}
+  .qe-sb{padding:12px}
+  /* price card as an accordion section */
+  .qe-sc{padding:0;border-radius:14px}
+  .qe-sc > .qe-mob-h{display:flex;border-bottom:1px solid var(--border)}
+  .qe-sc.mob-open > :not(.qe-mob-h){margin-left:14px;margin-right:14px}
+  .qe-sc.mob-open > .qe-mode{margin-top:12px}
+  .qe-sc.mob-open > :last-child{margin-bottom:14px}
+  /* shingle picker: brands and models scroll sideways in one row */
+  .qe-brands{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px 10px;padding:0 12px 2px;scrollbar-width:none}
+  .qe-brands::-webkit-scrollbar,.qe-models::-webkit-scrollbar{display:none}
+  .qe-chip{flex-shrink:0}
+  .qe-models{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px;padding:0 12px 2px;gap:8px;scrollbar-width:none}
+  .qe-models .qe-mc{flex:0 0 138px}
+  .qe-g2{grid-template-columns:1fr;gap:10px}
+  /* feature rows: label on top, value full width */
+  .qe-fr{grid-template-columns:1fr}
+  .qe-fr-k{padding:9px 12px 0}
+  .qe .qe-fr textarea{padding:2px 12px 10px;line-height:1.4}
+  /* scope: flatter list, bigger tap targets */
+  #qScopeSelector > div{background:transparent!important;border:0!important;padding:0!important;margin-bottom:6px!important}
+  #qScopeSelector label{padding:7px 0!important;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05)}
+  #qScopeSelector input[type=checkbox]{width:18px;height:18px}
+  /* Fields match the 14px text around them. The CRM's phone-wide 16px rule
+     exists to stop iPhone zooming on tap; the page's viewport setting
+     (maximum-scale=1) already prevents that, so it isn't needed here. */
+  .qe input:not([type=checkbox]):not([type=radio]),.qe select,.qe textarea{font-size:14px!important}
+  .qe input[type=text],.qe input[type=date],.qe input:not([type]),.qe select{padding:9px 11px}
+  .qe .qe-row input{font-size:14.5px!important}
+  /* bottom bar */
+  .qe-bar{gap:8px}
+  .qe-bar-l{white-space:nowrap}
+  .qe-bar .qe-btn{padding:11px 13px}
 }
 `;
 function qeEnsureStyles(){
@@ -17128,8 +17188,8 @@ function renderQuoteTab(j){
       <div class="qe-grid">
         <div class="qe-main">
           <!-- 1. Shingle -->
-          <div class="qe-sec">
-            <div class="qe-sh"><div class="qe-num">1</div><div class="qe-ttl">Shingle</div><div class="qe-sub">fills the feature rows</div><div class="qe-sp"></div><button type="button" class="qe-lnk" id="qeCustomToggle">Custom shingle</button></div>
+          <div class="qe-sec qe-ord-1 qe-acc mob-open" data-acc="shingle">
+            <div class="qe-sh"><div class="qe-num">1</div><div class="qe-ttl">Shingle</div><div class="qe-sub">fills the feature rows</div><div class="qe-sp"></div><span class="qe-msum" id="qeSumShingle"></span><span class="qe-chev">▾</span><button type="button" class="qe-lnk" id="qeCustomToggle">Custom shingle</button></div>
             <div class="qe-sb">
               <div class="qe-brands" id="qeBrands">${brandList.map(b => `<button type="button" class="qe-chip${curSys && curSys.brand===b ? ' on' : ''}" data-qe-brand="${escapeHtml(b)}">${escapeHtml(b)}</button>`).join('')}</div>
               <div class="qe-models" id="qeModels"></div>
@@ -17149,8 +17209,8 @@ function renderQuoteTab(j){
           </div>
 
           <!-- 2. Scope -->
-          <div class="qe-sec">
-            <div class="qe-sh"><div class="qe-num">2</div><div class="qe-ttl">Scope of work</div><div class="qe-sub" id="qeScopeCount">${scopeAll - scopeOff} of ${scopeAll} included</div><div class="qe-sp"></div>
+          <div class="qe-sec qe-ord-3 qe-acc" data-acc="scope">
+            <div class="qe-sh"><div class="qe-num">2</div><div class="qe-ttl">Scope of work</div><span class="qe-msum" id="qeSumScope"></span><span class="qe-chev">▾</span><div class="qe-sub" id="qeScopeCount">${scopeAll - scopeOff} of ${scopeAll} included</div><div class="qe-sp"></div>
               <button type="button" class="qe-lnk" id="quoteScopeAll" style="color:var(--success)">All</button>
               <button type="button" class="qe-lnk" id="quoteScopeNone" style="color:var(--danger)">None</button>
               <button type="button" class="qe-lnk mut" id="qeScopeText">Edit as text</button></div>
@@ -17164,8 +17224,8 @@ function renderQuoteTab(j){
           </div>
 
           <!-- 3. Terms -->
-          <div class="qe-sec flat" id="qeTermsSec">
-            <div class="qe-sh"><div class="qe-num">3</div><div class="qe-ttl">Terms &amp; conditions</div><div class="qe-sub">${isInsurance ? 'Insurance' : 'Cash'} terms · ${termParas} paragraph${termParas===1?'':'s'}</div><div class="qe-sp"></div><button type="button" class="qe-lnk" onclick="document.getElementById('qeTermsSec').classList.toggle('open')">Edit</button></div>
+          <div class="qe-sec flat qe-ord-4 qe-acc" data-acc="terms" id="qeTermsSec">
+            <div class="qe-sh"><div class="qe-num">3</div><div class="qe-ttl">Terms &amp; conditions</div><span class="qe-msum">${isInsurance ? 'Insurance' : 'Cash'} terms</span><span class="qe-chev">▾</span><div class="qe-sub">${isInsurance ? 'Insurance' : 'Cash'} terms · ${termParas} paragraph${termParas===1?'':'s'}</div><div class="qe-sp"></div><button type="button" class="qe-lnk" onclick="document.getElementById('qeTermsSec').classList.toggle('open')">Edit</button></div>
             <div class="qe-collapse">
               <textarea id="qTerms" rows="8" style="font-size:12px">${val(q.terms)}</textarea>
               <div style="text-align:right;margin-top:5px"><button type="button" class="qe-lnk mut" id="quoteResetTermsBtn">Reset to default</button></div>
@@ -17173,7 +17233,7 @@ function renderQuoteTab(j){
           </div>
 
           <!-- From -->
-          <div class="qe-sec flat">
+          <div class="qe-sec flat qe-ord-5">
             <div class="qe-sh" style="flex-wrap:nowrap"><div class="qe-ttl" style="flex-shrink:0">From</div>
               <div class="qe-from">${companyComplete ? escapeHtml([ci.name, ci.address, ci.phone].filter(Boolean).join(' · ')) : '<span style="color:var(--warn)">Add your company address and phone before sending quotes</span>'}</div>
               <button type="button" class="qe-lnk" id="quoteEditCompanyBtn" style="flex-shrink:0">${companyComplete ? 'Company info' : 'Set up'}</button></div>
@@ -17182,7 +17242,8 @@ function renderQuoteTab(j){
 
         <!-- Pricing summary -->
         <div class="qe-sum">
-          <div class="qe-sc">
+          <div class="qe-sc qe-acc" data-acc="price">
+            <div class="qe-sh qe-mob-h"><div class="qe-num">$</div><div class="qe-ttl">Price</div><div class="qe-sp"></div><span class="qe-msum" id="qeSumPrice"></span><span class="qe-chev">▾</span></div>
             <div class="qe-mode"><button type="button" id="quoteModeInsurance" class="${isInsurance?'on':''}">Insurance</button><button type="button" id="quoteModeCash" class="${isCash?'on cash':''}">Cash</button></div>
             <div class="qe-row"><label for="qContract">${isInsurance ? 'Contract (RCV)' : 'Total'}${isCash ? '<small>from section prices</small>' : ''}</label><input id="qContract" type="text" inputmode="decimal" ${isCash ? 'readonly' : ''} value="${val(q.contractAmount)}" placeholder="0.00"></div>
             ${isInsurance ? `<div class="qe-row"><label for="qDeductible">Deductible</label><input id="qDeductible" type="text" inputmode="decimal" value="${val(q.deductible)}" placeholder="0.00"></div>` : ''}
@@ -17459,6 +17520,37 @@ function renderQuoteTab(j){
   // Get the roof diagram ready in the background for Preview & Print
   if((j.roofFiles||[]).some(f => jobFileIsPdf(f) || jobFileIsImage(f))) roofSketchPrefetch(j);
   const root = $('qeRoot');
+  // ── Phone layout: one section open at a time, with a one-line summary ──
+  const qeMob = () => window.matchMedia('(max-width:860px)').matches;
+  function qeSummaries(){
+    const v = id => { const el = $(id); return el ? String(el.value || '').trim() : ''; };
+    const m = n => { const x = moneyNum(n); return x > 0 ? '$' + Math.round(x).toLocaleString('en-US') : ''; };
+    const shingle = [v('qShingleBrand'), v('qShingleModel')].filter(Boolean).join(' ');
+    if($('qeSumShingle')) $('qeSumShingle').textContent = [shingle || 'Pick a shingle', v('qShingleColor')].filter(Boolean).join(' · ');
+    if($('qeSumScope') && $('qeScopeCount')) $('qeSumScope').textContent = $('qeScopeCount').textContent;
+    if($('qeSumPrice')){
+      const c = m(v('qContract')), d = $('qDeductible') ? m(v('qDeductible')) : '';
+      $('qeSumPrice').textContent = c ? c + (d ? ' · ded. ' + d : '') : 'Enter a price';
+    }
+  }
+  qeSummaries();
+  root.addEventListener('input', qeSummaries);
+  root.addEventListener('change', qeSummaries);
+  new MutationObserver(qeSummaries).observe($('qScopeSelector'), { childList:true });
+  // Keep the open section across re-renders (switching options, etc.)
+  const openKey = window.__qeOpenSec || 'shingle';
+  root.querySelectorAll('.qe-acc').forEach(sec => sec.classList.toggle('mob-open', sec.dataset.acc === openKey));
+  root.addEventListener('click', e => {
+    if(!qeMob()) return;
+    const head = e.target.closest('.qe-acc > .qe-sh'); if(!head) return;
+    if(e.target.closest('button,a,input,select,textarea,label')) return;
+    const sec = head.parentElement, open = !sec.classList.contains('mob-open');
+    root.querySelectorAll('.qe-acc').forEach(x => x.classList.remove('mob-open'));
+    if(open){ sec.classList.add('mob-open'); window.__qeOpenSec = sec.dataset.acc;
+      setTimeout(() => sec.scrollIntoView({ block:'start', behavior:'smooth' }), 30);
+      if(sec.dataset.acc === 'shingle' && typeof qeRenderFeatRows === 'function') qeRenderFeatRows();
+    } else window.__qeOpenSec = '';
+  });
   root.addEventListener('input', e => {
     if(e.target.id === 'qLabel'){
       const t = root.querySelector('.qe-opt.on .qe-opt-m'); if(t) t.textContent = e.target.value.replace(/^\s*(good|better|best)\b\s*[—–-]?\s*/i, '') || '—';
