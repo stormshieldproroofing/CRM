@@ -19400,6 +19400,31 @@ ${theme.fonts || '<link href="https://fonts.googleapis.com/css2?family=Playfair+
 }
 window.buildQuoteLayoutA = buildQuoteLayoutA;
 
+// Preview tab chrome: a bar with "Back to CRM" and "Save PDF / Print" so the
+// preview isn't a dead end on a phone. Shown on screen only — never printed.
+function quotePreviewWithBar(html){
+  const bar = `<style>
+  .qpv-bar{position:fixed;left:0;top:0;width:100vw;box-sizing:border-box;z-index:2147483000;display:flex;gap:8px;align-items:center;
+    padding:calc(8px + env(safe-area-inset-top)) 10px 8px;background:rgba(18,22,30,.96);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 2px 12px rgba(0,0,0,.25);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  .qpv-bar button{min-height:44px;padding:0 14px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+  .qpv-back{background:transparent;border:1px solid rgba(255,255,255,.18);color:#E8ECF3}
+  .qpv-save{background:#2F6FEB;border:0;color:#fff}
+  .qpv-msg{position:fixed;left:10px;width:calc(100vw - 20px);box-sizing:border-box;top:calc(64px + env(safe-area-inset-top));z-index:2147483000;display:none;
+    padding:12px 14px;border-radius:10px;background:#12161E;color:#E8ECF3;font:14px/1.4 -apple-system,"Segoe UI",sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+  .qpv-space{height:calc(60px + env(safe-area-inset-top))}
+  .q-print-btn{display:none!important}
+  @media print{.qpv-bar,.qpv-msg,.qpv-space{display:none!important}}
+</style>
+<div class="qpv-bar" role="toolbar" aria-label="Estimate preview">
+  <button type="button" class="qpv-back" onclick="try{if(window.opener&&!window.opener.closed)window.opener.focus()}catch(e){}try{window.close()}catch(e){}setTimeout(function(){var m=document.getElementById('qpvMsg');if(m)m.style.display='block'},400)">&#8249; Back to CRM</button>
+  <button type="button" class="qpv-save" onclick="window.print()">Save PDF / Print</button>
+</div>
+<div class="qpv-msg" id="qpvMsg">Your CRM is still open in the other tab. Tap the tabs button and switch back to it.</div>
+<div class="qpv-space"></div>`;
+  return /<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, m => m + bar) : bar + html;
+}
 function openQuotePreview(j, opts){
   opts = opts || {};
   // Layout A (two-page Heritage proposal) is the default; pass layout:'classic'
@@ -19409,7 +19434,7 @@ function openQuotePreview(j, opts){
     if(opts.returnHtml) return html;
     const w = (opts.win && !opts.win.closed) ? opts.win : window.open('', '_blank');
     if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
-    w.document.open(); w.document.write(html); w.document.close();
+    w.document.open(); w.document.write(quotePreviewWithBar(html)); w.document.close();
     return;
   }
   const themeKey = opts.theme || 'heritage';
@@ -19826,7 +19851,7 @@ ${coverHtml}
   const w = (opts.win && !opts.win.closed) ? opts.win : window.open('', '_blank');
   if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
   w.document.open();
-  w.document.write(html);
+  w.document.write(quotePreviewWithBar(html));
   w.document.close();
 }
 
