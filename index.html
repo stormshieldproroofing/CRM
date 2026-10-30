@@ -17247,25 +17247,17 @@ function renderQuoteTab(j){
       openQuotePreview(j, peek.value ? { coverImg: peek.value } : {});
       return;
     }
-    // Still preparing: open the tab now (iPhone Safari only allows it inside
-    // the tap), show a placeholder, then fill it — after 5s at most, using the
-    // satellite view if the diagram isn't ready.
-    const win = window.open('', '_blank');
-    if(!win){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
-    try {
-      win.document.open();
-      win.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preparing estimate…</title>'
-        + '<p id="m" style="font-family:-apple-system,Segoe UI,sans-serif;padding:24px;color:#555">Preparing estimate…</p>'
-        + '<script>setTimeout(function(){var m=document.getElementById("m");if(m)m.innerHTML="Still preparing… If nothing appears, close this tab and tap <b>Preview &amp; Print</b> again.";},9000)<\/script>');
-      win.document.close();
-    } catch(e){}
+    // Still preparing: show the preview screen now with a placeholder, then
+    // fill it — after 5s at most, using the satellite view if needed.
+    const ov = quotePreviewOverlay();
     let sketch = null;
     try { sketch = await Promise.race([roofSketchPrefetch(j), new Promise(res => setTimeout(() => res(null), 5000))]); } catch(e){}
+    if(ov.closed) return;
     try {
-      openQuotePreview(j, Object.assign({ win }, sketch ? { coverImg: sketch } : {}));
+      openQuotePreview(j, Object.assign({ overlay: ov }, sketch ? { coverImg: sketch } : {}));
     } catch(e){
       console.error('[quote] preview failed', e);
-      try { win.document.open(); win.document.write('<p style="font-family:sans-serif;padding:24px;color:#B91C1C">Could not build the estimate: ' + escapeHtml(e.message || String(e)) + '</p>'); win.document.close(); } catch(_){}
+      ov.showError('Could not build the estimate: ' + (e.message || String(e)));
     }
   });
   $('quoteEditCompanyBtn').addEventListener('click', openCompanyInfoModal);
@@ -19468,6 +19460,135 @@ ${theme.fonts || '<link href="https://fonts.googleapis.com/css2?family=Playfair+
 }
 window.buildQuoteLayoutA = buildQuoteLayoutA;
 
+// ── QUOTE PREVIEW SCREEN ────────────────────────────────────────────────────
+// Shows the estimate inside the CRM (full screen) instead of a new tab, so the
+// home-screen web app and phones always have Close, Save PDF and Print, and the
+// phone's back gesture closes it.
+function quotePreviewOverlay(){
+  const old = document.getElementById('qpvOverlay'); if(old && old.__close) old.__close(true);
+  if(!document.getElementById('qpvStyles')){
+    const st = document.createElement('style'); st.id = 'qpvStyles';
+    st.textContent = `
+#qpvOverlay{position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;background:#E7E2DA}
+#qpvOverlay .qpv-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));background:#2A2622;color:#F4ECDD;flex-shrink:0}
+#qpvOverlay .qpv-t{flex:1;min-width:0;font:600 14px -apple-system,'Segoe UI',Inter,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#qpvOverlay button{font:600 14px -apple-system,'Segoe UI',Inter,sans-serif;border-radius:9px;padding:9px 14px;cursor:pointer;border:1px solid #B8955A;background:transparent;color:#F4ECDD;white-space:nowrap}
+#qpvOverlay button.pri{background:#B8955A;color:#fff}
+#qpvOverlay button.x{border-color:rgba(255,255,255,.25);padding:9px 12px}
+#qpvOverlay button[disabled]{opacity:.6}
+#qpvOverlay .qpv-msg{font:13px -apple-system,'Segoe UI',sans-serif;color:#E8D3AE;text-align:center;padding:6px 10px;background:#3A342E;display:none}
+#qpvOverlay .qpv-msg.on{display:block}
+#qpvOverlay iframe{flex:1;width:100%;border:0;background:#E7E2DA}
+#qpvOverlay .qpv-wait{flex:1;display:flex;align-items:center;justify-content:center;font:15px -apple-system,'Segoe UI',sans-serif;color:#5C544A;padding:24px;text-align:center}
+@media (max-width:520px){#qpvOverlay .qpv-t{display:none}#qpvOverlay .qpv-bar{justify-content:space-between}}`;
+    document.head.appendChild(st);
+  }
+  const ov = document.createElement('div'); ov.id = 'qpvOverlay';
+  ov.innerHTML = '<div class="qpv-bar"><button type="button" class="x" data-a="close" aria-label="Close preview">✕ Close</button>'
+    + '<div class="qpv-t">Preparing estimate…</div>'
+    + '<button type="button" class="pri" data-a="pdf" disabled>Save PDF</button><button type="button" data-a="print" disabled>Print</button></div>'
+    + '<div class="qpv-msg"></div><div class="qpv-wait">Preparing estimate…</div>';
+  document.body.appendChild(ov);
+  const prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';
+  const msgEl = ov.querySelector('.qpv-msg'), titleEl = ov.querySelector('.qpv-t');
+  const pdfBtn = ov.querySelector('[data-a=pdf]'), printBtn = ov.querySelector('[data-a=print]');
+  const say = t => { msgEl.textContent = t || ''; msgEl.classList.toggle('on', !!t); };
+  let frame = null, pendingFile = null, closed = false, pushed = false;
+  const waitTimer = setTimeout(() => { const w = ov.querySelector('.qpv-wait'); if(w) w.textContent = 'Still preparing… If nothing appears, tap Close and try again.'; }, 9000);
+
+  function close(fromPop){
+    if(closed) return; closed = true;
+    clearTimeout(waitTimer);
+    window.removeEventListener('popstate', onPop);
+    document.body.style.overflow = prevOverflow;
+    ov.remove();
+    if(pushed && !fromPop){ try { history.back(); } catch(e){} }
+  }
+  function onPop(){ close(true); }
+  try { history.pushState({ qpv: 1 }, ''); pushed = true; window.addEventListener('popstate', onPop); } catch(e){}
+  ov.__close = close;
+
+  function setHtml(html){
+    if(closed) return;
+    clearTimeout(waitTimer);
+    // Fit the letter-size pages to narrow screens (screen only, never print)
+    const fit = '<style>@media screen{html:not(.qpv-cap) body{zoom:var(--qpv-z,1)}}</style><script>(function(){function f(){var w=document.documentElement.clientWidth;var z=Math.min(1,(w-8)/(8.5*96+16));document.documentElement.style.setProperty("--qpv-z",z);}f();addEventListener("resize",f);})()<\/script>';
+    html = String(html).replace(/<\/head>/i, fit + '</head>');
+    const wait = ov.querySelector('.qpv-wait'); if(wait) wait.remove();
+    frame = document.createElement('iframe'); frame.title = 'Estimate preview';
+    frame.srcdoc = html;
+    frame.addEventListener('load', () => {
+      try { titleEl.textContent = frame.contentDocument.title || 'Estimate'; } catch(e){ titleEl.textContent = 'Estimate'; }
+      pdfBtn.disabled = false; printBtn.disabled = false;
+      // Hide any print button inside the page — the bar above has one
+      try { frame.contentDocument.querySelectorAll('.q-print-btn,.a-bar').forEach(b => b.style.display = 'none'); } catch(e){}
+    });
+    ov.appendChild(frame);
+  }
+  function showError(text){
+    clearTimeout(waitTimer);
+    const wait = ov.querySelector('.qpv-wait'); if(wait){ wait.style.color = '#B91C1C'; wait.textContent = text; }
+    titleEl.textContent = 'Estimate';
+  }
+
+  const loadScript = src => new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(sc); });
+  async function makePdf(){
+    if(!window.html2canvas) await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+    if(!window.jspdf) await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+    const doc = frame.contentDocument;
+    if(doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+    doc.documentElement.classList.add('qpv-cap');
+    try {
+      const pdf = new window.jspdf.jsPDF({ unit:'in', format:'letter', orientation:'portrait', compress:true });
+      const pages = doc.querySelectorAll('.a-page, .q-cover, .q-page');
+      for(let i = 0; i < pages.length; i++){
+        const el = pages[i], shadow = el.style.boxShadow; el.style.boxShadow = 'none';
+        const c = await window.html2canvas(el, { scale:2, useCORS:true, backgroundColor:'#ffffff', windowWidth:900, logging:false });
+        el.style.boxShadow = shadow;
+        let w = 8.5, h = c.height / c.width * 8.5; if(h > 11){ w = 8.5 * 11 / h; h = 11; }
+        if(i) pdf.addPage('letter', 'portrait');
+        pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', (8.5 - w) / 2, 0, w, h);
+      }
+      const name = ((doc.title || 'Roofing Estimate').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Roofing Estimate') + '.pdf';
+      return new File([pdf.output('blob')], name, { type:'application/pdf' });
+    } finally { doc.documentElement.classList.remove('qpv-cap'); }
+  }
+  const isTouch = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  async function shareOrDownload(file){
+    if(isTouch && navigator.canShare && navigator.canShare({ files:[file] })){
+      try { await navigator.share({ files:[file], title: file.name.replace(/\.pdf$/, '') }); say(''); pendingFile = null; pdfBtn.textContent = 'Save PDF'; return; }
+      catch(e){
+        if(e && e.name === 'AbortError'){ say(''); return; }
+        // iPhone needs a fresh tap after the PDF is built
+        pendingFile = file; pdfBtn.textContent = 'Share PDF'; say('PDF ready — tap Share PDF'); return;
+      }
+    }
+    const url = URL.createObjectURL(file), a = document.createElement('a');
+    a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    say('Saved ' + file.name); setTimeout(() => say(''), 4000);
+  }
+  ov.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-a]'); if(!b || b.disabled) return;
+    const act = b.dataset.a;
+    if(act === 'close') return close(false);
+    if(act === 'print'){
+      try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+      catch(err){ say('Printing isn’t available here — use Save PDF'); }
+      return;
+    }
+    if(act === 'pdf'){
+      if(pendingFile) return shareOrDownload(pendingFile);
+      pdfBtn.disabled = true; say('Creating PDF…');
+      try { await shareOrDownload(await makePdf()); }
+      catch(err){ console.error('[quote] pdf', err); say('Could not create the PDF — try Print'); }
+      pdfBtn.disabled = false;
+    }
+  });
+  return { setHtml, showError, close, get closed(){ return closed; } };
+}
+window.quotePreviewOverlay = quotePreviewOverlay;
+
 function openQuotePreview(j, opts){
   opts = opts || {};
   // Layout A (two-page Heritage proposal) is the default; pass layout:'classic'
@@ -19475,9 +19596,8 @@ function openQuotePreview(j, opts){
   if(opts.layout !== 'classic'){
     const html = buildQuoteLayoutA(j, opts);
     if(opts.returnHtml) return html;
-    const w = (opts.win && !opts.win.closed) ? opts.win : window.open('', '_blank');
-    if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
-    w.document.open(); w.document.write(html); w.document.close();
+    const ov = (opts.overlay && !opts.overlay.closed) ? opts.overlay : quotePreviewOverlay();
+    ov.setHtml(html);
     return;
   }
   const themeKey = opts.theme || 'heritage';
@@ -19891,11 +20011,8 @@ ${coverHtml}
 </body></html>`;
 
   if(opts.returnHtml) return html;
-  const w = (opts.win && !opts.win.closed) ? opts.win : window.open('', '_blank');
-  if(!w){ toast('Pop-up blocked — allow pop-ups for this site'); return; }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  const ov = (opts.overlay && !opts.overlay.closed) ? opts.overlay : quotePreviewOverlay();
+  ov.setHtml(html);
 }
 
 // Company info edit modal
