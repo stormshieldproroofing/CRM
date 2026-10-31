@@ -676,11 +676,14 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 </nav>
 <!-- Phone search: full screen, results as you type -->
 <div id="gsOverlay" role="dialog" aria-label="Search jobs">
+<div class="gs-card">
   <div class="gs-top">
     <div class="gs-field"><i class="ti ti-search"></i><input id="gsInput" type="search" inputmode="search" autocomplete="off" placeholder="Name, address, phone, claim #…" oninput="gsRender()"><button type="button" id="gsClear" onclick="gsClear()" aria-label="Clear"><i class="ti ti-x"></i></button></div>
     <button type="button" class="gs-cancel" onclick="gsClose()">Cancel</button>
   </div>
   <div id="gsResults"></div>
+  <div class="gs-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close</span><span>Open anytime with <kbd>/</kbd> or <kbd>Ctrl K</kbd></span></div>
+</div>
 </div>
 <div class="mobile-drawer-bg" id="mobileDrawerBg"></div>
 <div class="mobile-drawer" id="mobileDrawer"></div>
@@ -1491,6 +1494,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   .gs-btn .ti{font-size:18px;color:var(--brand-light)}
   html.gs-lock,html.gs-lock body{overflow:hidden}
   #gsOverlay.open{display:flex;flex-direction:column;position:fixed;inset:0;z-index:500;background:#0E1219}
+  #gsOverlay .gs-card{display:flex;flex-direction:column;flex:1;min-height:0}
   .gs-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;border-bottom:1px solid var(--border);background:#12161E}
   .gs-field{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:46px;padding:0 6px 0 12px;border-radius:12px;background:#1A1F29;border:1px solid rgba(77,157,224,.5)}
   .gs-field > .ti{font-size:18px;color:var(--brand-light)}
@@ -1516,6 +1520,47 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   .gs-empty .ti{display:block;font-size:34px;margin-bottom:10px;color:var(--brand-light);opacity:.7}
   .gs-more{text-align:center;color:var(--muted);font-size:13px;padding:10px}
 }
+
+/* ── SEARCH on computers: the same search as a pop-up in the middle of the screen ── */
+@media (min-width:761px){
+  #globalSearch{cursor:pointer}
+  html.gs-lock,html.gs-lock body{overflow:hidden}
+  #gsOverlay.open{display:flex;position:fixed;inset:0;z-index:600;background:rgba(5,8,14,.62);align-items:flex-start;justify-content:center;padding:9vh 16px 16px}
+  #gsOverlay .gs-card{width:100%;max-width:660px;max-height:78vh;display:flex;flex-direction:column;background:#161B24;border:1px solid var(--border);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
+  .gs-top{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+  .gs-field{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:44px;padding:0 8px 0 6px}
+  .gs-field > .ti{font-size:20px;color:var(--muted)}
+  #gsInput{flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-size:18px;font-family:inherit}
+  #gsInput::-webkit-search-cancel-button{display:none}
+  #gsClear{border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:6px;visibility:hidden}
+  .gs-cancel{flex-shrink:0;border:1px solid var(--border);background:none;color:var(--muted);font-size:11px;font-weight:700;font-family:inherit;padding:3px 7px;border-radius:5px;cursor:pointer}
+  .gs-cancel::before{content:'Esc'}.gs-cancel{font-size:0}.gs-cancel::before{font-size:11px}
+  #gsResults{flex:1;overflow:auto;padding:6px 0}
+  .gs-label{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:10px 16px 4px}
+  .gs-row{display:flex;align-items:center;gap:12px;padding:9px 16px;cursor:pointer;border-radius:0}
+  .gs-row.sel,.gs-row:hover{background:#1E2A44}
+  .gs-main{flex:1;min-width:0}
+  .gs-name{font-size:14.5px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gs-addr{font-size:12.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gs-row mark{background:rgba(242,196,107,.25);color:#F2C46B;border-radius:3px;padding:0 1px}
+  .gs-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+  .gs-tags:empty{display:none}
+  .gs-tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:#1E253A;color:#C4CBD8}
+  .gs-tag.ins{background:rgba(52,211,153,.12);color:#34D399}
+  .gs-tag.pl{background:rgba(59,123,240,.14);color:#9DB8F5}
+  .gs-tag.lost{background:rgba(248,113,113,.14);color:#F87171}
+  .gs-call{width:32px;height:32px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);color:var(--muted);font-size:15px;text-decoration:none}
+  .gs-call:hover{color:#34D399;border-color:rgba(52,211,153,.5)}
+  .gs-chev{display:none}
+  .gs-add .gs-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(52,211,153,.14);color:#34D399;font-size:16px;flex-shrink:0}
+  .gs-empty{text-align:center;color:var(--muted);font-size:14px;line-height:1.5;padding:34px 24px}
+  .gs-empty .ti{display:block;font-size:30px;margin-bottom:8px;color:var(--brand-light);opacity:.7}
+  .gs-more{text-align:center;color:var(--muted);font-size:12.5px;padding:8px}
+  .gs-foot{display:flex;justify-content:space-between;gap:10px;padding:9px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+  .gs-foot kbd{font-family:inherit;font-size:10.5px;border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:#C4CBD8}
+}
+.gs-foot{display:none}
+@media (min-width:761px){ .gs-foot{display:flex} }
 
 /* ── SUMMARY PAGE (rebuilt) ── */
 #boardSalesSummary{overflow-x:visible !important;padding:16px 20px 28px !important}
@@ -10721,6 +10766,13 @@ window.gsClear=function(){ const inp=document.getElementById('gsInput'); inp.val
 function gsStage(j){
   try{ const c=columnsForPipeline(j.pipeline).find(c=>c.id===j.col); return c?c.name:''; }catch(e){ return ''; }
 }
+function gsStageClosed(j){
+  try{ const c=columnsForPipeline(j.pipeline).find(c=>c.id===j.col); if(!c) return false;
+    return c.closed===true || ['denied','closed-denied','lost-lead','lost_lead'].includes(String(c.id).toLowerCase()) || /lost|denied/i.test(c.name||''); }catch(e){ return false; }
+}
+function gsPipelineName(j){
+  try{ if(!Array.isArray(pipelines) || pipelines.length<2) return ''; const p=pipelines.find(p=>p.id===(j.pipeline||'insurance')); return p?p.name:''; }catch(e){ return ''; }
+}
 function gsMatch(j,q){
   if(jobMatchesSearch(j,q)) return true;
   return [j.email,j.carrier,gsStage(j)].filter(Boolean).join(' ').toLowerCase().includes(q);
@@ -10733,7 +10785,7 @@ function gsRow(j,q){
     <div class="gs-main">
       <div class="gs-name">${hl(j.name||'Job')}</div>
       <div class="gs-addr">${hl((j.address||'No address').replace(/, USA$/,''))}</div>
-      <div class="gs-tags">${stage?`<span class="gs-tag">${escapeHtml(stage)}</span>`:''}${j.carrier?`<span class="gs-tag ins">${escapeHtml(j.carrier)}</span>`:''}${j.claimNum&&q&&String(j.claimNum).toLowerCase().includes(q)?`<span class="gs-tag">Claim ${hl(j.claimNum)}</span>`:''}</div>
+      <div class="gs-tags">${gsPipelineName(j)?`<span class="gs-tag pl">${escapeHtml(gsPipelineName(j))}</span>`:''}${stage?`<span class="gs-tag${gsStageClosed(j)?' lost':''}">${escapeHtml(stage)}</span>`:''}${j.carrier?`<span class="gs-tag ins">${escapeHtml(j.carrier)}</span>`:''}${j.claimNum&&q&&String(j.claimNum).toLowerCase().includes(q)?`<span class="gs-tag">Claim ${hl(j.claimNum)}</span>`:''}</div>
     </div>
     ${tel?`<a class="gs-call" href="tel:${tel}" aria-label="Call ${escapeHtml(j.name||'')}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i></a>`:''}
     <i class="ti ti-chevron-right gs-chev"></i>
@@ -10759,14 +10811,74 @@ window.gsRender=function(){
       ? `<div class="gs-label">${hits.length} ${hits.length===1?'job':'jobs'}</div>`+hits.slice(0,50).map(j=>gsRow(j,q)).join('')+(hits.length>50?`<div class="gs-more">Showing first 50 — keep typing to narrow it down</div>`:'')
       : `<div class="gs-empty"><i class="ti ti-mood-empty"></i>No jobs match “${escapeHtml(raw)}”.</div>`;
   }
+  if(q && gsIsDesktop()){
+    html += `<div class="gs-label">Actions</div><div class="gs-row gs-add" data-gs-add="1" role="button" tabindex="0"><div class="gs-av"><i class="ti ti-plus"></i></div><div class="gs-main"><div class="gs-name">Add new job “${escapeHtml(raw)}”</div></div></div>`;
+  }
   box.innerHTML=html;
   box.querySelectorAll('[data-gs-id]').forEach(r=>r.addEventListener('click',()=>{
     const id=r.dataset.gsId; gsRemember(id); gsClose();
     if(typeof openDetail==='function') openDetail(id);
   }));
+  const add=box.querySelector('[data-gs-add]');
+  if(add) add.addEventListener('click',()=>{ gsClose(); gsAddJob(raw); });
+  gsSel=0; gsMark();
 };
-document.addEventListener('keydown',e=>{ if(e.key==='Escape' && document.getElementById('gsOverlay')?.classList.contains('open')) gsClose(); });
+function gsIsDesktop(){ return window.matchMedia('(min-width:761px)').matches; }
+// Start a new job with what was typed: a phone number, an email, or a name
+function gsAddJob(text){
+  if(typeof openAddJobModal!=='function') return;
+  openAddJobModal();
+  const t=String(text||'').trim(), digits=t.replace(/\D/g,'');
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el){ el.value=v; el.dispatchEvent(new Event('input',{bubbles:true})); } };
+  if(/@/.test(t)) set('f-email',t);
+  else if(digits.length>=7 && digits.length>=t.replace(/\s/g,'').length-4) set('f-phone',t);
+  else if(/^\d+\s+\S/.test(t)) set('f-street',t);
+  else { const parts=t.split(/\s+/); set('f-firstname',parts.shift()||''); set('f-lastname',parts.join(' ')); }
+}
+// Keyboard: ↑ ↓ choose a result, Enter opens it
+let gsSel=0;
+function gsRows(){ return [...document.querySelectorAll('#gsResults .gs-row')]; }
+function gsMark(){
+  const rows=gsRows(); if(!gsIsDesktop()) return;
+  rows.forEach((r,i)=>r.classList.toggle('sel',i===gsSel));
+  if(rows[gsSel]) rows[gsSel].scrollIntoView({block:'nearest'});
+}
+document.addEventListener('keydown',e=>{
+  const ov=document.getElementById('gsOverlay'), open=ov?.classList.contains('open');
+  if(open){
+    if(e.key==='Escape'){ e.preventDefault(); gsClose(); return; }
+    const rows=gsRows(); if(!rows.length) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); gsSel=Math.min(rows.length-1,gsSel+1); gsMark(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); gsSel=Math.max(0,gsSel-1); gsMark(); }
+    else if(e.key==='Enter'){ e.preventDefault(); (rows[gsSel]||rows[0]).click(); }
+    return;
+  }
+  // "/" or Ctrl/Cmd+K opens search from anywhere (not while typing in a field)
+  const t=e.target, typing=t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  const ck=(e.ctrlKey||e.metaKey) && !e.altKey && (e.key==='k'||e.key==='K');
+  if(ck || (e.key==='/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey)){
+    if(typeof gsOpen!=='function') return;
+    e.preventDefault(); gsOpen();
+  }
+});
+// Click the dimmed background to close (computers)
+document.getElementById('gsOverlay')?.addEventListener('mousedown',e=>{ if(e.target.id==='gsOverlay') gsClose(); });
 
+// On computers the sidebar search box opens the pop-up search (every pipeline,
+// closed and lost jobs included) instead of only hiding cards on this board.
+function gsFromSidebar(e){
+  if(!gsIsDesktop()) return;
+  const box=$('globalSearch'), pre=box.value;
+  if(e && e.type==='keydown' && e.key && e.key.length===1 && !e.ctrlKey && !e.metaKey){ e.preventDefault(); box.value=''; gsOpen(); const i=document.getElementById('gsInput'); i.value=pre+e.key; gsRender(); return; }
+  if(e && e.type==='keydown') return;
+  box.value=''; box.blur(); gsOpen();
+  if(pre){ const i=document.getElementById('gsInput'); i.value=pre; gsRender(); }
+  document.querySelectorAll('.job-card').forEach(c=>c.style.display='');
+}
+$('globalSearch').addEventListener('mousedown',e=>{ if(gsIsDesktop()){ e.preventDefault(); gsFromSidebar(e); } });
+$('globalSearch').addEventListener('focus',e=>{ if(gsIsDesktop()) gsFromSidebar(e); });
+$('globalSearch').addEventListener('keydown',gsFromSidebar);
+$('globalSearch').setAttribute('placeholder', window.matchMedia('(min-width:761px)').matches ? 'Search all jobs…   /' : $('globalSearch').getAttribute('placeholder'));
 $('globalSearch').addEventListener('input',function(){
   const q=this.value.toLowerCase();
   document.querySelectorAll('.job-card').forEach(c=>{
