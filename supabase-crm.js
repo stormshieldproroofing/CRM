@@ -681,7 +681,7 @@ async function pushAllToSupabase() {
         assigned_to: j.user || null,
         name: j.name, phone: j.phone, email: j.email, address: j.address,
         priority: j.priority, source: j.source,
-        pot_val: parseFloat(j.potVal || 0), paid_val: parseFloat(j.paidVal || 0),
+        pot_val: parseFloat(j.potVal || 0), paid_val: Array.isArray(j.deposits) ? Math.round(j.deposits.reduce((t, d) => t + (parseFloat(String(d.amount ?? '').replace(/[^0-9.\-]/g, '')) || 0), 0) * 100) / 100 : parseFloat(j.paidVal || 0),
         carrier: j.carrier || null, claim_num: j.claimNum || null,
         claim_type: j.claimType || null,
         claim_status: j.claimStatus || null,
