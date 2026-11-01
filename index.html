@@ -645,7 +645,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=2"></script>
+<script src="supabase-crm.js?v=3"></script>
 <script src="crm-packet.js?v=15"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -2952,7 +2952,7 @@ function notifyFinalCheck(j, manual){
   if(!j) return;
   if(!manual){
     // Auto path: only when collected >= contract + approved supplements, once.
-    const collected = moneyNum(j.paidVal);
+    const collected = jobCollected(j);
     const contract = moneyNum(j.potVal);
     const supp = (typeof supplementsApprovedTotal==='function') ? supplementsApprovedTotal(j) : moneyNum(j.cpSupplement);
     const owed = contract + supp;
@@ -2963,7 +2963,7 @@ function notifyFinalCheck(j, manual){
   const name = j.name || 'Job';
   const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
   const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';
-  const collected = moneyNum(j.paidVal);
+  const collected = jobCollected(j);
   const contract = moneyNum(j.potVal);
   const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   // Board feed
@@ -2988,7 +2988,7 @@ function confirmNotifyPayroll(jobId, btn){
   const j = jobs.find(x=>x.id===jobId);
   if(!j) return;
   const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-  const collected = moneyNum(j.paidVal), contract = moneyNum(j.potVal);
+  const collected = jobCollected(j), contract = moneyNum(j.potVal);
   if(!confirm(`Notify #payroll that the final check is collected for ${j.name||'this job'}?\n\nCollected: ${money(collected)}${contract>0?` of ${money(contract)}`:''}\n\nThis posts to Discord so commissions can be broken down.`)) return;
   // Send it.
   notifyFinalCheck(j, true);
@@ -4483,6 +4483,14 @@ function openCheckMoneySheet(jobId, recIndex){
   })();
 }
 window.openCheckMoneySheet = openCheckMoneySheet;
+
+// Money collected on a job = the checks entered under Checks collected.
+// (paidVal is only a saved copy; it can fall behind, so it's a fallback only.)
+function jobCollected(j){
+  if(!j) return 0;
+  return Array.isArray(j.deposits) ? jobDepositTotal(j) : moneyNum(j.paidVal);
+}
+window.jobCollected = jobCollected;
 
 function jobDepositTotal(j){
   return (j.deposits||[]).reduce((s,d)=>s+moneyValue(d.amount),0);
@@ -13674,7 +13682,7 @@ function printJobPnL(jobId){
   // voucher or the payroll page about what a rep has earned.
   const netProfit = (typeof jobNetProfit==='function') ? jobNetProfit(j) : (revenue - netCosts);
   const margin = revenue > 0 ? (netProfit/revenue*100) : 0;
-  const collected = moneyNum(j.paidVal);
+  const collected = jobCollected(j);
   const outstanding = revenue - collected;
 
   // ── Commission: overhead comes off first, then the remainder splits ──
@@ -14216,7 +14224,7 @@ function openRetailInvoice(j){
 
   // Amounts
   const total = moneyNum(j.potVal) || moneyNum(q.contractAmount);
-  const paid = moneyNum(j.paidVal);
+  const paid = jobCollected(j);
   const balance = Math.max(0, total - paid);
 
   // Line items: use priced quote sections if they sum to the total, else one line.
