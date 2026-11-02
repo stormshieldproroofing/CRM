@@ -26725,7 +26725,11 @@ function confirmMeasurementImport(j, p, meta, done){
 saveTeam();
 // One-time cleanup of pre-Supabase team data lingering in localStorage
 try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
+// Start page: phones open on Summary, desktop stays on Boards.
 window.__activePage = 'boards';
+if(window.matchMedia && window.matchMedia('(max-width:760px)').matches){
+  try { switchPage('summary'); } catch(e){ window.__activePage = 'summary'; }
+}
 bootSupabase().then(ok => {
   if (ok) {
     syncActivePipeline(); renderBoard(); renderTeamPage?.(); updateProfitsNavVisibility?.(); loadInsuranceCarriers?.(); loadCompanyInfo?.();
