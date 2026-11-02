@@ -1611,7 +1611,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 /* summary: jobs tile — title + total on one line, colored stage numbers below */
 .sm-jobs-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .sm-jobs-head .sm-kpi-label{font-size:13px}
-.sm-jobs-total{color:var(--muted);font-weight:600}
+.sm-jobs-total{color:var(--muted);font-weight:600;font-size:13px}
 .sm-steps{display:flex;margin-top:12px}
 .sm-step{flex:1;min-width:0;text-align:center;border-left:1px solid var(--border)}
 .sm-step:first-child{border-left:none}
@@ -5462,6 +5462,20 @@ function createdThisYear(j){
   return !Number.isNaN(d.getTime())&&d.getFullYear()===new Date().getFullYear();
 }
 
+// Date the last check came in (deposits carry YYYY-MM-DD dates). null if none dated.
+function jobLastCheckDate(j){
+  let best = null;
+  (j.deposits || []).forEach(d => { const t = new Date(String(d.date || '') + 'T12:00:00'); if(!Number.isNaN(t.getTime()) && (!best || t > best)) best = t; });
+  return best;
+}
+// Commission earned = jobs paid in full (contract + approved supplements, nothing
+// still submitted) whose last check came in this year. No pending jobs.
+function earnedThisYear(j){
+  if(!jobFullyPaid(j)) return false;
+  const d = jobLastCheckDate(j);
+  return d ? d.getFullYear() === new Date().getFullYear() : createdThisYear(j);
+}
+
 function salesmanSummary(user){
   if(!user) return {revenue:0,commissionYtd:0,jobsInPipeline:0,receivable:0,pendingCommission:0};
   const assigned=jobs.filter(j=>j.user===user.id);
@@ -5470,7 +5484,7 @@ function salesmanSummary(user){
   const receivable=assigned.reduce((s,j)=>s+jobBalanceDue(j),0);
   return {
     revenue:ytd.reduce((s,j)=>s+moneyValue(j.potVal),0),
-    commissionYtd:ytd.reduce((s,j)=>s+estimatedCommissionForUser(j,user),0),
+    commissionYtd:assigned.filter(earnedThisYear).reduce((s,j)=>s+estimatedCommissionForUser(j,user),0),
     jobsInPipeline:active.length,
     receivable,
     pendingCommission:assigned.filter(j=>!jobFullyPaid(j)).reduce((s,j)=>s+estimatedCommissionForUser(j,user),0)
@@ -5484,7 +5498,7 @@ function summaryForJobs(summaryJobs,user=null){
   const commissionCalc=job=>user?estimatedCommissionForUser(job,user):estimatedTotalCommission(job);
   return {
     revenue:ytd.reduce((s,j)=>s+moneyValue(j.potVal),0),
-    commissionYtd:ytd.reduce((s,j)=>s+commissionCalc(j),0),
+    commissionYtd:summaryJobs.filter(earnedThisYear).reduce((s,j)=>s+commissionCalc(j),0),
     jobsInPipeline:active.length,
     receivable,
     pendingCommission:summaryJobs.filter(j=>!jobFullyPaid(j)).reduce((s,j)=>s+commissionCalc(j),0)
@@ -5504,8 +5518,8 @@ function refreshSalesSummaryUI(){
 
 // ── Summary tiles → the jobs behind each number ─────────────────────────
 // Same rules as summaryForJobs, so the rows always add up to the tile:
-// Revenue = contract of jobs created this year; Commission YTD = estimated
-// commission on those; Receivable = contract − checks on jobs still owing;
+// Revenue = contract of jobs created this year; Commission earned = commission
+// on jobs paid in full this year (by last check date); Receivable = contract − checks on jobs still owing;
 // Pending commission = commission on jobs still owing.
 function openSummaryDetail(key){
   const ctx = window.__sumCtx; if(!ctx) return;
@@ -5519,8 +5533,9 @@ function openSummaryDetail(key){
   const cfg = {
     rev:  { title:'Revenue', total:summary.revenue, color:'var(--brand)',
             rows: list.filter(createdThisYear).map(j => ({ j, amt:moneyValue(j.potVal), sub:stage(j) })) },
-    com:  { title:'Commission YTD', total:summary.commissionYtd, color:'#60C4FF',
-            rows: list.filter(createdThisYear).map(j => ({ j, amt:cc(j), lead:dot(j), sub:escapeHtml(rep(j)?.name||'Unassigned') })) },
+    com:  { title:'Commission earned', total:summary.commissionYtd, color:'#60C4FF',
+            rows: list.filter(earnedThisYear).map(j => { const d = jobLastCheckDate(j);
+              return { j, amt:cc(j), lead:dot(j), sub: d ? `Paid in full ${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}` : 'Paid in full' }; }) },
     recv: { title:'Receivable', total:summary.receivable, color:'#FBBF24',
             rows: list.filter(j => bal(j) > 0).map(j => { const c = jobAmountOwed(j), paid = jobDepositTotal(j), pct = c > 0 ? Math.min(100, Math.round(paid/c*100)) : 0;
               return { j, amt:bal(j), sub:`Paid ${m0(paid)} of ${m0(c)}`, bar:pct }; }) },
@@ -5676,7 +5691,7 @@ function renderBoardSalesSummary(){
   const items=[
     {label:'Jobs in Pipeline',value:summary.jobsInPipeline,color:'var(--brand)'},
     {label:'Revenue',value:moneyText(summary.revenue),color:'var(--brand)'},
-    {label:'Commission YTD',value:moneyText(summary.commissionYtd),color:'#60C4FF'},
+    {label:'Commission Earned',value:moneyText(summary.commissionYtd),color:'#60C4FF'},
     {label:'Account Receivable',value:moneyText(summary.receivable),color:summary.receivable>0?'var(--warn)':'var(--success)'},
     {label:'Pending Commission',value:moneyText(summary.pendingCommission),color:'#A78BFA'}
   ];
@@ -5817,14 +5832,36 @@ function renderBoardSalesSummary(){
     </section>`;
 
   // One row: each stage's count in its color over a short name, thin lines between.
+  // "Denied" counts open jobs in the Denial / Appeals pipeline (plus any job sitting
+  // in a Denied / Appeal stage of this pipeline) and sits right after Approved.
+  // The total on the title line only adds up the numbers shown.
   const STAGE_SHORT = { 'contract signed':'Signed', 'claim filed':'Claim', 'inspection':'Inspect' };
+  const isDenialPipe = p => /denial|denied|appeal|appraisal/i.test((p && p.name) || '');
+  const curPipe = (pipelines || []).find(p => p.id === currentPipelineId);
+  const deniedRow = isDenialPipe(curPipe) ? null : (() => {
+    const denialPipeIds = new Set((pipelines || []).filter(isDenialPipe).map(p => p.id));
+    const n = jobs.filter(j => {
+      if(!jobMatchesAssigneeFilter(j, userId)) return false;
+      const pid = j.pipeline || 'insurance';
+      const col = columnsForPipeline(pid).find(c => c.id === j.col);
+      const nm = String((col && col.name) || j.col || '').toLowerCase();
+      if(denialPipeIds.has(pid)) return !/closed|overturned|going retail/.test(nm);
+      return pid === currentPipelineId && (j.col === 'denied' || j.col === 'appeal' || nm === 'denied' || nm.startsWith('appeal'));
+    }).length;
+    return { name:'Denied', color:'#EF4444', count:n };
+  })();
+  const shownRows = stageRows.slice();
+  if(deniedRow){
+    const ai = shownRows.findIndex(r => /^approved$/i.test(r.name || ''));
+    shownRows.splice(ai >= 0 ? ai + 1 : shownRows.length, 0, deniedRow);
+  }
+  const shownTotal = shownRows.reduce((s, r) => s + r.count, 0);
   const stagesHtml = `
-    <div class="sm-steps">${stageRows.map(r => `
+    <div class="sm-steps">${shownRows.map(r => `
       <div class="sm-step${r.count?'':' zero'}" title="${escapeHtml(r.name)}: ${r.count}">
         <b style="color:${r.color};color:color-mix(in srgb, ${r.color} 68%, #fff)">${r.count}</b>
         <span>${escapeHtml(STAGE_SHORT[(r.name||'').toLowerCase()] || r.name)}</span>
-      </div>`).join('')}
-      <div class="sm-step sm-step-total" title="All jobs in the pipeline"><b>${summary.jobsInPipeline}</b><span>Total</span></div></div>`;
+      </div>`).join('')}</div>`;
 
   const phoneNow = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
   const openAttr = key => {
@@ -5868,11 +5905,11 @@ function renderBoardSalesSummary(){
       </div>
       <div class="sm-kpis">
         <div class="sm-kpi sm-kpi-jobs">
-          <div class="sm-jobs-head"><span class="sm-kpi-label">Jobs in pipeline</span></div>
+          <div class="sm-jobs-head"><span class="sm-kpi-label">Jobs in pipeline</span><span class="sm-jobs-total">${shownTotal} total</span></div>
           ${stagesHtml}
         </div>
         ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)', '', 'rev')}
-        ${kpi('Commission YTD', money0(summary.commissionYtd), 'Estimated', '#60C4FF', '', 'com')}
+        ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid in full this year', '#60C4FF', '', 'com')}
         ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`, 'recv')}
         ${kpi('Pending commission', money0(summary.pendingCommission), 'On jobs not fully paid', '#A78BFA', '', 'pend')}
       </div>
