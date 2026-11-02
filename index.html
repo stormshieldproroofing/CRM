@@ -5597,9 +5597,14 @@ function openSummaryDetail(key){
   document.body.appendChild(ov);
   requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.remove('sd-in')));
   const sheet = ov.querySelector('.sd');
-  // Phone: same size every time — from just under the top bar to the bottom of the screen.
+  // Phone: same size every time — starts just under the 4 tiles (about half the
+  // screen) and runs to the bottom, whether it lists 1 job or many.
+  const vh = window.innerHeight;
   const nav = document.querySelector('.topnav');
-  const top = Math.max(10, nav ? Math.round(nav.getBoundingClientRect().bottom) + 6 : 10);
+  const navBottom = nav ? Math.max(0, Math.round(nav.getBoundingClientRect().bottom)) : 0;
+  const lastTile = [...document.querySelectorAll('#boardSalesSummary .sm-kpis > .sm-kpi')].pop();
+  let top = lastTile ? Math.round(lastTile.getBoundingClientRect().bottom) + 8 : Math.round(vh * 0.45);
+  top = Math.min(Math.round(vh * 0.55), Math.max(navBottom + 6, 10, top));
   sheet.style.setProperty('--sd-h', `calc(100dvh - ${top}px)`);
   let closing = false;
   const close = () => {
