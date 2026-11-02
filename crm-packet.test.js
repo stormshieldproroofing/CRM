@@ -111,4 +111,41 @@ test('sectionMissing counts blanks per section and follow-ups only when Yes', ()
   assert.deepStrictEqual(pk.sectionMissing(f).project, []);
 });
 
+test('packet ↔ job: only empty fields fill, both ways', () => {
+  const j = { name: 'Maria Gonzalez', address: '4318 Briar Hollow Ln, Pearland, TX 77584', carrier: 'Allstate', claimNum: '0412-898',
+    dateOfLoss: '2026-05-14', deductible: '1000', policyNum: '', adjName: '', adjPhone: '',
+    packet: { status: 'draft', fields: { policy_number: 'A-882-41907', claim_number: '0412-889', adjuster: 'Kevin Park', date_of_loss: '' } } };
+  const toPk = pk.fillPacketFromJob(j);
+  assert.strictEqual(j.packet.fields.insurance_company, 'Allstate');
+  assert.strictEqual(j.packet.fields.date_of_loss, '05/14/2026');
+  assert.strictEqual(j.packet.fields.deductible, '1000');
+  assert.strictEqual(j.packet.fields.street, '4318 Briar Hollow Ln');
+  assert.strictEqual(j.packet.fields.claim_number, '0412-889', 'a filled packet answer is never overwritten');
+  assert.ok(toPk.indexOf('claim_number') < 0);
+  pk.fillJobFromPacket(j);
+  assert.strictEqual(j.policyNum, 'A-882-41907');
+  assert.strictEqual(j.adjName, 'Kevin Park');
+  assert.strictEqual(j.claimNum, '0412-898', 'a filled job detail is never overwritten');
+});
+
+test('packet ↔ job: mismatches ignore formatting, and Keep hides them', () => {
+  const j = { phone: '(281) 555-0142', adjPhone: '713-555-0188 x2205', dateOfLoss: '2026-05-14', deductible: '$1,000.00', claimNum: '0412-898', carrier: 'allstate ',
+    packet: { status: 'draft', fields: { cell_phone: '281.555.0142', adjuster_phone: '7135550188', date_of_loss: '05/14/2026', deductible: '1000',
+      claim_number: '0412-889', insurance_company: 'Allstate' } } };
+  const m = pk.syncMismatches(j);
+  assert.deepStrictEqual(m.map(x => x.pk), ['claim_number']);
+  j.packet.syncKeep = { claim_number: pk.syncNorm('id', '0412-889') + '|' + pk.syncNorm('id', '0412-898') };
+  assert.strictEqual(pk.syncMismatches(j).length, 0);
+  j.claimNum = '0412-999';   // changes again → note comes back
+  assert.strictEqual(pk.syncMismatches(j).length, 1);
+});
+
+test('packet ↔ job: a signed packet is never changed, but still fills the job', () => {
+  const j = { carrier: 'Allstate', policyNum: '', packet: { status: 'signed', fields: { insurance_company: '', policy_number: 'P-1' } } };
+  assert.deepStrictEqual(pk.fillPacketFromJob(j), []);
+  assert.strictEqual(j.packet.fields.insurance_company, '');
+  pk.fillJobFromPacket(j);
+  assert.strictEqual(j.policyNum, 'P-1');
+});
+
 console.log(passed + ' passed');
