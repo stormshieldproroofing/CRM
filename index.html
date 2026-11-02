@@ -5543,7 +5543,10 @@ function openSummaryDetail(key){
             rows: list.filter(j => !jobFullyPaid(j)).map(j => ({ j, amt:cc(j), lead:dot(j), sub: bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending' })) }
   }[key];
   if(!cfg) return;
-  const rows = cfg.rows.filter(r => r.amt > 0.004).sort((a,b) => b.amt - a.amt);
+  // Newest first: Commission earned by the date it was paid in full, the rest by
+  // when the job was created. Undated jobs go last, biggest amount first.
+  const when = j => { const d = key === 'com' ? jobLastCheckDate(j) : new Date(String(j.createdAt||j.created||'').replace(' at ', ' ')); return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0; };
+  const rows = cfg.rows.filter(r => r.amt > 0.004).sort((a,b) => (when(b.j) - when(a.j)) || (b.amt - a.amt));
   document.getElementById('sdOverlay')?.remove();
   if(!document.getElementById('sdStyle')){
     const st = document.createElement('style'); st.id = 'sdStyle';
