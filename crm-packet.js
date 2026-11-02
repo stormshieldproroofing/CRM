@@ -141,6 +141,76 @@
     return f;
   }
 
+  /* ---------------------------------------------------------------- packet ↔ job details */
+  // The packet and the job's own details share these answers. Only EMPTY fields
+  // are ever filled; when both sides have different values, the Packet tab shows
+  // a small note instead of changing anything. A signed packet is never changed.
+  const SYNC_FIELDS = [
+    ['name', 'name', 'text'], ['cell_phone', 'phone', 'phone'], ['email', 'email', 'email'],
+    ['insurance_company', 'carrier', 'text'], ['policy_number', 'policyNum', 'id'], ['claim_number', 'claimNum', 'id'],
+    ['date_of_loss', 'dateOfLoss', 'date'], ['deductible', 'deductible', 'money'],
+    ['adjuster', 'adjName', 'text'], ['adjuster_phone', 'adjPhone', 'phone'], ['appointment', 'inspDate', 'date']
+  ];
+  const isBlank = v => v == null || String(v).trim() === '' || String(v).trim() === '—';
+  function isoDate(v) {
+    const s = String(v || '').trim();
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    return m ? m[3] + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0') : '';
+  }
+  function syncNorm(kind, v) {
+    const s = String(v == null ? '' : v).trim();
+    if (kind === 'phone') { let d = s.replace(/\D/g, ''); if (d.length >= 11 && d[0] === '1') d = d.slice(1); return d.slice(0, 10); }
+    if (kind === 'id') return s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (kind === 'date') return isoDate(s);
+    if (kind === 'money') { const n = parseFloat(s.replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n.toFixed(2) : ''; }
+    return s.toLowerCase().replace(/\s+/g, ' ');
+  }
+  function toJobVal(kind, v) {
+    if (kind === 'date') return isoDate(v);
+    if (kind === 'money') return String(v).replace(/[^0-9.]/g, '');
+    return String(v).trim();
+  }
+  function toPacketVal(kind, v) {
+    if (kind === 'date') return fmtLooseDate(v);
+    if (kind === 'money') return String(v).replace(/^\$\s*/, '');
+    return String(v).trim();
+  }
+  // Fill empty packet answers from the job (drafts only). Returns the packet keys filled.
+  function fillPacketFromJob(j) {
+    const p = j && j.packet; if (!p || !p.fields || p.status === 'signed') return [];
+    const f = p.fields, done = [];
+    SYNC_FIELDS.forEach(([pk, jk, kind]) => {
+      if (isBlank(f[pk]) && !isBlank(j[jk])) { const x = toPacketVal(kind, j[jk]); if (!isBlank(x)) { f[pk] = x; done.push(pk); } }
+    });
+    if (isBlank(f.street) && isBlank(f.city_state) && isBlank(f.zip) && !isBlank(j.address)) {
+      const a = splitAddress(j.address); f.street = a.street; f.city_state = a.cityState; f.zip = a.zip; done.push('street');
+    }
+    return done;
+  }
+  // Fill empty job details from the packet (signed or not). Returns the job keys filled.
+  function fillJobFromPacket(j) {
+    const p = j && j.packet; if (!p || !p.fields) return [];
+    const f = p.fields, done = [];
+    SYNC_FIELDS.forEach(([pk, jk, kind]) => {
+      if (isBlank(j[jk]) && !isBlank(f[pk])) { const x = toJobVal(kind, f[pk]); if (!isBlank(x)) { j[jk] = x; done.push(jk); } }
+    });
+    if (isBlank(j.address) && !isBlank(f.street)) {
+      const tail = [f.city_state, f.zip].filter(x => !isBlank(x)).join(' ');
+      j.address = [String(f.street).trim(), tail].filter(Boolean).join(', '); done.push('address');
+    }
+    return done;
+  }
+  // Answers where the packet and the job disagree (and nobody chose "Keep" for these values).
+  function syncMismatches(j) {
+    const p = j && j.packet; if (!p || !p.fields) return [];
+    const f = p.fields, keep = p.syncKeep || {};
+    return SYNC_FIELDS.filter(([pk, jk, kind]) => !isBlank(f[pk]) && !isBlank(j[jk]) && syncNorm(kind, f[pk]) !== syncNorm(kind, j[jk])
+        && keep[pk] !== syncNorm(kind, f[pk]) + '|' + syncNorm(kind, j[jk]))
+      .map(([pk, jk, kind]) => ({ pk, jk, kind, packetVal: f[pk], jobVal: j[jk] }));
+  }
+
   // Answers object → { text:{pdfName:value}, checks:[pdfName…] } for the PDF.
   function pdfValues(fields) {
     const f = fields || {};
@@ -180,7 +250,8 @@
   }
 
   const api = { TEMPLATE_URL, PACKET_VERSION, TPA_MIRROR, TEXT_FIELDS, CHECK_FIELDS, YES_NO, KEY_TERMS, CANCEL_BUSINESS_DAYS,
-    splitAddress, addBusinessDays, fmtDate, fmtDateTime, fmtLooseDate, prefillFromJob, pdfValues, missingForSigning, sectionMissing };
+    splitAddress, addBusinessDays, fmtDate, fmtDateTime, fmtLooseDate, prefillFromJob, pdfValues, missingForSigning, sectionMissing,
+    SYNC_FIELDS, syncNorm, fillPacketFromJob, fillJobFromPacket, syncMismatches };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   root.crmPacket = api;
 
@@ -258,6 +329,11 @@
 .pk-badge.ok{background:rgba(52,211,153,.14);color:#34D399}
 .pk-badge.need{background:rgba(242,196,107,.14);color:#F2C46B}
 .pk-badge.lock{background:#1E2538;color:#8B94A7}
+.pk-sync{display:flex;align-items:center;gap:8px;margin-top:6px;padding:7px 8px 7px 10px;border-radius:9px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);font-size:12px;line-height:1.35}
+.pk-sync span{flex:1;min-width:0;color:#FBBF24;overflow-wrap:anywhere}
+.pk-sync button{flex:none;min-height:32px;padding:0 10px;border-radius:7px;border:0;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.pk-sync .use{background:#3A2E12;color:#FBBF24}
+.pk-sync .keep{background:none;color:#8B94A7;font-weight:600;padding:0 6px}
 .pk-badge.opt{background:none;color:#5A6580;font-weight:600}
 .pk-sec h4{display:flex;align-items:center;gap:8px}
 .pk-sec h4 .pk-badge{margin-left:auto}
@@ -650,6 +726,35 @@
     });
   }
 
+  /* ---------------------------------------------------------------- packet ↔ job: mismatch notes */
+  function renderSyncNotes(panel, j) {
+    const p = j.packet; if (!p) return;
+    const signed = p.status === 'signed';
+    const list = syncMismatches(j), want = new Set(list.map(m => m.pk));
+    panel.querySelectorAll('.pk-sync').forEach(n => { if (!want.has(n.dataset.pksync) || document.activeElement === panel.querySelector(`[data-pk="${n.dataset.pksync}"]`)) n.remove(); });
+    list.forEach(m => {
+      const inp = panel.querySelector(`[data-pk="${m.pk}"]`);
+      const fld = inp && inp.closest('.pk-fld');
+      if (!fld || document.activeElement === inp) return;
+      const show = m.kind === 'date' ? fmtLooseDate(m.jobVal) : String(m.jobVal);
+      let note = fld.querySelector('.pk-sync');
+      if (!note) { note = document.createElement('div'); note.className = 'pk-sync'; note.dataset.pksync = m.pk; fld.appendChild(note); }
+      note.innerHTML = `<span>${signed ? 'Job now says ' + esc(show) + ' (packet is signed)' : 'Job says ' + esc(show)}</span>`
+        + `<button type="button" class="use">${signed ? 'Update job' : 'Use job’s'}</button><button type="button" class="keep">Keep</button>`;
+      note.querySelector('.use').onclick = () => {
+        if (signed) { j[m.jk] = toJobVal(m.kind, p.fields[m.pk]); }
+        else { p.fields[m.pk] = toPacketVal(m.kind, m.jobVal); inp.value = p.fields[m.pk]; p.updatedAt = new Date().toISOString(); inp.dispatchEvent(new Event('input', { bubbles: true })); }
+        if (p.syncKeep) delete p.syncKeep[m.pk];
+        save(); note.remove();
+      };
+      note.querySelector('.keep').onclick = () => {
+        p.syncKeep = p.syncKeep || {};
+        p.syncKeep[m.pk] = syncNorm(m.kind, p.fields[m.pk]) + '|' + syncNorm(m.kind, j[m.jk]);
+        save(); note.remove();
+      };
+    });
+  }
+
   /* ---------------------------------------------------------------- Packet tab */
   function renderPacketTab(j) {
     const panel = document.getElementById('dpBody');
@@ -658,6 +763,8 @@
     const p = ensurePacket(j);
     const f = p.fields;
     const signed = p.status === 'signed';
+    // Packet ↔ job details: fill whatever is empty on either side
+    if (fillPacketFromJob(j).length + fillJobFromPacket(j).length) save();
     const dis = signed ? 'disabled' : '';
     const v = k => esc(f[k] == null ? '' : f[k]);
     const miss = sectionMissing(f);
@@ -747,6 +854,13 @@
 
     wirePanel(panel);
     renderLinks(j).catch(e => console.warn('[packet] links', e));
+    renderSyncNotes(panel, j);
+    // Leaving a box: copy what was typed into any EMPTY job detail, and refresh the notes
+    panel.addEventListener('focusout', () => setTimeout(() => {
+      if (!panel.isConnected || panel.__pkJob !== j.id) return;
+      if (fillJobFromPacket(j).length) save();
+      renderSyncNotes(panel, j);
+    }, 0));
     if (signed) return;
     const persist = () => { p.updatedAt = new Date().toISOString(); save(); refreshMissing(); };
     // Badges + amber outlines follow the answers as they're typed.
