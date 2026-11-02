@@ -5543,7 +5543,10 @@ function openSummaryDetail(key){
             rows: list.filter(j => !jobFullyPaid(j)).map(j => ({ j, amt:cc(j), lead:dot(j), sub: bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending' })) }
   }[key];
   if(!cfg) return;
-  const rows = cfg.rows.filter(r => r.amt > 0.004).sort((a,b) => b.amt - a.amt);
+  // Newest first: Commission earned by the date it was paid in full, the rest by
+  // when the job was created. Undated jobs go last, biggest amount first.
+  const when = j => { const d = key === 'com' ? jobLastCheckDate(j) : new Date(String(j.createdAt||j.created||'').replace(' at ', ' ')); return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0; };
+  const rows = cfg.rows.filter(r => r.amt > 0.004).sort((a,b) => (when(b.j) - when(a.j)) || (b.amt - a.amt));
   document.getElementById('sdOverlay')?.remove();
   if(!document.getElementById('sdStyle')){
     const st = document.createElement('style'); st.id = 'sdStyle';
@@ -5551,7 +5554,15 @@ function openSummaryDetail(key){
 #sdOverlay{position:fixed;inset:0;z-index:650;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
 #sdOverlay .sd{width:100%;max-width:520px;max-height:86vh;display:flex;flex-direction:column;background:#161B24;border:1px solid rgba(255,255,255,.1);border-bottom:0;border-radius:22px 22px 0 0;padding:8px 16px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box;color:#E8ECF3}
 @media(min-width:761px){#sdOverlay{align-items:center}#sdOverlay .sd{border-radius:18px;border-bottom:1px solid rgba(255,255,255,.1)}}
-#sdOverlay .sd-handle{width:38px;height:5px;border-radius:3px;background:#3A4150;margin:0 auto 12px;flex:none}
+#sdOverlay .sd{transition:transform .24s cubic-bezier(.2,.8,.2,1),max-height .24s ease,height .24s ease;will-change:transform}
+#sdOverlay.sd-in .sd{transform:translateY(100%)}
+#sdOverlay{transition:background .24s ease}
+#sdOverlay.sd-in,#sdOverlay.sd-out{background:rgba(0,0,0,0)}
+#sdOverlay.sd-out .sd{transform:translateY(100%)}
+#sdOverlay.sd-drag .sd{transition:none}
+#sdOverlay .sd.sd-full{height:calc(100dvh - 10px - env(safe-area-inset-top));max-height:none}
+#sdOverlay .sd-grab{touch-action:none;cursor:grab;flex:none;margin:-8px -16px 0;padding:8px 16px 0}
+#sdOverlay .sd-handle{width:44px;height:5px;border-radius:3px;background:#4A5263;margin:4px auto 14px;flex:none}
 #sdOverlay .sd-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.08);flex:none}
 #sdOverlay .sd-t{color:#8B93A3;font-size:13px;font-weight:600}
 #sdOverlay .sd-v{font-size:26px;font-weight:800;margin-top:2px}
@@ -5575,15 +5586,50 @@ function openSummaryDetail(key){
   const ov = document.createElement('div');
   ov.id = 'sdOverlay';
   ov.innerHTML = `<div class="sd" role="dialog" aria-modal="true" aria-label="${cfg.title}">
-    <div class="sd-handle" aria-hidden="true"></div>
+    <div class="sd-grab"><div class="sd-handle" aria-hidden="true"></div>
     <div class="sd-head"><div><div class="sd-t">${cfg.title} · ${rows.length} job${rows.length===1?'':'s'}</div><div class="sd-v" style="color:${cfg.color}">${m0(cfg.total)}</div></div>
-      <button type="button" class="sd-x" aria-label="Close">✕</button></div>
+      <button type="button" class="sd-x" aria-label="Close">✕</button></div></div>
     <div class="sd-list">${rows.length ? rows.map(r => `<button type="button" class="sd-row" data-job="${escapeHtml(r.j.id)}">${r.lead||''}
       <span class="sd-main"><span class="sd-n">${escapeHtml(r.j.name||'Job')}</span><span class="sd-s">${r.sub||''}</span>${r.bar!=null?`<span class="sd-bar"><span style="width:${r.bar}%"></span></span>`:''}</span>
       <span class="sd-a" style="color:${cfg.color}">${m0(r.amt)}</span></button>`).join('') : '<div class="sd-empty">No jobs here yet.</div>'}</div>
   </div>`;
+  ov.classList.add('sd-in');
   document.body.appendChild(ov);
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.remove('sd-in')));
+  const sheet = ov.querySelector('.sd');
+  let closing = false;
+  const close = () => {
+    if(closing) return; closing = true;
+    document.removeEventListener('keydown', onKey);
+    sheet.style.transform = '';
+    ov.classList.add('sd-out');
+    setTimeout(() => ov.remove(), 240);
+  };
+  // Top edge (handle + title) drags: swipe up = full screen, swipe down = close.
+  const grab = ov.querySelector('.sd-grab');
+  let y0 = null, t0 = 0, dy = 0;
+  grab.addEventListener('pointerdown', e => {
+    if(e.target.closest('.sd-x')) return;
+    y0 = e.clientY; t0 = Date.now(); dy = 0;
+    ov.classList.add('sd-drag');
+    try{ grab.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  grab.addEventListener('pointermove', e => {
+    if(y0 == null) return;
+    dy = e.clientY - y0;
+    sheet.style.transform = `translateY(${dy > 0 ? dy : dy / 4}px)`;   // a little give when pulling up
+  });
+  const endDrag = () => {
+    if(y0 == null) return;
+    const v = dy / Math.max(1, Date.now() - t0);   // px per ms
+    y0 = null;
+    ov.classList.remove('sd-drag');
+    sheet.style.transform = '';
+    if(dy < -40 || v < -0.5){ sheet.classList.add('sd-full'); return; }
+    if(dy > 60 || v > 0.5) close();
+  };
+  grab.addEventListener('pointerup', endDrag);
+  grab.addEventListener('pointercancel', endDrag);
   const onKey = e => { if(e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   ov.addEventListener('click', e => { if(e.target === ov) close(); });
