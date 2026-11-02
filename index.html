@@ -1611,7 +1611,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 /* summary: jobs tile — title + total on one line, colored stage numbers below */
 .sm-jobs-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .sm-jobs-head .sm-kpi-label{font-size:13px}
-.sm-jobs-total{color:var(--muted);font-weight:600}
+.sm-jobs-total{color:var(--muted);font-weight:600;font-size:13px}
 .sm-steps{display:flex;margin-top:12px}
 .sm-step{flex:1;min-width:0;text-align:center;border-left:1px solid var(--border)}
 .sm-step:first-child{border-left:none}
@@ -5817,14 +5817,36 @@ function renderBoardSalesSummary(){
     </section>`;
 
   // One row: each stage's count in its color over a short name, thin lines between.
+  // "Denied" counts open jobs in the Denial / Appeals pipeline (plus any job sitting
+  // in a Denied / Appeal stage of this pipeline) and sits right after Approved.
+  // The total on the title line only adds up the numbers shown.
   const STAGE_SHORT = { 'contract signed':'Signed', 'claim filed':'Claim', 'inspection':'Inspect' };
+  const isDenialPipe = p => /denial|denied|appeal|appraisal/i.test((p && p.name) || '');
+  const curPipe = (pipelines || []).find(p => p.id === currentPipelineId);
+  const deniedRow = isDenialPipe(curPipe) ? null : (() => {
+    const denialPipeIds = new Set((pipelines || []).filter(isDenialPipe).map(p => p.id));
+    const n = jobs.filter(j => {
+      if(!jobMatchesAssigneeFilter(j, userId)) return false;
+      const pid = j.pipeline || 'insurance';
+      const col = columnsForPipeline(pid).find(c => c.id === j.col);
+      const nm = String((col && col.name) || j.col || '').toLowerCase();
+      if(denialPipeIds.has(pid)) return !/closed|overturned|going retail/.test(nm);
+      return pid === currentPipelineId && (j.col === 'denied' || j.col === 'appeal' || nm === 'denied' || nm.startsWith('appeal'));
+    }).length;
+    return { name:'Denied', color:'#EF4444', count:n };
+  })();
+  const shownRows = stageRows.slice();
+  if(deniedRow){
+    const ai = shownRows.findIndex(r => /^approved$/i.test(r.name || ''));
+    shownRows.splice(ai >= 0 ? ai + 1 : shownRows.length, 0, deniedRow);
+  }
+  const shownTotal = shownRows.reduce((s, r) => s + r.count, 0);
   const stagesHtml = `
-    <div class="sm-steps">${stageRows.map(r => `
+    <div class="sm-steps">${shownRows.map(r => `
       <div class="sm-step${r.count?'':' zero'}" title="${escapeHtml(r.name)}: ${r.count}">
         <b style="color:${r.color};color:color-mix(in srgb, ${r.color} 68%, #fff)">${r.count}</b>
         <span>${escapeHtml(STAGE_SHORT[(r.name||'').toLowerCase()] || r.name)}</span>
-      </div>`).join('')}
-      <div class="sm-step sm-step-total" title="All jobs in the pipeline"><b>${summary.jobsInPipeline}</b><span>Total</span></div></div>`;
+      </div>`).join('')}</div>`;
 
   const phoneNow = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
   const openAttr = key => {
@@ -5868,7 +5890,7 @@ function renderBoardSalesSummary(){
       </div>
       <div class="sm-kpis">
         <div class="sm-kpi sm-kpi-jobs">
-          <div class="sm-jobs-head"><span class="sm-kpi-label">Jobs in pipeline</span></div>
+          <div class="sm-jobs-head"><span class="sm-kpi-label">Jobs in pipeline</span><span class="sm-jobs-total">${shownTotal} total</span></div>
           ${stagesHtml}
         </div>
         ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)', '', 'rev')}
