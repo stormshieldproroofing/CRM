@@ -5389,12 +5389,24 @@ function jobNetAfterOverhead(j){
   return netProfit-jobOverheadAmount(j, netProfit);
 }
 
-// Is this job fully paid? (sum of deposits >= contract)
-function jobFullyPaid(j){
-  const contract = moneyValue(j.potVal);
-  if(contract <= 0) return false;
-  return jobDepositTotal(j) >= contract;
+// What the job is owed in total: contract price + approved supplements.
+function jobAmountOwed(j){
+  const supp = (typeof supplementsApprovedTotal==='function') ? supplementsApprovedTotal(j) : 0;
+  return moneyValue(j.potVal) + supp;
 }
+// Money still to collect on the job (never negative).
+function jobBalanceDue(j){
+  return Math.max(0, jobAmountOwed(j) - jobDepositTotal(j));
+}
+// Is this job fully paid? Checks must cover the contract PLUS approved
+// supplements, and no supplement can still be waiting on the insurance company.
+function jobFullyPaid(j){
+  const owed = jobAmountOwed(j);
+  if(moneyValue(j.potVal) <= 0) return false;
+  if(typeof supplementsRollupStatus==='function' && supplementsRollupStatus(j)==='Submitted') return false;
+  return jobDepositTotal(j) >= owed - 0.005;
+}
+window.jobBalanceDue = jobBalanceDue;
 
 // All commission payouts for a job. Format: [{amount, date, method, notes, paidTo, paidAt, paidBy}]
 function jobCommissionPayouts(j){
@@ -5455,27 +5467,27 @@ function salesmanSummary(user){
   const assigned=jobs.filter(j=>j.user===user.id);
   const ytd=assigned.filter(createdThisYear);
   const active=assigned.filter(j=>j.col!=='completed');
-  const receivable=assigned.reduce((s,j)=>s+Math.max(0,moneyValue(j.potVal)-jobDepositTotal(j)),0);
+  const receivable=assigned.reduce((s,j)=>s+jobBalanceDue(j),0);
   return {
     revenue:ytd.reduce((s,j)=>s+moneyValue(j.potVal),0),
     commissionYtd:ytd.reduce((s,j)=>s+estimatedCommissionForUser(j,user),0),
     jobsInPipeline:active.length,
     receivable,
-    pendingCommission:assigned.filter(j=>Math.max(0,moneyValue(j.potVal)-jobDepositTotal(j))>0).reduce((s,j)=>s+estimatedCommissionForUser(j,user),0)
+    pendingCommission:assigned.filter(j=>!jobFullyPaid(j)).reduce((s,j)=>s+estimatedCommissionForUser(j,user),0)
   };
 }
 
 function summaryForJobs(summaryJobs,user=null){
   const ytd=summaryJobs.filter(createdThisYear);
   const active=summaryJobs.filter(j=>j.col!=='completed');
-  const receivable=summaryJobs.reduce((s,j)=>s+Math.max(0,moneyValue(j.potVal)-jobDepositTotal(j)),0);
+  const receivable=summaryJobs.reduce((s,j)=>s+jobBalanceDue(j),0);
   const commissionCalc=job=>user?estimatedCommissionForUser(job,user):estimatedTotalCommission(job);
   return {
     revenue:ytd.reduce((s,j)=>s+moneyValue(j.potVal),0),
     commissionYtd:ytd.reduce((s,j)=>s+commissionCalc(j),0),
     jobsInPipeline:active.length,
     receivable,
-    pendingCommission:summaryJobs.filter(j=>Math.max(0,moneyValue(j.potVal)-jobDepositTotal(j))>0).reduce((s,j)=>s+commissionCalc(j),0)
+    pendingCommission:summaryJobs.filter(j=>!jobFullyPaid(j)).reduce((s,j)=>s+commissionCalc(j),0)
   };
 }
 
@@ -5499,7 +5511,7 @@ function openSummaryDetail(key){
   const ctx = window.__sumCtx; if(!ctx) return;
   const { jobs: list, user, summary } = ctx;
   const cc = j => user ? estimatedCommissionForUser(j, user) : estimatedTotalCommission(j);
-  const bal = j => Math.max(0, moneyValue(j.potVal) - jobDepositTotal(j));
+  const bal = j => jobBalanceDue(j);
   const m0 = v => '$' + Math.round(Number(v)||0).toLocaleString('en-US');
   const rep = j => (USERS||[]).find(u => u.id === j.user) || null;
   const dot = j => { const u = rep(j); return u ? `<span class="sd-dot" style="background:${u.color}">${escapeHtml(String(u.id||'').toUpperCase())}</span>` : '<span class="sd-dot" style="background:#3A4150"></span>'; };
@@ -5510,10 +5522,10 @@ function openSummaryDetail(key){
     com:  { title:'Commission YTD', total:summary.commissionYtd, color:'#60C4FF',
             rows: list.filter(createdThisYear).map(j => ({ j, amt:cc(j), lead:dot(j), sub:escapeHtml(rep(j)?.name||'Unassigned') })) },
     recv: { title:'Receivable', total:summary.receivable, color:'#FBBF24',
-            rows: list.filter(j => bal(j) > 0).map(j => { const c = moneyValue(j.potVal), paid = jobDepositTotal(j), pct = c > 0 ? Math.min(100, Math.round(paid/c*100)) : 0;
+            rows: list.filter(j => bal(j) > 0).map(j => { const c = jobAmountOwed(j), paid = jobDepositTotal(j), pct = c > 0 ? Math.min(100, Math.round(paid/c*100)) : 0;
               return { j, amt:bal(j), sub:`Paid ${m0(paid)} of ${m0(c)}`, bar:pct }; }) },
     pend: { title:'Pending commission', total:summary.pendingCommission, color:'#A78BFA',
-            rows: list.filter(j => bal(j) > 0).map(j => ({ j, amt:cc(j), lead:dot(j), sub:`Owes ${m0(bal(j))}` })) }
+            rows: list.filter(j => !jobFullyPaid(j)).map(j => ({ j, amt:cc(j), lead:dot(j), sub: bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending' })) }
   }[key];
   if(!cfg) return;
   const rows = cfg.rows.filter(r => r.amt > 0.004).sort((a,b) => b.amt - a.amt);
@@ -5577,7 +5589,8 @@ function renderBoardSalesSummary(){
   const wonJobs=summaryJobs.filter(j=>j.col==='completed');
   const totalPipelineValue=summaryJobs.reduce((s,j)=>s+moneyValue(j.potVal),0);
   const collected=summaryJobs.reduce((s,j)=>s+jobDepositTotal(j),0);
-  const collectionPct=totalPipelineValue?Math.min(100,Math.round((collected/totalPipelineValue)*100)):0;
+  const owedTotal=summaryJobs.reduce((s,j)=>s+jobAmountOwed(j),0);   // contract + approved supplements
+  const collectionPct=owedTotal?Math.min(100,Math.round((collected/owedTotal)*100)):0;
   const closeRate=summaryJobs.length?Math.round((wonJobs.length/summaryJobs.length)*100):0;
   const avgDeal=summaryJobs.length?totalPipelineValue/summaryJobs.length:0;
   const openReceivables=summaryJobs
