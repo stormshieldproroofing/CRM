@@ -27007,7 +27007,8 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
     if(el.closest('textarea,select,canvas,input[type=range],[contenteditable],[data-noswipe],.dp-tabs,.mapboxgl-map')) return;
     if(el.matches('input') && document.activeElement === el) return;            // typing in a box: leave the caret alone
     if(scrollsSideways(el)) return;                                             // a row that scrolls sideways keeps its swipe
-    body = document.getElementById('dpBody'); if(!body || !body.contains(el)) return;   // swipe the content, not the header
+    body = document.getElementById('dpBody'); if(!body) return;
+    if(!body.contains(el) && el !== panel) return;                              // content or the empty space below it, not the header
     sx = t.clientX; sy = t.clientY; dx = 0; vx = 0; samples = [[t.clientX, performance.now()]]; armed = true;
   }, { passive: true });
 
@@ -27039,7 +27040,7 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
     const dir = dx < 0 ? 1 : -1, nb = neighbor(dir), w = window.innerWidth;
     const go = nb && (Math.abs(dx) > w * 0.22 || (Math.abs(vx) > 0.35 && Math.sign(vx) === Math.sign(dx) && Math.abs(dx) > 24));
     hidePeek();
-    if(!go){ setX(body, 0, 260, 'cubic-bezier(.3,1.3,.5,1)'); setTimeout(() => { if(body) body.style.willChange = ''; }, 270); return; }
+    if(!go){ setX(body, 0, 220); setTimeout(() => { if(body) body.style.willChange = ''; }, 230); return; }
     busy = true;
     // Keep moving at the flick's speed: remaining distance / speed, kept between 90 and 200ms.
     const remain = w - Math.abs(dx), speed = Math.max(Math.abs(vx), 1.2);
@@ -27047,14 +27048,19 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
     setX(body, -dir * w, out, 'cubic-bezier(.25,.6,.4,1)');
     // Highlight the new tab right away so the bar moves with the swipe.
     tabBtns().forEach(b => b.classList.toggle('active', b === nb));
+    // Tab bar: one smooth move to where the new tab sits centered, then the
+    // redraw lands it exactly there (no snap back and forth).
     const bar = panel.querySelector('.dp-tabs');
-    nb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    const barLeft = bar ? Math.max(0, Math.min(bar.scrollWidth - bar.clientWidth, nb.offsetLeft - (bar.clientWidth - nb.offsetWidth) / 2)) : 0;
+    if(bar) bar.scrollTo({ left: barLeft, behavior: 'smooth' });
+    const tabsTop = bar ? bar.offsetTop - 8 : 0;
     setTimeout(() => {
-      const keepScroll = bar ? bar.scrollLeft : 0, target = nb.dataset.dptab;
-      activeTab = target;
+      activeTab = nb.dataset.dptab;
+      const keepTop = panel.scrollTop;
       try { renderDetailPanel(); } catch(err){ console.warn('tab render failed', err); busy = false; return; }
       const nbar = panel.querySelector('.dp-tabs');
-      if(nbar){ nbar.scrollLeft = keepScroll; panel.querySelector('.dp-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }); }
+      if(nbar) nbar.scrollLeft = barLeft;
+      panel.scrollTop = Math.min(keepTop, Math.max(0, tabsTop));               // new tab starts at its top, tab bar in view
       const newBody = document.getElementById('dpBody');
       if(newBody && !reduce()){
         setX(newBody, dir * w * 0.25, 0);
