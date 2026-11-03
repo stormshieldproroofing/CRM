@@ -26965,39 +26965,73 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
 // Start page: phones open on Summary, desktop stays on Boards.
 // Job modal on phone: swipe sideways on the content to change tabs.
 // Finger right-to-left = next tab (Overview → Photos → Packet…), left-to-right = previous.
+// The content follows your finger, then slides out while the next tab slides in.
 (function jobTabSwipe(){
   const panel = document.getElementById('detailPanel'); if(!panel) return;
-  let sx = 0, sy = 0, st = 0, ok = false;
+  let sx = 0, sy = 0, st = 0, armed = false, mode = '', dx = 0, body = null, lastX = 0, lastT = 0, vx = 0, busy = false;
   const phone = () => window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  const reduce = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const scrollsSideways = el => {
     for(let n = el; n && n !== panel; n = n.parentElement){
       if(n.scrollWidth > n.clientWidth + 2){ const ox = getComputedStyle(n).overflowX; if(ox === 'auto' || ox === 'scroll') return true; }
     }
     return false;
   };
+  const tabIds = () => [...panel.querySelectorAll('.dp-tab')].map(b => b.dataset.dptab);
+  const neighbor = dir => { const ids = tabIds(), i = ids.indexOf(activeTab); return i < 0 ? null : (ids[i + dir] || null); };
+  const setX = (el, x, ms) => { el.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.8,.2,1), opacity ${ms}ms ease` : 'none'; el.style.transform = x ? `translate3d(${x}px,0,0)` : ''; el.style.opacity = x ? String(Math.max(.55, 1 - Math.abs(x) / (window.innerWidth * 1.4))) : ''; };
+
   panel.addEventListener('touchstart', e => {
-    ok = false;
-    if(!phone() || e.touches.length !== 1) return;
+    armed = false; mode = '';
+    if(busy || !phone() || e.touches.length !== 1) return;
     const t = e.touches[0], el = e.target;
     if(t.clientX < 24 || t.clientX > window.innerWidth - 24) return;            // leave the screen edges to the phone
     if(el.closest('textarea,select,canvas,input[type=range],[contenteditable],[data-noswipe],.dp-tabs,.mapboxgl-map')) return;
     if(el.matches('input') && document.activeElement === el) return;            // typing in a box: leave the caret alone
     if(scrollsSideways(el)) return;                                             // a row that scrolls sideways keeps its swipe
-    sx = t.clientX; sy = t.clientY; st = Date.now(); ok = true;
+    body = document.getElementById('dpBody'); if(!body || !body.contains(el)) return;   // swipe the content, not the header
+    sx = lastX = t.clientX; sy = t.clientY; st = lastT = Date.now(); dx = 0; vx = 0; armed = true;
   }, { passive: true });
-  panel.addEventListener('touchend', e => {
-    if(!ok) return; ok = false;
-    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-    if(Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - st > 700) return;
-    if(window.getSelection && String(window.getSelection()).length) return;
-    const ids = [...panel.querySelectorAll('.dp-tab')].map(b => b.dataset.dptab);
-    const i = ids.indexOf(activeTab); if(i < 0) return;
-    const next = ids[i + (dx < 0 ? 1 : -1)]; if(!next) return;
-    activeTab = next; renderDetailPanel();
-    const body = document.getElementById('dpBody');
-    if(body && body.animate) body.animate([{ transform: `translateX(${dx < 0 ? 28 : -28}px)`, opacity: .4 }, { transform: 'none', opacity: 1 }], { duration: 180, easing: 'ease-out' });
-    panel.querySelector('.dp-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-  }, { passive: true });
+
+  panel.addEventListener('touchmove', e => {
+    if(!armed) return;
+    const t = e.touches[0], mx = t.clientX - sx, my = t.clientY - sy;
+    if(!mode){
+      if(Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+      mode = Math.abs(mx) > Math.abs(my) * 1.2 ? 'x' : 'y';
+      if(mode === 'y'){ armed = false; return; }
+    }
+    e.preventDefault();                                                         // sideways drag: don't scroll the page too
+    const now = Date.now(); vx = (t.clientX - lastX) / Math.max(1, now - lastT); lastX = t.clientX; lastT = now;
+    dx = mx;
+    if(!neighbor(dx < 0 ? 1 : -1)) dx = dx / 3;                                 // first/last tab: a little give, then stops
+    if(body) setX(body, dx, 0);
+  }, { passive: false });
+
+  const finish = () => {
+    if(!armed) return; armed = false;
+    if(mode !== 'x' || !body){ mode = ''; return; }
+    mode = '';
+    const dir = dx < 0 ? 1 : -1, next = neighbor(dir), w = window.innerWidth;
+    const go = next && (Math.abs(dx) > w * 0.22 || (Math.abs(vx) > 0.45 && Math.sign(vx) === Math.sign(dx) && Math.abs(dx) > 30));
+    if(!go){ setX(body, 0, 220); return; }
+    busy = true;
+    const out = reduce() ? 0 : 140;
+    setX(body, -dir * w * 0.6, out);
+    setTimeout(() => {
+      activeTab = next;
+      try { renderDetailPanel(); } catch(err){ console.warn('tab render failed', err); busy = false; return; }
+      const nb = document.getElementById('dpBody');
+      panel.querySelector('.dp-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+      if(nb && !reduce()){
+        setX(nb, dir * w * 0.35, 0);
+        requestAnimationFrame(() => requestAnimationFrame(() => setX(nb, 0, 220)));
+        setTimeout(() => { nb.style.transition = ''; busy = false; }, 240);
+      } else busy = false;
+    }, out);
+  };
+  panel.addEventListener('touchend', finish, { passive: true });
+  panel.addEventListener('touchcancel', () => { if(armed && body) setX(body, 0, 200); armed = false; mode = ''; }, { passive: true });
 })();
 
 window.__activePage = 'boards';
