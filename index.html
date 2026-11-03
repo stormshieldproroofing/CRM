@@ -26963,6 +26963,43 @@ saveTeam();
 // One-time cleanup of pre-Supabase team data lingering in localStorage
 try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
 // Start page: phones open on Summary, desktop stays on Boards.
+// Job modal on phone: swipe sideways on the content to change tabs.
+// Finger right-to-left = next tab (Overview → Photos → Packet…), left-to-right = previous.
+(function jobTabSwipe(){
+  const panel = document.getElementById('detailPanel'); if(!panel) return;
+  let sx = 0, sy = 0, st = 0, ok = false;
+  const phone = () => window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  const scrollsSideways = el => {
+    for(let n = el; n && n !== panel; n = n.parentElement){
+      if(n.scrollWidth > n.clientWidth + 2){ const ox = getComputedStyle(n).overflowX; if(ox === 'auto' || ox === 'scroll') return true; }
+    }
+    return false;
+  };
+  panel.addEventListener('touchstart', e => {
+    ok = false;
+    if(!phone() || e.touches.length !== 1) return;
+    const t = e.touches[0], el = e.target;
+    if(t.clientX < 24 || t.clientX > window.innerWidth - 24) return;            // leave the screen edges to the phone
+    if(el.closest('textarea,select,canvas,input[type=range],[contenteditable],[data-noswipe],.dp-tabs,.mapboxgl-map')) return;
+    if(el.matches('input') && document.activeElement === el) return;            // typing in a box: leave the caret alone
+    if(scrollsSideways(el)) return;                                             // a row that scrolls sideways keeps its swipe
+    sx = t.clientX; sy = t.clientY; st = Date.now(); ok = true;
+  }, { passive: true });
+  panel.addEventListener('touchend', e => {
+    if(!ok) return; ok = false;
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if(Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - st > 700) return;
+    if(window.getSelection && String(window.getSelection()).length) return;
+    const ids = [...panel.querySelectorAll('.dp-tab')].map(b => b.dataset.dptab);
+    const i = ids.indexOf(activeTab); if(i < 0) return;
+    const next = ids[i + (dx < 0 ? 1 : -1)]; if(!next) return;
+    activeTab = next; renderDetailPanel();
+    const body = document.getElementById('dpBody');
+    if(body && body.animate) body.animate([{ transform: `translateX(${dx < 0 ? 28 : -28}px)`, opacity: .4 }, { transform: 'none', opacity: 1 }], { duration: 180, easing: 'ease-out' });
+    panel.querySelector('.dp-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }, { passive: true });
+})();
+
 window.__activePage = 'boards';
 if(window.matchMedia && window.matchMedia('(max-width:760px)').matches){
   try { switchPage('summary'); } catch(e){ window.__activePage = 'summary'; }
