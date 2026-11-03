@@ -236,7 +236,7 @@ async function loadAllFromSupabase() {
         deposits:(deps||[]).filter(d=>d.job_id===r.id).map(d=>window.crmSync.depositFromRow(d)),
         expenses:(exps||[]).filter(e=>e.job_id===r.id).map(e=>window.crmSync.expenseFromRow(e)),
         photos, contracts:byKind('contract'), checks:byKind('check'),
-        lossFiles:byKind('loss'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
+        lossFiles:byKind('loss'), decFiles:byKind('dec'), roofFiles:byKind('roof'), otherFiles:byKind('other'),
         signedContractFiles:byKind('signed_contract'),
         packetFiles:byKind('packet'),
         // Claim Packet (Contingency Agreement + Third-Party Authorization):

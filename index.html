@@ -645,7 +645,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=3"></script>
+<script src="supabase-crm.js?v=4"></script>
 <script src="crm-packet.js?v=16"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -3882,6 +3882,47 @@ function parseCheckText(text){
 // Parse OCR text from an insurance loss statement / Xactimate summary.
 // Returns { rcv, acv, deductible, recoverableDep, nonRecoverableDep, netClaim }.
 // Each value is a number or null. Verify before relying on these.
+// Read a homeowners declaration page: carrier (matched to the Insurance
+// directory, so the claims phone lines up), policy number and the wind/hail
+// deductible (a % deductible is worked out from Coverage A).
+function parseDecPageText(text){
+  const t = String(text || '').replace(/\r/g, '');
+  const out = {};
+  const num = v => { const n = parseFloat(String(v).replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : null; };
+  // Policy number
+  let m = t.match(/policy\s*(?:number|no\.?|num|#)\s*[:#]?\s*\n?\s*([A-Z0-9][A-Z0-9\- ]{4,24}[A-Z0-9])/i);
+  if(m){ const v = m[1].trim().split(/\s{2,}|\s(?=[A-Za-z]{3,}\b)/)[0].trim(); if(/\d/.test(v)) out.policyNum = v; }
+  // Carrier: a directory name (or its full name in notes) that appears on the page
+  const norm = s => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
+  const page = ' ' + norm(t) + ' ';
+  let best = null;
+  (window.insCarriers || []).forEach(c => {
+    const keys = [c.name, ...String(c.notes || '').split('·')];
+    keys.slice().forEach(k => { const bare = String(k).replace(/\([^)]*\)/g, ' '); if(bare !== k) keys.push(bare); });
+    keys.map(norm).filter(x => x.length >= 3).forEach(k => {
+      if(page.includes(' ' + k + ' ') && (!best || k.length > best.len)) best = { name: c.name, len: k.length };
+    });
+  });
+  if(best) out.carrier = best.name;
+  // Coverage A (dwelling)
+  m = t.match(/(?:coverage\s*a|dwelling)[^$\n]{0,40}\$\s*([\d,]{4,}(?:\.\d\d)?)/i);
+  const covA = m ? num(m[1]) : null;
+  // Wind/hail deductible first, then the general / all-perils one
+  const lines = t.split('\n');
+  const one = (line) => {
+    if(!line) return null;
+    const d = line.match(/\$\s*([\d,]{3,}(?:\.\d\d)?)/); if(d) return num(d[1]);
+    const pc = line.match(/(\d+(?:\.\d+)?)\s*%/); if(pc && covA) return Math.round(covA * parseFloat(pc[1]) / 100 * 100) / 100;
+    return null;
+  };
+  // The amount is on the matching line, or on the line right after it.
+  const find = (re) => { for(let i = 0; i < lines.length; i++){ if(re.test(lines[i])){ const v = one(lines[i]) ?? one(lines[i + 1]); if(v != null) return v; } } return null; };
+  const ded = find(/wind\s*(?:storm)?\s*(?:\/|and|&|or)?\s*hail|hurricane|named\s*storm/i) ?? find(/all\s*other\s*perils|\baop\b|\bdeductible\b/i);
+  if(ded != null && ded > 0 && ded < 200000) out.deductible = ded;
+  return out;
+}
+window.parseDecPageText = parseDecPageText;
+
 function parseLossStatementText(text){
   const out = { rcv:null, acv:null, deductible:null, recoverableDep:null, nonRecoverableDep:null, netClaim:null };
   if(!text) return out;
@@ -4623,6 +4664,7 @@ function renameJobFile(file, kind, section){
     packet: 'Claim Packet (signed)',
     check: 'Check',
     loss: 'Loss Statement',
+    dec: 'Declaration Page',
     roof: 'Measurement',
     other: 'Document',
   };
@@ -4644,6 +4686,7 @@ function renameJobFile(file, kind, section){
   else if(kind==='packet') existing = (j.packetFiles||[]).length;
   else if(kind==='check') existing = (j.checks||[]).length;
   else if(kind==='loss') existing = (j.lossFiles||[]).length;
+  else if(kind==='dec') existing = (j.decFiles||[]).length;
   else if(kind==='roof') existing = (j.roofFiles||[]).length;
   else existing = (j.otherFiles||[]).length;
   // Bump per call within the same batch
@@ -6396,7 +6439,7 @@ function renderDetailPanel(){
     {id:'packet',icon:'ti-file-certificate',label:'Packet'},
     {id:'contract',icon:'ti-writing',label:'Contract'},
     {id:'checks',icon:'ti-writing-sign',label:'Checks'},
-    {id:'loss',icon:'ti-file-alert',label:'Loss Statement'},
+    {id:'loss',icon:'ti-file-alert',label:'Insurance docs'},
     {id:'roof',icon:'ti-ruler-measure',label:'Roof Measurement'},
     {id:'other',icon:'ti-dots',label:'Other'},
     {id:'timeline',icon:'ti-history',label:'Timeline'},
@@ -6453,7 +6496,7 @@ function jobDocCounts(j){
     packet: len(j.packetFiles),
     contract: len(j.signedContractFiles) + len(j.contracts),
     checks: len(j.checks),
-    loss: len(j.lossFiles),
+    loss: len(j.lossFiles) + len(j.decFiles),
     roof: len(j.roofFiles),
     other: len(j.otherFiles),
   };
@@ -9179,6 +9222,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
 
   } else if(activeTab==='loss'){
     if(!j.lossFiles) j.lossFiles=[];
+    if(!j.decFiles) j.decFiles=[];
     // pre-populate form fields from job insurance data
     const ins={
       carrier:   j.carrier||'',
@@ -9195,7 +9239,25 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       claimNotes:j.claimNotes||'',
     };
 
+    function idocSlot(kind, title, sub, color, list){
+      const coll = kind === 'dec' ? 'decFiles' : 'lossFiles';
+      const add = kind === 'dec' ? 'decAddFiles' : 'lossAddFiles';
+      const del = kind === 'dec' ? 'decDelete' : 'lossDelete';
+      const files = (list || []).map((f, i) => `<div class="idoc-file" onclick="openJobStoredFile('${coll}',${i})">${retainedFileIcon(f, color)}<span class="n">${escapeHtml(f.name || 'File')}</span>
+          <button type="button" class="x" aria-label="Remove" onclick="event.stopPropagation();${del}(${i})"><i class="ti ti-x" aria-hidden="true"></i></button></div>`).join('');
+      const done = (list || []).length > 0;
+      return `<div class="idoc" style="--idoc-c:${color}" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="event.preventDefault();this.classList.remove('dragover');${add}(event.dataTransfer.files)">
+        <div class="idoc-t"><i class="ti ${done ? 'ti-circle-check' : 'ti-file-text'}" aria-hidden="true"></i>${title}</div>
+        ${done ? '' : `<div class="idoc-s">${sub}</div>`}
+        ${files}
+        <div class="idoc-btns">
+          <label class="idoc-up"><i class="ti ti-upload" aria-hidden="true"></i>${done ? 'Add' : 'Upload'}<input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="${add}(this.files)"></label>
+          <label class="idoc-cam" aria-label="Take photo"><i class="ti ti-camera" aria-hidden="true"></i><input type="file" accept="image/*" capture="environment" style="display:none" onchange="${add}(this.files)"></label>
+        </div></div>`;
+    }
+
     function lossHTML(analyzing){
+      Object.keys(ins).forEach(k => { ins[k] = j[k] || ''; });   // pick up values filled from the dec page
       return `
       <style>
         .loss-zone{border:2px dashed var(--border);border-radius:10px;padding:24px 16px;text-align:center;transition:border-color 0.15s,background 0.15s;margin-bottom:16px}
@@ -9210,39 +9272,30 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         .autofill-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.35);color:#A78BFA;border-radius:12px;font-size:10px;font-weight:600;padding:2px 8px}
       </style>
 
-      <!-- Upload zone -->
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Loss Statement Document</div>
-      <div class="loss-zone"
-        ondragover="event.preventDefault();this.classList.add('dragover')"
-        ondragleave="this.classList.remove('dragover')"
-        ondrop="event.preventDefault();this.classList.remove('dragover');lossAddFiles(event.dataTransfer.files)">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 8px;display:block;opacity:.55"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>
-        <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:3px">Drag & drop loss statement here</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">PDF, JPG, or PNG — insurance loss statement document</div>
-        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-          <label class="loss-upload-btn primary">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload Statement
-            <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="lossAddFiles(this.files)">
-          </label>
-          <label class="loss-upload-btn">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            Scan Document
-            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="lossAddFiles(this.files)">
-          </label>
-        </div>
+      <!-- Insurance documents: declaration page + loss statement, side by side -->
+      <style>
+        .idoc-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+        .idoc{min-width:0;border:1.5px dashed var(--idoc-c);border-radius:12px;padding:12px;background:color-mix(in srgb, var(--idoc-c) 6%, transparent);transition:background .15s}
+        .idoc.dragover{background:color-mix(in srgb, var(--idoc-c) 14%, transparent)}
+        .idoc-t{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--idoc-c)}
+        .idoc-s{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.35}
+        .idoc-btns{display:flex;gap:6px;margin-top:10px}
+        .idoc-up{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:8px;background:var(--idoc-c);color:#0B0F17;font-size:12px;font-weight:700;cursor:pointer}
+        .idoc-cam{display:inline-flex;align-items:center;justify-content:center;width:34px;border-radius:8px;border:1px solid rgba(255,255,255,.14);color:var(--brand);cursor:pointer;font-size:15px}
+        .idoc-file{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 9px;border-radius:8px;background:#141927;border:1px solid var(--border);cursor:pointer;min-width:0}
+        .idoc-file .n{flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .idoc-file .x{width:24px;height:24px;border-radius:6px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+        .idoc-note{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#C4B5FD;font-size:12.5px}
+        .idoc-note button{margin-left:auto;border:0;background:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+        @media(max-width:380px){.idoc-row{grid-template-columns:1fr}}
+      </style>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Insurance documents</div>
+      <div class="idoc-row">
+        ${idocSlot('dec','Declaration page','Policy #, deductible, carrier','#7AA2FF',j.decFiles)}
+        ${idocSlot('loss','Loss statement','What insurance approved','#F87171',j.lossFiles)}
       </div>
-
-      ${j.lossFiles.length>0?`
-      <div style="margin-bottom:16px">
-        ${j.lossFiles.map((f,i)=>`
-        <div onclick="openJobStoredFile('lossFiles',${i})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer">
-          ${retainedFileIcon(f,'#EF4444')}
-          <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div><div style="font-size:10px;color:var(--muted)">${f.date}</div></div>
-          ${previewFileBtn('lossFiles',i)}
-          <button onclick="event.stopPropagation();lossDelete(${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-        </div>`).join('')}
-      </div>`:''}
+      ${window.__decNote && window.__decNote.jobId===j.id ? `<div class="idoc-note"><i class="ti ti-sparkles" aria-hidden="true"></i><span>${escapeHtml(window.__decNote.text)}</span>${window.__decNote.undo?'<button type="button" onclick="decUndo()">Undo</button>':''}</div>` : ''}
+      ${analyzing==='dec' ? `<div class="idoc-note"><i class="ti ti-loader-2" style="animation:spin .7s linear infinite" aria-hidden="true"></i><span>Reading the declaration page…</span></div>` : ''}
 
       <!-- Insurance details form -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -9300,6 +9353,47 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const f=j.lossFiles[i];
       if(f && window.deleteJobFile){ try{ await window.deleteJobFile(f); }catch(e){ console.warn('loss file delete failed', e); } }
       j.lossFiles.splice(i,1);
+      saveToStorage();
+      body.innerHTML=lossHTML(false);
+    };
+    // Declaration page: upload, then read it and fill carrier / policy # /
+    // deductible — only boxes that are still empty. Undo puts them back.
+    window.decAddFiles=async function(files){
+      const pending=Array.from(files||[]);
+      if(!pending.length) return;
+      const records=await Promise.all(pending.map(f=>intakeJobFile(f,'dec',null)));
+      j.decFiles.push(...records);
+      saveToStorage();
+      body.innerHTML=lossHTML('dec');
+      let text='';
+      for(const f of records){ try{ const t=await ocrLossFile(f); if(t) text+='\n'+t; }catch(e){ console.warn('dec OCR failed', f && f.name, e); } }
+      const parsed = text.trim() ? parseDecPageText(text) : {};
+      const before = {}, applied = [];
+      const fill = (field, val, label) => {
+        if(val == null || val === '') return;
+        if(j[field] != null && String(j[field]).trim() !== '') return;
+        before[field] = j[field] || ''; j[field] = String(val); applied.push(label);
+      };
+      fill('carrier', parsed.carrier, 'carrier');
+      fill('policyNum', parsed.policyNum, 'policy #');
+      fill('deductible', parsed.deductible != null ? parsed.deductible.toFixed(2) : null, 'deductible');
+      if(applied.length) saveToStorage();
+      window.__decNote = { jobId:j.id,
+        text: !text.trim() ? 'Couldn’t read the declaration page. Try a clearer photo.'
+            : applied.length ? `Filled ${applied.join(', ')} from the dec page · check it`
+            : 'Nothing new to fill from the dec page',
+        undo: applied.length ? before : null };
+      body.innerHTML=lossHTML(false);
+    };
+    window.decUndo=function(){
+      const n=window.__decNote; if(!n || n.jobId!==j.id || !n.undo) return;
+      Object.entries(n.undo).forEach(([k,v])=>{ j[k]=v; });
+      saveToStorage(); window.__decNote=null; body.innerHTML=lossHTML(false); toast('Put back');
+    };
+    window.decDelete=async function(i){
+      const f=j.decFiles[i];
+      if(f && window.deleteJobFile){ try{ await window.deleteJobFile(f); }catch(e){ console.warn('dec file delete failed', e); } }
+      j.decFiles.splice(i,1);
       saveToStorage();
       body.innerHTML=lossHTML(false);
     };
