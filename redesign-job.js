@@ -144,14 +144,15 @@
   }
 
   // Upload: switch to the right tab and open its file picker in the same tap
-  function uploadTo(tab, photoKey) {
+  function uploadTo(tab, photoKey, handler) {
     const btn = document.querySelector('#detailPanel .dp-tab[data-dptab="' + tab + '"]');
     if (!btn) return;
     btn.click();   // the CRM redraws the job on that tab
     const body = $id('dpBody');
     if (!body) return;
     let input = null;
-    if (photoKey) input = body.querySelector('input[type="file"][multiple][onchange*="\'' + photoKey + '\'"]');
+    if (handler) input = body.querySelector('input[type="file"]:not([capture])[onchange*="' + handler + '("]');
+    if (!input && photoKey) input = body.querySelector('input[type="file"][multiple][onchange*="\'' + photoKey + '\'"]');
     if (!input) input = body.querySelector('input[type="file"][multiple]') || body.querySelector('input[type="file"]:not([capture])');
     if (input) input.click();
   }
@@ -179,10 +180,14 @@
     });
     menu.appendChild(grid);
     head('Documents');
-    [['contract', 'ti-writing', 'Contract'], ['checks', 'ti-receipt', 'Check'], ['loss', 'ti-file-alert', 'Loss statement'],
-     ['roof', 'ti-ruler-measure', 'Roof measurement'], ['other', 'ti-file', 'Other document']].forEach(([tab, icon, label]) => {
-      const n = counts[tab] || 0;
-      sheetItem(menu, icon, label, () => uploadTo(tab), { now: true, note: n ? n + ' uploaded' : 'none yet', noteCls: n ? 'ok' : '' });
+    const len = a => Array.isArray(a) ? a.length : 0;
+    // Insurance docs tab holds two uploads, so each item opens its own picker.
+    [['contract', 'ti-writing', 'Contract'], ['checks', 'ti-receipt', 'Check'],
+     ['loss', 'ti-file-alert', 'Loss statement', 'lossAddFiles', len(j.lossFiles)],
+     ['loss', 'ti-file-certificate', 'Declaration page', 'decAddFiles', len(j.decFiles)],
+     ['roof', 'ti-ruler-measure', 'Roof measurement'], ['other', 'ti-file', 'Other document']].forEach(([tab, icon, label, handler, cnt]) => {
+      const n = cnt != null ? cnt : (counts[tab] || 0);
+      sheetItem(menu, icon, label, () => uploadTo(tab, null, handler), { now: true, note: n ? n + ' uploaded' : 'none yet', noteCls: n ? 'ok' : '' });
     });
     sheetCancel(menu);
   }
