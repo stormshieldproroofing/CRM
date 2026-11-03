@@ -5349,6 +5349,9 @@ document.addEventListener('keydown', e=>{
 });
 
 function openStoredFile(file){
+  // Open inside the CRM (no new window): a new window has no way back on the
+  // phone home-screen app, and phones only show page 1 of a PDF in a frame.
+  if(file && typeof previewStoredFile === 'function'){ previewStoredFile(file); return; }
   if(!file?.url){toast('File preview is unavailable');return}
   const win=window.open('');
   if(!win){toast('Allow pop-ups to preview files');return}
@@ -26632,15 +26635,19 @@ async function previewStoredFile(f, title){
   const esc = window.escapeHtml || (s=>String(s==null?'':s));
   const overlay = document.createElement('div');
   overlay.id = 'filePreviewOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px';
+  document.getElementById('filePreviewOverlay')?.remove();
+  const phone = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  overlay.style.cssText = phone
+    ? 'position:fixed;inset:0;background:#0A0D13;z-index:600;display:flex;flex-direction:column;padding:calc(8px + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom)'
+    : 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px';
+  const btn = 'background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;text-decoration:none;white-space:nowrap';
   overlay.innerHTML = `
-    <div style="width:min(1000px,94vw);display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <div style="flex:1;min-width:0;color:#fff;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title || f.name || 'File')}</div>
-      <a id="fpOpen" href="#" target="_blank" rel="noopener" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:11px;font-weight:600;padding:5px 11px;border-radius:5px;text-decoration:none">Open in new tab</a>
-      <a id="fpDl" href="#" download style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;font-size:11px;font-weight:600;padding:5px 11px;border-radius:5px;text-decoration:none">Download</a>
-      <button id="fpClose" style="width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:15px;line-height:1">×</button>
+    <div style="width:${phone?'100%':'min(1000px,94vw)'};box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:${phone?'0 12px 8px':'0 0 8px'}">
+      <div style="flex:1;min-width:0;color:#fff;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title || f.name || 'File')}</div>
+      <a id="fpDl" href="#" download target="_blank" rel="noopener" style="${btn}">Download</a>
+      <button id="fpClose" aria-label="Close" style="width:40px;height:40px;flex:none;border-radius:12px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#fff;cursor:pointer;font-size:20px;line-height:1">×</button>
     </div>
-    <div id="fpBody" style="width:min(1000px,94vw);height:84vh;background:#fff;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center">
+    <div id="fpBody" style="width:${phone?'100%':'min(1000px,94vw)'};${phone?'flex:1;min-height:0':'height:84vh;border-radius:8px'};background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center">
       <div style="color:#666;font-size:13px;font-family:sans-serif">Loading…</div>
     </div>`;
   document.body.appendChild(overlay);
@@ -26656,10 +26663,34 @@ async function previewStoredFile(f, title){
     body.innerHTML = '<div style="color:#c0392b;font-size:13px;font-family:sans-serif;padding:20px;text-align:center">This file could not be loaded.<br><span style="color:#777;font-size:11px">It may have been uploaded before cloud sync was enabled, or removed from storage.</span></div>';
     return;
   }
-  overlay.querySelector('#fpOpen').href = url;
   overlay.querySelector('#fpDl').href = url;
   overlay.querySelector('#fpDl').setAttribute('download', f.name || 'file');
-  if(jobFileIsPdf(f)){
+  if(jobFileIsPdf(f) && window.pdfjsLib){
+    // Draw every page so all pages scroll on phones (a PDF in a frame shows page 1 only there).
+    body.style.cssText += ';display:block;overflow:auto;-webkit-overflow-scrolling:touch;background:#3A3F4A';
+    body.innerHTML = '<div style="color:#ddd;font-size:13px;font-family:sans-serif;padding:24px;text-align:center">Loading…</div>';
+    try {
+      const buf = await (await fetch(url)).arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      if(!document.body.contains(overlay)) return;
+      body.innerHTML = '';
+      const w = Math.max(280, body.clientWidth - (phone ? 0 : 24)), dpr = Math.min(2.5, window.devicePixelRatio || 1);
+      for(let n = 1; n <= pdf.numPages; n++){
+        const pg = await pdf.getPage(n);
+        const base = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: (w / base.width) * dpr });
+        const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+        c.style.cssText = `display:block;width:${w}px;height:auto;margin:${phone ? '0 auto 6px' : '12px auto'};background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)`;
+        body.appendChild(c);
+        await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+        if(!document.body.contains(overlay)) return;
+      }
+      if(pdf.numPages > 1){ const t = document.createElement('div'); t.style.cssText = 'color:#ccc;font:12px sans-serif;text-align:center;padding:10px 0 16px'; t.textContent = pdf.numPages + ' pages'; body.appendChild(t); }
+    } catch(e){
+      console.warn('pdf preview failed', e);
+      body.style.cssText = body.style.cssText.replace('display:block', 'display:flex');
+      body.innerHTML = `<iframe src="${url}#view=FitH" style="width:100%;height:100%;border:0"></iframe>`;
+    }
+  } else if(jobFileIsPdf(f)){
     body.innerHTML = `<iframe src="${url}#view=FitH" style="width:100%;height:100%;border:0"></iframe>`;
   } else if(jobFileIsImage(f)){
     body.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain">`;
@@ -26708,7 +26739,7 @@ function openDepositAttachments(jobId, idx){
   if(items.length < 2) return;
   const ovs = document.querySelectorAll('#filePreviewOverlay');
   const ov = ovs[ovs.length-1]; if(!ov) return;
-  const bar = ov.querySelector('#fpOpen')?.parentNode; if(!bar) return;
+  const bar = ov.querySelector('#fpDl')?.parentNode; if(!bar) return;
   const navBtn = (dir, label, ch) => {
     const b = document.createElement('button');
     b.type = 'button'; b.title = label; b.setAttribute('aria-label', label); b.textContent = ch;
@@ -26716,7 +26747,7 @@ function openDepositAttachments(jobId, idx){
     b.addEventListener('click', e => { e.stopPropagation(); openDepositAttachments(jobId, idx+dir); });
     return b;
   };
-  const first = bar.querySelector('#fpOpen');
+  const first = bar.querySelector('#fpDl');
   bar.insertBefore(navBtn(-1,'Previous check','‹'), first);
   bar.insertBefore(navBtn(1,'Next check','›'), first);
   const onKey = e => {
