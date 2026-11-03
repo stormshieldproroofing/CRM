@@ -13826,6 +13826,7 @@ function openSubEditModal(id){
       else if(cn.split(' ').some(w => w.startsWith(n))) sc = 2;
       else if(cn.includes(n)) sc = 3;
       else if(n.length >= 4 && n.includes(cn)) sc = 4;     // "State Farm Lloyds" → "State Farm"
+      else if(n.length >= 3 && (' ' + norm(c.notes)).includes(' ' + n)) sc = 5;   // full name kept in notes: "windstorm" → TWIA
       if(sc >= 0) scored.push({ c, sc });
     });
     return scored.sort((a, b) => a.sc - b.sc || a.c.name.localeCompare(b.c.name)).slice(0, 6).map(x => x.c);
