@@ -218,44 +218,73 @@
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + t;
   }
 
+  // Short, plain wording for the automatic history lines
+  function niceDate(v) {
+    const m = String(v || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(v || '').trim();
+    return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  function sysText(e) {
+    const label = String(e.label || '').trim();
+    const parts = String(e.detail || '').split(/→|->/);
+    const to = parts.length > 1 ? parts[parts.length - 1].trim() : '';
+    if (/stage changed/i.test(label) && to) return 'Moved to ' + to;
+    if (/build date/i.test(label) && to) return /unscheduled|^$/i.test(to) ? 'Build date cleared' : 'Build set for ' + niceDate(to);
+    return label + (to ? ': ' + niceDate(to) : (e.detail ? ': ' + e.detail : ''));
+  }
+
   function feedItems(jobId) {
     const notes = (state.notes[jobId] || []).filter(n => !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
     const stages = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.type === 'stage' && e.at)
-      .slice(-6)
-      .map(e => ({ kind: 'sys', at: e.at, text: (e.label || 'Stage changed') + (e.detail ? ': ' + e.detail : ''), by: e.by }));
+      .slice(-12)
+      .map(e => ({ kind: 'sys', at: e.at, text: sysText(e), stage: /stage changed/i.test(e.label || '') }));
     return notes.concat(stages).sort((a, b) => new Date(a.at) - new Date(b.at));
   }
 
   function count(jobId) { return (state.notes[jobId] || []).length; }
 
+  function monthKey(iso) {
+    const d = new Date(iso); if (isNaN(d)) return '';
+    const now = new Date();
+    return d.toLocaleDateString('en-US', d.getFullYear() === now.getFullYear() ? { month: 'long' } : { month: 'long', year: 'numeric' });
+  }
+  function shortDate(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+
   function noteHTML(it) {
     if (it.kind === 'sys') {
-      return `<div class="ssn-item sys"><div class="ssn-av sys"><i class="ti ti-arrows-right-left" aria-hidden="true"></i></div>
-        <div class="ssn-main"><div class="ssn-meta"><b>${esc(it.by && it.by !== 'system' ? firstName(it.by) : 'CRM')}</b><span>${esc(timeLabel(it.at))}</span></div>
-        <div class="ssn-text">${esc(it.text)}</div></div></div>`;
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}" aria-hidden="true"></span><span class="ssn-tl-d">${esc(shortDate(it.at))}</span><span class="ssn-tl-t">${esc(it.text)}</span></div>`;
     }
     const n = it.n;
     const mine = n._pending || (state.myAuthId && n.author_id === state.myAuthId);
     const who = mine ? 'You' : firstName(n.author_name);
-    return `<div class="ssn-item${n._pending ? ' pending' : ''}">
-      <div class="ssn-av${mine ? ' me' : ''}">${esc(initials(n.author_name || who))}</div>
-      <div class="ssn-main">
-        <div class="ssn-meta"><b>${esc(who)}</b><span>${n._pending ? 'Sending…' : esc(timeLabel(n.created_at))}</span>
-          <span class="ssn-acts">
-            ${n._pending ? '' : `<button type="button" class="ssn-link" data-pin="${esc(n.id)}">Pin</button>`}
-            ${mine ? `<button type="button" class="ssn-link" data-del="${esc(n.id)}" aria-label="Delete note"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
-          </span></div>
+    return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
+      <div class="ssn-card${mine ? ' mine' : ''}${n._pending ? ' pending' : ''}">
         <div class="ssn-text">${esc(n.body)}</div>
         ${n.tag ? `<span class="ssn-tag">${esc(n.tag)}</span>` : ''}
+        <div class="ssn-meta"><span>${esc(who)} · ${n._pending ? 'sending…' : esc(timeLabel(n.created_at))}</span>
+          <span class="ssn-acts">
+            ${n._pending ? '' : `<button type="button" class="ssn-link" data-pin="${esc(n.id)}" aria-label="Pin note"><i class="ti ti-pin" aria-hidden="true"></i>Pin</button>`}
+            ${mine ? `<button type="button" class="ssn-link" data-del="${esc(n.id)}" aria-label="Delete note"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
+          </span></div>
       </div></div>`;
+  }
+
+  function timelineHTML(items) {
+    let out = '', month = '';
+    items.forEach(it => {
+      const m = monthKey(it.at);
+      if (m && m !== month) { month = m; out += `<div class="ssn-tl-m">${esc(m)}</div>`; }
+      out += noteHTML(it);
+    });
+    return `<div class="ssn-tl">${out}</div>`;
   }
 
   function pinnedHTML(jobId) {
     return (state.notes[jobId] || []).filter(n => n.pinned).map(n => `
       <div class="ssn-pin">
-        <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>PINNED · ${esc(firstName(n.author_name))}
+        <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>Pinned · ${esc((n._pending || (state.myAuthId && n.author_id === state.myAuthId)) ? 'You' : firstName(n.author_name))}
           <button type="button" class="ssn-link" data-pin="${esc(n.id)}">Unpin</button></div>
         <div class="ssn-text">${esc(n.body)}</div>
       </div>`).join('');
@@ -265,46 +294,44 @@
     const jobId = state.jobId;
     const j = jobById(jobId);
     const n = count(jobId);
+    const pad = state.tab === 'pad';
+    const padBtn = `<button type="button" class="ssn-icon${pad ? ' on' : ''}" data-act="pad" aria-pressed="${pad}" aria-label="My scratchpad (private)" title="My scratchpad (private)"><i class="ti ti-notebook" aria-hidden="true"></i></button>`;
+    const title = pad ? 'My scratchpad' : (mode === 'float' && j ? esc(j.name || 'Notes') : 'Notes') + (mode === 'sheet' ? '' : ` <span class="ssn-n">${n}</span>`);
     const head = mode === 'sheet'
       ? `<div class="ssn-grab" aria-hidden="true"></div>
-         <div class="ssn-head"><div class="ssn-title"><div>Notes <span class="ssn-n">${n}</span></div>
-           <div class="ssn-sub">${esc(j ? (j.name || '') + (j.address && j.address !== '—' ? ' · ' + j.address : '') : '')}</div></div>
+         <div class="ssn-head"><div class="ssn-title"><div>${title}</div></div>${padBtn}
            <button type="button" class="ssn-icon" data-act="close" aria-label="Close notes"><i class="ti ti-x" aria-hidden="true"></i></button></div>`
       : `<div class="ssn-head"${mode === 'float' ? ' data-drag="1"' : ''}>
            ${mode === 'float' ? '<i class="ti ti-grip-vertical ssn-grip" aria-hidden="true"></i>' : ''}
-           <div class="ssn-title"><div>${mode === 'float' && j ? esc(j.name || 'Notes') : 'Notes'} <span class="ssn-n">${n}</span></div>
-             ${mode === 'float' && j && j.address && j.address !== '—' ? `<div class="ssn-sub">${esc(j.address)}</div>` : ''}</div>
-           ${mode === 'dock' ? '<button type="button" class="ssn-text-btn" data-act="popout"><i class="ti ti-external-link" aria-hidden="true"></i>Pop out</button>' : ''}
+           <div class="ssn-title"><div>${title}</div></div>
+           ${padBtn}
+           ${mode === 'dock' ? '<button type="button" class="ssn-icon" data-act="popout" aria-label="Pop out" title="Pop out"><i class="ti ti-external-link" aria-hidden="true"></i></button>' : ''}
            ${mode === 'float' ? '<button type="button" class="ssn-icon" data-act="openjob" aria-label="Open job"><i class="ti ti-arrow-up-right" aria-hidden="true"></i></button>' : ''}
            <button type="button" class="ssn-icon" data-act="${mode === 'dock' ? 'hide' : 'closefloat'}" aria-label="${mode === 'dock' ? 'Hide notes' : 'Close notes'}"><i class="ti ${mode === 'dock' ? 'ti-chevron-left' : 'ti-x'}" aria-hidden="true"></i></button>
          </div>`;
-    const tabs = `<div class="ssn-tabs" role="tablist">
-        <button type="button" role="tab" class="ssn-tab${state.tab === 'job' ? ' on' : ''}" data-tab="job" aria-selected="${state.tab === 'job'}">Job notes</button>
-        <button type="button" role="tab" class="ssn-tab${state.tab === 'pad' ? ' on' : ''}" data-tab="pad" aria-selected="${state.tab === 'pad'}">My scratchpad</button></div>`;
-    if (state.tab === 'pad') {
-      return head + tabs + `<div class="ssn-padwrap">
+    if (pad) {
+      return head + `<div class="ssn-padwrap">
         <div class="ssn-hint">Only you can see this. It follows you across every job.</div>
         <label class="ssn-sr" for="ssnPad">My scratchpad</label>
         <textarea id="ssnPad" class="ssn-pad" placeholder="Reminders, calls to make, anything…">${esc(lsGet(LS.pad, ''))}</textarea>
         <div class="ssn-status ${state.statusKind}">${esc(state.status || 'Saves as you type')}</div></div>`;
     }
     const items = feedItems(jobId);
-    const feed = items.length ? items.map(noteHTML).join('') : '<div class="ssn-empty">No notes yet. Gate codes, who to call, what the adjuster said: put it here so the whole team knows.</div>';
+    const feed = items.length ? timelineHTML(items) : '<div class="ssn-empty">No notes yet. Gate codes, who to call, what the adjuster said: put it here so the whole team knows.</div>';
     const draft = lsGet(LS.draft(jobId), '');
-    return head + tabs + `
+    return head + `
       <div class="ssn-feed">${pinnedHTML(jobId)}${feed}</div>
-      <div class="ssn-compose">
+      <div class="ssn-compose${state.tag || draft ? ' open' : ''}">
         <div class="ssn-chips">${TAGS.map(t => `<button type="button" class="ssn-chip${state.tag === t ? ' on' : ''}" data-tag="${esc(t)}" aria-pressed="${state.tag === t}">${esc(t)}</button>`).join('')}</div>
         <div class="ssn-row">
           <label class="ssn-sr" for="ssnInput-${mode}">New note</label>
-          <textarea id="ssnInput-${mode}" class="ssn-input" rows="2" placeholder="${mode === 'sheet' ? 'Add a note…' : 'Write a note… (Enter to post, Shift+Enter for a new line)'}" enterkeyhint="send">${esc(draft)}</textarea>
+          <textarea id="ssnInput-${mode}" class="ssn-input" rows="2" placeholder="${mode === 'sheet' ? 'Add a note…' : 'Write a note… (Enter to post)'}" enterkeyhint="send">${esc(draft)}</textarea>
           <button type="button" class="ssn-send" data-act="post" aria-label="Post note"><i class="ti ti-send" aria-hidden="true"></i></button>
         </div>
-        <div class="ssn-status ${state.statusKind}">${esc(state.status || (draft ? 'Draft saved on this device' : 'Drafts save as you type'))}</div>
+        <div class="ssn-status ${state.statusKind}">${esc(state.status || '')}</div>
       </div>`;
   }
 
-  // Containers
   function dockEl() {
     let el = $('ssnDock');
     const ov = $('detailOverlay'), panel = $('detailPanel');
@@ -478,6 +505,7 @@
     if (b.dataset.pin) { togglePin(b.dataset.pin); return; }
     if (b.dataset.del) { remove(b.dataset.del); return; }
     switch (b.dataset.act) {
+      case 'pad': state.tab = state.tab === 'pad' ? 'job' : 'pad'; state.status = ''; if (state.tab === 'pad') loadPad(); render(true); break;
       case 'post': post(root); break;
       case 'close': state.sheetOpen = false; render(); break;
       case 'hide': setDock(false); break;
@@ -513,6 +541,11 @@
     }
     if (e.key === 'Escape' && state.sheetOpen) { state.sheetOpen = false; render(); }
   });
+
+  // Tapping a tag chip keeps the keyboard up (chips only show while writing)
+  document.addEventListener('pointerdown', e => {
+    if (e.target.closest && e.target.closest('.ssn-chip')) e.preventDefault();
+  }, true);
 
   // Drag the floating panel by its header
   document.addEventListener('pointerdown', e => {
@@ -651,6 +684,32 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-sheet .ssn-input{height:48px;font-size:16px;border-radius:24px;padding:12px 16px}
 .ssn-sheet .ssn-send{width:48px;height:48px;border-radius:999px;font-size:20px}
 .ssn-sheet .ssn-pad{font-size:16px}
+.ssn-icon.on{background:#10283A;color:#7DD3FC}
+.ssn-compose .ssn-chips{display:none}
+.ssn-compose:focus-within .ssn-chips,.ssn-compose.open .ssn-chips{display:flex}
+.ssn-compose .ssn-status:empty,.ssn-compose .ssn-status.ok{display:none}
+.ssn-tl{position:relative;padding-left:18px}
+.ssn-tl:before{content:"";position:absolute;left:4px;top:6px;bottom:6px;width:2px;background:#1F2A36;border-radius:2px}
+.ssn-tl-m{font-size:11px;color:#6B7686;text-transform:uppercase;letter-spacing:.08em;margin:14px 0 4px}
+.ssn-tl-m:first-child{margin-top:2px}
+.ssn-dot{position:absolute;left:-18px;width:10px;height:10px;border-radius:999px;background:#3A4A5A;border:2px solid var(--n-bg);box-sizing:content-box;margin-left:-1px}
+.ssn-dot.stage{background:#8B5CF6}
+.ssn-dot.note{background:#38BDF8;top:14px}
+.ssn-tl-sys{position:relative;display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;color:#8E9BAA}
+.ssn-tl-sys .ssn-dot{top:7px}
+.ssn-tl-d{width:46px;flex:none;font-size:12px;color:#6B7686}
+.ssn-tl-t{min-width:0}
+.ssn-tl-note{position:relative;margin:6px 0 8px}
+.ssn-card{padding:10px 12px 8px;border-radius:12px;background:#172230;border:1px solid #22344A}
+.ssn-card.mine{background:#14202C;border-color:#1E3A52}
+.ssn-card.pending{opacity:.65}
+.ssn-card .ssn-text{font-size:14px;margin:0}
+.ssn-card .ssn-meta{margin-top:6px;align-items:center}
+.ssn-card .ssn-tag{margin-top:6px}
+.ssn-link i{font-size:13px;margin-right:2px;vertical-align:-2px}
+.ssn-pin{margin-bottom:6px}
+.ssn-sheet .ssn-tl-sys{font-size:14px}
+.ssn-sheet .ssn-card .ssn-text{font-size:15px}
 @media (min-width:1181px){html.ssn-docked.ui-new .detail-overlay{align-items:stretch}}
 @media (max-width:1180px){.ssn-hbtn{display:none}}
 `;
