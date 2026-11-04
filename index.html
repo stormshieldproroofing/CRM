@@ -1700,6 +1700,27 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sm-todo-item span{flex:1}
 .sm-todo-item em{font-style:normal;font-size:10px;font-weight:700;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:1px 5px;flex-shrink:0}
 .sm-todo-item.locked{opacity:.55;cursor:not-allowed}
+/* Desktop one-row tiles: same height, one-line labels, numbers at the same height,
+   Receivable's bar on the bottom edge, numbers shrink a little instead of getting cut off. */
+@media (min-width:1181px){
+  .sm-kpis{grid-template-columns:1.8fr repeat(4,minmax(0,1fr));align-items:stretch}
+  .sm-kpis > .sm-kpi:not(.sm-kpi-jobs){display:flex;flex-direction:column}
+  .sm-kpis > .sm-kpi{padding:14px clamp(12px,1vw,16px)}
+  .sm-kpis .sm-kpi-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:10px;font-size:clamp(11px,.9vw,12px)}
+  .sm-kpis .sm-step span{font-size:clamp(10.5px,.85vw,11.5px);overflow:visible;text-overflow:clip}
+  .sm-kpis > .sm-kpi-jobs{padding-left:10px;padding-right:10px}
+  .sm-kpis > .sm-kpi-jobs .sm-jobs-head{padding:0 4px}
+  .sm-kpis .sm-kpi-value{font-size:clamp(20px,1.75vw,26px);margin-top:6px;overflow:visible;text-overflow:clip}
+  .sm-kpis .sm-kpi-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:10px}
+  .sm-kpis .sm-kpi-track{margin-top:auto}
+}
+/* Laptop widths: a bit more room so every label fits on one line */
+@media (min-width:1181px) and (max-width:1439px){
+  .sm-kpis{grid-template-columns:1.9fr repeat(4,minmax(0,1fr))}
+  .sm-kpis .sm-kpi-chev{display:none}
+  .sm-kpis .sm-kpi-label{padding-right:0;font-size:11.5px}
+  .sm-kpis .sm-step span{font-size:10px;letter-spacing:-.02em}
+}
 @media (max-width:1180px){
   .sm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sm-kpi-jobs{grid-column:1/-1}
@@ -6142,7 +6163,7 @@ function renderBoardSalesSummary(){
         ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)', '', 'rev')}
         ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid in full this year', '#60C4FF', '', 'com')}
         ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`, 'recv')}
-        ${kpi('Pending commission', money0(summary.pendingCommission), 'On jobs not fully paid', '#A78BFA', '', 'pend')}
+        ${kpi('Pending commission', money0(summary.pendingCommission), 'Not fully paid', '#A78BFA', '', 'pend')}
       </div>
       <div class="sm-cols">
         <div class="sm-col">
