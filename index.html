@@ -287,6 +287,10 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .jobs-wrap{padding:14px 16px 30px}
 .jobs-toolbar{background:#141927;border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px}
 .jobs-toolbar-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.jobs-search-note{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:-2px 0 10px;font-size:12.5px;color:var(--muted)}
+.jobs-search-note b{color:#E8ECF3}
+.jobs-search-note button{border:0;background:none;padding:0;color:var(--brand-light);font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.jobs-search-note [data-jobs-showall]{color:#F2C46B}
 .jobs-search{min-width:260px;flex:1;background:#1A1F2E;border:1px solid var(--border);border-radius:7px;padding:8px 11px;color:var(--brand);font-size:12px;font-family:'Barlow',sans-serif;outline:none}
 .jobs-search:focus{border-color:var(--brand-light)}
 .jobs-filters{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:8px}
@@ -737,8 +741,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
     <div class="jobs-toolbar">
       <div class="jobs-toolbar-top">
         <i class="ti ti-search" style="font-size:16px;color:var(--brand-light)" aria-hidden="true"></i>
-        <input id="jobsSearch" class="jobs-search" placeholder="Search name, phone, address, carrier, claim...">
+        <input id="jobsSearch" class="jobs-search" placeholder="Search anything: name, phone, address, carrier, claim #, stage, pipeline, rep… (e.g. safepoint appraisal)">
       </div>
+      <div id="jobsSearchNote" class="jobs-search-note" style="display:none"></div>
       <div class="jobs-filters">
         <select id="jobsPipelineFilter" class="jobs-filter"></select>
         <select id="jobsAgentFilter" class="jobs-filter"></select>
@@ -4192,6 +4197,25 @@ function jobMatchesSearch(j, q){
   const queryDigits = q.replace(/\D/g, '');
   return text.includes(q) || !!(queryDigits && digits.includes(queryDigits));
 }
+
+// Smart search used by the search pop-up AND the Jobs page. Every word must
+// match something on the job: name, address, phone (any format), email,
+// claim #, policy #, carrier, lead source, stage, pipeline or rep name.
+// "safepoint appraisal" = SafePoint jobs in Appraisal.
+function jobSearchText(j){
+  let stage='', pipe='', rep='';
+  try{ const c=columnsForPipeline(j.pipeline||'insurance').find(c=>c.id===j.col); stage=c?c.name:''; }catch(e){}
+  try{ const p=(pipelines||[]).find(p=>p.id===(j.pipeline||'insurance')); pipe=p?p.name:''; }catch(e){}
+  try{ const u=(USERS||[]).find(u=>u.id===j.user); rep=u?u.name:''; }catch(e){}
+  return [j.name,j.address,j.phone,j.email,j.claimNum,j.policyNum,j.carrier,j.source,stage,pipe,rep].filter(Boolean).join(' ').toLowerCase();
+}
+function jobSmartMatch(j, q){
+  q=String(q||'').trim().toLowerCase(); if(!q) return true;
+  if(jobMatchesSearch(j,q)) return true;                       // whole phrase / phone digits
+  const text=jobSearchText(j), digits=[j.phone,j.policyNum,j.claimNum].filter(Boolean).join(' ').replace(/\D/g,'');
+  return q.split(/\s+/).every(w => text.includes(w) || (w.replace(/\D/g,'').length>=3 && digits.includes(w.replace(/\D/g,''))));
+}
+window.jobSmartMatch = jobSmartMatch;
 
 // ── Adjuster phone helpers ────────────────────────────────────────────
 // Adjusters are usually reached at a main line plus an extension, entered in
@@ -11281,10 +11305,7 @@ function gsStageClosed(j){
 function gsPipelineName(j){
   try{ if(!Array.isArray(pipelines) || pipelines.length<2) return ''; const p=pipelines.find(p=>p.id===(j.pipeline||'insurance')); return p?p.name:''; }catch(e){ return ''; }
 }
-function gsMatch(j,q){
-  if(jobMatchesSearch(j,q)) return true;
-  return [j.email,j.carrier,gsStage(j)].filter(Boolean).join(' ').toLowerCase().includes(q);
-}
+function gsMatch(j,q){ return jobSmartMatch(j,q); }
 function gsStageColor(j){
   try{ const c=columnsForPipeline(j.pipeline).find(c=>c.id===j.col); if(!c) return '#8B93A3';
     const lost=/lost|denied/i.test(c.name||'') || ['denied','closed-denied','lost-lead','lost_lead'].includes(String(c.id).toLowerCase());   // finished jobs keep their own color
@@ -11349,7 +11370,7 @@ window.gsRender=function(){
     // names that start with the search come first
     hits.sort((a,b)=>((b.name||'').toLowerCase().startsWith(q))-((a.name||'').toLowerCase().startsWith(q)));
     html = hits.length
-      ? `<div class="gs-label gs-label-row"><span>${hits.length} ${hits.length===1?'job':'jobs'}</span>${hits.length>1?`<button type="button" class="gs-clearq" onclick="gsShowList()">See all as a list</button>`:''}</div>`+hits.slice(0,50).map(j=>gsRow(j,q)).join('')+(hits.length>50?`<div class="gs-more">Showing first 50 — keep typing to narrow it down</div>`:'')
+      ? `<div class="gs-label gs-label-row"><span>${hits.length} ${hits.length===1?'job':'jobs'}</span>${hits.length>1?`<button type="button" class="gs-clearq" onclick="gsShowList()">${gsIsDesktop()?'See all in Jobs list':'See all as a list'}</button>`:''}</div>`+hits.slice(0,50).map(j=>gsRow(j,q)).join('')+(hits.length>50?`<div class="gs-more">Showing first 50 — keep typing to narrow it down</div>`:'')
       : `<div class="gs-empty"><i class="ti ti-mood-empty"></i>No jobs match “${escapeHtml(raw)}”.</div>`;
   }
   if(q && gsIsDesktop()){
@@ -11401,16 +11422,20 @@ function gsWireList(box, raw){
   box.querySelectorAll('[data-gs-id]').forEach(r=>r.addEventListener('click',()=>{ const id=r.dataset.gsId; gsRemember(id); gsRememberQuery(raw); gsClose(); if(typeof openDetail==='function') openDetail(id); }));
   box.querySelectorAll('[data-gs-stage]').forEach(b=>b.addEventListener('click',()=>{ window.__gsList.stage=b.dataset.gsStage; gsRender(); }));
   box.querySelector('[data-gs-sort]')?.addEventListener('change',e=>{ window.__gsList.sort=e.target.value; gsRender(); });
-  box.querySelector('[data-gs-jobs]')?.addEventListener('click',()=>{
-    gsRememberQuery(raw); gsClose();
-    if(typeof switchPage==='function') switchPage('jobs');
-    const pf=document.getElementById('jobsPipelineFilter'); if(pf) pf.value='';
-    const js=document.getElementById('jobsSearch'); if(js){ js.value=raw; }
-    if(typeof renderJobsPage==='function') renderJobsPage();
-  });
+  box.querySelector('[data-gs-jobs]')?.addEventListener('click',()=>gsOpenJobsList(raw));
 }
+// Computers: the Jobs page is the full list. Clear its other filters so
+// nothing is hidden, then search there.
+window.gsOpenJobsList=function(raw){
+  raw=String(raw||'').trim(); gsRememberQuery(raw); gsClose();
+  if(typeof switchPage==='function') switchPage('jobs');
+  ['jobsPipelineFilter','jobsAgentFilter','jobsStageFilter','jobsPriorityFilter'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const js=document.getElementById('jobsSearch'); if(js) js.value=raw;
+  if(typeof renderJobsPage==='function') renderJobsPage();
+};
 window.gsShowList=function(){
   const raw=(document.getElementById('gsInput').value||'').trim(); if(!raw) return false;
+  if(gsIsDesktop()){ gsOpenJobsList(raw); return true; }
   window.__gsList={ q:raw, stage:'all', sort:'new' }; gsRender(); document.getElementById('gsResults').scrollTop=0; return true;
 };
 function gsIsDesktop(){ return window.matchMedia('(min-width:761px)').matches; }
@@ -11720,9 +11745,22 @@ function renderJobsPage(){
     if(!jobMatchesAssigneeFilter(j, selectedAgent)) return false;
     if(selectedStage && j.col!==selectedStage) return false;
     if(selectedPriority && j.priority!==selectedPriority) return false;
-    if(q && !jobMatchesSearch(j,q) && !String(j.carrier||'').toLowerCase().includes(q) && !String(j.source||'').toLowerCase().includes(q)) return false;
+    if(q && !jobSmartMatch(j,q)) return false;
     return true;
   });
+  // Results line + "hidden by filters" so a search never looks empty for no reason
+  const note=$('jobsSearchNote');
+  if(note){
+    const anyFilter=!!(selectedPipeline||selectedAgent||selectedStage||selectedPriority);
+    const allHits=q?jobs.filter(j=>jobSmartMatch(j,q)).length:0, hidden=anyFilter?allHits-visibleJobs.length:0;
+    const raw=searchInput.value.trim();
+    note.innerHTML = q ? `<span>Results for <b>“${escapeHtml(raw)}”</b> · ${visibleJobs.length} ${visibleJobs.length===1?'job':'jobs'}</span>`
+      + (hidden>0?`<button type="button" data-jobs-showall>${hidden} more hidden by filters · Show all</button>`:'')
+      + `<button type="button" data-jobs-clear>Clear search</button>` : '';
+    note.style.display = q ? '' : 'none';
+    note.querySelector('[data-jobs-showall]')?.addEventListener('click',()=>{ [pipelineFilter,agentFilter,stageFilter,priorityFilter].forEach(el=>el.value=''); renderJobsPage(); });
+    note.querySelector('[data-jobs-clear]')?.addEventListener('click',()=>{ searchInput.value=''; renderJobsPage(); searchInput.focus(); });
+  }
   const totalValue=visibleJobs.reduce((s,j)=>s+moneyValue(j.potVal),0);
   const receivable=visibleJobs.reduce((s,j)=>s+Math.max(0,moneyValue(j.potVal)-jobDepositTotal(j)),0);
   const active=visibleJobs.filter(j=>j.col!=='completed').length;
