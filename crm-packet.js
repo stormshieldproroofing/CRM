@@ -842,7 +842,7 @@
       ${signed ? '' : '<p class="pk-note">Answers save automatically.</p>'}`;
 
     const total = Object.values(miss).reduce((n, a) => n + a.length, 0);
-    const isOpen = formOpen[j.id] !== undefined ? formOpen[j.id] : !signed;
+    const isOpen = formOpen[j.id] !== undefined ? formOpen[j.id] : false;   // starts closed; tap the bar to open
     panel.__pkJob = j.id;
     panel.innerHTML = `<div class="pk-wrap${signed ? ' pk-locked' : ''}">
       <div class="pk-trk" id="pk-trk" data-job="${esc(j.id)}">${trackerHtml(j, p)}</div>
