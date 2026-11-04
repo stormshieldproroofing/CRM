@@ -650,7 +650,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
 <script src="supabase-crm.js?v=4"></script>
-<script src="crm-packet.js?v=16"></script>
+<script src="crm-packet.js?v=17"></script>
 
 <div style="position:relative;overflow:hidden">
 
@@ -9431,46 +9431,65 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       ${window.__decNote && window.__decNote.jobId===j.id ? `<div class="idoc-note"><i class="ti ti-sparkles" aria-hidden="true"></i><span>${escapeHtml(window.__decNote.text)}</span>${window.__decNote.undo?'<button type="button" onclick="decUndo()">Undo</button>':''}</div>` : ''}
       ${analyzing==='dec' ? `<div class="idoc-note"><i class="ti ti-loader-2" style="animation:spin .7s linear infinite" aria-hidden="true"></i><span>Reading the declaration page…</span></div>` : ''}
 
-      <!-- Insurance details form -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Insurance Claim Details</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${j.lossFiles.length>0?`<button onclick="lossAutofill()" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:7px;border:1px solid rgba(139,92,246,0.4);background:rgba(139,92,246,0.12);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif">${analyzing?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin .7s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Analyzing...':'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 8v4l3 3"/><path d="M16.24 7.76l4.24-4.24"/><path d="M20.48 3.52L22 2"/></svg> Autofill from Statement'}</button>`:''}
-          <span class="autofill-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Synced with Job</span>
-        </div>
-      </div>
-
-      <div style="background:#141927;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <div><label class="ins-label">Insurance Carrier</label><input class="ins-field" id="li-carrier" value="${ins.carrier}" placeholder="e.g. State Farm" oninput="lossSyncField('carrier',this.value)"></div>
-          <div><label class="ins-label">Claim Number</label><input class="ins-field" id="li-claimNum" value="${ins.claimNum}" placeholder="e.g. SF-2026-88821" oninput="lossSyncField('claimNum',this.value)"></div>
-          <div><label class="ins-label">Policy Number</label><input class="ins-field" id="li-policyNum" value="${ins.policyNum}" placeholder="Policy #" oninput="lossSyncField('policyNum',this.value)"></div>
-          <div><label class="ins-label">Date of Loss</label><input type="date" class="ins-field" id="li-dateOfLoss" value="${ins.dateOfLoss}" oninput="lossSyncField('dateOfLoss',this.value)"></div>
-          <div><label class="ins-label">Claim Type</label>
-            <select class="ins-field" id="li-claimType" onchange="lossSyncField('claimType',this.value)">
-              <option value="">Select…</option>
-              ${['Hail Damage','Wind Damage','Storm Damage','Fire Damage','Water / Flood Damage','Fallen Tree','Other'].map(o=>`<option${ins.claimType===o?' selected':''}>${o}</option>`).join('')}
-            </select>
-          </div>
-          <div><label class="ins-label">Claim Status</label>
-            <select class="ins-field" id="li-claimStatus" onchange="lossSyncField('claimStatus',this.value)">
-              <option value="">Select…</option>
-              ${['Not Yet Filed','Filed — Pending Adjuster','Adjuster Scheduled','Approved','Supplemented','Denied','Closed'].map(o=>`<option${ins.claimStatus===o?' selected':''}>${o}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
-          <div><label class="ins-label">RCV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-rcv" value="${ins.rcv}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('rcv',this.value)"></div></div>
-          <div><label class="ins-label">Deductible</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-deductible" value="${ins.deductible}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('deductible',this.value)"></div></div>
-          <div><label class="ins-label">ACV Amount</label><div style="display:flex;align-items:center;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:8px 11px;gap:4px"><span style="color:var(--muted);font-size:12px">$</span><input type="text" inputmode="decimal" style="border:none;outline:none;font-size:12px;font-family:'Barlow',sans-serif;color:var(--brand);width:100%;background:none" id="li-acv" value="${ins.acv}" placeholder="0.00 (try 800+1200)" oninput="lossSyncField('acv',this.value)"></div></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <div><label class="ins-label">Adjuster Name</label><input class="ins-field" id="li-adjName" value="${ins.adjName}" placeholder="Adjuster full name" oninput="lossSyncField('adjName',this.value)"></div>
-          <div><label class="ins-label">Adjuster Phone</label><input class="ins-field" id="li-adjPhone" data-no-calc="true" value="${ins.adjPhone}" placeholder="Adjuster phone" oninput="lossSyncField('adjPhone',this.value)"></div>
-        </div>
-        <div><label class="ins-label">Damage Description / Claim Notes</label><textarea class="ins-field" rows="3" style="resize:vertical;font-size:12px" id="li-claimNotes" oninput="lossSyncField('claimNotes',this.value)" placeholder="Describe damage, scope of loss, special instructions…">${ins.claimNotes}</textarea></div>
-      </div>
-      <button onclick="lossSave()" class="btn-primary" style="font-size:12px">Save Insurance Details</button>`;
+      <!-- Insurance claim details: one collapsible bar like the Packet / Contract tabs -->
+      <style>
+        .idf-bar{display:flex;align-items:center;gap:10px;width:100%;margin:4px 0 12px;padding:13px 14px;border:1px solid var(--border);border-radius:11px;background:#141927;color:var(--brand);font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;text-align:left}
+        .idf-bar[aria-expanded="true"]{border-color:#33405A}
+        .idf-bar .t{flex:1}
+        .idf-bar .c{display:flex;color:#8B94A7;transition:transform .15s}
+        .idf-bar[aria-expanded="true"] .c{transform:rotate(180deg)}
+        .idf-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;letter-spacing:0;text-transform:none}
+        .idf-badge.need{background:rgba(242,196,107,.14);color:#F2C46B}
+        .idf-badge.ok{background:rgba(52,211,153,.14);color:#34D399}
+        .idf-sec{background:var(--card,#161B26);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+        .idf-sec h4{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:12px;letter-spacing:.04em;color:var(--brand);text-transform:uppercase}
+        .idf-sec h4 .idf-badge{margin-left:auto}
+        .idf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+        .idf-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px}
+        .idf-fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+        .idf-fld.full{grid-column:1/-1}
+        .idf-fld label{font-size:11px;color:var(--muted);font-weight:600}
+        .idf-fld input,.idf-fld select,.idf-fld textarea{background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text,#E8ECF3);font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box;outline:none}
+        .idf-fld input:focus,.idf-fld select:focus,.idf-fld textarea:focus{border-color:var(--brand-light)}
+        .idf-fld textarea{resize:vertical;min-height:76px}
+        .idf-money{display:flex;align-items:center;gap:4px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:0 10px}
+        .idf-money span{color:var(--muted);font-size:13px}
+        .idf-money input{border:0;background:none;padding:9px 0}
+        .idf-auto{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;border:1px solid rgba(139,92,246,0.4);background:rgba(139,92,246,0.12);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:0;text-transform:none}
+        .idf-foot{font-size:11.5px;color:var(--muted);margin:-2px 2px 8px}
+        @media (max-width:640px){.idf-grid:not(.keep2),.idf-grid3{grid-template-columns:1fr}}
+      </style>
+      ${(()=>{
+        const open = !!(window._insFormOpen && window._insFormOpen[j.id]);
+        const need = [['carrier'],['claimNum'],['policyNum'],['dateOfLoss'],['deductible'],['adjName'],['adjPhone']].filter(([k])=>!String(ins[k]||'').trim()).length;
+        const miss = (keys) => keys.filter(k=>!String(ins[k]||'').trim()).length;
+        const badge = n => n ? `<span class="idf-badge need">${n} missing</span>` : '<span class="idf-badge ok">Done</span>';
+        const money = (id, key, label) => `<div class="idf-fld"><label for="li-${id}">${label}</label><div class="idf-money"><span>$</span><input type="text" inputmode="decimal" id="li-${id}" value="${ins[key]}" placeholder="0.00" oninput="lossSyncField('${key}',this.value)"></div></div>`;
+        return `<button type="button" class="idf-bar" aria-expanded="${open}" onclick="window._insFormOpen=window._insFormOpen||{};window._insFormOpen['${j.id}']=${!open};lossRerender()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="t">Insurance claim details</span>${badge(need)}
+          <span class="c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></button>
+        ${open ? `
+        <div class="idf-sec"><h4>Claim${badge(miss(['carrier','claimNum','policyNum','dateOfLoss']))}</h4>
+          <div class="idf-grid">
+            <div class="idf-fld full"><label for="li-carrier">Insurance carrier</label><input id="li-carrier" value="${ins.carrier}" placeholder="e.g. State Farm" oninput="lossSyncField('carrier',this.value)"></div>
+            <div class="idf-fld"><label for="li-claimNum">Claim #</label><input id="li-claimNum" value="${ins.claimNum}" placeholder="e.g. SF-2026-88821" oninput="lossSyncField('claimNum',this.value)"></div>
+            <div class="idf-fld"><label for="li-policyNum">Policy #</label><input id="li-policyNum" value="${ins.policyNum}" placeholder="Policy #" oninput="lossSyncField('policyNum',this.value)"></div>
+            <div class="idf-fld"><label for="li-dateOfLoss">Date of loss</label><input type="date" id="li-dateOfLoss" value="${ins.dateOfLoss}" oninput="lossSyncField('dateOfLoss',this.value)"></div>
+            <div class="idf-fld"><label for="li-claimType">Claim type</label><select id="li-claimType" onchange="lossSyncField('claimType',this.value)"><option value="">Select…</option>${['Hail Damage','Wind Damage','Storm Damage','Fire Damage','Water / Flood Damage','Fallen Tree','Other'].map(o=>`<option${ins.claimType===o?' selected':''}>${o}</option>`).join('')}</select></div>
+            <div class="idf-fld full"><label for="li-claimStatus">Claim status</label><select id="li-claimStatus" onchange="lossSyncField('claimStatus',this.value)"><option value="">Select…</option>${['Not Yet Filed','Filed — Pending Adjuster','Adjuster Scheduled','Approved','Supplemented','Denied','Closed'].map(o=>`<option${ins.claimStatus===o?' selected':''}>${o}</option>`).join('')}</select></div>
+          </div></div>
+        <div class="idf-sec"><h4>Money${badge(miss(['deductible']))}${j.lossFiles.length>0?`<button type="button" class="idf-auto" onclick="lossAutofill()">${analyzing===true?'Reading…':'Fill from loss statement'}</button>`:''}</h4>
+          <div class="idf-grid3">${money('rcv','rcv','RCV')}${money('acv','acv','ACV')}${money('deductible','deductible','Deductible')}</div></div>
+        <div class="idf-sec"><h4>Adjuster${badge(miss(['adjName','adjPhone']))}</h4>
+          <div class="idf-grid">
+            <div class="idf-fld"><label for="li-adjName">Name</label><input id="li-adjName" value="${ins.adjName}" placeholder="Adjuster full name" oninput="lossSyncField('adjName',this.value)"></div>
+            <div class="idf-fld"><label for="li-adjPhone">Phone</label><input id="li-adjPhone" data-no-calc="true" value="${ins.adjPhone}" placeholder="Adjuster phone" oninput="lossSyncField('adjPhone',this.value)"></div>
+          </div></div>
+        <div class="idf-sec"><h4>Damage &amp; claim notes</h4>
+          <div class="idf-fld full"><textarea id="li-claimNotes" rows="3" oninput="lossSyncField('claimNotes',this.value)" placeholder="Describe damage, scope of loss, special instructions…">${ins.claimNotes}</textarea></div></div>
+        <div class="idf-foot">Answers save automatically and stay in sync with the job and the packet.</div>` : ''}`;
+      })()}`;
     }
 
     body.innerHTML = lossHTML(false);
@@ -9532,6 +9551,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       body.innerHTML=lossHTML(false);
     };
     window.lossSyncField=function(field,val){ j[field]=val; saveToStorage(); };  // live sync to job + persist
+    window.lossRerender=function(){ body.innerHTML=lossHTML(false); };
     window.lossSave=function(){saveToStorage();toast('Insurance details saved');};
     window.lossAutofill=async function(){
       if(!j.lossFiles || !j.lossFiles.length){ toast('Upload a loss statement first'); return; }
@@ -18380,7 +18400,7 @@ function renderContractTab(j){
     ...(Array.isArray(j.contracts) ? j.contracts : []).map((f,i)=>({f, col:'contracts', i, del:`contractFileDelete('${j.id}',${i})`})),
   ];
   // Contract form: open by default until a signed copy is on file.
-  const formOpen = (window._ctFormOpen && window._ctFormOpen[j.id] !== undefined) ? window._ctFormOpen[j.id] : !scFiles.length;
+  const formOpen = (window._ctFormOpen && window._ctFormOpen[j.id] !== undefined) ? window._ctFormOpen[j.id] : false;   // starts closed
   const c = j.contract || {};
   // prefill from job
   const pf = {
@@ -18664,8 +18684,7 @@ function renderContractTab(j){
 window.toggleContractForm = function(jobId){
   const j = jobs.find(x => x.id === jobId); if(!j) return;
   window._ctFormOpen = window._ctFormOpen || {};
-  const cur = window._ctFormOpen[jobId] !== undefined ? window._ctFormOpen[jobId]
-    : !(((j.signedContractFiles||[]).length + (j.contracts||[]).length));
+  const cur = window._ctFormOpen[jobId] !== undefined ? window._ctFormOpen[jobId] : false;
   window._ctFormOpen[jobId] = !cur;
   renderContractTab(j);
 };
