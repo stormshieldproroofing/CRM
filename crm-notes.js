@@ -5,7 +5,8 @@
    - Desktop (wide screens), job open: a Notes column docked beside the job
      screen. "Notes · N" in the job header shows / hides it. "Pop out" turns it
      into a floating panel you can drag around and keep open after closing the job.
-   - Phone / tablet, job open: a "Notes · N" button that opens a bottom sheet.
+   - Phone / tablet, job open: a notes strip on top of the job's bottom action bar
+     (latest or pinned note, + to add). Tap it to open the notes sheet.
 
    Saving:
    - What you type is kept as a draft on this device as you go (per job), so a
@@ -38,6 +39,7 @@
   const sbc = () => window.sb || null;
   const me = () => window.currentMember || {};
   const myName = () => me().name || 'Me';
+  const firstName = n => String(n || 'Team').trim().split(/\s+/)[0] || 'Team';
   const initials = n => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -231,12 +233,12 @@
   function noteHTML(it) {
     if (it.kind === 'sys') {
       return `<div class="ssn-item sys"><div class="ssn-av sys"><i class="ti ti-arrows-right-left" aria-hidden="true"></i></div>
-        <div class="ssn-main"><div class="ssn-meta"><b>${esc(it.by && it.by !== 'system' ? it.by : 'CRM')}</b><span>${esc(timeLabel(it.at))}</span></div>
+        <div class="ssn-main"><div class="ssn-meta"><b>${esc(it.by && it.by !== 'system' ? firstName(it.by) : 'CRM')}</b><span>${esc(timeLabel(it.at))}</span></div>
         <div class="ssn-text">${esc(it.text)}</div></div></div>`;
     }
     const n = it.n;
     const mine = n._pending || (state.myAuthId && n.author_id === state.myAuthId);
-    const who = mine ? 'You' : (n.author_name || 'Team');
+    const who = mine ? 'You' : firstName(n.author_name);
     return `<div class="ssn-item${n._pending ? ' pending' : ''}">
       <div class="ssn-av${mine ? ' me' : ''}">${esc(initials(n.author_name || who))}</div>
       <div class="ssn-main">
@@ -253,7 +255,7 @@
   function pinnedHTML(jobId) {
     return (state.notes[jobId] || []).filter(n => n.pinned).map(n => `
       <div class="ssn-pin">
-        <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>PINNED · ${esc(n.author_name || 'Team')}
+        <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>PINNED · ${esc(firstName(n.author_name))}
           <button type="button" class="ssn-link" data-pin="${esc(n.id)}">Unpin</button></div>
         <div class="ssn-text">${esc(n.body)}</div>
       </div>`).join('');
@@ -330,13 +332,39 @@
     }
     return el;
   }
-  function fabEl() {
-    let el = $('ssnFab');
+  // Phone / tablet: a notes strip that sits on top of the job's bottom action bar
+  // (or on its own at the bottom on tabs that have no bar). Tap it to open the
+  // notes sheet; tap + to jump straight to writing a note.
+  function openSheet(focus) {
+    state.sheetOpen = true; state.tab = 'job'; render(true);
+    setTimeout(() => {
+      const sh = document.querySelector('.ssn-sheet');
+      const f = sh && sh.querySelector('.ssn-feed'); if (f) f.scrollTop = f.scrollHeight;
+      const t = sh && sh.querySelector('.ssn-input'); if (focus && t) t.focus();
+    }, 30);
+  }
+  function stripHTML() {
+    const list = state.notes[state.jobId] || [];
+    const pin = list.slice().reverse().find(n => n.pinned);
+    const last = list[list.length - 1];
+    const show = pin || last;
+    const n = count(state.jobId);
+    return `<span class="ssn-strip-ic${pin ? ' pin' : ''}"><i class="ti ${pin ? 'ti-pin-filled' : 'ti-notes'}" aria-hidden="true"></i>${n ? `<span class="ssn-strip-n">${n}</span>` : ''}</span>
+      <span class="ssn-strip-text${show ? '' : ' empty'}">${esc(show ? show.body : 'No notes yet. Tap to add one')}</span>
+      <span class="ssn-strip-add" data-add="1" role="button" aria-label="Add a note"><i class="ti ti-plus" aria-hidden="true"></i></span>`;
+  }
+  function stripEl(bar) {
+    let el = $('ssnStrip');
     if (!el) {
-      el = document.createElement('button'); el.id = 'ssnFab'; el.type = 'button'; el.className = 'ssn-fab';
-      el.addEventListener('click', () => { state.sheetOpen = true; render(); setTimeout(() => { const t = document.querySelector('.ssn-sheet .ssn-feed'); if (t) t.scrollTop = t.scrollHeight; }, 0); });
-      document.body.appendChild(el);
+      el = document.createElement('button');
+      el.id = 'ssnStrip'; el.type = 'button'; el.className = 'ssn-strip';
+      el.setAttribute('aria-label', 'Job notes');
+      el.addEventListener('click', e => { e.stopPropagation(); openSheet(!!(e.target.closest && e.target.closest('[data-add]'))); });
     }
+    const host = bar || $('detailOverlay');
+    if (bar) { if (el.parentElement !== bar || bar.firstElementChild !== el) bar.insertBefore(el, bar.firstElementChild); }
+    else if (host && el.parentElement !== host) host.appendChild(el);
+    el.classList.toggle('solo', !bar);
     return el;
   }
   function placeFloat(el, x, y) {
@@ -385,12 +413,14 @@
     const fl = floatOn ? floatEl() : $('ssnFloat');
     if (fl) { fl.hidden = !floatOn; if (floatOn) paint(fl, 'float', scrollToEnd); }
 
-    // Phone sheet + button
-    const fab = sheetMode ? fabEl() : $('ssnFab');
-    if (fab) {
-      fab.hidden = !sheetMode || state.sheetOpen;
-      fab.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>Notes · ' + count(state.jobId);
+    // Phone / tablet: notes strip on top of the action bar
+    const bar = sheetMode ? document.querySelector('#detailPanel .rd-qa-bar') : null;
+    const strip = sheetMode ? stripEl(bar) : $('ssnStrip');
+    if (strip) {
+      strip.hidden = !sheetMode;
+      if (sheetMode) strip.innerHTML = stripHTML();
     }
+    document.documentElement.classList.toggle('ssn-strip-solo', !!(sheetMode && !bar));
     const wrap = sheetMode && state.sheetOpen ? sheetEl() : $('ssnSheetWrap');
     if (wrap) {
       const on = sheetMode && state.sheetOpen;
@@ -538,7 +568,7 @@
 .ssn{--n-bg:#121A23;--n-bg2:#0E141B;--n-line:#253241;--n-text:#E6EDF3;--n-mute:#8E9BAA;--n-accent:#38BDF8;--n-accent-soft:#10283A;
   box-sizing:border-box;background:var(--n-bg);color:var(--n-text);display:flex;flex-direction:column;font-size:13px;min-height:0}
 .ssn *{box-sizing:border-box}
-.ssn[hidden],.ssn-fab[hidden]{display:none!important}
+.ssn[hidden]{display:none!important}
 .ssn-dock{width:360px;flex:none;height:100%;margin-right:10px;border:1px solid var(--n-line);border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:ssnIn .18s ease}
 @keyframes ssnIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
 .ssn-float{position:fixed;right:24px;top:80px;width:380px;height:min(640px,calc(100vh - 100px));z-index:120;border:1px solid #2A3846;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.6)}
@@ -593,7 +623,16 @@
 .ssn-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .ssn-hbtn{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line,#253241);background:transparent;color:var(--text-2,#C4CBD8);display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex-shrink:0}
 .ssn-hbtn.on{border-color:#38BDF8;background:#10283A;color:#7DD3FC}
-.ssn-fab{position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:130;height:52px;padding:0 18px;border-radius:999px;border:0;background:#38BDF8;color:#06202E;font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;box-shadow:0 10px 30px rgba(56,189,248,.35);cursor:pointer}
+.ssn-strip[hidden]{display:none!important}
+.ssn-strip{grid-column:1/-1;display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:6px 6px 6px 8px;margin:0 0 4px;border:0;border-bottom:1px solid rgba(255,255,255,0.07);border-radius:12px 12px 0 0;background:transparent;color:#E8ECF3;text-align:left;cursor:pointer;font:inherit}
+.ssn-strip-ic{position:relative;width:30px;height:30px;flex:none;border-radius:9px;background:#10283A;color:#38BDF8;display:flex;align-items:center;justify-content:center;font-size:17px}
+.ssn-strip-ic.pin{background:#2A2210;color:#FCD34D}
+.ssn-strip-n{position:absolute;top:-6px;right:-7px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:#38BDF8;color:#06202E;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}
+.ssn-strip-text{flex:1;min-width:0;font-size:14px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ssn-strip-text.empty{color:#8B94A7}
+.ssn-strip-add{width:40px;height:40px;flex:none;border-radius:999px;background:#38BDF8;color:#06202E;display:flex;align-items:center;justify-content:center;font-size:20px}
+.ssn-strip.solo{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:130;width:auto;margin:0;padding:8px 8px 8px 10px;border:1px solid rgba(255,255,255,0.07);border-radius:18px;background:rgba(18,22,30,0.96);box-shadow:0 10px 30px rgba(0,0,0,0.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bottom))!important}
 .ssn-sheet-wrap{position:fixed;inset:0;z-index:140;display:none}
 .ssn-sheet-wrap.open{display:block}
 .ssn-scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
