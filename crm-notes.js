@@ -160,6 +160,40 @@
     } catch (e) { n.pinned = !n.pinned; setStatus('Could not pin — check your connection', 'warn'); render(); }
   }
 
+  // Edit your own note (text only). The server only lets the author change it.
+  let editDraft = null;
+  function startEdit(id) {
+    const n = (state.notes[state.jobId] || []).find(x => x.id === id);
+    if (!n || n._pending) return;
+    state.editing = id; editDraft = n.body;
+    render();
+    setTimeout(() => { const t = document.querySelector('.ssn:not([hidden]) .ssn-edit, .ssn-sheet-wrap.open .ssn-edit'); if (t) { t.focus({ preventScroll: true }); t.setSelectionRange(t.value.length, t.value.length); const card = t.closest('.ssn-card, .ssn-pin') || t; card.scrollIntoView({ block: 'nearest' }); } }, 20);
+  }
+  function cancelEdit() { state.editing = null; editDraft = null; render(); }
+  async function saveEdit(root) {
+    const id = state.editing;
+    const n = (state.notes[state.jobId] || []).find(x => x.id === id);
+    const t = (root || document).querySelector('.ssn-edit');
+    const body = ((t && t.value) || '').trim();
+    if (!n) return cancelEdit();
+    if (!body) { setStatus('A note can\'t be empty — use the trash icon to delete it', 'warn'); return; }
+    if (body === n.body) return cancelEdit();
+    const old = { body: n.body, edited_at: n.edited_at };
+    n.body = body; n.edited_at = new Date().toISOString();
+    state.editing = null; editDraft = null;
+    render();
+    try {
+      const { error } = await sbc().from('job_notes').update({ body }).eq('id', id);
+      if (error) throw error;
+      cacheSave(state.jobId);
+      setStatus('Note updated', 'ok');
+    } catch (e) {
+      Object.assign(n, old);
+      setStatus('Could not save the edit — check your connection', 'warn');
+      render();
+    }
+  }
+
   async function remove(id) {
     const list = state.notes[state.jobId] || [];
     const n = list.find(x => x.id === id);
@@ -228,7 +262,7 @@
     const label = String(e.label || '').trim();
     const parts = String(e.detail || '').split(/→|->/);
     const to = parts.length > 1 ? parts[parts.length - 1].trim() : '';
-    if (/stage changed/i.test(label) && to) return 'Moved to ' + to;
+    if (/stage changed/i.test(label) && to) return to;
     if (/build date/i.test(label) && to) return /unscheduled|^$/i.test(to) ? 'Build date cleared' : 'Build set for ' + niceDate(to);
     return label + (to ? ': ' + niceDate(to) : (e.detail ? ': ' + e.detail : ''));
   }
@@ -250,7 +284,10 @@
     const now = new Date();
     return d.toLocaleDateString('en-US', d.getFullYear() === now.getFullYear() ? { month: 'long' } : { month: 'long', year: 'numeric' });
   }
-  function shortDate(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+  function shortDate(iso) {
+    const d = new Date(iso); if (isNaN(d)) return '';
+    return d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: '2-digit' });
+  }
 
   function noteHTML(it) {
     if (it.kind === 'sys') {
@@ -259,34 +296,53 @@
     const n = it.n;
     const mine = n._pending || (state.myAuthId && n.author_id === state.myAuthId);
     const who = mine ? 'You' : firstName(n.author_name);
+    if (state.editing === n.id) {
+      return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
+        <div class="ssn-card mine editing">${editBoxHTML(n)}</div></div>`;
+    }
     return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
       <div class="ssn-card${mine ? ' mine' : ''}${n._pending ? ' pending' : ''}">
         <div class="ssn-text">${esc(n.body)}</div>
         ${n.tag ? `<span class="ssn-tag">${esc(n.tag)}</span>` : ''}
-        <div class="ssn-meta"><span>${esc(who)} · ${n._pending ? 'sending…' : esc(timeLabel(n.created_at))}</span>
+        <div class="ssn-meta"><span>${esc(who)} · ${n._pending ? 'sending…' : esc(timeLabel(n.created_at))}${n.edited_at ? ' · <em class="ssn-edited">edited</em>' : ''}</span>
           <span class="ssn-acts">
             ${n._pending ? '' : `<button type="button" class="ssn-link" data-pin="${esc(n.id)}" aria-label="Pin note"><i class="ti ti-pin" aria-hidden="true"></i>Pin</button>`}
+            ${mine && !n._pending ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}" aria-label="Edit note"><i class="ti ti-pencil" aria-hidden="true"></i>Edit</button>` : ''}
             ${mine ? `<button type="button" class="ssn-link" data-del="${esc(n.id)}" aria-label="Delete note"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
           </span></div>
       </div></div>`;
   }
 
+  function editBoxHTML(n) {
+    return `<label class="ssn-sr" for="ssnEdit">Edit note</label>
+      <textarea id="ssnEdit" class="ssn-edit" rows="3">${esc(editDraft != null ? editDraft : n.body)}</textarea>
+      <div class="ssn-edit-row"><button type="button" class="ssn-btn" data-act="edit-cancel">Cancel</button>
+        <button type="button" class="ssn-btn primary" data-act="edit-save">Save</button></div>`;
+  }
+
+  // The job's older "Claim notes" field, shown read-only at the top so everything is in one place
+  function claimNotesHTML(jobId) {
+    const j = jobById(jobId);
+    const t = j && String(j.claimNotes || '').trim();
+    if (!t) return '';
+    return `<div class="ssn-claim"><div class="ssn-claim-h"><i class="ti ti-notes" aria-hidden="true"></i>Claim notes
+      <button type="button" class="ssn-link" data-act="editjob">Edit in job</button></div>
+      <div class="ssn-text">${esc(t)}</div></div>`;
+  }
+
   function timelineHTML(items) {
-    let out = '', month = '';
-    items.forEach(it => {
-      const m = monthKey(it.at);
-      if (m && m !== month) { month = m; out += `<div class="ssn-tl-m">${esc(m)}</div>`; }
-      out += noteHTML(it);
-    });
+    const out = items.map(noteHTML).join('');
     return `<div class="ssn-tl">${out}</div>`;
   }
 
   function pinnedHTML(jobId) {
-    return (state.notes[jobId] || []).filter(n => n.pinned).map(n => `
+    return (state.notes[jobId] || []).filter(n => n.pinned).map(n => state.editing === n.id ? `<div class="ssn-pin editing">${editBoxHTML(n)}</div>` : `
       <div class="ssn-pin">
         <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>Pinned · ${esc((n._pending || (state.myAuthId && n.author_id === state.myAuthId)) ? 'You' : firstName(n.author_name))}
-          <button type="button" class="ssn-link" data-pin="${esc(n.id)}">Unpin</button></div>
+          <span class="ssn-acts">${(state.myAuthId && n.author_id === state.myAuthId) ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}">Edit</button>` : ''}
+          <button type="button" class="ssn-link" data-pin="${esc(n.id)}">Unpin</button></span></div>
         <div class="ssn-text">${esc(n.body)}</div>
+        ${n.edited_at ? '<div class="ssn-edited-l">edited</div>' : ''}
       </div>`).join('');
   }
 
@@ -317,10 +373,10 @@
         <div class="ssn-status ${state.statusKind}">${esc(state.status || 'Saves as you type')}</div></div>`;
     }
     const items = feedItems(jobId);
-    const feed = items.length ? timelineHTML(items) : '<div class="ssn-empty">No notes yet. Gate codes, who to call, what the adjuster said: put it here so the whole team knows.</div>';
+    const feed = items.length || claimNotesHTML(jobId) ? timelineHTML(items) : '<div class="ssn-empty">No notes yet. Gate codes, who to call, what the adjuster said: put it here so the whole team knows.</div>';
     const draft = lsGet(LS.draft(jobId), '');
     return head + `
-      <div class="ssn-feed">${pinnedHTML(jobId)}${feed}</div>
+      <div class="ssn-feed">${claimNotesHTML(jobId)}${pinnedHTML(jobId)}${feed}</div>
       <div class="ssn-compose${state.tag || draft ? ' open' : ''}">
         <div class="ssn-chips">${TAGS.map(t => `<button type="button" class="ssn-chip${state.tag === t ? ' on' : ''}" data-tag="${esc(t)}" aria-pressed="${state.tag === t}">${esc(t)}</button>`).join('')}</div>
         <div class="ssn-row">
@@ -462,7 +518,11 @@
     const caret = hadFocus ? [active.selectionStart, active.selectionEnd, active.className, active.value] : null;
     const oldInput = el.querySelector('.ssn-input');
     const keepDraft = oldInput && el.dataset.job === String(state.jobId) ? oldInput.value : null;
+    const oldEdit = el.querySelector('.ssn-edit');
+    if (oldEdit && state.editing) editDraft = oldEdit.value;
+    const editFocused = oldEdit && active === oldEdit;
     const oldFeed = el.querySelector('.ssn-feed');
+    const oldTop = oldFeed ? oldFeed.scrollTop : 0;
     const atEnd = !oldFeed || oldFeed.scrollTop + oldFeed.clientHeight >= oldFeed.scrollHeight - 30;
     el.innerHTML = bodyHTML(mode);
     el.dataset.job = String(state.jobId);
@@ -470,7 +530,9 @@
     delete el.dataset.justPosted;
     const feed = el.querySelector('.ssn-feed');
     const key = mode + ':' + state.jobId;
-    if (feed && (scrollToEnd || atEnd || key !== lastScrollKey)) feed.scrollTop = feed.scrollHeight;
+    if (feed && state.editing && key === lastScrollKey) feed.scrollTop = oldTop;
+    else if (feed && (scrollToEnd || atEnd || key !== lastScrollKey)) feed.scrollTop = feed.scrollHeight;
+    if (editFocused) { const ne = el.querySelector('.ssn-edit'); if (ne) ne.focus(); }
     lastScrollKey = key;
     if (caret) {
       const t = el.querySelector(caret[2].indexOf('ssn-pad') >= 0 ? '.ssn-pad' : '.ssn-input');
@@ -480,6 +542,7 @@
 
   function switchJob(jobId) {
     state.jobId = jobId;
+    state.editing = null; editDraft = null;
     state.tag = null;
     state.status = '';
     if (jobId) { load(jobId); subscribe(jobId); }
@@ -498,15 +561,19 @@
     const root = inNotes(e.target);
     if (!root) return;
     e.stopPropagation();   // keep clicks from reaching the job overlay (which closes the job)
-    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del]');
+    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit]');
     if (!b) return;
     if (b.dataset.tab) { state.tab = b.dataset.tab; state.status = ''; if (state.tab === 'pad') loadPad(); render(); return; }
     if (b.dataset.tag) { state.tag = state.tag === b.dataset.tag ? null : b.dataset.tag; render(); const t = root.querySelector('.ssn-input'); if (t) t.focus(); return; }
     if (b.dataset.pin) { togglePin(b.dataset.pin); return; }
     if (b.dataset.del) { remove(b.dataset.del); return; }
+    if (b.dataset.edit) { startEdit(b.dataset.edit); return; }
     switch (b.dataset.act) {
       case 'pad': state.tab = state.tab === 'pad' ? 'job' : 'pad'; state.status = ''; if (state.tab === 'pad') loadPad(); render(true); break;
       case 'post': post(root); break;
+      case 'edit-save': saveEdit(root); break;
+      case 'edit-cancel': cancelEdit(); break;
+      case 'editjob': if (typeof window.openEditJob === 'function' && state.jobId) { state.sheetOpen = false; render(); window.openEditJob(state.jobId); } break;
       case 'close': state.sheetOpen = false; render(); break;
       case 'hide': setDock(false); break;
       case 'popout': {
@@ -538,6 +605,10 @@
     const t = e.target;
     if (t && t.classList && t.classList.contains('ssn-input') && e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault(); post(t.closest('.ssn'));
+    }
+    if (t && t.classList && t.classList.contains('ssn-edit')) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); return; }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveEdit(t.closest('.ssn')); return; }
     }
     if (e.key === 'Escape' && state.sheetOpen) { state.sheetOpen = false; render(); }
   });
@@ -688,7 +759,7 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-compose .ssn-chips{display:none}
 .ssn-compose:focus-within .ssn-chips,.ssn-compose.open .ssn-chips{display:flex}
 .ssn-compose .ssn-status:empty,.ssn-compose .ssn-status.ok{display:none}
-.ssn-tl{position:relative;padding-left:18px}
+.ssn-tl{position:relative;padding-left:18px;padding-top:2px}
 .ssn-tl:before{content:"";position:absolute;left:4px;top:6px;bottom:6px;width:2px;background:#1F2A36;border-radius:2px}
 .ssn-tl-m{font-size:11px;color:#6B7686;text-transform:uppercase;letter-spacing:.08em;margin:14px 0 4px}
 .ssn-tl-m:first-child{margin-top:2px}
@@ -710,6 +781,22 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-pin{margin-bottom:6px}
 .ssn-sheet .ssn-tl-sys{font-size:14px}
 .ssn-sheet .ssn-card .ssn-text{font-size:15px}
+.ssn-edit{width:100%;min-height:72px;resize:vertical;padding:9px 11px;border-radius:9px;border:1px solid var(--n-accent);background:var(--n-bg2);color:var(--n-text);font:inherit;font-size:14px;line-height:1.45}
+.ssn-edit:focus{outline:none}
+.ssn-edit-row{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.ssn-btn{height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--n-line);background:transparent;color:var(--n-text);font-size:13px;cursor:pointer}
+.ssn-btn.primary{border-color:var(--n-accent);background:var(--n-accent);color:#06202E;font-weight:600}
+.ssn-edited{font-style:normal;color:#6B7686}
+.ssn-edited-l{font-size:11px;color:#A38A4A;margin-top:4px}
+.ssn-pin.editing{background:#14202C;border-color:#1E3A52}
+.ssn-pin-h .ssn-acts{margin-left:auto}
+.ssn-pin-h .ssn-acts .ssn-link{color:#FCD34D;margin-left:0}
+.ssn-claim{padding:10px 12px;border-radius:10px;background:#141A22;border:1px dashed #2A3846;margin-bottom:6px}
+.ssn-claim-h{display:flex;align-items:center;gap:6px;font-size:11px;color:#8E9BAA;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.ssn-claim-h .ssn-link{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500}
+.ssn-claim .ssn-text{color:#C4CBD8;margin-top:4px}
+.ssn-sheet .ssn-btn{height:40px;padding:0 18px;font-size:15px}
+.ssn-sheet .ssn-edit{font-size:16px}
 @media (min-width:1181px){html.ssn-docked.ui-new .detail-overlay{align-items:stretch}}
 @media (max-width:1180px){.ssn-hbtn{display:none}}
 `;
