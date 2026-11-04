@@ -1523,7 +1523,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 
 /* ── SEARCH on computers: the same search as a pop-up in the middle of the screen ── */
 @media (min-width:761px){
-  #globalSearch{cursor:pointer}
+  #globalSearch{cursor:text}
   html.gs-lock,html.gs-lock body{overflow:hidden}
   #gsOverlay.open{display:flex;position:fixed;inset:0;z-index:600;background:rgba(5,8,14,.62);align-items:flex-start;justify-content:center;padding:9vh 16px 16px}
   #gsOverlay .gs-card{width:100%;max-width:660px;max-height:78vh;display:flex;flex-direction:column;background:#161B24;border:1px solid var(--border);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
@@ -11315,15 +11315,21 @@ document.getElementById('gsOverlay')?.addEventListener('mousedown',e=>{ if(e.tar
 function gsFromSidebar(e){
   if(!gsIsDesktop()) return;
   const box=$('globalSearch'), pre=box.value;
-  if(e && e.type==='keydown' && e.key && e.key.length===1 && !e.ctrlKey && !e.metaKey){ e.preventDefault(); box.value=''; gsOpen(); const i=document.getElementById('gsInput'); i.value=pre+e.key; gsRender(); return; }
+  if(e && e.type==='keydown' && e.key && e.key.length===1 && !e.ctrlKey && !e.metaKey){ e.preventDefault(); box.value=''; gsOpen(); const i=document.getElementById('gsInput'); i.value=pre+e.key; gsRender(); i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(_){} return; }   // focus now so the next keys land in the pop-up
   if(e && e.type==='keydown') return;
   box.value=''; box.blur(); gsOpen();
   if(pre){ const i=document.getElementById('gsInput'); i.value=pre; gsRender(); }
   document.querySelectorAll('.job-card').forEach(c=>c.style.display='');
 }
-$('globalSearch').addEventListener('mousedown',e=>{ if(gsIsDesktop()){ e.preventDefault(); gsFromSidebar(e); } });
-$('globalSearch').addEventListener('focus',e=>{ if(gsIsDesktop()) gsFromSidebar(e); });
+// Clicking the box just puts the cursor in it; the pop-up opens once you type
+// (or paste). "/" and Ctrl/Cmd+K still open it straight away.
 $('globalSearch').addEventListener('keydown',gsFromSidebar);
+$('globalSearch').addEventListener('paste',e=>{
+  if(!gsIsDesktop()) return;
+  const txt=(e.clipboardData||window.clipboardData)?.getData('text')||''; if(!txt.trim()) return;
+  e.preventDefault(); const box=$('globalSearch'), pre=box.value; box.value=''; box.blur();
+  gsOpen(); const i=document.getElementById('gsInput'); i.value=pre+txt.trim(); gsRender(); i.focus();
+});
 $('globalSearch').setAttribute('placeholder', window.matchMedia('(min-width:761px)').matches ? 'Search all jobs…   /' : $('globalSearch').getAttribute('placeholder'));
 $('globalSearch').addEventListener('input',function(){
   const q=this.value.toLowerCase();
