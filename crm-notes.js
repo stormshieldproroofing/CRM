@@ -1,0 +1,623 @@
+/* StormShield CRM — Job notes.
+   Quick, timestamped notes on every job, saved to Supabase (job_notes table).
+
+   Where they show up:
+   - Desktop (wide screens), job open: a Notes column docked beside the job
+     screen. "Notes · N" in the job header shows / hides it. "Pop out" turns it
+     into a floating panel you can drag around and keep open after closing the job.
+   - Phone / tablet, job open: a "Notes · N" button that opens a bottom sheet.
+
+   Saving:
+   - What you type is kept as a draft on this device as you go (per job), so a
+     closed screen or dead signal never loses it. Enter (or the send button) posts it.
+   - Posted notes are saved to Supabase. If the phone is offline they wait in an
+     outbox on the device and send themselves when the connection comes back.
+   - "My scratchpad" is a private note that follows you across jobs (only you see it).
+   Other people's new notes appear live (Supabase realtime). */
+(function () {
+  'use strict';
+  if (window.__ssNotes) return;
+  window.__ssNotes = true;
+
+  const WIDE = '(min-width:1181px)';
+  const TAGS = ['Called HO', 'No answer', 'Adjuster mtg', 'Supplement', 'Follow-up'];
+  const LS = {
+    dock: 'ssNotesDock',          // '1' | '0' — docked column shown beside the job (desktop)
+    float: 'ssNotesFloat',        // JSON {x,y,jobId} when popped out
+    draft: id => 'ssNoteDraft:' + id,
+    cache: id => 'ssNotesCache:' + id,
+    outbox: 'ssNotesOutbox',
+    pad: 'ssScratchpad',
+  };
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
+  const lsSet = (k, v) => { try { if (v == null || v === '') localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} };
+  const lsJSON = (k, d) => { try { return JSON.parse(lsGet(k, '')) || d; } catch (e) { return d; } };
+  const wide = () => window.matchMedia(WIDE).matches;
+  const sbc = () => window.sb || null;
+  const me = () => window.currentMember || {};
+  const myName = () => me().name || 'Me';
+  const initials = n => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+
+  // ── State ───────────────────────────────────────────────────────────────
+  const state = {
+    jobId: null,          // job whose notes are showing
+    notes: {},            // jobId -> array of rows
+    loaded: {},           // jobId -> true once fetched
+    tab: 'job',           // 'job' | 'pad'
+    tag: null,
+    sheetOpen: false,     // phone bottom sheet
+    floating: false,      // popped-out floating panel (desktop)
+    status: '',
+    statusKind: 'ok',
+    myAuthId: null,
+  };
+  let channel = null, channelJob = null, padTimer = null, draftTimer = null, padLoaded = false;
+
+  function jobById(id) { try { return (window.jobs || jobs).find(x => x.id === id) || null; } catch (e) { return null; } }
+  function overlayOpen() { const o = $('detailOverlay'); return !!(o && o.classList.contains('open')); }
+  function openJob() { try { return overlayOpen() ? (window.openJobId || openJobId || null) : null; } catch (e) { return null; } }
+
+  // ── Data ────────────────────────────────────────────────────────────────
+  function cacheSave(jobId) { lsSet(LS.cache(jobId), JSON.stringify((state.notes[jobId] || []).slice(-200))); }
+  function outbox() { return lsJSON(LS.outbox, []); }
+  function setOutbox(a) { lsSet(LS.outbox, a.length ? JSON.stringify(a) : null); }
+
+  async function myAuth() {
+    if (state.myAuthId) return state.myAuthId;
+    try { const { data } = await sbc().auth.getUser(); state.myAuthId = data && data.user ? data.user.id : null; } catch (e) {}
+    return state.myAuthId;
+  }
+
+  async function load(jobId) {
+    if (!jobId) return;
+    if (!state.notes[jobId]) state.notes[jobId] = lsJSON(LS.cache(jobId), []);
+    if (!sbc()) return;
+    try {
+      const { data, error } = await sbc().from('job_notes').select('*').eq('job_id', jobId).order('created_at', { ascending: true });
+      if (error) throw error;
+      const pending = (state.notes[jobId] || []).filter(n => n._pending);
+      state.notes[jobId] = (data || []).concat(pending);
+      state.loaded[jobId] = true;
+      cacheSave(jobId);
+      render();
+    } catch (e) {
+      console.warn('[notes] load failed, showing saved copy', e);
+    }
+  }
+
+  function subscribe(jobId) {
+    if (!sbc() || channelJob === jobId) return;
+    try { if (channel) sbc().removeChannel(channel); } catch (e) {}
+    channel = null; channelJob = jobId;
+    if (!jobId) return;
+    try {
+      channel = sbc().channel('job_notes:' + jobId)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'job_notes', filter: 'job_id=eq.' + jobId }, () => load(jobId))
+        .subscribe();
+    } catch (e) { console.warn('[notes] live updates off', e); }
+  }
+
+  async function flushOutbox() {
+    const box = outbox();
+    if (!box.length || !sbc() || navigator.onLine === false) return;
+    const left = [];
+    for (const item of box) {
+      try {
+        const { data, error } = await sbc().from('job_notes')
+          .insert({ job_id: item.job_id, body: item.body, tag: item.tag || null, author_name: item.author_name })
+          .select().single();
+        if (error) throw error;
+        const list = state.notes[item.job_id];
+        if (list) {
+          const i = list.findIndex(n => n.id === item.tmp);
+          if (i >= 0) list[i] = data; else list.push(data);
+          cacheSave(item.job_id);
+        }
+      } catch (e) {
+        if (e && e.code && /^(23|42)/.test(e.code)) console.warn('[notes] dropped a note the server refused', e);
+        else left.push(item);
+      }
+    }
+    setOutbox(left);
+    if (box.length !== left.length) setStatus(left.length ? left.length + ' note(s) waiting to send' : 'All notes sent', left.length ? 'warn' : 'ok');
+    render();
+  }
+
+  async function post(root) {
+    const jobId = state.jobId;
+    const ta = (root || document).querySelector('.ssn-input');
+    const body = ((ta && ta.value) || '').trim();
+    if (!jobId || !body) return;
+    const tmp = 'tmp-' + Date.now();
+    const row = { id: tmp, job_id: jobId, body, tag: state.tag, pinned: false, author_name: myName(), author_id: state.myAuthId, created_at: new Date().toISOString(), _pending: true };
+    (state.notes[jobId] = state.notes[jobId] || []).push(row);
+    cacheSave(jobId);
+    const ob = outbox(); ob.push({ tmp, job_id: jobId, body, tag: state.tag, author_name: myName() }); setOutbox(ob);
+    if (ta) { ta.value = ''; const host = ta.closest('.ssn'); if (host) host.dataset.justPosted = '1'; }
+    lsSet(LS.draft(jobId), null);
+    state.tag = null;
+    setStatus(navigator.onLine === false ? 'Offline — will send when you have signal' : 'Posting…', navigator.onLine === false ? 'warn' : 'busy');
+    render(true);
+    await flushOutbox();
+    if (!outbox().some(o => o.tmp === tmp)) setStatus('Posted · saved to job', 'ok');
+    render();
+  }
+
+  async function togglePin(id) {
+    const list = state.notes[state.jobId] || [];
+    const n = list.find(x => x.id === id);
+    if (!n || n._pending) return;
+    n.pinned = !n.pinned;
+    render();
+    try {
+      const { error } = await sbc().from('job_notes').update({ pinned: n.pinned }).eq('id', id);
+      if (error) throw error;
+      cacheSave(state.jobId);
+    } catch (e) { n.pinned = !n.pinned; setStatus('Could not pin — check your connection', 'warn'); render(); }
+  }
+
+  async function remove(id) {
+    const list = state.notes[state.jobId] || [];
+    const n = list.find(x => x.id === id);
+    if (!n || !confirm('Delete this note?')) return;
+    if (n._pending) {
+      setOutbox(outbox().filter(o => o.tmp !== id));
+    } else {
+      try { const { error } = await sbc().from('job_notes').delete().eq('id', id); if (error) throw error; }
+      catch (e) { setStatus('Could not delete — check your connection', 'warn'); render(); return; }
+    }
+    state.notes[state.jobId] = list.filter(x => x.id !== id);
+    cacheSave(state.jobId);
+    render();
+  }
+
+  // Scratchpad (private)
+  async function loadPad() {
+    if (padLoaded || !sbc()) return;
+    padLoaded = true;
+    try {
+      const { data } = await sbc().from('user_scratchpads').select('body').maybeSingle();
+      const local = lsGet(LS.pad, null);
+      if (data && local == null) { lsSet(LS.pad, data.body); render(); }
+    } catch (e) {}
+  }
+  function savePadSoon(text) {
+    lsSet(LS.pad, text);
+    setStatus('Saving…', 'busy', true);
+    clearTimeout(padTimer);
+    padTimer = setTimeout(async () => {
+      try {
+        const { error } = await sbc().from('user_scratchpads').upsert({ auth_id: await myAuth(), body: text, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        setStatus('Saved · just now', 'ok', true);
+      } catch (e) { setStatus('Saved on this device · will sync later', 'warn', true); }
+    }, 800);
+  }
+
+  // ── Status line ─────────────────────────────────────────────────────────
+  function setStatus(text, kind, quiet) {
+    state.status = text; state.statusKind = kind || 'ok';
+    document.querySelectorAll('.ssn-status').forEach(el => {
+      el.className = 'ssn-status ' + state.statusKind;
+      el.textContent = text;
+    });
+  }
+
+  // ── Rendering ───────────────────────────────────────────────────────────
+  function timeLabel(iso) {
+    const d = new Date(iso); if (isNaN(d)) return '';
+    const now = new Date();
+    const t = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return 'Today · ' + t;
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return 'Yesterday · ' + t;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + t;
+  }
+
+  function feedItems(jobId) {
+    const notes = (state.notes[jobId] || []).filter(n => !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
+    const j = jobById(jobId);
+    const stages = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.type === 'stage' && e.at)
+      .slice(-6)
+      .map(e => ({ kind: 'sys', at: e.at, text: (e.label || 'Stage changed') + (e.detail ? ': ' + e.detail : ''), by: e.by }));
+    return notes.concat(stages).sort((a, b) => new Date(a.at) - new Date(b.at));
+  }
+
+  function count(jobId) { return (state.notes[jobId] || []).length; }
+
+  function noteHTML(it) {
+    if (it.kind === 'sys') {
+      return `<div class="ssn-item sys"><div class="ssn-av sys"><i class="ti ti-arrows-right-left" aria-hidden="true"></i></div>
+        <div class="ssn-main"><div class="ssn-meta"><b>${esc(it.by && it.by !== 'system' ? it.by : 'CRM')}</b><span>${esc(timeLabel(it.at))}</span></div>
+        <div class="ssn-text">${esc(it.text)}</div></div></div>`;
+    }
+    const n = it.n;
+    const mine = n._pending || (state.myAuthId && n.author_id === state.myAuthId);
+    const who = mine ? 'You' : (n.author_name || 'Team');
+    return `<div class="ssn-item${n._pending ? ' pending' : ''}">
+      <div class="ssn-av${mine ? ' me' : ''}">${esc(initials(n.author_name || who))}</div>
+      <div class="ssn-main">
+        <div class="ssn-meta"><b>${esc(who)}</b><span>${n._pending ? 'Sending…' : esc(timeLabel(n.created_at))}</span>
+          <span class="ssn-acts">
+            ${n._pending ? '' : `<button type="button" class="ssn-link" data-pin="${esc(n.id)}">Pin</button>`}
+            ${mine ? `<button type="button" class="ssn-link" data-del="${esc(n.id)}" aria-label="Delete note"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
+          </span></div>
+        <div class="ssn-text">${esc(n.body)}</div>
+        ${n.tag ? `<span class="ssn-tag">${esc(n.tag)}</span>` : ''}
+      </div></div>`;
+  }
+
+  function pinnedHTML(jobId) {
+    return (state.notes[jobId] || []).filter(n => n.pinned).map(n => `
+      <div class="ssn-pin">
+        <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>PINNED · ${esc(n.author_name || 'Team')}
+          <button type="button" class="ssn-link" data-pin="${esc(n.id)}">Unpin</button></div>
+        <div class="ssn-text">${esc(n.body)}</div>
+      </div>`).join('');
+  }
+
+  function bodyHTML(mode) {
+    const jobId = state.jobId;
+    const j = jobById(jobId);
+    const n = count(jobId);
+    const head = mode === 'sheet'
+      ? `<div class="ssn-grab" aria-hidden="true"></div>
+         <div class="ssn-head"><div class="ssn-title"><div>Notes <span class="ssn-n">${n}</span></div>
+           <div class="ssn-sub">${esc(j ? (j.name || '') + (j.address && j.address !== '—' ? ' · ' + j.address : '') : '')}</div></div>
+           <button type="button" class="ssn-icon" data-act="close" aria-label="Close notes"><i class="ti ti-x" aria-hidden="true"></i></button></div>`
+      : `<div class="ssn-head"${mode === 'float' ? ' data-drag="1"' : ''}>
+           ${mode === 'float' ? '<i class="ti ti-grip-vertical ssn-grip" aria-hidden="true"></i>' : ''}
+           <div class="ssn-title"><div>${mode === 'float' && j ? esc(j.name || 'Notes') : 'Notes'} <span class="ssn-n">${n}</span></div>
+             ${mode === 'float' && j && j.address && j.address !== '—' ? `<div class="ssn-sub">${esc(j.address)}</div>` : ''}</div>
+           ${mode === 'dock' ? '<button type="button" class="ssn-text-btn" data-act="popout"><i class="ti ti-external-link" aria-hidden="true"></i>Pop out</button>' : ''}
+           ${mode === 'float' ? '<button type="button" class="ssn-icon" data-act="openjob" aria-label="Open job"><i class="ti ti-arrow-up-right" aria-hidden="true"></i></button>' : ''}
+           <button type="button" class="ssn-icon" data-act="${mode === 'dock' ? 'hide' : 'closefloat'}" aria-label="${mode === 'dock' ? 'Hide notes' : 'Close notes'}"><i class="ti ${mode === 'dock' ? 'ti-chevron-left' : 'ti-x'}" aria-hidden="true"></i></button>
+         </div>`;
+    const tabs = `<div class="ssn-tabs" role="tablist">
+        <button type="button" role="tab" class="ssn-tab${state.tab === 'job' ? ' on' : ''}" data-tab="job" aria-selected="${state.tab === 'job'}">Job notes</button>
+        <button type="button" role="tab" class="ssn-tab${state.tab === 'pad' ? ' on' : ''}" data-tab="pad" aria-selected="${state.tab === 'pad'}">My scratchpad</button></div>`;
+    if (state.tab === 'pad') {
+      return head + tabs + `<div class="ssn-padwrap">
+        <div class="ssn-hint">Only you can see this. It follows you across every job.</div>
+        <label class="ssn-sr" for="ssnPad">My scratchpad</label>
+        <textarea id="ssnPad" class="ssn-pad" placeholder="Reminders, calls to make, anything…">${esc(lsGet(LS.pad, ''))}</textarea>
+        <div class="ssn-status ${state.statusKind}">${esc(state.status || 'Saves as you type')}</div></div>`;
+    }
+    const items = feedItems(jobId);
+    const feed = items.length ? items.map(noteHTML).join('') : '<div class="ssn-empty">No notes yet. Gate codes, who to call, what the adjuster said: put it here so the whole team knows.</div>';
+    const draft = lsGet(LS.draft(jobId), '');
+    return head + tabs + `
+      <div class="ssn-feed">${pinnedHTML(jobId)}${feed}</div>
+      <div class="ssn-compose">
+        <div class="ssn-chips">${TAGS.map(t => `<button type="button" class="ssn-chip${state.tag === t ? ' on' : ''}" data-tag="${esc(t)}" aria-pressed="${state.tag === t}">${esc(t)}</button>`).join('')}</div>
+        <div class="ssn-row">
+          <label class="ssn-sr" for="ssnInput-${mode}">New note</label>
+          <textarea id="ssnInput-${mode}" class="ssn-input" rows="2" placeholder="${mode === 'sheet' ? 'Add a note…' : 'Write a note… (Enter to post, Shift+Enter for a new line)'}" enterkeyhint="send">${esc(draft)}</textarea>
+          <button type="button" class="ssn-send" data-act="post" aria-label="Post note"><i class="ti ti-send" aria-hidden="true"></i></button>
+        </div>
+        <div class="ssn-status ${state.statusKind}">${esc(state.status || (draft ? 'Draft saved on this device' : 'Drafts save as you type'))}</div>
+      </div>`;
+  }
+
+  // Containers
+  function dockEl() {
+    let el = $('ssnDock');
+    const ov = $('detailOverlay'), panel = $('detailPanel');
+    if (!ov || !panel) return null;
+    if (!el) { el = document.createElement('section'); el.id = 'ssnDock'; el.className = 'ssn ssn-dock'; el.setAttribute('aria-label', 'Job notes'); }
+    if (el.parentElement !== ov || el.nextElementSibling !== panel) ov.insertBefore(el, panel);
+    return el;
+  }
+  function floatEl() {
+    let el = $('ssnFloat');
+    if (!el) {
+      el = document.createElement('section'); el.id = 'ssnFloat'; el.className = 'ssn ssn-float'; el.setAttribute('aria-label', 'Job notes');
+      document.body.appendChild(el);
+      const pos = lsJSON(LS.float, null);
+      if (pos && typeof pos.x === 'number') placeFloat(el, pos.x, pos.y);
+    }
+    return el;
+  }
+  function sheetEl() {
+    let el = $('ssnSheetWrap');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'ssnSheetWrap'; el.className = 'ssn-sheet-wrap';
+      el.innerHTML = '<div class="ssn-scrim" data-act="close"></div><section class="ssn ssn-sheet" aria-label="Job notes" role="dialog" aria-modal="true"></section>';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function fabEl() {
+    let el = $('ssnFab');
+    if (!el) {
+      el = document.createElement('button'); el.id = 'ssnFab'; el.type = 'button'; el.className = 'ssn-fab';
+      el.addEventListener('click', () => { state.sheetOpen = true; render(); setTimeout(() => { const t = document.querySelector('.ssn-sheet .ssn-feed'); if (t) t.scrollTop = t.scrollHeight; }, 0); });
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function placeFloat(el, x, y) {
+    const w = el.offsetWidth || 380, h = el.offsetHeight || 560;
+    x = Math.max(8, Math.min(window.innerWidth - w - 8, x));
+    y = Math.max(8, Math.min(window.innerHeight - Math.min(h, 120), y));
+    el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.right = 'auto';
+  }
+
+  function headerButton() {
+    const panel = $('detailPanel');
+    const edit = panel && panel.querySelector('#dpEdit');
+    if (!edit) return;
+    let b = panel.querySelector('.ssn-hbtn');
+    if (!b) {
+      b = document.createElement('button');
+      b.type = 'button'; b.className = 'ssn-hbtn';
+      b.addEventListener('click', e => { e.stopPropagation(); setDock(lsGet(LS.dock, '1') !== '1'); });
+      edit.parentElement.insertBefore(b, edit);
+    }
+    const on = lsGet(LS.dock, '1') === '1' && !state.floating;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+    b.innerHTML = '<i class="ti ti-notes" aria-hidden="true"></i>Notes · ' + count(state.jobId);
+  }
+
+  let lastScrollKey = '';
+  function render(scrollToEnd) {
+    const jobInModal = openJob();
+    if (jobInModal && jobInModal !== state.jobId) switchJob(jobInModal);
+    const isWide = wide();
+    const dockOn = isWide && !!jobInModal && lsGet(LS.dock, '1') === '1' && !state.floating;
+    const floatOn = isWide && state.floating && !!state.jobId;
+    const sheetMode = !isWide && !!jobInModal;
+
+    // Dock
+    const dock = jobInModal ? dockEl() : $('ssnDock');
+    if (dock) {
+      dock.hidden = !dockOn;
+      if (dockOn) paint(dock, 'dock', scrollToEnd);
+    }
+    document.documentElement.classList.toggle('ssn-docked', dockOn);
+    if (jobInModal && isWide) headerButton();
+
+    // Floating
+    const fl = floatOn ? floatEl() : $('ssnFloat');
+    if (fl) { fl.hidden = !floatOn; if (floatOn) paint(fl, 'float', scrollToEnd); }
+
+    // Phone sheet + button
+    const fab = sheetMode ? fabEl() : $('ssnFab');
+    if (fab) {
+      fab.hidden = !sheetMode || state.sheetOpen;
+      fab.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>Notes · ' + count(state.jobId);
+    }
+    const wrap = sheetMode && state.sheetOpen ? sheetEl() : $('ssnSheetWrap');
+    if (wrap) {
+      const on = sheetMode && state.sheetOpen;
+      wrap.classList.toggle('open', on);
+      if (on) paint(wrap.querySelector('.ssn-sheet'), 'sheet', scrollToEnd);
+    }
+  }
+
+  function paint(el, mode, scrollToEnd) {
+    const active = document.activeElement;
+    const hadFocus = active && el.contains(active) && (active.classList.contains('ssn-input') || active.classList.contains('ssn-pad'));
+    const caret = hadFocus ? [active.selectionStart, active.selectionEnd, active.className, active.value] : null;
+    const oldInput = el.querySelector('.ssn-input');
+    const keepDraft = oldInput && el.dataset.job === String(state.jobId) ? oldInput.value : null;
+    const oldFeed = el.querySelector('.ssn-feed');
+    const atEnd = !oldFeed || oldFeed.scrollTop + oldFeed.clientHeight >= oldFeed.scrollHeight - 30;
+    el.innerHTML = bodyHTML(mode);
+    el.dataset.job = String(state.jobId);
+    if (keepDraft != null && !el.dataset.justPosted) { const ni = el.querySelector('.ssn-input'); if (ni) ni.value = keepDraft; }
+    delete el.dataset.justPosted;
+    const feed = el.querySelector('.ssn-feed');
+    const key = mode + ':' + state.jobId;
+    if (feed && (scrollToEnd || atEnd || key !== lastScrollKey)) feed.scrollTop = feed.scrollHeight;
+    lastScrollKey = key;
+    if (caret) {
+      const t = el.querySelector(caret[2].indexOf('ssn-pad') >= 0 ? '.ssn-pad' : '.ssn-input');
+      if (t) { t.value = caret[3]; t.focus(); try { t.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
+    }
+  }
+
+  function switchJob(jobId) {
+    state.jobId = jobId;
+    state.tag = null;
+    state.status = '';
+    if (jobId) { load(jobId); subscribe(jobId); }
+  }
+
+  function setDock(on) {
+    lsSet(LS.dock, on ? '1' : '0');
+    if (on) state.floating = false;
+    render(true);
+  }
+
+  // ── Events (delegated) ──────────────────────────────────────────────────
+  function inNotes(t) { return t && t.closest && t.closest('.ssn, .ssn-sheet-wrap'); }
+
+  document.addEventListener('click', e => {
+    const root = inNotes(e.target);
+    if (!root) return;
+    e.stopPropagation();   // keep clicks from reaching the job overlay (which closes the job)
+    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del]');
+    if (!b) return;
+    if (b.dataset.tab) { state.tab = b.dataset.tab; state.status = ''; if (state.tab === 'pad') loadPad(); render(); return; }
+    if (b.dataset.tag) { state.tag = state.tag === b.dataset.tag ? null : b.dataset.tag; render(); const t = root.querySelector('.ssn-input'); if (t) t.focus(); return; }
+    if (b.dataset.pin) { togglePin(b.dataset.pin); return; }
+    if (b.dataset.del) { remove(b.dataset.del); return; }
+    switch (b.dataset.act) {
+      case 'post': post(root); break;
+      case 'close': state.sheetOpen = false; render(); break;
+      case 'hide': setDock(false); break;
+      case 'popout': {
+        state.floating = true; lsSet(LS.dock, '0');
+        const d = $('ssnDock'); const r = d ? d.getBoundingClientRect() : null;
+        render();
+        const f = $('ssnFloat'); if (f && r) { placeFloat(f, r.left, r.top + 40); lsSet(LS.float, JSON.stringify({ x: r.left, y: r.top + 40 })); }
+        break;
+      }
+      case 'closefloat': state.floating = false; render(); break;
+      case 'openjob': if (state.jobId && typeof window.openDetail === 'function') { state.floating = false; lsSet(LS.dock, '1'); window.openDetail(state.jobId); } break;
+    }
+  }, true);
+
+  document.addEventListener('input', e => {
+    const t = e.target;
+    if (!t || !t.classList) return;
+    if (t.classList.contains('ssn-input')) {
+      const id = state.jobId, v = t.value;
+      setStatus('Saving draft…', 'busy');
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(() => { lsSet(LS.draft(id), v.trim() ? v : null); setStatus(v.trim() ? 'Draft saved on this device' : 'Drafts save as you type', 'ok'); }, 350);
+    } else if (t.classList.contains('ssn-pad')) {
+      savePadSoon(t.value);
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    const t = e.target;
+    if (t && t.classList && t.classList.contains('ssn-input') && e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault(); post(t.closest('.ssn'));
+    }
+    if (e.key === 'Escape' && state.sheetOpen) { state.sheetOpen = false; render(); }
+  });
+
+  // Drag the floating panel by its header
+  document.addEventListener('pointerdown', e => {
+    const h = e.target.closest && e.target.closest('.ssn-float [data-drag]');
+    if (!h || e.target.closest('button')) return;
+    const f = $('ssnFloat'); const r = f.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    const move = ev => placeFloat(f, ev.clientX - dx, ev.clientY - dy);
+    const up = () => {
+      document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
+      lsSet(LS.float, JSON.stringify({ x: parseFloat(f.style.left) || 0, y: parseFloat(f.style.top) || 0 }));
+    };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+    e.preventDefault();
+  });
+
+  // ── Hooks into the CRM ──────────────────────────────────────────────────
+  function hook() {
+    const fn = window.renderDetailPanel;
+    if (typeof fn === 'function' && !fn.__ssn) {
+      const wrapped = function () {
+        const r = fn.apply(this, arguments);
+        try { render(); } catch (e) { console.warn('[notes] render skipped', e); }
+        return r;
+      };
+      Object.keys(fn).forEach(k => { wrapped[k] = fn[k]; });
+      wrapped.__ssn = true;
+      window.renderDetailPanel = wrapped;
+    }
+  }
+
+  function init() {
+    injectCSS();
+    hook();
+    setTimeout(hook, 0);   // after other files wrap it
+    const ov = $('detailOverlay');
+    if (ov) new MutationObserver(() => {
+      if (!overlayOpen()) { state.sheetOpen = false; document.documentElement.classList.remove('ssn-docked'); }
+      render();
+    }).observe(ov, { attributes: true, attributeFilter: ['class'] });
+    window.matchMedia(WIDE).addEventListener('change', () => render());
+    window.addEventListener('online', flushOutbox);
+    myAuth().then(() => render());
+    setTimeout(flushOutbox, 3000);
+    render();
+  }
+
+  // ── Styles ──────────────────────────────────────────────────────────────
+  function injectCSS() {
+    if ($('ssnCSS')) return;
+    const s = document.createElement('style'); s.id = 'ssnCSS';
+    s.textContent = `
+.ssn{--n-bg:#121A23;--n-bg2:#0E141B;--n-line:#253241;--n-text:#E6EDF3;--n-mute:#8E9BAA;--n-accent:#38BDF8;--n-accent-soft:#10283A;
+  box-sizing:border-box;background:var(--n-bg);color:var(--n-text);display:flex;flex-direction:column;font-size:13px;min-height:0}
+.ssn *{box-sizing:border-box}
+.ssn[hidden],.ssn-fab[hidden]{display:none!important}
+.ssn-dock{width:360px;flex:none;height:100%;margin-right:10px;border:1px solid var(--n-line);border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:ssnIn .18s ease}
+@keyframes ssnIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+.ssn-float{position:fixed;right:24px;top:80px;width:380px;height:min(640px,calc(100vh - 100px));z-index:120;border:1px solid #2A3846;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+.ssn-head{display:flex;align-items:center;gap:8px;padding:14px 14px 10px;border-bottom:1px solid var(--n-line)}
+.ssn-float .ssn-head{cursor:move;background:#141E28;touch-action:none}
+.ssn-grip{color:#5B6B7B;font-size:16px}
+.ssn-title{flex:1;min-width:0;font-size:15px;font-weight:600}
+.ssn-title>div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ssn-n{color:var(--n-mute);font-weight:400}
+.ssn-sub{font-size:12px;color:var(--n-mute);font-weight:400;margin-top:2px}
+.ssn-icon{width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--n-mute);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;flex:none}
+.ssn-icon:hover,.ssn-text-btn:hover{background:#1A2430;color:var(--n-text)}
+.ssn-text-btn{height:30px;padding:0 8px;border-radius:8px;border:0;background:transparent;color:var(--n-mute);display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px}
+.ssn-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--n-line)}
+.ssn-tab{padding:9px 10px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--n-mute);font-size:13px;cursor:pointer}
+.ssn-tab.on{color:var(--n-text);border-bottom-color:var(--n-accent);font-weight:600}
+.ssn-feed{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
+.ssn-empty{color:var(--n-mute);font-size:13px;line-height:1.5;padding:18px 4px;text-align:center}
+.ssn-pin{padding:10px 12px;border-radius:10px;background:#2A2210;border:1px solid #5A4614}
+.ssn-pin-h{display:flex;align-items:center;gap:6px;font-size:11px;color:#FCD34D;font-weight:600;letter-spacing:.02em}
+.ssn-pin .ssn-link{margin-left:auto;color:#FCD34D}
+.ssn-pin .ssn-text{color:#FEF3C7;margin-top:4px}
+.ssn-item{display:flex;gap:10px}
+.ssn-item.pending{opacity:.65}
+.ssn-av{width:28px;height:28px;flex:none;border-radius:999px;background:#1F3A4F;color:#7DD3FC;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.ssn-av.me{background:#233240;color:#CBD5E1}
+.ssn-av.sys{background:#1A2430;color:var(--n-mute);font-size:13px}
+.ssn-main{flex:1;min-width:0}
+.ssn-meta{display:flex;align-items:baseline;gap:6px;font-size:12px;color:var(--n-mute)}
+.ssn-meta b{color:var(--n-text);font-weight:600}
+.ssn-acts{margin-left:auto;display:flex;gap:2px;opacity:.85}
+.ssn-link{border:0;background:transparent;color:var(--n-mute);font-size:11px;padding:2px 5px;border-radius:5px;cursor:pointer}
+.ssn-link:hover{color:var(--n-text);background:#1A2430}
+.ssn-text{font-size:13px;line-height:1.45;margin-top:2px;white-space:pre-wrap;word-wrap:break-word}
+.ssn-item.sys .ssn-text{color:var(--n-mute)}
+.ssn-tag{display:inline-block;margin-top:5px;padding:2px 7px;border-radius:999px;background:var(--n-accent-soft);color:#7DD3FC;font-size:11px}
+.ssn-compose{border-top:1px solid var(--n-line);padding:10px 14px 12px;background:#101820;display:flex;flex-direction:column;gap:8px}
+.ssn-chips{display:flex;gap:6px;flex-wrap:wrap}
+.ssn-chip{padding:4px 9px;border-radius:999px;font-size:11px;cursor:pointer;border:1px solid var(--n-line);background:transparent;color:var(--n-mute)}
+.ssn-chip.on{border-color:var(--n-accent);background:var(--n-accent-soft);color:#7DD3FC}
+.ssn-row{display:flex;gap:8px;align-items:flex-end}
+.ssn-input,.ssn-pad{flex:1;resize:none;padding:10px 12px;border-radius:10px;border:1px solid var(--n-line);background:var(--n-bg2);color:var(--n-text);font:inherit;font-size:13px;line-height:1.45}
+.ssn-input{height:62px}
+.ssn-input:focus,.ssn-pad:focus{outline:2px solid var(--n-accent);outline-offset:-2px}
+.ssn-send{width:38px;height:38px;flex:none;border-radius:10px;border:0;background:var(--n-accent);color:#06202E;font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ssn-status{font-size:11px;color:#4ADE80;display:flex;align-items:center;gap:6px}
+.ssn-status:before{content:"";width:6px;height:6px;border-radius:999px;background:currentColor}
+.ssn-status.busy{color:#FBBF24}.ssn-status.warn{color:#FB923C}
+.ssn-padwrap{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:12px 14px}
+.ssn-hint{font-size:12px;color:var(--n-mute)}
+.ssn-pad{min-height:0;height:100%}
+.ssn-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.ssn-hbtn{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line,#253241);background:transparent;color:var(--text-2,#C4CBD8);display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex-shrink:0}
+.ssn-hbtn.on{border-color:#38BDF8;background:#10283A;color:#7DD3FC}
+.ssn-fab{position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:130;height:52px;padding:0 18px;border-radius:999px;border:0;background:#38BDF8;color:#06202E;font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;box-shadow:0 10px 30px rgba(56,189,248,.35);cursor:pointer}
+.ssn-sheet-wrap{position:fixed;inset:0;z-index:140;display:none}
+.ssn-sheet-wrap.open{display:block}
+.ssn-scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.ssn-sheet{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:560px;height:min(82vh,680px);border-top:1px solid #2A3846;border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -20px 50px rgba(0,0,0,.5);animation:ssnUp .2s ease}
+@keyframes ssnUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.ssn-grab{width:38px;height:5px;border-radius:999px;background:#3A4A5A;margin:8px auto 0}
+.ssn-sheet .ssn-head{padding:8px 16px 10px}
+.ssn-sheet .ssn-icon{width:44px;height:44px;border-radius:12px;background:#1A2430;color:#CBD5E1;font-size:20px}
+.ssn-sheet .ssn-tab{padding:11px 12px;font-size:14px}
+.ssn-sheet .ssn-feed{padding:12px 16px}
+.ssn-sheet .ssn-text{font-size:14px}
+.ssn-sheet .ssn-link{font-size:12px;padding:6px 8px}
+.ssn-sheet .ssn-compose{padding:10px 16px 14px}
+.ssn-sheet .ssn-chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.ssn-sheet .ssn-chip{flex:none;height:34px;padding:0 12px;font-size:13px}
+.ssn-sheet .ssn-input{height:48px;font-size:16px;border-radius:24px;padding:12px 16px}
+.ssn-sheet .ssn-send{width:48px;height:48px;border-radius:999px;font-size:20px}
+.ssn-sheet .ssn-pad{font-size:16px}
+@media (min-width:1181px){html.ssn-docked.ui-new .detail-overlay{align-items:stretch}}
+@media (max-width:1180px){.ssn-hbtn{display:none}}
+`;
+    document.head.appendChild(s);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
