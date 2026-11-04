@@ -3,7 +3,7 @@
 
    Where they show up:
    - Desktop (wide screens), job open: a Notes column docked beside the job
-     screen. "Notes · N" in the job header shows / hides it. "Pop out" turns it
+     screen (to its right). "Notes · N" in the job header shows / hides it. "Pop out" turns it
      into a floating panel you can drag around and keep open after closing the job.
    - Phone / tablet, job open: a notes strip on top of the job's bottom action bar
      (latest or pinned note, + to add). Tap it to open the notes sheet.
@@ -307,7 +307,7 @@
            ${padBtn}
            ${mode === 'dock' ? '<button type="button" class="ssn-icon" data-act="popout" aria-label="Pop out" title="Pop out"><i class="ti ti-external-link" aria-hidden="true"></i></button>' : ''}
            ${mode === 'float' ? '<button type="button" class="ssn-icon" data-act="openjob" aria-label="Open job"><i class="ti ti-arrow-up-right" aria-hidden="true"></i></button>' : ''}
-           <button type="button" class="ssn-icon" data-act="${mode === 'dock' ? 'hide' : 'closefloat'}" aria-label="${mode === 'dock' ? 'Hide notes' : 'Close notes'}"><i class="ti ${mode === 'dock' ? 'ti-chevron-left' : 'ti-x'}" aria-hidden="true"></i></button>
+           <button type="button" class="ssn-icon" data-act="${mode === 'dock' ? 'hide' : 'closefloat'}" aria-label="${mode === 'dock' ? 'Hide notes' : 'Close notes'}"><i class="ti ${mode === 'dock' ? 'ti-chevron-right' : 'ti-x'}" aria-hidden="true"></i></button>
          </div>`;
     if (pad) {
       return head + `<div class="ssn-padwrap">
@@ -337,7 +337,7 @@
     const ov = $('detailOverlay'), panel = $('detailPanel');
     if (!ov || !panel) return null;
     if (!el) { el = document.createElement('section'); el.id = 'ssnDock'; el.className = 'ssn ssn-dock'; el.setAttribute('aria-label', 'Job notes'); }
-    if (el.parentElement !== ov || el.nextElementSibling !== panel) ov.insertBefore(el, panel);
+    if (el.parentElement !== ov || el.previousElementSibling !== panel) panel.insertAdjacentElement('afterend', el);
     return el;
   }
   function floatEl() {
@@ -602,8 +602,8 @@
   box-sizing:border-box;background:var(--n-bg);color:var(--n-text);display:flex;flex-direction:column;font-size:13px;min-height:0}
 .ssn *{box-sizing:border-box}
 .ssn[hidden]{display:none!important}
-.ssn-dock{width:360px;flex:none;height:100%;margin-right:10px;border:1px solid var(--n-line);border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:ssnIn .18s ease}
-@keyframes ssnIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+.ssn-dock{width:360px;flex:none;height:100%;margin-left:10px;border:1px solid var(--n-line);border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:ssnIn .18s ease}
+@keyframes ssnIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 .ssn-float{position:fixed;right:24px;top:80px;width:380px;height:min(640px,calc(100vh - 100px));z-index:120;border:1px solid #2A3846;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.6)}
 .ssn-head{display:flex;align-items:center;gap:8px;padding:14px 14px 10px;border-bottom:1px solid var(--n-line)}
 .ssn-float .ssn-head{cursor:move;background:#141E28;touch-action:none}
