@@ -1518,12 +1518,13 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   .gs-chev{color:var(--muted);font-size:18px;flex-shrink:0}
   .gs-l1{display:flex;align-items:center;gap:10px;min-width:0}
   .gs-l1 .gs-name{flex:1;min-width:0}
-  .gs-stage{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;font-size:12.5px;color:#C4CBD8;white-space:nowrap}
-  .gs-stage i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .gs-stage{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;width:104px;overflow:hidden;font-size:12.5px;color:#C4CBD8;white-space:nowrap}
+  .gs-stage i{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
   .gs-hit{color:#C4CBD8}
   .gs-label-row{display:flex;align-items:center;justify-content:space-between}
   .gs-clearq{border:0;background:none;color:var(--brand-light);font-size:12px;font-weight:600;font-family:inherit;text-transform:none;letter-spacing:0;cursor:pointer;padding:4px}
   .gs-chips{display:flex;flex-wrap:wrap;gap:8px;padding:2px 4px 6px}
+  .gs-nocall{visibility:hidden}
   .gs-chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#1A1F29;color:#C4CBD8;font-size:14px;font-family:inherit;cursor:pointer}
   .gs-chip .ti{color:var(--muted);font-size:14px}
   .gs-empty{text-align:center;color:var(--muted);font-size:15px;line-height:1.5;padding:48px 24px}
@@ -1565,8 +1566,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   .gs-row{padding:11px 16px}
   .gs-l1{display:flex;align-items:center;gap:10px;min-width:0}
   .gs-l1 .gs-name{flex:1;min-width:0}
-  .gs-stage{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;color:#C4CBD8;white-space:nowrap}
-  .gs-stage i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .gs-stage{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;width:128px;overflow:hidden;text-overflow:ellipsis;color:#C4CBD8;white-space:nowrap}   /* fixed column so the dots line up */
+  .gs-stage i{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
   .gs-hit{color:#C4CBD8}
   .gs-label-row{display:flex;align-items:center;justify-content:space-between}
   .gs-clearq{border:0;background:none;color:var(--brand-light);font-size:12px;font-weight:600;font-family:inherit;text-transform:none;letter-spacing:0;cursor:pointer;padding:4px}
@@ -1576,6 +1577,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   .gs-chip .ti{color:var(--muted);font-size:14px}
   .gs-stage{font-size:12.5px}
   .gs-call{visibility:hidden}
+  .gs-row .gs-nocall{visibility:hidden !important}
   .gs-row.sel .gs-call,.gs-row:hover .gs-call{visibility:visible;color:#34D399;border-color:rgba(52,211,153,.45)}
   .gs-chips{padding:2px 16px 8px}
   .gs-label-row{padding-right:12px}
@@ -11271,14 +11273,15 @@ function gsRow(j,q){
   const tel=(j.phone||'').replace(/[^\d+]/g,'');
   const pl=(j.pipeline||'insurance')!=='insurance' ? gsPipelineName(j) : '';
   const m=gsMatchedField(j,q);
-  const sub=[hl((j.address||'No address').replace(/, USA$/,'')), j.carrier?escapeHtml(j.carrier):'', pl?escapeHtml(pl):'',
+  const nameHit=!!q && String(j.name||'').toLowerCase().includes(q);
+  const sub=[(nameHit?escapeHtml:hl)((j.address||'No address').replace(/, USA$/,'')), j.carrier?escapeHtml(j.carrier):'', pl?escapeHtml(pl):'',
     m ? `<span class="gs-hit">${m[0]?escapeHtml(m[0])+' ':''}${hl(m[1])}</span>` : ''].filter(Boolean).join(' · ');
   return `<div class="gs-row" data-gs-id="${j.id}" role="button" tabindex="0">
     <div class="gs-main">
       <div class="gs-l1"><span class="gs-name">${hl(j.name||'Job')}</span>${stage?`<span class="gs-stage"><i style="background:${gsStageColor(j)}"></i>${escapeHtml(stage)}</span>`:''}</div>
       <div class="gs-addr">${sub}</div>
     </div>
-    ${tel?`<a class="gs-call" href="tel:${tel}" aria-label="Call ${escapeHtml(j.name||'')}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i></a>`:''}
+    ${tel?`<a class="gs-call" href="tel:${tel}" aria-label="Call ${escapeHtml(j.name||'')}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i></a>`:'<span class="gs-call gs-nocall" aria-hidden="true"></span>'}
   </div>`;
 }
 // Recent searches (this device): saved when you open a job from a search.
