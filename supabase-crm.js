@@ -151,8 +151,11 @@ async function loadAllFromSupabase() {
       sb.from('job_files').select('*').in('job_id', ids),
       sb.from('stage_checklist_done').select('*').in('job_id', ids),
     ]);
-    // Signed URLs for these files.
-    const allPaths = (files || []).map(f => f.storage_path).filter(Boolean);
+    // Signed URLs for these files (and photo thumbnails). Photos stored in
+    // Cloudflare R2 (storage = 'r2') are signed by the photo worker instead.
+    const isR2 = f => f.storage === 'r2';
+    const allPaths = (files || []).filter(f => !isR2(f)).flatMap(f => [f.storage_path, f.thumb_path]).filter(Boolean);
+    const r2Paths = (files || []).filter(isR2).flatMap(f => [f.storage_path, f.thumb_path]).filter(Boolean);
     const urlMap = {};
     if(allPaths.length){
       try {
@@ -160,8 +163,16 @@ async function loadAllFromSupabase() {
         (signed || []).forEach(s => { if(s && s.path && s.signedUrl) urlMap[s.path] = s.signedUrl; });
       } catch(e){ console.warn('signed url batch failed', e); }
     }
+    if(r2Paths.length && window.crmPhotos){
+      try { Object.assign(urlMap, await window.crmPhotos.signR2(r2Paths)); }
+      catch(e){ console.warn('R2 signed url batch failed', e); }
+    }
     const isPdfName = n => /\.pdf$/i.test(n||'');
-    const fileRec = f => ({ name: f.name, path: f.storage_path, _id: f.id, url: urlMap[f.storage_path] || null, isPdf: isPdfName(f.name) });
+    const fileRec = f => ({
+      name: f.name, path: f.storage_path, _id: f.id, url: urlMap[f.storage_path] || null, isPdf: isPdfName(f.name),
+      storage: f.storage || 'supabase', thumbPath: f.thumb_path || null, thumb: (f.thumb_path && urlMap[f.thumb_path]) || null,
+      takenAt: f.taken_at || null, lat: f.lat ?? null, lng: f.lng ?? null,
+    });
     return (jobRows || []).map(r => {
       const jobFiles = (files || []).filter(f => f.job_id === r.id);
       const photos = { before:[], during:[], after:[] };
@@ -1139,6 +1150,8 @@ window.saveCompanyDocs = saveCompanyDocs;
 /* ---------- FILE delete helper */
 async function deleteJobFile(rec){
   if(!rec) return;
+  // Photos (R2 or with a thumbnail) are removed by the photo module, which knows both files.
+  if((rec.storage === 'r2' || rec.thumbPath) && window.crmPhotos) return window.crmPhotos.deleteRecord(rec);
   try {
     if(rec.path) await sb.storage.from('job-files').remove([rec.path]);
     if(rec._id) await sb.from('job_files').delete().eq('id', rec._id);

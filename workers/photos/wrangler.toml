@@ -1,0 +1,15 @@
+name = "stormshield-photos"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# The R2 bucket the photos live in (create it in the Cloudflare dashboard first).
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "stormshield-photos"
+
+[vars]
+SUPABASE_URL = "https://lqhdhflsgswctdwmojhd.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxaGRoZmxzZ3N3Y3Rkd21vamhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5Mzc2NjcsImV4cCI6MjA5NTUxMzY2N30.1FXt_Q88QSg93MAA3GjdoYzfP1eX3ON6-14nz3m8flI"
+ALLOWED_ORIGINS = "https://stormshieldproroofing.github.io"
+
+# Secret (not in this file):  npx wrangler secret put URL_SIGNING_SECRET

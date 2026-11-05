@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Job Photos · StormShield Pro Roofing</title>
+<link rel="icon" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root{--bg:#F6F7F9;--ink:#141A26;--muted:#5B6578;--line:#E2E6EE;--card:#fff;--brand:#1D4ED8}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-text-size-adjust:100%}
+  header{background:#0F1117;color:#fff;padding:calc(16px + env(safe-area-inset-top)) 16px 18px}
+  .hwrap,main{max-width:1100px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand img{width:42px;height:42px;border-radius:10px;background:#fff;object-fit:contain}
+  .brand b{display:block;font-size:16px;letter-spacing:.2px}
+  .brand span{font-size:12px;color:#9AA6BF}
+  h1{font-size:22px;margin:18px 0 4px;line-height:1.25}
+  .meta{font-size:13px;color:#9AA6BF}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;text-decoration:none}
+  .btn.primary{background:var(--brand);border-color:var(--brand)}
+  .btn:disabled{opacity:.6;cursor:default}
+  main{padding:8px 16px calc(40px + env(safe-area-inset-bottom))}
+  section{margin-top:22px}
+  section h2{display:flex;align-items:center;gap:8px;font-size:13px;text-transform:uppercase;letter-spacing:.7px;margin:0 0 10px;color:var(--muted)}
+  section h2 i{width:9px;height:9px;border-radius:50%;display:inline-block}
+  section h2 small{font-weight:600;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1px 8px;letter-spacing:0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  @media(max-width:480px){.grid{grid-template-columns:repeat(3,1fr);gap:5px}}
+  .ph{position:relative;aspect-ratio:1;border:none;padding:0;border-radius:10px;overflow:hidden;background:#E6E9EF;cursor:zoom-in}
+  .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .msg{max-width:520px;margin:0 auto;padding:56px 22px;text-align:center}
+  .msg img{width:88px;margin-bottom:16px}
+  .msg h1{color:var(--ink)}
+  .msg p{font-size:16px;line-height:1.55;color:#3C4658}
+  .msg a{color:var(--brand)}
+  .spin{width:30px;height:30px;border:3px solid #D5DAE3;border-top-color:var(--brand);border-radius:50%;margin:30px auto;animation:sp .9s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .lb{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;touch-action:pan-y}
+  .lb.open{display:flex}
+  .lb img{max-width:96vw;max-height:78vh;object-fit:contain;border-radius:6px}
+  .lb .cap{color:rgba(255,255,255,.7);font-size:13px;margin-top:12px;text-align:center;padding:0 16px}
+  .lb .x{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px}
+  .lb .nav{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:30px;cursor:pointer}
+  .lb .prev{left:12px}.lb .next{right:12px}
+  .lb .dl{margin-top:14px}
+  .rb{width:42px;height:42px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:20px;cursor:pointer}
+  footer{text-align:center;color:var(--muted);font-size:13px;margin-top:36px}
+  footer a{color:var(--brand)}
+  #toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#141A26;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div id="root"><div class="msg"><div class="spin" aria-hidden="true"></div><p>Loading photos…</p></div></div>
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Photo viewer">
+  <button class="rb x" data-lb="close" aria-label="Close">✕</button>
+  <button class="nav prev" data-lb="prev" aria-label="Previous photo">‹</button>
+  <img id="lbImg" alt="">
+  <button class="nav next" data-lb="next" aria-label="Next photo">›</button>
+  <div class="cap" id="lbCap"></div>
+  <a class="btn primary dl" id="lbDl" download>⤓ Download photo</a>
+</div>
+<div id="toast" role="status"></div>
+<script>
+(function () {
+  'use strict';
+  var FN = 'https://lqhdhflsgswctdwmojhd.supabase.co/functions/v1/photo-share';
+  var ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxaGRoZmxzZ3N3Y3Rkd21vamhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5Mzc2NjcsImV4cCI6MjA5NTUxMzY2N30.1FXt_Q88QSg93MAA3GjdoYzfP1eX3ON6-14nz3m8flI';
+  var PHONE = '832-910-7735';
+  var SECTIONS = { before: ['Before', '#F59E0B'], during: ['During', '#4D9DE0'], after: ['After', '#34D399'] };
+  var token = new URLSearchParams(location.search).get('t') || '';
+  var root = document.getElementById('root');
+  var photos = [], idx = 0, address = '';
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var tt;
+  function toast(m) { var t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('on'); }, 2600); }
+  function message(title, body) {
+    root.innerHTML = '<div class="msg"><img src="favicon-192.png" alt="StormShield Pro Roofing"><h1>' + esc(title) + '</h1><p>' + body + '</p>' +
+      '<p>Questions? Call <a href="tel:' + PHONE.replace(/-/g, '') + '">' + PHONE + '</a>.</p></div>';
+  }
+  function when(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  function fileName(p, i) {
+    var n = String(p.name || ('Photo ' + (i + 1))).replace(/[\\/:*?"<>|]+/g, '');
+    return /\.(jpe?g|png|webp)$/i.test(n) ? n : n + '.jpg';
+  }
+
+  function render(b) {
+    photos = b.photos || [];
+    address = (b.job && b.job.address) || '';
+    var order = ['before', 'during', 'after'];
+    var html = '<header><div class="hwrap">' +
+      '<div class="brand"><img src="favicon-192.png" alt=""><div><b>StormShield Pro Roofing</b><span>Storm Damage Experts</span></div></div>' +
+      '<h1>' + esc(address || 'Job photos') + '</h1>' +
+      '<div class="meta">' + photos.length + ' photo' + (photos.length === 1 ? '' : 's') + (b.label ? ' · Shared with ' + esc(b.label) : '') + '</div>' +
+      (photos.length ? '<div class="bar"><button class="btn primary" id="dlAll">⤓ Download all</button></div>' : '') +
+      '</div></header><main>';
+    if (!photos.length) html += '<div class="msg"><p>No photos have been added yet. Check back soon.</p></div>';
+    order.forEach(function (key) {
+      var list = [];
+      photos.forEach(function (p, i) { if (p.section === key) list.push(i); });
+      if (!list.length) return;
+      var s = SECTIONS[key];
+      html += '<section><h2><i style="background:' + s[1] + '"></i>' + s[0] + ' <small>' + list.length + '</small></h2><div class="grid">' +
+        list.map(function (i) {
+          return '<button class="ph" data-i="' + i + '" aria-label="Open photo ' + (i + 1) + '"><img src="' + esc(photos[i].thumb || photos[i].url) + '" alt="" loading="lazy"></button>';
+        }).join('') + '</div></section>';
+    });
+    html += '<footer>StormShield Pro Roofing · <a href="tel:' + PHONE.replace(/-/g, '') + '">' + PHONE + '</a></footer></main>';
+    root.innerHTML = html;
+    var dl = document.getElementById('dlAll');
+    if (dl) dl.addEventListener('click', downloadAll);
+  }
+
+  function open(i) {
+    idx = (i + photos.length) % photos.length;
+    var p = photos[idx];
+    var s = SECTIONS[p.section] || ['Photo'];
+    document.getElementById('lbImg').src = p.url;
+    document.getElementById('lbCap').textContent = s[0] + ' · ' + (idx + 1) + ' of ' + photos.length + (p.taken_at ? ' · ' + when(p.taken_at) : '');
+    var a = document.getElementById('lbDl');
+    a.href = p.url; a.setAttribute('download', fileName(p, idx));
+    document.getElementById('lb').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function close() { document.getElementById('lb').classList.remove('open'); document.body.style.overflow = ''; }
+
+  root.addEventListener('click', function (e) { var b = e.target.closest('.ph'); if (b) open(+b.dataset.i); });
+  document.getElementById('lb').addEventListener('click', function (e) {
+    var a = e.target.closest('[data-lb]');
+    if (a) { var k = a.dataset.lb; if (k === 'close') close(); else open(idx + (k === 'next' ? 1 : -1)); return; }
+    if (e.target.id === 'lb') close();
+  });
+  // Direct download needs the file as a blob (cross-site links ignore "download").
+  document.getElementById('lbDl').addEventListener('click', function (e) {
+    e.preventDefault();
+    var p = photos[idx];
+    fetch(p.url).then(function (r) { return r.blob(); }).then(function (blob) { saveBlob(blob, fileName(p, idx)); })
+      .catch(function () { window.open(p.url, '_blank'); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!document.getElementById('lb').classList.contains('open')) return;
+    if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') open(idx + 1); else if (e.key === 'ArrowLeft') open(idx - 1);
+  });
+  var tx = null;
+  document.getElementById('lb').addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; }, { passive: true });
+  document.getElementById('lb').addEventListener('touchend', function (e) {
+    if (tx == null) return; var dx = e.changedTouches[0].clientX - tx; tx = null;
+    if (Math.abs(dx) > 50) open(idx + (dx < 0 ? 1 : -1));
+  });
+
+  function saveBlob(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+  function loadZip() {
+    return window.JSZip ? Promise.resolve() : new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload = res; s.onerror = rej; document.head.appendChild(s);
+    });
+  }
+  function downloadAll() {
+    var btn = document.getElementById('dlAll');
+    btn.disabled = true; btn.textContent = 'Preparing…';
+    loadZip().then(function () {
+      var zip = new JSZip(), done = 0, used = {};
+      return Promise.all(photos.map(function (p, i) {
+        return fetch(p.url).then(function (r) { if (!r.ok) throw 0; return r.blob(); }).then(function (b) {
+          var folder = (SECTIONS[p.section] || ['Photos'])[0];
+          var n = fileName(p, i), key = folder + '/' + n, k = 2;
+          while (used[key]) key = folder + '/' + n.replace(/(\.\w+)$/, ' (' + (k++) + ')$1');
+          used[key] = 1; zip.file(key, b);
+          btn.textContent = 'Preparing… ' + (++done) + '/' + photos.length;
+        }).catch(function () {});
+      })).then(function () { return zip.generateAsync({ type: 'blob' }); });
+    }).then(function (blob) {
+      var name = (address ? address.split(',')[0] + ' - ' : '') + 'Photos.zip';
+      saveBlob(blob, name.replace(/[\\/:*?"<>|]+/g, ''));
+    }).catch(function () { toast('Download failed — try again, or save photos one at a time.'); })
+      .then(function () { btn.disabled = false; btn.textContent = '⤓ Download all'; });
+  }
+
+  if (!token) { message('Link not found', 'This photo link is incomplete. Please use the full link you were sent.'); return; }
+  fetch(FN + '?t=' + encodeURIComponent(token), { headers: { apikey: ANON, Authorization: 'Bearer ' + ANON } })
+    .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+    .then(function (res) {
+      var b = res.b || {};
+      if (b.state === 'revoked') return message('Link turned off', 'This photo link was turned off. Ask StormShield Pro Roofing for a new one.');
+      if (b.state === 'expired') return message('Link expired', 'This photo link has expired. Ask StormShield Pro Roofing for a new one.');
+      if (!res.ok || b.state !== 'open') return message('Link not valid', 'This photo link isn’t valid. Ask StormShield Pro Roofing for a new one.');
+      render(b);
+    })
+    .catch(function () { message('Can’t connect', 'We couldn’t load the photos. Check your internet connection and open the link again.'); });
+})();
+</script>
+</body>
+</html>

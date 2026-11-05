@@ -649,7 +649,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=4"></script>
+<script src="supabase-crm.js?v=5"></script>
+<script src="crm-photos.js?v=1"></script>
 <script src="crm-packet.js?v=17"></script>
 <script src="crm-notes.js?v=8"></script>
 <script src="crm-notifications.js?v=1"></script>
@@ -8863,6 +8864,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       return `
       <style>
         .ph-section{margin-bottom:0}
+        .ph-tools{display:flex;gap:8px;margin-bottom:16px}
+        .ph-tool{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 12px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+        .ph-tool-main{background:#1D4ED8;border-color:#1D4ED8;color:#fff}
+        .ph-tool:hover{filter:brightness(1.1)}
         .ph-header{display:flex;align-items:center;gap:9px;margin-bottom:10px}
         .ph-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}
         .ph-count{font-size:10px;font-weight:600;color:var(--muted);background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;padding:1px 7px;min-width:20px;text-align:center}
@@ -8899,6 +8904,17 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <button class="ph-lb-download" onclick="phLightboxDownload()" title="Download photo">⤓ Download</button>
       </div>
 
+      <div class="ph-tools">
+        <button type="button" class="ph-tool ph-tool-main" onclick="phCamera('before')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Take Photos
+        </button>
+        <button type="button" class="ph-tool" onclick="phShare()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          Share Photos
+        </button>
+      </div>
+
       ${sections.map(s=>`
       <div class="ph-section" id="phs-${s.key}">
         <div class="ph-header">
@@ -8911,11 +8927,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             Upload
             <input type="file" accept="image/*" multiple style="display:none" onchange="phAddFiles('${s.key}',this.files)">
           </label>
-          <label style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--brand);font-size:11px;font-weight:500;cursor:pointer;font-family:'Barlow',sans-serif;white-space:nowrap">
+          <button type="button" onclick="phCamera('${s.key}')" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--brand);font-size:11px;font-weight:500;cursor:pointer;font-family:'Barlow',sans-serif;white-space:nowrap">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             Camera
-            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="phAddFiles('${s.key}',this.files)">
-          </label>
+          </button>
         </div>
 
         <div class="ph-zone" id="phz-${s.key}" style="border-color:${s.color}30"
@@ -8931,8 +8946,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           <div class="ph-grid" id="phg-${s.key}">
             ${j.photos[s.key].map((p,i)=>`
             <div class="ph-thumb" onclick="phOpenLightbox('${s.key}',${i})">
-              <img src="${p.url}" alt="${p.name}">
-              <div class="ph-overlay"><span>${p.name}</span></div>
+              <img src="${p.thumb||p.url}" alt="${escapeHtml(p.name||'Photo')}" loading="lazy">
+              <div class="ph-overlay"><span>${escapeHtml(p.name||'')}</span></div>
               <button class="ph-del" onclick="event.stopPropagation();phDelete('${s.key}',${i})" title="Remove">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
@@ -8952,11 +8967,39 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     body.innerHTML = photosTabHTML();
 
     // wire up photo functions scoped to this job
+    function phRerender(){
+      // Only redraw if this job's Photos tab is still what's on screen.
+      if(openJobId!==j.id || activeTab!=='photos' || !body.isConnected) return;
+      body.innerHTML = photosTabHTML();
+      wirePhotoFunctions();
+    }
+    window.phRefresh = phRerender;
+    if(window._phUploadedHandler) window.removeEventListener('crmphotos:uploaded', window._phUploadedHandler);
+    window._phUploadedHandler = e => { if(e.detail && e.detail.jobId===j.id) phRerender(); };
+    window.addEventListener('crmphotos:uploaded', window._phUploadedHandler);
+
+    // In-app camera: photos go straight to the job, never to the camera roll.
+    window.phCamera = function(sectionKey){
+      if(!window.crmPhotos){ toast('Camera is still loading — try again'); return; }
+      window.crmPhotos.openCamera(j, sectionKey, {
+        onFiles: (files, sk) => window.phAddFiles(sk, files),
+        onClose: () => phRerender(),
+      });
+    };
+    window.phShare = function(){ window.crmPhotos ? window.crmPhotos.openShare(j) : toast('Sharing is still loading — try again'); };
+
     window.phAddFiles = async function(sectionKey, files){
       if(!files||!files.length) return;
       const images=Array.from(files).filter(file=>file.type.startsWith('image/'));
       if(!images.length) return;
       toast('Uploading…');
+      if(window.crmPhotos && j._sb && window.sb){
+        // Shrinks each photo, makes a thumbnail, uploads (or waits for signal).
+        await window.crmPhotos.addFiles(j, sectionKey, images);
+        phRerender();
+        toast(navigator.onLine===false ? 'Saved — photos will upload when you have signal' : 'Photos uploaded');
+        return;
+      }
       const records=await Promise.all(images.map(f=>intakeJobFile(f,'photo',sectionKey)));
       j.photos[sectionKey].push(...records);
       saveToStorage();
