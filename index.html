@@ -27550,6 +27550,89 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
   panel.addEventListener('touchcancel', () => { if(armed && mode === 'down'){ setY(0, 200); setTimeout(reset, 210); } armed = false; mode = ''; }, { passive: true });
 })();
 
+// Phone: pull down at the top of any main screen to open Search (like iPhone's pull-down search).
+// Only when the screen is already scrolled to the top and nothing is open on top of it.
+// A pill follows your finger ("Pull to search" → "Release to search"); let go past it to open.
+(function pullToSearch(){
+  const phone = () => window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  const NEED = 80;                                          // px of pull to trigger
+  let pill = null, sx = 0, sy = 0, armed = false, mode = '', dy = 0;
+  function blocked(){
+    if (document.documentElement.classList.contains('gs-lock')) return true;            // search already open
+    const ov = document.getElementById('detailOverlay'); if (ov && ov.classList.contains('open')) return true;
+    if (document.querySelector('.ssn-sheet-wrap.open, #ssnNotifPanel:not([hidden]), .modal-overlay.open, .modal.open, .rd-menu-wrap.open')) return true;
+    return typeof window.gsOpen !== 'function';
+  }
+  // Every scrolling box under the finger (and the page) must be at its top
+  function atTop(el){
+    if ((window.scrollY || document.documentElement.scrollTop || 0) > 0) return false;
+    for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement){
+      const cs = getComputedStyle(n);
+      if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1 && n.scrollTop > 0) return false;
+      if (cs.position === 'fixed' && !n.classList.contains('topnav')) return false;        // sheets, pop-ups, bottom bars
+    }
+    return true;
+  }
+  function ensurePill(){
+    if (pill) return pill;
+    pill = document.createElement('div');
+    pill.className = 'pts-pill'; pill.setAttribute('aria-hidden', 'true');
+    pill.innerHTML = '<i class="ti ti-search"></i><span>Pull to search</span>';
+    document.body.appendChild(pill);
+    const st = document.createElement('style');
+    st.textContent = '.pts-pill{position:fixed;left:50%;top:calc(60px + env(safe-area-inset-top));z-index:650;display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:999px;background:#1A2330;border:1px solid #2A3846;color:#C4CBD8;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.45);transform:translate(-50%,-44px);opacity:0;pointer-events:none;will-change:transform}'
+      + '.pts-pill .ti{font-size:18px;color:#7DD3FC}.pts-pill.ready{background:#38BDF8;border-color:#38BDF8;color:#06202E}.pts-pill.ready .ti{color:#06202E}'
+      + '.pts-pill.back{transition:transform .22s ease,opacity .22s ease}';
+    document.head.appendChild(st);
+    return pill;
+  }
+  function show(d){
+    const p = ensurePill();
+    const y = Math.min(d * 0.5, 44) - 44;
+    p.classList.remove('back');
+    p.style.transform = `translate(-50%,${y}px)`;
+    p.style.opacity = String(Math.min(1, d / 40));
+    const ready = d >= NEED;
+    if (ready !== p.classList.contains('ready')){
+      p.classList.toggle('ready', ready);
+      p.querySelector('span').textContent = ready ? 'Release to search' : 'Pull to search';
+    }
+  }
+  function hide(){ if (!pill) return; pill.classList.add('back'); pill.style.transform = 'translate(-50%,-44px)'; pill.style.opacity = '0'; pill.classList.remove('ready'); }
+
+  document.addEventListener('touchstart', e => {
+    armed = false; mode = ''; dy = 0;
+    if (!phone() || e.touches.length !== 1 || blocked()) return;
+    const el = e.target;
+    if (el.closest && el.closest('input,textarea,select,canvas,[contenteditable],[data-noswipe],.mapboxgl-map,#mapContainer')) return;
+    if (!atTop(el)) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; armed = true;
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!armed) return;
+    const t = e.touches[0], mx = t.clientX - sx, my = t.clientY - sy;
+    if (!mode){
+      if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+      if (my > 0 && my > Math.abs(mx) * 1.3 && atTop(e.target)) mode = 'pull';
+      else { armed = false; return; }                      // sideways (kanban swipe) or scrolling: not ours
+    }
+    e.preventDefault();
+    dy = Math.max(0, my);
+    show(dy);
+  }, { passive: false, capture: true });
+
+  const end = () => {
+    if (!armed) return;
+    armed = false;
+    const go = mode === 'pull' && dy >= NEED;
+    mode = ''; hide();
+    if (go){ try { window.gsOpen(); } catch (err) {} }
+  };
+  document.addEventListener('touchend', end, { passive: true, capture: true });
+  document.addEventListener('touchcancel', () => { armed = false; mode = ''; hide(); }, { passive: true, capture: true });
+})();
+
 window.__activePage = 'boards';
 if(window.matchMedia && window.matchMedia('(max-width:760px)').matches){
   try { switchPage('summary'); } catch(e){ window.__activePage = 'summary'; }
