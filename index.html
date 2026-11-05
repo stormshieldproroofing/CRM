@@ -11392,7 +11392,10 @@ window.gsOpen=function(){
   const o=document.getElementById('gsOverlay'); if(!o) return;
   o.classList.add('open'); document.documentElement.classList.add('gs-lock');
   const inp=document.getElementById('gsInput'); inp.value=''; window.__gsList=null; gsRender();
-  setTimeout(()=>inp.focus(), 30);
+  // Focus right away, while we're still inside the tap / pull: iPhones only raise the
+  // keyboard when focus happens during the gesture itself (a delayed focus gets ignored).
+  try{ inp.focus({preventScroll:true}); }catch(e){ try{ inp.focus(); }catch(_){} }
+  setTimeout(()=>{ if(document.activeElement!==inp) inp.focus(); }, 30);
 };
 window.gsClose=function(){
   const o=document.getElementById('gsOverlay'); if(o) o.classList.remove('open');
