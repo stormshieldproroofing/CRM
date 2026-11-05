@@ -28,7 +28,6 @@
     draft: id => 'ssNoteDraft:' + id,
     cache: id => 'ssNotesCache:' + id,
     outbox: 'ssNotesOutbox',
-    pad: 'ssScratchpad',
   };
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -55,7 +54,7 @@
     statusKind: 'ok',
     myAuthId: null,
   };
-  let channel = null, channelJob = null, padTimer = null, draftTimer = null, padLoaded = false;
+  let channel = null, channelJob = null, padTimer = null, draftTimer = null;
 
   function jobById(id) { try { return (window.jobs || jobs).find(x => x.id === id) || null; } catch (e) { return null; } }
   function overlayOpen() { const o = $('detailOverlay'); return !!(o && o.classList.contains('open')); }
@@ -209,27 +208,59 @@
     render();
   }
 
-  // Scratchpad (private)
+  // Scratchpad (private, one per user, synced across devices).
+  // The saved copy lives in the user's account (user_scratchpads). Each time it
+  // opens it shows the latest saved copy. The device only holds typing that
+  // hasn't reached the server yet (no signal), under that user's own key, and
+  // sends it as soon as it can.
+  let padText = null, padSaving = false, padSeq = 0;
+  const padPendingKey = uid => 'ssPadUnsaved:' + uid;
+  function padPending(uid) { return uid ? lsGet(padPendingKey(uid), null) : null; }
+
   async function loadPad() {
-    if (padLoaded || !sbc()) return;
-    padLoaded = true;
+    if (!sbc()) return;
+    const uid = await myAuth();
+    if (!uid) return;
+    const pend = padPending(uid);
+    if (pend != null) { padText = pend; render(); pushPad(pend); return; }   // unsent typing wins, then sync it
+    const seq = ++padSeq;
     try {
-      const { data } = await sbc().from('user_scratchpads').select('body').maybeSingle();
-      const local = lsGet(LS.pad, null);
-      if (data && local == null) { lsSet(LS.pad, data.body); render(); }
-    } catch (e) {}
+      const { data, error } = await sbc().from('user_scratchpads').select('body').eq('auth_id', uid).maybeSingle();
+      if (error) throw error;
+      const ta = document.querySelector('.ssn-pad');
+      if (seq !== padSeq || (ta && document.activeElement === ta && padText != null)) return;   // don't overwrite while typing
+      padText = data ? data.body : '';
+      setStatus('', 'ok');
+      render();
+    } catch (e) {
+      if (padText == null) { padText = ''; setStatus('Offline — showing what\'s on this screen', 'warn'); render(); }
+    }
+  }
+  async function pushPad(text) {
+    const uid = await myAuth();
+    if (!uid) return;
+    padSaving = true;
+    try {
+      const { error } = await sbc().from('user_scratchpads').upsert({ auth_id: uid, body: text, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      if (padPending(uid) === text) lsSet(padPendingKey(uid), null);
+      setStatus('Saved · syncs to all your devices', 'ok', true);
+    } catch (e) {
+      setStatus('No signal — will save when you\'re back online', 'warn', true);
+    } finally { padSaving = false; }
   }
   function savePadSoon(text) {
-    lsSet(LS.pad, text);
+    padText = text;
+    padSeq++;                                   // a load already in flight won't overwrite this
+    if (state.myAuthId) lsSet(padPendingKey(state.myAuthId), text);
     setStatus('Saving…', 'busy', true);
     clearTimeout(padTimer);
-    padTimer = setTimeout(async () => {
-      try {
-        const { error } = await sbc().from('user_scratchpads').upsert({ auth_id: await myAuth(), body: text, updated_at: new Date().toISOString() });
-        if (error) throw error;
-        setStatus('Saved · just now', 'ok', true);
-      } catch (e) { setStatus('Saved on this device · will sync later', 'warn', true); }
-    }, 800);
+    padTimer = setTimeout(() => pushPad(text), 700);
+  }
+  async function flushPad() {
+    const uid = await myAuth();
+    const pend = padPending(uid);
+    if (pend != null && !padSaving) pushPad(pend);
   }
 
   // ── Status line ─────────────────────────────────────────────────────────
@@ -367,9 +398,9 @@
          </div>`;
     if (pad) {
       return head + `<div class="ssn-padwrap">
-        <div class="ssn-hint">Only you can see this. It follows you across every job.</div>
+        <div class="ssn-hint">Only you can see this. It follows you across every job and every device you sign in on.</div>
         <label class="ssn-sr" for="ssnPad">My scratchpad</label>
-        <textarea id="ssnPad" class="ssn-pad" placeholder="Reminders, calls to make, anything…">${esc(lsGet(LS.pad, ''))}</textarea>
+        <textarea id="ssnPad" class="ssn-pad" placeholder="${padText == null ? 'Loading…' : 'Reminders, calls to make, anything…'}"${padText == null ? ' disabled' : ''}>${esc(padText || '')}</textarea>
         <div class="ssn-status ${state.statusKind}">${esc(state.status || 'Saves as you type')}</div></div>`;
     }
     const items = feedItems(jobId);
@@ -658,9 +689,16 @@
       render();
     }).observe(ov, { attributes: true, attributeFilter: ['class'] });
     window.matchMedia(WIDE).addEventListener('change', () => render());
-    window.addEventListener('online', flushOutbox);
+    window.addEventListener('online', () => { flushOutbox(); flushPad(); });
+    // Coming back to the app: pick up scratchpad changes made on another device
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      flushPad();
+      if (state.tab === 'pad' && !document.querySelector('.ssn-pad:focus')) loadPad();
+    });
+    lsSet('ssScratchpad', null);   // old shared-device copy (not tied to a user); the account copy is the real one
     myAuth().then(() => render());
-    setTimeout(flushOutbox, 3000);
+    setTimeout(() => { flushOutbox(); flushPad(); }, 3000);
     render();
   }
 
