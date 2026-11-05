@@ -658,7 +658,6 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="supabase-crm.js?v=5"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=1"></script>
-<script src="crm-checkread.js?v=1"></script>
 <script src="crm-packet.js?v=17"></script>
 <script src="crm-notes.js?v=8"></script>
 <script src="crm-notifications.js?v=2"></script>
@@ -4564,11 +4563,7 @@ function openCheckMoneySheet(jobId, recIndex){
 #cmsOverlay .cms-amt span{color:#8B93A3;font-size:20px}
 #cmsOverlay .cms-amt input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#E8ECF3;font-size:20px;font-weight:700;font-family:inherit}
 #cmsOverlay .cms-hint{margin-top:6px;font-size:12px;color:#8B93A3}
-#cmsOverlay .cms-hint.ok{color:#6EE7B7}
-#cmsOverlay .cms-hint.warn{color:#F2C46B}
-#cmsOverlay .cms-picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-#cmsOverlay .cms-pick{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:#0E1219;color:#E8ECF3;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-#cmsOverlay .cms-pick.on{border-color:#3B7BF0;background:#172443;color:#8FB4FF}
+#cmsOverlay .cms-hint.ok{color:#8FB4FF}
 #cmsOverlay .cms-chips{display:flex;flex-wrap:wrap;gap:6px}
 #cmsOverlay .cms-chip{min-height:38px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:#1A1F29;color:#C4CBD8;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 #cmsOverlay .cms-chip.on{background:#172443;border-color:#3B7BF0;color:#8FB4FF}
@@ -4663,38 +4658,11 @@ function openCheckMoneySheet(jobId, recIndex){
       const got = parseCheckText(text);
       if(!document.body.contains(ov)) return;
       if(got.checkNum && !$c('cmsNum').value) $c('cmsNum').value = got.checkNum;
-      // Cross-check the $ box against the written ("legal") amount.
-      const r = window.crmCheckRead ? window.crmCheckRead.read(text, () => got.amount) : { amount: got.amount, status: got.amount ? 'numeric' : 'none', others: [] };
-      if(amt.value){ hint.textContent = ''; return; }   // they typed while we read
-      if(!r.amount){ hint.textContent = "Couldn't read the amount — type it in"; return; }
-      amt.value = Number(r.amount).toFixed(2); syncBtn();
-      hint.dataset.read = '1';
-      const money = n => '$' + usd2(n);
-      const msg = {
-        match:    `✓ Matches the written amount on the check`,
-        mismatch: `The written amount says ${money(r.written)} but the $ box looks like ${money(r.numeric)} — tap the right one`,
-        written:  `Read from the written amount — check it matches the check`,
-        numeric:  `Read from the $ box — check it matches the check`,
-      }[r.status] || 'Read from the photo — check it matches the check';
-      hint.className = 'cms-hint ' + (r.status === 'match' ? 'ok' : r.status === 'mismatch' ? 'warn' : '');
-      hint.textContent = msg;
-      // Tap-to-pick: the other amounts it could be.
-      const picks = r.status === 'mismatch' ? [r.written, r.numeric, ...(r.others || [])] : (r.status === 'match' ? [] : (r.others || []));
-      const uniq = [...new Set(picks.filter(n => n > 0).map(n => Number(n).toFixed(2)))];
-      if(uniq.length > (r.status === 'mismatch' ? 1 : 0)){
-        const row = document.createElement('div'); row.className = 'cms-picks'; row.setAttribute('role', 'group'); row.setAttribute('aria-label', 'Amounts found on the check');
-        uniq.slice(0, 4).forEach(v => {
-          const b = document.createElement('button'); b.type = 'button'; b.className = 'cms-pick' + (v === amt.value ? ' on' : '');
-          b.textContent = money(+v) + (r.written && Number(r.written).toFixed(2) === v ? ' · written' : '');
-          b.addEventListener('click', () => {
-            amt.value = v; syncBtn();
-            row.querySelectorAll('.cms-pick').forEach(x => x.classList.toggle('on', x === b));
-            hint.className = 'cms-hint'; hint.textContent = 'Picked — make sure it matches the check';
-          });
-          row.appendChild(b);
-        });
-        hint.after(row);
-      }
+      if(got.amount && !amt.value){
+        amt.value = Number(got.amount).toFixed(2); syncBtn();
+        hint.textContent = 'Read from the photo — check it matches the check'; hint.className = 'cms-hint ok'; hint.dataset.read = '1';
+      } else if(!amt.value){ hint.textContent = "Couldn't read the amount — type it in"; }
+      else { hint.textContent = ''; }
     } catch(e){
       console.warn('[check] read failed', e);
       if(document.body.contains(ov) && !amt.value) hint.textContent = "Couldn't read the amount — type it in";

@@ -75,4 +75,53 @@ test('no camera in Node: open() hands off to the fallback', () => {
   assert.strictEqual(globalThis.crmCheckCam, cam);   // older name still works
 });
 
+
+// ---- auto-snap ----
+// A sample W×H: frame occupies the middle (15% margin each side, like the camera's sample).
+function scene(opts) {
+  const w = 160, h = 80, lum = new Uint8Array(w * h).fill(opts.bg == null ? 45 : opts.bg);
+  const f = { x0: 0.15 / 1.3, x1: 1.15 / 1.3, y0: 0.15 / 1.3, y1: 1.15 / 1.3 };
+  if (opts.paper) {
+    const p = opts.paper;   // paper rect in sample fractions
+    for (let y = Math.round(p.y0 * h); y < Math.round(p.y1 * h); y++)
+      for (let x = Math.round(p.x0 * w); x < Math.round(p.x1 * w); x++) lum[y * w + x] = opts.fg == null ? 225 : opts.fg;
+    // a bit of "print" on the paper
+    for (let x = Math.round(p.x0 * w) + 6; x < Math.round(p.x1 * w) - 6; x += 3) lum[Math.round(((p.y0 + p.y1) / 2) * h) * w + x] = 60;
+  }
+  return { lum, w, h, f };
+}
+const run = o => { const s = scene(o); return cam.analyze(s.lum, s.w, s.h, s.f).state; };
+const F = { x0: 0.15 / 1.3, x1: 1.15 / 1.3, y0: 0.15 / 1.3, y1: 1.15 / 1.3 };
+
+test('auto-snap: paper filling the frame on a dark surface → ok', () => {
+  assert.strictEqual(run({ paper: { x0: F.x0 + 0.01, x1: F.x1 - 0.01, y0: F.y0 + 0.02, y1: F.y1 - 0.02 } }), 'ok');
+});
+test('auto-snap: paper slightly smaller than the frame still counts', () => {
+  const m = 0.07;
+  assert.strictEqual(run({ paper: { x0: F.x0 + m, x1: F.x1 - m, y0: F.y0 + m, y1: F.y1 - m } }), 'ok');
+});
+test('auto-snap: paper too small → move closer', () => {
+  assert.strictEqual(run({ paper: { x0: 0.3, x1: 0.7, y0: 0.35, y1: 0.65 } }), 'far');
+});
+test('auto-snap: paper off to one side → center it', () => {
+  assert.strictEqual(run({ paper: { x0: F.x0 + 0.12, x1: F.x1 + 0.1, y0: F.y0, y1: F.y1 } }), 'center');
+});
+test('auto-snap: paper bigger than the frame → move back', () => {
+  assert.strictEqual(run({ paper: { x0: 0, x1: 1, y0: 0.02, y1: 0.98 } }), 'near');
+});
+test('auto-snap: white paper on a white counter → ask for a darker surface', () => {
+  assert.strictEqual(run({ bg: 205, fg: 225, paper: { x0: F.x0, x1: F.x1, y0: F.y0, y1: F.y1 } }), 'contrast');
+});
+test('auto-snap: too dark', () => {
+  assert.strictEqual(run({ bg: 10, fg: 30, paper: { x0: F.x0, x1: F.x1, y0: F.y0, y1: F.y1 } }), 'dark');
+});
+test('auto-snap: nothing there', () => {
+  assert.strictEqual(run({}), 'none');
+});
+test('auto-snap: motion is ~0 for the same picture and large when it changes', () => {
+  const a = scene({ paper: { x0: 0.2, x1: 0.8, y0: 0.2, y1: 0.8 } }).lum, b = scene({}).lum;
+  assert.strictEqual(cam.motion(a, a), 0);
+  assert.ok(cam.motion(a, b) > 30);
+});
+
 console.log(`\n${passed} passed`);

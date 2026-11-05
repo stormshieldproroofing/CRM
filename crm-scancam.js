@@ -21,7 +21,12 @@
      onFallback()     live camera not available — use the phone camera
    })
 
-   The layout / crop math is plain functions so it can be tested in Node.
+   Auto-snap: a few times a second it looks at a small copy of the picture
+   around the frame. When light paper fills the frame on a darker surface
+   and the phone is held still, the corners turn green and it takes the
+   photo by itself. The Auto button turns this off; the shutter always works.
+
+   The layout / crop / auto-snap math is plain functions so it can be tested in Node.
    ============================================================ */
 
 (function (root, factory) {
@@ -74,6 +79,88 @@
     return turn ? { w: h, h: w } : { w, h };
   }
 
+  /* ---------- auto-snap ---------- */
+
+  // Otsu's threshold: the brightness that best splits paper from background.
+  function otsu(hist, n) {
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += i * hist[i];
+    let sumB = 0, wB = 0, best = 0, t = 127;
+    for (let i = 0; i < 256; i++) {
+      wB += hist[i]; if (!wB) continue;
+      const wF = n - wB; if (!wF) break;
+      sumB += i * hist[i];
+      const mB = sumB / wB, mF = (sum - sumB) / wF;
+      const v = wB * wF * (mB - mF) * (mB - mF);
+      if (v > best) { best = v; t = i; }
+    }
+    return t;
+  }
+
+  // Longest stretch of "paper" columns (or rows) → [start, end) or null.
+  // A column is paper when it's at least half as bright as the brightest one;
+  // short gaps (a printed line, a signature) don't break the stretch.
+  function longestRun(frac) {
+    let max = 0;
+    for (let i = 0; i < frac.length; i++) if (frac[i] > max) max = frac[i];
+    if (max < 0.15) return null;
+    const thr = max * 0.5, gap = Math.max(2, Math.round(frac.length * 0.05));
+    let bs = -1, be = -1, s = -1, lastOn = -1;
+    for (let i = 0; i <= frac.length; i++) {
+      const on = i < frac.length && frac[i] > thr;
+      if (on) { if (s < 0 || i - lastOn > gap + 1) { if (s >= 0 && lastOn + 1 - s > be - bs) { bs = s; be = lastOn + 1; } s = i; } lastOn = i; }
+    }
+    if (s >= 0 && lastOn + 1 - s > be - bs) { bs = s; be = lastOn + 1; }
+    return bs < 0 ? null : [bs, be];
+  }
+
+  // Is the paper lined up with the frame?
+  //   lum  brightness 0–255 of a small sample around the frame, w × h, row by row
+  //   f    the frame inside that sample, as fractions { x0, y0, x1, y1 }
+  // → { state, box }  state: 'ok' | 'none' | 'dark' | 'contrast' | 'far' | 'near' | 'center'
+  function analyze(lum, w, h, f) {
+    const n = w * h;
+    const hist = new Array(256).fill(0);
+    let sum = 0;
+    for (let i = 0; i < n; i++) { hist[lum[i]]++; sum += lum[i]; }
+    if (sum / n < 35) return { state: 'dark' };
+    const t = otsu(hist, n);
+    const col = new Float32Array(w), row = new Float32Array(h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (lum[y * w + x] > t) { col[x]++; row[y]++; }
+    for (let x = 0; x < w; x++) col[x] /= h;
+    for (let y = 0; y < h; y++) row[y] /= w;
+    const cr = longestRun(col), rr = longestRun(row);
+    if (!cr || !rr) return { state: 'none' };
+    const [x0, x1] = cr, [y0, y1] = rr;
+    let inS = 0, inN = 0, inB = 0, outS = 0, outN = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const v = lum[y * w + x];
+      if (x >= x0 && x < x1 && y >= y0 && y < y1) { inS += v; inN++; if (v > t) inB++; }
+      else { outS += v; outN++; }
+    }
+    const box = { x0: x0 / w, x1: x1 / w, y0: y0 / h, y1: y1 / h };
+    if (!outN) return { state: 'near', box };   // paper runs past the sample on every side
+    if (inS / inN - outS / outN < 28) return { state: 'contrast', box };
+    if (inB / inN < 0.75) return { state: 'none', box };
+    const fw = f.x1 - f.x0, fh = f.y1 - f.y0;
+    const rw = (box.x1 - box.x0) / fw, rh = (box.y1 - box.y0) / fh;
+    const dx = ((box.x0 + box.x1) / 2 - (f.x0 + f.x1) / 2) / fw;
+    const dy = ((box.y0 + box.y1) / 2 - (f.y0 + f.y1) / 2) / fh;
+    if (rw > 1.14 || rh > 1.18) return { state: 'near', box };
+    if (rw < 0.6 && rh < 0.6) return { state: 'far', box };
+    if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) return { state: 'center', box };
+    if (rw < 0.8 || rh < 0.75) return { state: 'far', box };
+    return { state: 'ok', box };
+  }
+
+  // Average brightness change between two samples (0–255): small = phone held still.
+  function motion(a, b) {
+    if (!a || !b || a.length !== b.length) return 255;
+    let d = 0;
+    for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]);
+    return d / a.length;
+  }
+
   const hasDOM = typeof document !== 'undefined';
   function supported() {
     return hasDOM && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -104,6 +191,7 @@
 .sscam-guide{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:6px;white-space:nowrap;padding:6px 10px;border-radius:999px;background:rgba(14,18,25,.75);font-size:12px;font-weight:600;color:#C4CBD8;pointer-events:none}
 .sscam-top{position:absolute;left:0;right:0;top:0;padding:calc(8px + env(safe-area-inset-top)) 12px 0;display:flex;align-items:center;justify-content:space-between}
 .sscam-title{font-size:17px;font-weight:700}
+.sscam-top .sscam-title{position:absolute;left:50%;top:calc(8px + env(safe-area-inset-top));height:44px;line-height:44px;transform:translateX(-50%);white-space:nowrap}
 .sscam-ib{width:44px;height:44px;border-radius:22px;border:0;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .sscam-ib[aria-pressed="true"]{background:#F2C46B;color:#1C1B19}
 .sscam-ib.ghost{visibility:hidden}
@@ -126,6 +214,13 @@
 .sscam-flash.on{opacity:.8;transition:none}
 .sscam-toast{position:absolute;left:50%;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(13,41,24,.95);border:1px solid rgba(52,211,153,.4);color:#6EE7B7;font-size:13px;font-weight:600;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s}
 .sscam-toast.on{opacity:1}
+.sscam-frame .sscam-c{transition:border-color .15s}
+.sscam-frame.lock .sscam-c{border-color:#34D399}
+.sscam-status{position:absolute;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(14,18,25,.85);border:1px solid rgba(255,255,255,.18);font-size:13px;font-weight:600;text-align:center;pointer-events:none;box-sizing:border-box}
+.sscam-status.lock{background:rgba(13,41,24,.92);border-color:rgba(52,211,153,.45);color:#6EE7B7}
+.sscam-rgt{display:flex;gap:8px;align-items:center}
+.sscam-auto{min-height:44px;padding:0 14px;border-radius:22px;border:0;background:rgba(255,255,255,.12);color:#C4CBD8;font:700 13px Inter,system-ui,sans-serif;cursor:pointer}
+.sscam-auto[aria-pressed="true"]{background:#0D2918;color:#6EE7B7;box-shadow:inset 0 0 0 1px rgba(52,211,153,.45)}
 .sscam-msg{position:absolute;left:24px;right:24px;top:40%;transform:translateY(-50%);text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center;font-size:15px;line-height:1.45}
 .sscam-btn{min-height:50px;padding:0 22px;border:0;border-radius:12px;background:#2F6FEB;color:#fff;font:700 15px Inter,system-ui,sans-serif;cursor:pointer}
 .sscam-btn.sec{background:#1A1F29;color:#E8ECF3;border:1px solid #252B38}
@@ -163,10 +258,14 @@
       <div class="sscam-top">
         <button type="button" class="sscam-ib" data-act="close" aria-label="Close">${ICON.x}</button>
         <div class="sscam-title"></div>
-        <button type="button" class="sscam-ib ghost" data-act="torch" aria-label="Flash" aria-pressed="false">${ICON.bolt}</button>
+        <div class="sscam-rgt">
+          <button type="button" class="sscam-ib ghost" data-act="torch" aria-label="Flash" aria-pressed="false">${ICON.bolt}</button>
+          <button type="button" class="sscam-auto" data-act="auto" aria-pressed="true" title="Take the photo automatically when it's lined up">Auto</button>
+        </div>
       </div>
       <div class="sscam-pill"></div>
       <div class="sscam-toast"></div>
+      <div class="sscam-status" hidden></div>
       <div class="sscam-tips"><b></b><span></span></div>
       <div class="sscam-msg" hidden></div>
       <div class="sscam-ctrl">
@@ -188,6 +287,11 @@
     let step = 'front', retakeAt = -1;
     let stream = null, track = null, closed = false, busy = false;
     let frame = null, land = false, turn = false;
+    let auto = true;
+    try { auto = localStorage.getItem('ssScanAuto') !== '0'; } catch (e) {}
+    let armed = true, okTicks = 0, offTicks = 0, prevLum = null, timer = null;
+    const sample = document.createElement('canvas');
+    const sctx = sample.getContext('2d', { willReadFrequently: true });
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -236,6 +340,11 @@
       Object.assign(frameEl.style, { left: frame.x + 'px', top: frame.y + 'px', width: frame.w + 'px', height: frame.h + 'px' });
       $('.sscam-guide').hidden = !turn;
       $('.sscam-toast').style.top = (frame.y + 12) + 'px';
+      const st = $('.sscam-status');
+      st.style.left = (frame.x + frame.w / 2) + 'px';
+      st.style.maxWidth = Math.max(140, frame.w - 16) + 'px';
+      st.style.top = (frame.y + frame.h - 52) + 'px';
+      $('[data-act="auto"]').setAttribute('aria-pressed', String(auto));
     }
 
     function paint() {
@@ -278,6 +387,7 @@
     function close() {
       if (closed) return;
       closed = true;
+      clearTimeout(timer);
       stopStream();
       revokeAll();
       document.body.style.overflow = prevOverflow;
@@ -397,14 +507,72 @@
     }
 
     function backToCamera() {
+      armed = true; okTicks = 0; prevLum = null;
       review.hidden = true;
       layout();
       start();
     }
 
+    const MSG = {
+      none: mode === 'doc' ? 'Line up the page in the frame' : 'Line up the check in the frame',
+      dark: 'Needs more light',
+      contrast: 'Use a darker surface to auto-snap',
+      far: 'Move closer',
+      near: 'Move back a little',
+      center: 'Center it in the frame',
+    };
+    function setStatus(text, lock) {
+      const st = $('.sscam-status');
+      st.hidden = !text;
+      if (text) st.textContent = text;
+      st.classList.toggle('lock', !!lock);
+      frameEl.classList.toggle('lock', !!lock);
+    }
+
+    // A few times a second: is the paper lined up and the phone still? Then take it.
+    function tick() {
+      timer = setTimeout(tick, 140);
+      if (!auto || !stream || busy || !review.hidden || !video.videoWidth || !frame) {
+        if (!auto) setStatus(null);
+        return;
+      }
+      const W = wrap.clientWidth, H = wrap.clientHeight;
+      const mx = frame.w * 0.15, my = frame.h * 0.15;
+      const r = { x: Math.max(0, frame.x - mx), y: Math.max(0, frame.y - my) };
+      r.w = Math.min(W, frame.x + frame.w + mx) - r.x;
+      r.h = Math.min(H, frame.y + frame.h + my) - r.y;
+      const c = cropRect(W, H, video.videoWidth, video.videoHeight, r, 0);
+      const k = 160 / Math.max(r.w, r.h);
+      const w = Math.max(8, Math.round(r.w * k)), h = Math.max(8, Math.round(r.h * k));
+      if (sample.width !== w || sample.height !== h) { sample.width = w; sample.height = h; prevLum = null; }
+      let px;
+      try { sctx.drawImage(video, c.sx, c.sy, c.sw, c.sh, 0, 0, w, h); px = sctx.getImageData(0, 0, w, h).data; }
+      catch (e) { return; }
+      const lum = new Uint8Array(w * h);
+      for (let i = 0, j = 0; j < lum.length; i += 4, j++) lum[j] = (px[i] * 77 + px[i + 1] * 150 + px[i + 2] * 29) >> 8;
+      const f = { x0: (frame.x - r.x) / r.w, x1: (frame.x + frame.w - r.x) / r.w, y0: (frame.y - r.y) / r.h, y1: (frame.y + frame.h - r.y) / r.h };
+      const res = analyze(lum, w, h, f);
+      const still = motion(lum, prevLum) < 6;
+      prevLum = lum;
+      if (res.state === 'ok') {
+        offTicks = 0;
+        if (!armed) { setStatus('Got it \u2014 ' + (mode === 'doc' ? 'next page' : (step === 'back' ? 'flip it over' : 'next')), true); return; }
+        okTicks = still ? okTicks + 1 : 0;
+        setStatus(still ? 'Hold steady\u2026' : 'Hold still\u2026', true);
+        if (okTicks >= 3) shoot();
+      } else {
+        okTicks = 0;
+        if (++offTicks >= 3) armed = true;   // the paper moved away: ready for the next one
+        let text = MSG[res.state] || MSG.none;
+        if (res.state === 'dark' && !$('[data-act="torch"]').classList.contains('ghost')) text += ' \u2014 try the flash';
+        setStatus(text, false);
+      }
+    }
+
     async function shoot() {
       if (busy || !stream || !video.videoWidth) return;
       busy = true;
+      armed = false; okTicks = 0;   // wait for the paper to change before auto-snapping again
       const fl = $('.sscam-flash');
       fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60);
       try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
@@ -463,6 +631,13 @@
         } else { close(); if (opts.onUpload) opts.onUpload(); }
       }
       else if (act === 'review') showReview();
+      else if (act === 'auto') {
+        auto = !auto; b.setAttribute('aria-pressed', String(auto));
+        try { localStorage.setItem('ssScanAuto', auto ? '1' : '0'); } catch (x) {}
+        armed = true; okTicks = 0;
+        if (!auto) setStatus(null);
+        toast(auto ? 'Auto-snap on' : 'Auto-snap off \u2014 tap the shutter');
+      }
       else if (act === 'torch' && track) {
         const on = b.getAttribute('aria-pressed') !== 'true';
         track.applyConstraints({ advanced: [{ torch: on }] }).then(() => b.setAttribute('aria-pressed', String(on))).catch(() => {});
@@ -485,6 +660,7 @@
     document.addEventListener('visibilitychange', onVis);
     layout();
     start();
+    tick();
     return { close };
   }
 
@@ -501,5 +677,5 @@
     return new Blob([await doc.save()], { type: 'application/pdf' });
   }
 
-  return { CHECK_RATIO, DOC_RATIO, frameRatio, fitFrame, cropRect, outSize, supported, open, pagesToPdf };
+  return { CHECK_RATIO, DOC_RATIO, frameRatio, fitFrame, cropRect, outSize, otsu, analyze, motion, supported, open, pagesToPdf };
 });
