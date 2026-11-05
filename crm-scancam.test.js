@@ -124,4 +124,26 @@ test('auto-snap: motion is ~0 for the same picture and large when it changes', (
   assert.ok(cam.motion(a, b) > 30);
 });
 
+
+test('auto-snap: camera grain alone does not count as movement', () => {
+  const s = scene({ paper: { x0: F.x0, x1: F.x1, y0: F.y0, y1: F.y1 } });
+  // ±12 brightness of random grain per pixel, like a real phone sensor indoors
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const noisy = () => Uint8Array.from(s.lum, v => Math.max(0, Math.min(255, v + Math.round((rnd() - 0.5) * 24))));
+  const a = noisy(), b = noisy();
+  assert.ok(cam.motion(a, b) >= 6, 'pixel-by-pixel sees grain as movement (the old bug)');
+  assert.ok(cam.motion(a, b, s.w) < cam.STILL, `block compare ignores grain: ${cam.motion(a, b, s.w)}`);
+});
+test('auto-snap: a real shift of the phone still counts as movement', () => {
+  const a = scene({ paper: { x0: F.x0, x1: F.x1, y0: F.y0, y1: F.y1 } });
+  const b = scene({ paper: { x0: F.x0 + 0.08, x1: F.x1 + 0.08, y0: F.y0 + 0.08, y1: F.y1 + 0.08 } });
+  assert.ok(cam.motion(a.lum, b.lum, a.w) > cam.STEADY);
+});
+test('auto-snap: snaps after ~0.4s still, or ~1.1s steady-enough in the hand', () => {
+  assert.strictEqual(cam.readyToSnap(2, 2), false);
+  assert.strictEqual(cam.readyToSnap(3, 3), true);
+  assert.strictEqual(cam.readyToSnap(0, 7), false);
+  assert.strictEqual(cam.readyToSnap(0, 8), true);
+});
+
 console.log(`\n${passed} passed`);
