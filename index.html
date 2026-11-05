@@ -657,6 +657,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-rep.js"></script>
 <script src="supabase-crm.js?v=5"></script>
 <script src="crm-photos.js?v=1"></script>
+<script src="crm-checkcam.js?v=1"></script>
 <script src="crm-packet.js?v=17"></script>
 <script src="crm-notes.js?v=8"></script>
 <script src="crm-notifications.js?v=2"></script>
@@ -9336,11 +9337,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             Upload File
             <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="checkAddFiles(this.files)">
           </label>
-          <label class="chk-upload-btn">
+          <button type="button" class="chk-upload-btn" onclick="checkScan()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             Scan Check
-            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="checkAddFiles(this.files)">
-          </label>
+          </button>
         </div>
       </div>
 
@@ -9378,11 +9378,13 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       </div>`:''}`;
     }
     body.innerHTML = checksHTML();
-    window.checkAddFiles=async function(files){
-      const pending=Array.from(files);
+    // opts.backOf: indexes (in files) that are the back of a check — saved as photos, not payments
+    window.checkAddFiles=async function(files, opts){
+      const pending=Array.from(files||[]).filter(Boolean);
       if(!pending.length) return;
       toast('Uploading…');
       const records=await Promise.all(pending.map(f=>intakeJobFile(f,'check',null)));
+      ((opts&&opts.backOf)||[]).forEach(i=>{ if(records[i]) records[i].photoOnly=true; });
       const firstNew=j.checks.length;
       j.checks.push(...records);
       saveToStorage();
@@ -9391,6 +9393,18 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       toast('Check uploaded');
       // Ask for the amount right away so it lands in Money
       if(records.length) openCheckMoneySheet(j.id, firstNew);
+    };
+    // Scan Check: the in-app check camera (frame, front + back, cropped). Falls back to the phone camera.
+    window.checkScan=function(){
+      const pick=(capture)=>{ const inp=document.createElement('input'); inp.type='file';
+        if(capture){ inp.accept='image/*'; inp.setAttribute('capture','environment'); } else { inp.accept='.pdf,image/*'; inp.multiple=true; }
+        inp.style.display='none'; inp.addEventListener('change',()=>{ checkAddFiles(inp.files); inp.remove(); }); document.body.appendChild(inp); inp.click(); };
+      if(!window.crmCheckCam){ pick(true); return; }
+      window.crmCheckCam.open({
+        onDone: ({front, back}) => checkAddFiles([front, back].filter(Boolean), { backOf: front && back ? [1] : (back && !front ? [0] : []) }),
+        onUpload: () => pick(false),
+        onFallback: () => pick(true),
+      });
     };
     window.checkDelete=function(i){const rec=j.checks[i];(j.deposits||[]).forEach(d=>{if(d.checkFile&&rec&&((d.checkFile.id&&d.checkFile.id===rec.id)||(d.checkFile.path&&d.checkFile.path===rec.path)))delete d.checkFile;});window.deleteJobFile?.(rec);j.checks.splice(i,1);saveToStorage();body.innerHTML=checksHTML();wireCheckLightbox()};
     window.checkOpenFile=function(i){
