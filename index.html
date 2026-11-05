@@ -657,7 +657,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-rep.js"></script>
 <script src="supabase-crm.js?v=5"></script>
 <script src="crm-photos.js?v=1"></script>
-<script src="crm-checkcam.js?v=1"></script>
+<script src="crm-scancam.js?v=1"></script>
+<script src="crm-checkread.js?v=1"></script>
 <script src="crm-packet.js?v=17"></script>
 <script src="crm-notes.js?v=8"></script>
 <script src="crm-notifications.js?v=2"></script>
@@ -4563,7 +4564,11 @@ function openCheckMoneySheet(jobId, recIndex){
 #cmsOverlay .cms-amt span{color:#8B93A3;font-size:20px}
 #cmsOverlay .cms-amt input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#E8ECF3;font-size:20px;font-weight:700;font-family:inherit}
 #cmsOverlay .cms-hint{margin-top:6px;font-size:12px;color:#8B93A3}
-#cmsOverlay .cms-hint.ok{color:#8FB4FF}
+#cmsOverlay .cms-hint.ok{color:#6EE7B7}
+#cmsOverlay .cms-hint.warn{color:#F2C46B}
+#cmsOverlay .cms-picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+#cmsOverlay .cms-pick{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:#0E1219;color:#E8ECF3;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+#cmsOverlay .cms-pick.on{border-color:#3B7BF0;background:#172443;color:#8FB4FF}
 #cmsOverlay .cms-chips{display:flex;flex-wrap:wrap;gap:6px}
 #cmsOverlay .cms-chip{min-height:38px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:#1A1F29;color:#C4CBD8;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 #cmsOverlay .cms-chip.on{background:#172443;border-color:#3B7BF0;color:#8FB4FF}
@@ -4658,11 +4663,38 @@ function openCheckMoneySheet(jobId, recIndex){
       const got = parseCheckText(text);
       if(!document.body.contains(ov)) return;
       if(got.checkNum && !$c('cmsNum').value) $c('cmsNum').value = got.checkNum;
-      if(got.amount && !amt.value){
-        amt.value = Number(got.amount).toFixed(2); syncBtn();
-        hint.textContent = 'Read from the photo — check it matches the check'; hint.className = 'cms-hint ok'; hint.dataset.read = '1';
-      } else if(!amt.value){ hint.textContent = "Couldn't read the amount — type it in"; }
-      else { hint.textContent = ''; }
+      // Cross-check the $ box against the written ("legal") amount.
+      const r = window.crmCheckRead ? window.crmCheckRead.read(text, () => got.amount) : { amount: got.amount, status: got.amount ? 'numeric' : 'none', others: [] };
+      if(amt.value){ hint.textContent = ''; return; }   // they typed while we read
+      if(!r.amount){ hint.textContent = "Couldn't read the amount — type it in"; return; }
+      amt.value = Number(r.amount).toFixed(2); syncBtn();
+      hint.dataset.read = '1';
+      const money = n => '$' + usd2(n);
+      const msg = {
+        match:    `✓ Matches the written amount on the check`,
+        mismatch: `The written amount says ${money(r.written)} but the $ box looks like ${money(r.numeric)} — tap the right one`,
+        written:  `Read from the written amount — check it matches the check`,
+        numeric:  `Read from the $ box — check it matches the check`,
+      }[r.status] || 'Read from the photo — check it matches the check';
+      hint.className = 'cms-hint ' + (r.status === 'match' ? 'ok' : r.status === 'mismatch' ? 'warn' : '');
+      hint.textContent = msg;
+      // Tap-to-pick: the other amounts it could be.
+      const picks = r.status === 'mismatch' ? [r.written, r.numeric, ...(r.others || [])] : (r.status === 'match' ? [] : (r.others || []));
+      const uniq = [...new Set(picks.filter(n => n > 0).map(n => Number(n).toFixed(2)))];
+      if(uniq.length > (r.status === 'mismatch' ? 1 : 0)){
+        const row = document.createElement('div'); row.className = 'cms-picks'; row.setAttribute('role', 'group'); row.setAttribute('aria-label', 'Amounts found on the check');
+        uniq.slice(0, 4).forEach(v => {
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'cms-pick' + (v === amt.value ? ' on' : '');
+          b.textContent = money(+v) + (r.written && Number(r.written).toFixed(2) === v ? ' · written' : '');
+          b.addEventListener('click', () => {
+            amt.value = v; syncBtn();
+            row.querySelectorAll('.cms-pick').forEach(x => x.classList.toggle('on', x === b));
+            hint.className = 'cms-hint'; hint.textContent = 'Picked — make sure it matches the check';
+          });
+          row.appendChild(b);
+        });
+        hint.after(row);
+      }
     } catch(e){
       console.warn('[check] read failed', e);
       if(document.body.contains(ov) && !amt.value) hint.textContent = "Couldn't read the amount — type it in";
@@ -4752,10 +4784,12 @@ async function intakeJobFile(file, kind, section){
     working = renameJobFile(file, kind, section) || file;
   } catch(e){ console.warn('[intake] rename failed, using original name', e); working = file; }
 
-  // Step 2: downsize if image (never fatal)
+  // Step 2: downsize if image (never fatal). Scan-camera photos ("check-…", "scan-…") are
+  // already cropped to the page, so keep them sharp for the text reader.
   let sized = working;
+  const _isScan = /^(check|scan)-/.test(file?.name || '');
   try {
-    sized = await downsizeImageFile(working) || working;
+    sized = await (_isScan ? downsizeImageFile(working, 2400, 0.88) : downsizeImageFile(working)) || working;
   } catch(e){ console.warn('[intake] downsize failed, using full size', e); sized = working; }
 
   // Step 3: upload to Supabase storage if available
@@ -4788,6 +4822,34 @@ async function intakeJobFile(file, kind, section){
   return rec;
 }
 window.intakeJobFile = intakeJobFile;
+
+// Scan with the in-app camera (crm-scancam.js): mode 'check' or 'doc'.
+// onFiles(files[, opts]) gets what was scanned — the same handler the Upload button uses.
+// Falls back to the phone's camera / file picker when the live camera isn't available.
+function ssScan(mode, onFiles, opts){
+  opts = opts || {};
+  const pick = (capture) => {
+    const inp = document.createElement('input'); inp.type = 'file';
+    if(capture){ inp.accept = 'image/*'; inp.setAttribute('capture', 'environment'); }
+    else { inp.accept = '.pdf,image/*'; inp.multiple = true; }
+    inp.style.display = 'none';
+    inp.addEventListener('change', () => { onFiles(inp.files); inp.remove(); });
+    document.body.appendChild(inp); inp.click();
+  };
+  if(!window.crmScanCam){ pick(true); return; }
+  window.crmScanCam.open({
+    mode, title: opts.title,
+    onDone: r => {
+      if(mode === 'check'){
+        const files = [r.front, r.back].filter(Boolean);
+        if(files.length) onFiles(files, { backOf: r.front && r.back ? [1] : [] });
+      } else if(r.files && r.files.length) onFiles(r.files);
+    },
+    onUpload: () => pick(false),
+    onFallback: () => pick(true),
+  });
+}
+window.ssScan = ssScan;
 
 // Produce a renamed File with a clean, descriptive name based on the open job.
 // Pattern: "Name - Address - Type - YYYY-MM-DD - ##.ext"
@@ -9208,11 +9270,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             Upload File
             <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="contractAddFiles(this.files)">
           </label>
-          <label class="doc-upload-btn">
+          <button type="button" class="doc-upload-btn" onclick="ssScan('doc', f => contractAddFiles(f), { title:'Scan contract' })">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             Scan / Photo
-            <input type="file" accept="image/*" capture="environment" style="display:none" onchange="contractAddFiles(this.files)">
-          </label>
+          </button>
         </div>
       </div>
 
@@ -9395,17 +9456,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(records.length) openCheckMoneySheet(j.id, firstNew);
     };
     // Scan Check: the in-app check camera (frame, front + back, cropped). Falls back to the phone camera.
-    window.checkScan=function(){
-      const pick=(capture)=>{ const inp=document.createElement('input'); inp.type='file';
-        if(capture){ inp.accept='image/*'; inp.setAttribute('capture','environment'); } else { inp.accept='.pdf,image/*'; inp.multiple=true; }
-        inp.style.display='none'; inp.addEventListener('change',()=>{ checkAddFiles(inp.files); inp.remove(); }); document.body.appendChild(inp); inp.click(); };
-      if(!window.crmCheckCam){ pick(true); return; }
-      window.crmCheckCam.open({
-        onDone: ({front, back}) => checkAddFiles([front, back].filter(Boolean), { backOf: front && back ? [1] : (back && !front ? [0] : []) }),
-        onUpload: () => pick(false),
-        onFallback: () => pick(true),
-      });
-    };
+    window.checkScan=function(){ ssScan('check', (files, o) => checkAddFiles(files, o), { title:'Scan check' }); };
     window.checkDelete=function(i){const rec=j.checks[i];(j.deposits||[]).forEach(d=>{if(d.checkFile&&rec&&((d.checkFile.id&&d.checkFile.id===rec.id)||(d.checkFile.path&&d.checkFile.path===rec.path)))delete d.checkFile;});window.deleteJobFile?.(rec);j.checks.splice(i,1);saveToStorage();body.innerHTML=checksHTML();wireCheckLightbox()};
     window.checkOpenFile=function(i){
       const f=j.checks[i];if(!f)return;
@@ -9453,7 +9504,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         ${files}
         <div class="idoc-btns">
           <label class="idoc-up"><i class="ti ti-upload" aria-hidden="true"></i>${done ? 'Add' : 'Upload'}<input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="${add}(this.files)"></label>
-          <label class="idoc-cam" aria-label="Take photo"><i class="ti ti-camera" aria-hidden="true"></i><input type="file" accept="image/*" capture="environment" style="display:none" onchange="${add}(this.files)"></label>
+          <button type="button" class="idoc-cam" aria-label="Scan with camera" onclick="ssScan('doc', f => ${add}(f), { title:'Scan ${kind === 'dec' ? 'dec page' : 'loss statement'}' })"><i class="ti ti-camera" aria-hidden="true"></i></button>
         </div></div>`;
     }
 
@@ -9482,7 +9533,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         .idoc-s{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.35}
         .idoc-btns{display:flex;gap:6px;margin-top:10px}
         .idoc-up{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:8px;background:var(--idoc-c);color:#0B0F17;font-size:12px;font-weight:700;cursor:pointer}
-        .idoc-cam{display:inline-flex;align-items:center;justify-content:center;width:34px;border-radius:8px;border:1px solid rgba(255,255,255,.14);color:var(--brand);cursor:pointer;font-size:15px}
+        .idoc-cam{display:inline-flex;align-items:center;justify-content:center;width:34px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:transparent;padding:0;font-family:inherit;color:var(--brand);cursor:pointer;font-size:15px}
         .idoc-file{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 9px;border-radius:8px;background:#141927;border:1px solid var(--border);cursor:pointer;min-width:0}
         .idoc-file .n{flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .idoc-file .x{width:24px;height:24px;border-radius:6px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
@@ -9750,11 +9801,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               Upload File
               <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="roofAddFiles(this.files)">
             </label>
-            <label class="roof-upload-btn">
+            <button type="button" class="roof-upload-btn" onclick="ssScan('doc', f => roofAddFiles(f), { title:'Scan report' })">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
               Scan / Photo
-              <input type="file" accept="image/*" capture="environment" style="display:none" onchange="roofAddFiles(this.files)">
-            </label>
+            </button>
           </div>
         </div>
 
@@ -9865,11 +9915,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               Upload File
               <input type="file" multiple style="display:none" onchange="otherAddFiles(this.files)">
             </label>
-            <label class="other-upload-btn">
+            <button type="button" class="other-upload-btn" onclick="ssScan('doc', f => otherAddFiles(f), { title:'Scan document' })">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
               Scan / Photo
-              <input type="file" accept="image/*" capture="environment" style="display:none" onchange="otherAddFiles(this.files)">
-            </label>
+            </button>
           </div>
         </div>
 
@@ -18577,11 +18626,10 @@ function renderContractTab(j){
           Upload File
           <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
         </label>
-        <label class="sc-upload-btn">
+        <button type="button" class="sc-upload-btn" onclick="ssScan('doc', f => signedContractAddFiles('${j.id}', f), { title:'Scan contract' })">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           Scan Contract
-          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
-        </label>
+        </button>
       </div>
     </div>
 
