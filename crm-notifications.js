@@ -8,7 +8,9 @@
    Where you see them:
    - A bell with an unread count (top bar on phone/tablet, sidebar on desktop)
    - A pop-up at the top of the screen the moment one arrives
-   - Desktop: an optional system alert when the CRM tab is in the background
+   - Lock-screen alerts (Web Push) on each phone / computer where the person turns
+     them on from the bell ("Turn on lock-screen alerts"). iPhone: only from the
+     home-screen app (Share → Add to Home Screen). Server side: push-send function.
    Tapping one opens the job (notes for note/mention alerts, Packet tab for packet alerts). */
 (function () {
   'use strict';
@@ -20,13 +22,15 @@
     mention:       { icon: 'ti-at',           cls: 'mention' },
     packet_viewed: { icon: 'ti-eye',          cls: 'viewed' },
     packet_signed: { icon: 'ti-writing-sign', cls: 'signed' },
+    test:          { icon: 'ti-bell',         cls: 'note' },
   };
+  // Public half of the push signing key (the private half is in Supabase Vault)
+  const VAPID_PUBLIC = 'BLRj0hCYCe-5aEHlpstRTFEiH6CVeGYJBplZUM-2oRWIP_o5taZTm_FWU6qmfDApRYZFBcqWt2Ok-rf3GynF0VQ';
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const sbc = () => window.sb || null;
-  const DESKTOP = '(min-width:1181px)';
 
-  const S = { uid: null, items: [], open: false, filter: 'all', channel: null, started: false };
+  const S = { uid: null, items: [], open: false, filter: 'all', channel: null, started: false, push: 'checking', pushBusy: false };
 
   // ── Data ────────────────────────────────────────────────────────────────
   async function load() {
@@ -43,7 +47,7 @@
       S.channel = sbc().channel('notifications:' + S.uid)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'recipient=eq.' + S.uid }, p => {
           const n = p.new; if (!n || S.items.some(x => x.id === n.id)) return;
-          S.items.unshift(n); paint(); popup(n); systemAlert(n);
+          S.items.unshift(n); paint(); popup(n);
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: 'recipient=eq.' + S.uid }, p => {
           const i = S.items.findIndex(x => x.id === p.new.id); if (i >= 0) { S.items[i] = p.new; paint(); }
@@ -54,6 +58,7 @@
   const unread = () => S.items.filter(n => !n.read_at).length;
 
   async function markRead(ids) {
+    ids = (ids || []).filter(Boolean); if (!ids.length) return;
     const now = new Date().toISOString();
     S.items.forEach(n => { if (ids.includes(n.id) && !n.read_at) n.read_at = now; });
     paint();
@@ -120,7 +125,9 @@
         const a = e.target.closest('[data-act]'); if (!a) return;
         if (a.dataset.act === 'readall') markAllRead();
         if (a.dataset.act === 'close') closePanel();
-        if (a.dataset.act === 'desktop') askDesktop();
+        if (a.dataset.act === 'push-on') turnOnPush();
+        if (a.dataset.act === 'push-off') turnOffPush();
+        if (a.dataset.act === 'push-test') sendTest();
       });
     }
     return p;
@@ -155,7 +162,6 @@
     if (!S.open) return;
     const list = S.filter === 'mention' ? S.items.filter(n => n.kind === 'mention')
       : S.filter === 'packet' ? S.items.filter(n => n.kind.indexOf('packet') === 0) : S.items;
-    const showDesktop = window.matchMedia(DESKTOP).matches && 'Notification' in window && Notification.permission === 'default';
     panel().innerHTML = `
       <div class="ssn-np-h"><div class="ssn-np-title">Notifications</div>
         ${u ? '<button type="button" class="ssn-np-link" data-act="readall">Mark all read</button>' : ''}
@@ -164,7 +170,7 @@
         ${[['all', 'All'], ['mention', 'Mentions'], ['packet', 'Packets']].map(([k, l]) => `<button type="button" class="ssn-np-chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}
       </div>
       <div class="ssn-np-list">${list.length ? list.map(itemHTML).join('') : '<div class="ssn-np-empty">You\'re all caught up.</div>'}</div>
-      ${showDesktop ? '<div class="ssn-np-foot"><button type="button" class="ssn-np-link" data-act="desktop"><i class="ti ti-device-desktop" aria-hidden="true"></i> Also show alerts when the CRM is in the background</button></div>' : ''}`;
+      ${pushRowHTML() ? `<div class="ssn-np-foot">${pushRowHTML()}</div>` : ''}`;
   }
 
   // ── Pop-up when one arrives ─────────────────────────────────────────────
@@ -184,14 +190,104 @@
     clearTimeout(popTimer); popTimer = setTimeout(() => el.classList.remove('show'), 6000);
   }
 
-  // ── Desktop system alerts (browser tab in the background) ────────────────
-  function askDesktop() { try { Notification.requestPermission().then(() => paint()); } catch (e) {} }
-  function systemAlert(n) {
+  // ── Lock-screen alerts (Web Push) ───────────────────────────────────────
+  const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = () => !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  function keyBytes(b64) {
+    const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4));
+    return Uint8Array.from(s, c => c.charCodeAt(0));
+  }
+  let swReg = null;
+  async function registerSW() {
+    if (!('serviceWorker' in navigator)) return null;
+    try { swReg = await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn('[push] helper not registered', e); }
+    return swReg;
+  }
+  async function saveSub(sub) {
+    const j = sub.toJSON();
+    const { error } = await sbc().rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent });
+    if (error) throw error;
+  }
+  // Work out what the "lock-screen alerts" row should say on this device
+  async function checkPush() {
+    if (isIOS() && !standalone()) S.push = 'ios-install';
+    else if (!pushSupported()) S.push = 'unsupported';
+    else if (Notification.permission === 'denied') S.push = 'blocked';
+    else {
+      const reg = swReg || await registerSW();
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      if (sub && Notification.permission === 'granted') {
+        S.push = 'on';
+        try { await saveSub(sub); } catch (e) {}          // keep it linked to whoever is signed in now
+      } else S.push = 'off';
+    }
+    paint();
+  }
+  async function turnOnPush() {
+    if (S.pushBusy) return;
+    S.pushBusy = true; paint();
     try {
-      if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return;
-      const a = new Notification(n.title, { body: (n.job_label ? n.job_label + ' · ' : '') + (n.body || ''), tag: n.id, icon: 'favicon-192.png' });
-      a.onclick = () => { window.focus(); openItem(n); a.close(); };
+      const perm = await Notification.requestPermission();   // must run straight from the tap
+      if (perm !== 'granted') { S.push = perm === 'denied' ? 'blocked' : 'off'; return; }
+      const reg = swReg || await registerSW();
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC) });
+      await saveSub(sub);
+      S.push = 'on';
+      toastMsg('Lock-screen alerts are on');
+    } catch (e) {
+      console.warn('[push] turn on failed', e);
+      toastMsg("Couldn't turn on alerts. Try again");
+    } finally { S.pushBusy = false; paint(); }
+  }
+  async function turnOffPush() {
+    try {
+      const reg = swReg || await registerSW();
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) { try { await sbc().rpc('remove_push_subscription', { p_endpoint: sub.endpoint }); } catch (e) {} await sub.unsubscribe(); }
     } catch (e) {}
+    S.push = 'off'; paint();
+  }
+  async function sendTest() {
+    try { const { error } = await sbc().rpc('send_test_notification'); if (error) throw error; toastMsg('Test sent. Lock your phone to see it'); }
+    catch (e) { toastMsg("Couldn't send a test"); }
+  }
+  function pushRowHTML() {
+    switch (S.push) {
+      case 'on': return `<div class="ssn-np-push on"><i class="ti ti-device-mobile-check" aria-hidden="true"></i><span class="ssn-np-pt">Lock-screen alerts are on for this device</span>
+        <button type="button" class="ssn-np-link" data-act="push-test">Send a test</button><button type="button" class="ssn-np-link mute" data-act="push-off">Turn off</button></div>`;
+      case 'off': return `<div class="ssn-np-push"><i class="ti ti-device-mobile" aria-hidden="true"></i><span class="ssn-np-pt">Get these on your lock screen</span>
+        <button type="button" class="ssn-np-btn" data-act="push-on"${S.pushBusy ? ' disabled' : ''}>${S.pushBusy ? 'Turning on…' : 'Turn on'}</button></div>`;
+      case 'ios-install': return `<div class="ssn-np-push col"><span class="ssn-np-pt"><b>Get alerts on your locked iPhone</b></span>
+        <span class="ssn-np-ps">In Safari tap <b>Share</b> &rarr; <b>Add to Home Screen</b>, open StormShield from the new icon, then tap the bell and <b>Turn on</b>.</span></div>`;
+      case 'blocked': return `<div class="ssn-np-push col"><span class="ssn-np-pt"><b>Alerts are blocked on this device</b></span>
+        <span class="ssn-np-ps">${isIOS() ? 'Settings &rarr; Notifications &rarr; StormShield &rarr; Allow Notifications.' : 'Allow notifications for this site in your browser settings.'}</span></div>`;
+      default: return '';
+    }
+  }
+
+  // ── Opening from a lock-screen alert (?job=…&open=notes|packet&nid=…) ─────
+  function openFromUrl(href) {
+    let u; try { u = new URL(href, location.href); } catch (e) { return; }
+    const job = u.searchParams.get('job'), open = u.searchParams.get('open'), nid = u.searchParams.get('nid');
+    if (!job && !nid) return;
+    if (href === location.href) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+    if (nid) markRead([nid]);
+    if (!job) return;
+    let tries = 0;
+    const t = setInterval(() => {                      // wait for the jobs to load
+      tries++;
+      if (canOpen(job)) {
+        clearInterval(t);
+        const n = { id: nid || '', job_id: job, kind: open === 'packet' ? 'packet_signed' : 'note', read_at: 1 };
+        openItem(n);
+      } else if (tries > 40) clearInterval(t);
+    }, 500);
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.type === 'ss-open') openFromUrl(e.data.url); });
   }
 
   // ── Start once signed in ────────────────────────────────────────────────
@@ -202,8 +298,10 @@
     if (!uid) return;
     S.started = true; S.uid = uid;
     injectCSS(); bell(); await load(); subscribe();
+    registerSW().then(checkPush);
+    openFromUrl(location.href);
     // Refresh when coming back to the app (phones pause live updates in the background)
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') load(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { load(); try { navigator.clearAppBadge && unread() === 0 && navigator.clearAppBadge(); } catch (e) {} } });
     setInterval(() => { if (S.open) paint(); }, 60000);    // keep "5m" labels fresh
   }
   let tries = 0;
@@ -236,7 +334,17 @@
 .ssn-np-chip.on{background:#1F2D3B;border-color:#1F2D3B;color:#E6EDF3;font-weight:600}
 .ssn-np-list{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .ssn-np-empty{padding:28px 16px;text-align:center;color:#8E9BAA}
-.ssn-np-foot{border-top:1px solid #1F2A36;padding:8px 12px}
+.ssn-np-foot{border-top:1px solid #1F2A36;padding:10px 14px;background:#101820}
+.ssn-np-push{display:flex;align-items:center;gap:8px;font-size:13px;color:#C4CBD8}
+.ssn-np-push > i{font-size:18px;color:#7DD3FC}
+.ssn-np-push.on > i{color:#34D399}
+.ssn-np-push.col{flex-direction:column;align-items:flex-start;gap:4px}
+.ssn-np-pt{flex:1}
+.ssn-np-ps{font-size:12px;color:#8E9BAA;line-height:1.45}
+.ssn-np-link.mute{color:#8E9BAA}
+.ssn-np-btn{height:34px;padding:0 14px;border-radius:9px;border:0;background:#38BDF8;color:#06202E;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.ssn-np-btn[disabled]{opacity:.6}
+@media (max-width:760px){.ssn-np-btn{height:40px;padding:0 16px;font-size:14px}.ssn-np-push{font-size:14px}}
 .ssn-ni{width:100%;display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border:0;border-bottom:1px solid #172029;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .ssn-ni:hover{background:#16212C}
 .ssn-ni.unread{background:#152030}
