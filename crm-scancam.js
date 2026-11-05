@@ -153,12 +153,31 @@
     return { state: 'ok', box };
   }
 
-  // Average brightness change between two samples (0–255): small = phone held still.
-  function motion(a, b) {
+  // How much the picture changed between two samples (0–255): small = phone held still.
+  // Compares 4×4-pixel block averages, so a real camera's grain and flicker don't count
+  // as movement. w = sample width (rows of w pixels); without it, pixel by pixel.
+  function motion(a, b, w) {
     if (!a || !b || a.length !== b.length) return 255;
-    let d = 0;
-    for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]);
-    return d / a.length;
+    if (!w) {
+      let d = 0;
+      for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]);
+      return d / a.length;
+    }
+    const h = Math.floor(a.length / w), B = 4;
+    let d = 0, n = 0;
+    for (let by = 0; by + B <= h; by += B) for (let bx = 0; bx + B <= w; bx += B) {
+      let sa = 0, sb = 0;
+      for (let y = by; y < by + B; y++) for (let x = bx; x < bx + B; x++) { sa += a[y * w + x]; sb += b[y * w + x]; }
+      d += Math.abs(sa - sb) / (B * B); n++;
+    }
+    return n ? d / n : 255;
+  }
+
+  // Snap when lined up and still for ~0.4s, or lined up and steady-enough for ~1.1s
+  // (a hand never holds perfectly still). Never while the picture is moving a lot.
+  const STILL = 10, STEADY = 24;
+  function readyToSnap(stillTicks, steadyTicks) {
+    return stillTicks >= 3 || steadyTicks >= 8;
   }
 
   const hasDOM = typeof document !== 'undefined';
@@ -289,7 +308,7 @@
     let frame = null, land = false, turn = false;
     let auto = true;
     try { auto = localStorage.getItem('ssScanAuto') !== '0'; } catch (e) {}
-    let armed = true, okTicks = 0, offTicks = 0, prevLum = null, timer = null;
+    let armed = true, okTicks = 0, steadyTicks = 0, offTicks = 0, prevLum = null, timer = null;
     const sample = document.createElement('canvas');
     const sctx = sample.getContext('2d', { willReadFrequently: true });
     const prevOverflow = document.body.style.overflow;
@@ -552,16 +571,19 @@
       for (let i = 0, j = 0; j < lum.length; i += 4, j++) lum[j] = (px[i] * 77 + px[i + 1] * 150 + px[i + 2] * 29) >> 8;
       const f = { x0: (frame.x - r.x) / r.w, x1: (frame.x + frame.w - r.x) / r.w, y0: (frame.y - r.y) / r.h, y1: (frame.y + frame.h - r.y) / r.h };
       const res = analyze(lum, w, h, f);
-      const still = motion(lum, prevLum) < 6;
+      const m = motion(lum, prevLum, w);
       prevLum = lum;
+      let dbg = '';
+      try { if (localStorage.getItem('ssScanDebug') === '1') dbg = ` \u00b7 ${m.toFixed(1)}`; } catch (e) {}
       if (res.state === 'ok') {
         offTicks = 0;
-        if (!armed) { setStatus('Got it \u2014 ' + (mode === 'doc' ? 'next page' : (step === 'back' ? 'flip it over' : 'next')), true); return; }
-        okTicks = still ? okTicks + 1 : 0;
-        setStatus(still ? 'Hold steady\u2026' : 'Hold still\u2026', true);
-        if (okTicks >= 3) shoot();
+        if (!armed) { setStatus('Got it \u2014 ' + (mode === 'doc' ? 'next page' : (step === 'back' ? 'flip it over' : 'next')) + dbg, true); return; }
+        okTicks = m < STILL ? okTicks + 1 : 0;
+        steadyTicks = m < STEADY ? steadyTicks + 1 : 0;
+        setStatus((m < STEADY ? 'Hold steady\u2026' : 'Hold still\u2026') + dbg, true);
+        if (readyToSnap(okTicks, steadyTicks)) { steadyTicks = 0; shoot(); }
       } else {
-        okTicks = 0;
+        okTicks = 0; steadyTicks = 0;
         if (++offTicks >= 3) armed = true;   // the paper moved away: ready for the next one
         let text = MSG[res.state] || MSG.none;
         if (res.state === 'dark' && !$('[data-act="torch"]').classList.contains('ghost')) text += ' \u2014 try the flash';
@@ -677,5 +699,5 @@
     return new Blob([await doc.save()], { type: 'application/pdf' });
   }
 
-  return { CHECK_RATIO, DOC_RATIO, frameRatio, fitFrame, cropRect, outSize, otsu, analyze, motion, supported, open, pagesToPdf };
+  return { CHECK_RATIO, DOC_RATIO, STILL, STEADY, frameRatio, fitFrame, cropRect, outSize, otsu, analyze, motion, readyToSnap, supported, open, pagesToPdf };
 });
