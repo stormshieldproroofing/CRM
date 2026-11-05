@@ -4,6 +4,7 @@
    - Someone adds a note to a job assigned to you
    - Someone @mentions you in a note
    - The homeowner opens / signs the claim packet you sent (or on your job)
+   - A supplement on your job is approved / partially approved (rep + office)
 
    Where you see them:
    - A bell with an unread count (top bar on phone/tablet, sidebar on desktop)
@@ -23,6 +24,7 @@
     packet_viewed: { icon: 'ti-eye',          cls: 'viewed' },
     packet_signed: { icon: 'ti-writing-sign', cls: 'signed' },
     test:          { icon: 'ti-bell',         cls: 'note' },
+    supplement_approved: { icon: 'ti-file-dollar', cls: 'signed' },
   };
   // Public half of the push signing key (the private half is in Supabase Vault)
   const VAPID_PUBLIC = 'BLRj0hCYCe-5aEHlpstRTFEiH6CVeGYJBplZUM-2oRWIP_o5taZTm_FWU6qmfDApRYZFBcqWt2Ok-rf3GynF0VQ';
@@ -161,13 +163,14 @@
     try { if (navigator.setAppBadge) { u ? navigator.setAppBadge(u) : navigator.clearAppBadge(); } } catch (e) {}
     if (!S.open) return;
     const list = S.filter === 'mention' ? S.items.filter(n => n.kind === 'mention')
-      : S.filter === 'packet' ? S.items.filter(n => n.kind.indexOf('packet') === 0) : S.items;
+      : S.filter === 'packet' ? S.items.filter(n => n.kind.indexOf('packet') === 0)
+      : S.filter === 'supp' ? S.items.filter(n => n.kind === 'supplement_approved') : S.items;
     panel().innerHTML = `
       <div class="ssn-np-h"><div class="ssn-np-title">Notifications</div>
         ${u ? '<button type="button" class="ssn-np-link" data-act="readall">Mark all read</button>' : ''}
         <button type="button" class="ssn-np-x" data-act="close" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button></div>
       <div class="ssn-np-f">
-        ${[['all', 'All'], ['mention', 'Mentions'], ['packet', 'Packets']].map(([k, l]) => `<button type="button" class="ssn-np-chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}
+        ${[['all', 'All'], ['mention', 'Mentions'], ['packet', 'Packets'], ['supp', 'Supplements']].map(([k, l]) => `<button type="button" class="ssn-np-chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}
       </div>
       <div class="ssn-np-list">${list.length ? list.map(itemHTML).join('') : '<div class="ssn-np-empty">You\'re all caught up.</div>'}</div>
       ${pushRowHTML() ? `<div class="ssn-np-foot">${pushRowHTML()}</div>` : ''}`;
@@ -281,7 +284,8 @@
       tries++;
       if (canOpen(job)) {
         clearInterval(t);
-        const n = { id: nid || '', job_id: job, kind: open === 'packet' ? 'packet_signed' : 'note', read_at: 1 };
+        const known = nid && S.items.find(x => x.id === nid);   // use the alert's real type when we have it
+        const n = { id: nid || '', job_id: job, kind: known ? known.kind : (open === 'packet' ? 'packet_signed' : open === 'job' ? 'supplement_approved' : 'note'), read_at: 1 };
         openItem(n);
       } else if (tries > 40) clearInterval(t);
     }, 500);
@@ -329,8 +333,9 @@
 .ssn-np-title{flex:1;font-size:16px;font-weight:700}
 .ssn-np-link{border:0;background:transparent;color:#7DD3FC;font:inherit;font-size:12px;cursor:pointer;padding:6px 4px}
 .ssn-np-x{width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:#8E9BAA;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.ssn-np-f{display:flex;gap:6px;padding:0 16px 10px;border-bottom:1px solid #1F2A36}
-.ssn-np-chip{padding:5px 11px;border-radius:999px;border:1px solid #253241;background:transparent;color:#9AA3B5;font:inherit;font-size:12px;cursor:pointer}
+.ssn-np-f{display:flex;gap:6px;padding:0 16px 10px;border-bottom:1px solid #1F2A36;overflow-x:auto;scrollbar-width:none}
+.ssn-np-f::-webkit-scrollbar{display:none}
+.ssn-np-chip{flex:none;padding:5px 11px;border-radius:999px;border:1px solid #253241;background:transparent;color:#9AA3B5;font:inherit;font-size:12px;cursor:pointer}
 .ssn-np-chip.on{background:#1F2D3B;border-color:#1F2D3B;color:#E6EDF3;font-weight:600}
 .ssn-np-list{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .ssn-np-empty{padding:28px 16px;text-align:center;color:#8E9BAA}
