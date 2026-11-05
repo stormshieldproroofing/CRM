@@ -22,13 +22,45 @@
 
   const WIDE = '(min-width:1181px)';
   const TAGS = ['Called HO', 'No answer', 'Adjuster mtg', 'Supplement', 'Follow-up'];
+
+  // ── @mentions ─────────────────────────────────────────────────────────
+  // People you can mention: team members with a CRM login (they get the alert).
+  function team() {
+    try { return (window.TEAM || []).filter(m => m && m.name && m.authId && m.status !== 'inactive'); } catch (e) { return []; }
+  }
+  const reEsc = x => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Names a note can use for each person: full name, plus first name when nobody else shares it
+  function mentionNames() {
+    const t = team(), firsts = {};
+    t.forEach(m => { const f = m.name.trim().split(/\s+/)[0].toLowerCase(); firsts[f] = (firsts[f] || 0) + 1; });
+    const out = [];
+    t.forEach(m => {
+      out.push({ id: m.id, name: m.name.trim() });
+      const f = m.name.trim().split(/\s+/)[0];
+      if (firsts[f.toLowerCase()] === 1 && f !== m.name.trim()) out.push({ id: m.id, name: f });
+    });
+    return out.sort((a, b) => b.name.length - a.name.length);   // longest first: "@Sang Nguyen" before "@Sang"
+  }
+  function findMentions(text) {
+    const ids = new Set();
+    mentionNames().forEach(n => { if (new RegExp('(^|[^\\w])@' + reEsc(n.name) + '(?![\\w])', 'i').test(text)) ids.add(n.id); });
+    if (state.myMemberId) ids.delete(state.myMemberId);
+    return Array.from(ids);
+  }
+  // Escaped note text with @Name highlighted
+  function noteText(raw) {
+    let h = esc(raw);
+    const names = mentionNames();
+    if (!names.length || h.indexOf('@') < 0) return h;
+    const re = new RegExp('(^|[^\\w])@(' + names.map(n => reEsc(esc(n.name))).join('|') + ')(?![\\w])', 'gi');
+    return h.replace(re, (m, pre, nm) => pre + '<span class="ssn-at">@' + nm + '</span>');
+  }
   const LS = {
     dock: 'ssNotesDock',          // '1' | '0' — docked column shown beside the job (desktop)
     float: 'ssNotesFloat',        // JSON {x,y,jobId} when popped out
     draft: id => 'ssNoteDraft:' + id,
     cache: id => 'ssNotesCache:' + id,
     outbox: 'ssNotesOutbox',
-    pad: 'ssScratchpad',
   };
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -55,7 +87,7 @@
     statusKind: 'ok',
     myAuthId: null,
   };
-  let channel = null, channelJob = null, padTimer = null, draftTimer = null, padLoaded = false;
+  let channel = null, channelJob = null, padTimer = null, draftTimer = null;
 
   function jobById(id) { try { return (window.jobs || jobs).find(x => x.id === id) || null; } catch (e) { return null; } }
   function overlayOpen() { const o = $('detailOverlay'); return !!(o && o.classList.contains('open')); }
@@ -69,6 +101,7 @@
   async function myAuth() {
     if (state.myAuthId) return state.myAuthId;
     try { const { data } = await sbc().auth.getUser(); state.myAuthId = data && data.user ? data.user.id : null; } catch (e) {}
+    try { const cm = window.currentMember || (team().find(m => m.authId === state.myAuthId)); state.myMemberId = cm ? cm.id : null; } catch (e) {}
     return state.myAuthId;
   }
 
@@ -108,7 +141,7 @@
     for (const item of box) {
       try {
         const { data, error } = await sbc().from('job_notes')
-          .insert({ job_id: item.job_id, body: item.body, tag: item.tag || null, author_name: item.author_name })
+          .insert({ job_id: item.job_id, body: item.body, tag: item.tag || null, author_name: item.author_name, mentions: item.mentions || [] })
           .select().single();
         if (error) throw error;
         const list = state.notes[item.job_id];
@@ -136,7 +169,7 @@
     const row = { id: tmp, job_id: jobId, body, tag: state.tag, pinned: false, author_name: myName(), author_id: state.myAuthId, created_at: new Date().toISOString(), _pending: true };
     (state.notes[jobId] = state.notes[jobId] || []).push(row);
     cacheSave(jobId);
-    const ob = outbox(); ob.push({ tmp, job_id: jobId, body, tag: state.tag, author_name: myName() }); setOutbox(ob);
+    const ob = outbox(); ob.push({ tmp, job_id: jobId, body, tag: state.tag, author_name: myName(), mentions: findMentions(body) }); setOutbox(ob);
     if (ta) { ta.value = ''; const host = ta.closest('.ssn'); if (host) host.dataset.justPosted = '1'; }
     lsSet(LS.draft(jobId), null);
     state.tag = null;
@@ -209,27 +242,59 @@
     render();
   }
 
-  // Scratchpad (private)
+  // Scratchpad (private, one per user, synced across devices).
+  // The saved copy lives in the user's account (user_scratchpads). Each time it
+  // opens it shows the latest saved copy. The device only holds typing that
+  // hasn't reached the server yet (no signal), under that user's own key, and
+  // sends it as soon as it can.
+  let padText = null, padSaving = false, padSeq = 0;
+  const padPendingKey = uid => 'ssPadUnsaved:' + uid;
+  function padPending(uid) { return uid ? lsGet(padPendingKey(uid), null) : null; }
+
   async function loadPad() {
-    if (padLoaded || !sbc()) return;
-    padLoaded = true;
+    if (!sbc()) return;
+    const uid = await myAuth();
+    if (!uid) return;
+    const pend = padPending(uid);
+    if (pend != null) { padText = pend; render(); pushPad(pend); return; }   // unsent typing wins, then sync it
+    const seq = ++padSeq;
     try {
-      const { data } = await sbc().from('user_scratchpads').select('body').maybeSingle();
-      const local = lsGet(LS.pad, null);
-      if (data && local == null) { lsSet(LS.pad, data.body); render(); }
-    } catch (e) {}
+      const { data, error } = await sbc().from('user_scratchpads').select('body').eq('auth_id', uid).maybeSingle();
+      if (error) throw error;
+      const ta = document.querySelector('.ssn-pad');
+      if (seq !== padSeq || (ta && document.activeElement === ta && padText != null)) return;   // don't overwrite while typing
+      padText = data ? data.body : '';
+      setStatus('', 'ok');
+      render();
+    } catch (e) {
+      if (padText == null) { padText = ''; setStatus('Offline — showing what\'s on this screen', 'warn'); render(); }
+    }
+  }
+  async function pushPad(text) {
+    const uid = await myAuth();
+    if (!uid) return;
+    padSaving = true;
+    try {
+      const { error } = await sbc().from('user_scratchpads').upsert({ auth_id: uid, body: text, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      if (padPending(uid) === text) lsSet(padPendingKey(uid), null);
+      setStatus('Saved · syncs to all your devices', 'ok', true);
+    } catch (e) {
+      setStatus('No signal — will save when you\'re back online', 'warn', true);
+    } finally { padSaving = false; }
   }
   function savePadSoon(text) {
-    lsSet(LS.pad, text);
+    padText = text;
+    padSeq++;                                   // a load already in flight won't overwrite this
+    if (state.myAuthId) lsSet(padPendingKey(state.myAuthId), text);
     setStatus('Saving…', 'busy', true);
     clearTimeout(padTimer);
-    padTimer = setTimeout(async () => {
-      try {
-        const { error } = await sbc().from('user_scratchpads').upsert({ auth_id: await myAuth(), body: text, updated_at: new Date().toISOString() });
-        if (error) throw error;
-        setStatus('Saved · just now', 'ok', true);
-      } catch (e) { setStatus('Saved on this device · will sync later', 'warn', true); }
-    }, 800);
+    padTimer = setTimeout(() => pushPad(text), 700);
+  }
+  async function flushPad() {
+    const uid = await myAuth();
+    const pend = padPending(uid);
+    if (pend != null && !padSaving) pushPad(pend);
   }
 
   // ── Status line ─────────────────────────────────────────────────────────
@@ -302,7 +367,7 @@
     }
     return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
       <div class="ssn-card${mine ? ' mine' : ''}${n._pending ? ' pending' : ''}">
-        <div class="ssn-text">${esc(n.body)}</div>
+        <div class="ssn-text">${noteText(n.body)}</div>
         ${n.tag ? `<span class="ssn-tag">${esc(n.tag)}</span>` : ''}
         <div class="ssn-meta"><span>${esc(who)} · ${n._pending ? 'sending…' : esc(timeLabel(n.created_at))}${n.edited_at ? ' · <em class="ssn-edited">edited</em>' : ''}</span>
           <span class="ssn-acts">
@@ -341,7 +406,7 @@
         <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>Pinned · ${esc((n._pending || (state.myAuthId && n.author_id === state.myAuthId)) ? 'You' : firstName(n.author_name))}
           <span class="ssn-acts">${(state.myAuthId && n.author_id === state.myAuthId) ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}">Edit</button>` : ''}
           <button type="button" class="ssn-link" data-pin="${esc(n.id)}">Unpin</button></span></div>
-        <div class="ssn-text">${esc(n.body)}</div>
+        <div class="ssn-text">${noteText(n.body)}</div>
         ${n.edited_at ? '<div class="ssn-edited-l">edited</div>' : ''}
       </div>`).join('');
   }
@@ -367,9 +432,9 @@
          </div>`;
     if (pad) {
       return head + `<div class="ssn-padwrap">
-        <div class="ssn-hint">Only you can see this. It follows you across every job.</div>
+        <div class="ssn-hint">Only you can see this. It follows you across every job and every device you sign in on.</div>
         <label class="ssn-sr" for="ssnPad">My scratchpad</label>
-        <textarea id="ssnPad" class="ssn-pad" placeholder="Reminders, calls to make, anything…">${esc(lsGet(LS.pad, ''))}</textarea>
+        <textarea id="ssnPad" class="ssn-pad" placeholder="${padText == null ? 'Loading…' : 'Reminders, calls to make, anything…'}"${padText == null ? ' disabled' : ''}>${esc(padText || '')}</textarea>
         <div class="ssn-status ${state.statusKind}">${esc(state.status || 'Saves as you type')}</div></div>`;
     }
     const items = feedItems(jobId);
@@ -379,9 +444,10 @@
       <div class="ssn-feed">${claimNotesHTML(jobId)}${pinnedHTML(jobId)}${feed}</div>
       <div class="ssn-compose${state.tag || draft ? ' open' : ''}">
         <div class="ssn-chips">${TAGS.map(t => `<button type="button" class="ssn-chip${state.tag === t ? ' on' : ''}" data-tag="${esc(t)}" aria-pressed="${state.tag === t}">${esc(t)}</button>`).join('')}</div>
+        <div class="ssn-mention" role="listbox" aria-label="Mention someone" hidden></div>
         <div class="ssn-row">
           <label class="ssn-sr" for="ssnInput-${mode}">New note</label>
-          <textarea id="ssnInput-${mode}" class="ssn-input" rows="2" placeholder="${mode === 'sheet' ? 'Add a note…' : 'Write a note… (Enter to post)'}" enterkeyhint="send">${esc(draft)}</textarea>
+          <textarea id="ssnInput-${mode}" class="ssn-input" rows="2" placeholder="${mode === 'sheet' ? 'Add a note… (@ to mention)' : 'Write a note… @ to mention, Enter to post'}" enterkeyhint="send">${esc(draft)}</textarea>
           <button type="button" class="ssn-send" data-act="post" aria-label="Post note"><i class="ti ti-send" aria-hidden="true"></i></button>
         </div>
         <div class="ssn-status ${state.statusKind}">${esc(state.status || '')}</div>
@@ -588,10 +654,46 @@
     }
   }, true);
 
+  function mentionQuery(t) {
+    const upto = t.value.slice(0, t.selectionStart);
+    const m = upto.match(/(^|\s)@([A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)?$/);
+    return m ? { q: (m[2] || ''), start: upto.length - (m[2] || '').length - 1 } : null;
+  }
+  function mentionSuggest(t) {
+    const box = t.closest('.ssn-compose') && t.closest('.ssn-compose').querySelector('.ssn-mention');
+    if (!box) return;
+    const mq = mentionQuery(t);
+    const me = state.myMemberId;
+    const list = mq ? team().filter(m => m.id !== me && (!mq.q || m.name.toLowerCase().split(/\s+/).some(w => w.startsWith(mq.q.toLowerCase().split(' ')[0])) || m.name.toLowerCase().startsWith(mq.q.toLowerCase()))).slice(0, 6) : [];
+    if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+    box.innerHTML = list.map((m, i) => `<button type="button" role="option" class="ssn-mopt${i === 0 ? ' on' : ''}" data-mention="${esc(m.id)}"><span class="ssn-av">${esc(initials(m.name))}</span>${esc(m.name)}<span class="ssn-mrole">${esc(m.role || '')}</span></button>`).join('');
+    box.hidden = false;
+  }
+  function pickMention(t, memberId) {
+    const m = team().find(x => x.id === memberId); if (!m) return;
+    const mq = mentionQuery(t); if (!mq) return;
+    const before = t.value.slice(0, mq.start), after = t.value.slice(t.selectionStart);
+    const ins = '@' + m.name.trim() + ' ';
+    t.value = before + ins + after.replace(/^\s+/, '');
+    const pos = (before + ins).length;
+    t.focus(); t.setSelectionRange(pos, pos);
+    const box = t.closest('.ssn-compose').querySelector('.ssn-mention'); if (box) { box.hidden = true; box.innerHTML = ''; }
+    t.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  // keep the keyboard up and the caret in place when tapping a name
+  document.addEventListener('pointerdown', e => {
+    const o = e.target.closest && e.target.closest('.ssn-mopt');
+    if (!o) return;
+    e.preventDefault();
+    const t = o.closest('.ssn-compose').querySelector('.ssn-input');
+    if (t) pickMention(t, o.dataset.mention);
+  }, true);
+
   document.addEventListener('input', e => {
     const t = e.target;
     if (!t || !t.classList) return;
     if (t.classList.contains('ssn-input')) {
+      mentionSuggest(t);
       const id = state.jobId, v = t.value;
       setStatus('Saving draft…', 'busy');
       clearTimeout(draftTimer);
@@ -603,6 +705,16 @@
 
   document.addEventListener('keydown', e => {
     const t = e.target;
+    if (t && t.classList && t.classList.contains('ssn-input')) {
+      const box = t.closest('.ssn-compose') && t.closest('.ssn-compose').querySelector('.ssn-mention');
+      if (box && !box.hidden) {
+        const opts = Array.from(box.querySelectorAll('[data-mention]'));
+        let i = opts.findIndex(o => o.classList.contains('on'));
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); opts.forEach(o => o.classList.remove('on')); i = (i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length; opts[i].classList.add('on'); return; }
+        if ((e.key === 'Enter' || e.key === 'Tab') && opts.length) { e.preventDefault(); pickMention(t, (opts[i] || opts[0]).dataset.mention); return; }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); box.hidden = true; return; }
+      }
+    }
     if (t && t.classList && t.classList.contains('ssn-input') && e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault(); post(t.closest('.ssn'));
     }
@@ -648,6 +760,17 @@
     }
   }
 
+  // Open a job with its notes showing (desktop: notes column; phone: notes sheet)
+  window.ssOpenJobNotes = function (jobId) {
+    if (!jobId || typeof window.openDetail !== 'function' || !jobById(jobId)) return false;
+    if (wide()) { lsSet(LS.dock, '1'); state.floating = false; }
+    state.tab = 'job';
+    window.openDetail(jobId);
+    if (!wide()) setTimeout(() => openSheet(false), 60);
+    else setTimeout(() => render(true), 60);
+    return true;
+  };
+
   function init() {
     injectCSS();
     hook();
@@ -658,9 +781,16 @@
       render();
     }).observe(ov, { attributes: true, attributeFilter: ['class'] });
     window.matchMedia(WIDE).addEventListener('change', () => render());
-    window.addEventListener('online', flushOutbox);
+    window.addEventListener('online', () => { flushOutbox(); flushPad(); });
+    // Coming back to the app: pick up scratchpad changes made on another device
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      flushPad();
+      if (state.tab === 'pad' && !document.querySelector('.ssn-pad:focus')) loadPad();
+    });
+    lsSet('ssScratchpad', null);   // old shared-device copy (not tied to a user); the account copy is the real one
     myAuth().then(() => render());
-    setTimeout(flushOutbox, 3000);
+    setTimeout(() => { flushOutbox(); flushPad(); }, 3000);
     render();
   }
 
@@ -797,6 +927,15 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-claim .ssn-text{color:#C4CBD8;margin-top:4px}
 .ssn-sheet .ssn-btn{height:40px;padding:0 18px;font-size:15px}
 .ssn-sheet .ssn-edit{font-size:16px}
+.ssn-at{color:#7DD3FC;font-weight:600}
+.ssn-compose{position:relative}
+.ssn-mention{position:absolute;left:12px;right:12px;bottom:calc(100% - 4px);z-index:5;background:#1A2430;border:1px solid #2A3846;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.5);padding:4px;display:flex;flex-direction:column}
+.ssn-mention[hidden]{display:none}
+.ssn-mopt{display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--n-text);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.ssn-mopt.on,.ssn-mopt:hover{background:#22344A}
+.ssn-mopt .ssn-av{width:26px;height:26px}
+.ssn-mrole{margin-left:auto;font-size:11px;color:var(--n-mute);text-transform:capitalize}
+.ssn-sheet .ssn-mopt{min-height:48px;font-size:16px}
 @media (min-width:1181px){html.ssn-docked.ui-new .detail-overlay{align-items:stretch}}
 @media (max-width:1180px){.ssn-hbtn{display:none}}
 `;
