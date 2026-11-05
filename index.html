@@ -658,6 +658,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="supabase-crm.js?v=5"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=1"></script>
+<script src="crm-checkamount.js?v=1"></script>
 <script src="crm-packet.js?v=17"></script>
 <script src="crm-notes.js?v=8"></script>
 <script src="crm-notifications.js?v=2"></script>
@@ -4125,7 +4126,11 @@ function parseLossStatementText(text){
 
 // OCR a loss file (PDF or image) using Google Vision. For PDFs, render the first
 // few pages to images via pdf.js and OCR each. Returns combined text.
-async function ocrLossFile(f){
+// opts.withWords: return { text, words } — words carry where each one sits on
+// the image (images only; PDFs give words: []).
+async function ocrLossFile(f, opts){
+  opts = opts || {};
+  let lastAnn = null;
   const API_KEY = 'AIzaSyAkwB1-yQIBajaxb6HLo-3tMwHX8gCsReU';
   async function visionOCR(base64){
     const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`, {
@@ -4136,7 +4141,8 @@ async function ocrLossFile(f){
     if(data.error || data.responses?.[0]?.error){
       throw new Error(data.error?.message || data.responses[0].error.message || 'OCR failed');
     }
-    return data.responses?.[0]?.fullTextAnnotation?.text || '';
+    lastAnn = data.responses?.[0]?.fullTextAnnotation || null;
+    return lastAnn?.text || '';
   }
   // Get the file bytes via its URL (Supabase) or an in-memory blob.
   let blob = null;
@@ -4160,7 +4166,7 @@ async function ocrLossFile(f){
       const b64 = canvas.toDataURL('image/png').split(',')[1];
       try { text += '\n' + await visionOCR(b64); } catch(e){ console.warn('page OCR failed', p, e); }
     }
-    return text;
+    return opts.withWords ? { text, words: [] } : text;
   } else {
     const b64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -4168,7 +4174,9 @@ async function ocrLossFile(f){
       reader.onerror = () => reject(new Error('Could not read file'));
       reader.readAsDataURL(blob);
     });
-    return await visionOCR(b64);
+    const text = await visionOCR(b64);
+    if(!opts.withWords) return text;
+    return { text, words: (window.crmCheckAmount && lastAnn) ? window.crmCheckAmount.visionWords(lastAnn) : [] };
   }
 }
 
@@ -4654,8 +4662,10 @@ function openCheckMoneySheet(jobId, recIndex){
       if(!url && typeof jobFileUrl === 'function') url = await jobFileUrl(rec);
       const img = $c('cmsImg'); if(img && url) img.src = url;
       if(!url && !rec._file) throw new Error('no file url');
-      const text = await ocrLossFile(Object.assign({}, rec, url ? { url } : {}));
-      const got = parseCheckText(text);
+      const read = await ocrLossFile(Object.assign({}, rec, url ? { url } : {}), { withWords: true });
+      const text = read.text;
+      // Read what's written right after the "$" (word positions), skipping the memo, address and bank numbers.
+      const got = window.crmCheckAmount ? window.crmCheckAmount.parse(text, read.words) : parseCheckText(text);
       if(!document.body.contains(ov)) return;
       if(got.checkNum && !$c('cmsNum').value) $c('cmsNum').value = got.checkNum;
       if(got.amount && !amt.value){
