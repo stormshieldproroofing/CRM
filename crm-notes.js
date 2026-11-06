@@ -534,11 +534,28 @@
       b.addEventListener('click', e => { e.stopPropagation(); setDock(lsGet(LS.dock, '1') !== '1'); });
       edit.parentElement.insertBefore(b, edit);
     }
+    // Only needed while the notes column is hidden: a small icon (with the count) to bring it back.
+    // When the column is showing, its own › button hides it, so the header keeps just Edit / ⋯ / ✕.
     const on = lsGet(LS.dock, '1') === '1' && !state.floating;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
-    b.innerHTML = '<i class="ti ti-notes" aria-hidden="true"></i>Notes · ' + count(state.jobId);
+    const n = count(state.jobId);
+    b.hidden = on;
+    b.setAttribute('aria-label', 'Show notes' + (n ? ' (' + n + ')' : ''));
+    b.title = 'Show notes';
+    b.innerHTML = '<i class="ti ti-notes" aria-hidden="true"></i>' + (n ? '<span class="ssn-hbtn-n">' + n + '</span>' : '');
+    fitTitle();
   }
+  // Desktop job header: the buttons sit in the top-right corner over a centered name, so pad the
+  // name on both sides by the buttons' real width (keeps it centered and never covered).
+  function fitTitle() {
+    const panel = $('detailPanel'); if (!panel) return;
+    const tg = panel.querySelector('.rd-job .dp-title-group, .dp-title-group');
+    const g = panel.querySelector('.dp-name-row > div:last-child');
+    if (!tg || !g) return;
+    if (!window.matchMedia('(min-width:761px)').matches || getComputedStyle(g).position !== 'absolute') { tg.style.paddingLeft = tg.style.paddingRight = ''; return; }
+    const w = Math.ceil(g.getBoundingClientRect().width) + 16;
+    tg.style.paddingLeft = tg.style.paddingRight = w + 'px';
+  }
+  window.addEventListener('resize', () => { try { fitTitle(); } catch (e) {} });
 
   let lastScrollKey = '';
   function render(scrollToEnd) {
@@ -556,7 +573,7 @@
       if (dockOn) paint(dock, 'dock', scrollToEnd);
     }
     document.documentElement.classList.toggle('ssn-docked', dockOn);
-    if (jobInModal && isWide) headerButton();
+    if (jobInModal && isWide) headerButton(); else if (jobInModal) fitTitle();
 
     // Floating
     const fl = floatOn ? floatEl() : $('ssnFloat');
@@ -855,8 +872,10 @@
 .ssn-hint{font-size:12px;color:var(--n-mute)}
 .ssn-pad{min-height:0;height:100%}
 .ssn-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.ssn-hbtn{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line,#253241);background:transparent;color:var(--text-2,#C4CBD8);display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex-shrink:0}
-.ssn-hbtn.on{border-color:#38BDF8;background:#10283A;color:#7DD3FC}
+.ssn-hbtn{position:relative;width:36px;height:36px;padding:0;border-radius:10px;border:1px solid var(--line,#253241);background:var(--panel-2,#181D27);color:#7DD3FC;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;flex-shrink:0}
+.ssn-hbtn[hidden]{display:none!important}
+.ssn-hbtn:hover{background:#10283A;border-color:#38BDF8}
+.ssn-hbtn-n{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:#38BDF8;color:#06202E;font-size:10px;font-weight:700;line-height:17px;text-align:center}
 .ssn-strip[hidden]{display:none!important}
 .ssn-strip{grid-column:1/-1;display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:6px 6px 6px 8px;margin:0 0 4px;border:0;border-bottom:1px solid rgba(255,255,255,0.07);border-radius:12px 12px 0 0;background:transparent;color:#E8ECF3;text-align:left;cursor:pointer;font:inherit}
 .ssn-strip-ic{position:relative;width:30px;height:30px;flex:none;border-radius:9px;background:#10283A;color:#38BDF8;display:flex;align-items:center;justify-content:center;font-size:17px}
