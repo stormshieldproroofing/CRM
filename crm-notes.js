@@ -1307,10 +1307,10 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-c-head{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#A7F3D0}
 .ssn-c-head i{font-size:14px;color:#34D399}
 .ssn-card.contact .ssn-text{margin-top:3px}
-.ssn-strip-cnt{color:#8B94A7;font-weight:600}
+.ssn-strip-cnt{color:#8B94A7;font-weight:500}
 .ssn-strip-pin{color:#FCD34D;font-weight:600}
-.ssn-strip-c{color:#A7F3D0;font-weight:600}
-.ssn-strip-s{font-weight:600;color:#CBD5E1}.ssn-strip-s.money{color:#FCD34D}.ssn-strip-s.packet{color:#5EEAD4}.ssn-strip-s.sent{color:#7DD3FC}.ssn-strip-s.denied{color:#FCA5A5}.ssn-strip-s.stage{color:#C4B5FD}
+.ssn-strip-c{color:#A7F3D0;font-weight:500}
+.ssn-strip-s{font-weight:400;color:#CBD5E1}.ssn-strip-s.money{color:#FCD34D}.ssn-strip-s.packet{color:#5EEAD4}.ssn-strip-s.sent{color:#7DD3FC}.ssn-strip-s.denied{color:#FCA5A5}.ssn-strip-s.stage{color:#C4B5FD}
 .ssn-cline{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;margin:8px auto 2px;padding:6px 12px;border-radius:999px;border:1px solid var(--line,#253241);background:rgba(14,20,27,.7);color:#C4CBD8;font:inherit;font-size:12px;cursor:pointer;max-width:100%}
 .ssn-cline:hover{border-color:#34D399}
 .ssn-cline > .ti{color:#34D399;font-size:14px}
