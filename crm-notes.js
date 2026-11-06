@@ -23,6 +23,23 @@
   const WIDE = '(min-width:1181px)';
   const TAGS = ['Called HO', 'No answer', 'Adjuster mtg', 'Supplement', 'Follow-up'];
 
+  // ── Contacts (replaces the old "Last contact" card) ─────────────────────
+  // Logged from the note box (phone button) into the job's contact log (j.contactLog via
+  // logContact), so the follow-up warnings keep working. Shown as green cards in the timeline.
+  const C_PARTY = [['client', 'Homeowner'], ['adjuster', 'Adjuster'], ['carrier', 'Carrier']];
+  const C_METHOD = [['call', 'Call'], ['text', 'Text'], ['email', 'Email'], ['voicemail', 'Voicemail'], ['in-person', 'In person']];
+  const C_NEXT = [['none', 'No follow-up'], ['1', 'Tomorrow'], ['3', '3 days'], ['7', '1 week']];
+  const C_VERB = { call: 'Called', text: 'Texted', email: 'Emailed', voicemail: 'Left voicemail for', 'in-person': 'Met with' };
+  const C_WHO = { client: 'homeowner', adjuster: 'adjuster', carrier: 'carrier' };
+  const C_SHORT = { client: 'HO', adjuster: 'adjuster', carrier: 'carrier' };
+  const C_ICON = { call: 'ti-phone', text: 'ti-message-2', email: 'ti-mail', voicemail: 'ti-phone-pause', 'in-person': 'ti-user-check' };
+  function contactHead(e) { return (C_VERB[e.method] || 'Contacted') + ' ' + (C_WHO[e.party] || e.party || ''); }
+  function daysAgoTxt(iso) {
+    const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    return isNaN(d) ? '' : d <= 0 ? 'today' : d + 'd';
+  }
+  function addDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+
   // ── @mentions ─────────────────────────────────────────────────────────
   // People you can mention: team members with a CRM login (they get the alert).
   function team() {
@@ -76,6 +93,7 @@
 
   // ── State ───────────────────────────────────────────────────────────────
   const state = {
+    contact: null,        // { party, method, next } while the phone button is on
     jobId: null,          // job whose notes are showing
     notes: {},            // jobId -> array of rows
     loaded: {},           // jobId -> true once fetched
@@ -144,6 +162,7 @@
           .insert({ job_id: item.job_id, body: item.body, tag: item.tag || null, author_name: item.author_name, mentions: item.mentions || [] })
           .select().single();
         if (error) throw error;
+        if (!data || !data.id) throw new Error('note saved but not returned');
         const list = state.notes[item.job_id];
         if (list) {
           const i = list.findIndex(n => n.id === item.tmp);
@@ -164,6 +183,7 @@
     const jobId = state.jobId;
     const ta = (root || document).querySelector('.ssn-input');
     const body = ((ta && ta.value) || '').trim();
+    if (state.contact) return postContact(ta, body);
     if (!jobId || !body) return;
     const tmp = 'tmp-' + Date.now();
     const row = { id: tmp, job_id: jobId, body, tag: state.tag, pinned: false, author_name: myName(), author_id: state.myAuthId, created_at: new Date().toISOString(), _pending: true };
@@ -178,6 +198,19 @@
     await flushOutbox();
     if (!outbox().some(o => o.tmp === tmp)) setStatus('Posted · saved to job', 'ok');
     render();
+  }
+
+  function postContact(ta, body) {
+    const j = jobById(state.jobId), c = state.contact;
+    if (!j || !c || typeof window.logContact !== 'function') return;
+    const opts = c.next && c.next !== 'none' ? { followUp: addDays(parseInt(c.next, 10)) } : undefined;
+    try { window.logContact(j, c.party, c.method, body, opts); }
+    catch (e) { setStatus('Could not log the contact', 'warn'); return; }
+    if (ta) { ta.value = ''; const host = ta.closest('.ssn'); if (host) host.dataset.justPosted = '1'; }
+    lsSet(LS.draft(state.jobId), null);
+    state.contact = null;
+    setStatus(contactHead({ party: c.party, method: c.method }) + ' · logged', 'ok');
+    render(true);
   }
 
   async function togglePin(id) {
@@ -333,13 +366,16 @@
   }
 
   function feedItems(jobId) {
-    const notes = (state.notes[jobId] || []).filter(n => !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
+    const notes = (state.notes[jobId] || []).filter(n => n && !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
     const stages = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.type === 'stage' && e.at)
       .slice(-12)
       .map(e => ({ kind: 'sys', at: e.at, text: sysText(e), stage: /stage changed/i.test(e.label || '') }));
-    return notes.concat(stages).sort((a, b) => new Date(a.at) - new Date(b.at));
+    const contacts = (j && Array.isArray(j.contactLog) ? j.contactLog : [])
+      .filter(e => e && e.at).slice(-30)
+      .map(e => ({ kind: 'contact', at: e.at, e }));
+    return notes.concat(stages, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
   }
 
   function count(jobId) { return (state.notes[jobId] || []).length; }
@@ -355,6 +391,16 @@
   }
 
   function noteHTML(it) {
+    if (it.kind === 'contact') {
+      const e = it.e;
+      const mine = e.by && (e.by === myName() || (state.myMemberId && e.by === state.myMemberId));
+      return `<div class="ssn-tl-note"><span class="ssn-dot contact" aria-hidden="true"></span>
+        <div class="ssn-card contact">
+          <div class="ssn-c-head"><i class="ti ${C_ICON[e.method] || 'ti-phone'}" aria-hidden="true"></i>${esc(contactHead(e))}</div>
+          ${e.note ? `<div class="ssn-text">${noteText(e.note)}</div>` : ''}
+          <div class="ssn-meta"><span>${esc(mine ? 'You' : firstName(e.by && e.by !== 'system' ? e.by : 'Team'))} · ${esc(timeLabel(e.at))}</span></div>
+        </div></div>`;
+    }
     if (it.kind === 'sys') {
       return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}" aria-hidden="true"></span><span class="ssn-tl-d">${esc(shortDate(it.at))}</span><span class="ssn-tl-t">${esc(it.text)}</span></div>`;
     }
@@ -401,7 +447,7 @@
   }
 
   function pinnedHTML(jobId) {
-    return (state.notes[jobId] || []).filter(n => n.pinned).map(n => state.editing === n.id ? `<div class="ssn-pin editing">${editBoxHTML(n)}</div>` : `
+    return (state.notes[jobId] || []).filter(n => n && n.pinned).map(n => state.editing === n.id ? `<div class="ssn-pin editing">${editBoxHTML(n)}</div>` : `
       <div class="ssn-pin">
         <div class="ssn-pin-h"><i class="ti ti-pin-filled" aria-hidden="true"></i>Pinned · ${esc((n._pending || (state.myAuthId && n.author_id === state.myAuthId)) ? 'You' : firstName(n.author_name))}
           <span class="ssn-acts">${(state.myAuthId && n.author_id === state.myAuthId) ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}">Edit</button>` : ''}
@@ -409,6 +455,13 @@
         <div class="ssn-text">${noteText(n.body)}</div>
         ${n.edited_at ? '<div class="ssn-edited-l">edited</div>' : ''}
       </div>`).join('');
+  }
+
+  function contactRowsHTML() {
+    const c = state.contact;
+    const row = (label, key, opts, cur) => `<div class="ssn-crow"><span class="ssn-clab">${label}</span><div class="ssn-cchips">${opts.map(([v, l]) =>
+      `<button type="button" class="ssn-chip${cur === v ? ' on' : ''}${key === 'next' && v !== 'none' && cur === v ? ' fu' : ''}" data-c${key}="${esc(v)}" aria-pressed="${cur === v}">${esc(l)}</button>`).join('')}</div></div>`;
+    return `<div class="ssn-contact">${row('Who', 'party', C_PARTY, c.party)}${row('How', 'method', C_METHOD, c.method)}${row('Next', 'next', C_NEXT, c.next)}</div>`;
   }
 
   function bodyHTML(mode) {
@@ -442,12 +495,13 @@
     const draft = lsGet(LS.draft(jobId), '');
     return head + `
       <div class="ssn-feed">${claimNotesHTML(jobId)}${pinnedHTML(jobId)}${feed}</div>
-      <div class="ssn-compose${state.tag || draft ? ' open' : ''}">
-        <div class="ssn-chips">${TAGS.map(t => `<button type="button" class="ssn-chip${state.tag === t ? ' on' : ''}" data-tag="${esc(t)}" aria-pressed="${state.tag === t}">${esc(t)}</button>`).join('')}</div>
+      <div class="ssn-compose${state.tag || draft ? ' open' : ''}${state.contact ? ' contact' : ''}">
+        ${state.contact ? contactRowsHTML() : `<div class="ssn-chips">${TAGS.map(t => `<button type="button" class="ssn-chip${state.tag === t ? ' on' : ''}" data-tag="${esc(t)}" aria-pressed="${state.tag === t}">${esc(t)}</button>`).join('')}</div>`}
         <div class="ssn-mention" role="listbox" aria-label="Mention someone" hidden></div>
         <div class="ssn-row">
-          <label class="ssn-sr" for="ssnInput-${mode}">New note</label>
-          <textarea id="ssnInput-${mode}" class="ssn-input" rows="2" placeholder="${mode === 'sheet' ? 'Add a note… (@ to mention)' : 'Write a note… @ to mention, Enter to post'}" enterkeyhint="send">${esc(draft)}</textarea>
+          <button type="button" class="ssn-cbtn${state.contact ? ' on' : ''}" data-act="contact" aria-pressed="${!!state.contact}" aria-label="${state.contact ? 'Back to a plain note' : 'Log a call, text or visit'}" title="Log a call, text or visit"><i class="ti ti-phone" aria-hidden="true"></i></button>
+          <label class="ssn-sr" for="ssnInput-${mode}">${state.contact ? 'What happened' : 'New note'}</label>
+          <textarea id="ssnInput-${mode}" class="ssn-input" rows="2" placeholder="${state.contact ? 'What happened? (optional)' : mode === 'sheet' ? 'Add a note… (@ to mention)' : 'Write a note… @ to mention, Enter to post'}" enterkeyhint="send">${esc(draft)}</textarea>
           <button type="button" class="ssn-send" data-act="post" aria-label="Post note"><i class="ti ti-send" aria-hidden="true"></i></button>
         </div>
         <div class="ssn-status ${state.statusKind}">${esc(state.status || '')}</div>
@@ -494,12 +548,16 @@
   }
   function stripHTML() {
     const list = state.notes[state.jobId] || [];
-    const pin = list.slice().reverse().find(n => n.pinned);
-    const last = list[list.length - 1];
-    const show = pin || last;
+    const pin = list.slice().reverse().find(n => n && n.pinned);
+    // Latest note or logged contact, whichever is newer (a pinned note always wins)
+    const items = feedItems(state.jobId).filter(it => it.kind !== 'sys');
+    const latest = items[items.length - 1];
+    let html;
+    if (pin) html = '<b class="ssn-strip-pin">Pinned:</b> ' + esc(pin.body);
+    else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc((C_VERB[latest.e.method] || 'Contacted') + ' ' + (C_SHORT[latest.e.party] || '')) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
+    else if (latest) html = esc(latest.n.body);
     const n = count(state.jobId);
-    return `<span class="ssn-strip-ic${pin ? ' pin' : ''}"><i class="ti ${pin ? 'ti-pin-filled' : 'ti-notes'}" aria-hidden="true"></i>${n ? `<span class="ssn-strip-n">${n}</span>` : ''}</span>
-      <span class="ssn-strip-text${show ? '' : ' empty'}">${esc(show ? show.body : 'No notes yet. Tap to add one')}</span>
+    return `<span class="ssn-strip-text${html ? '' : ' empty'}">${html ? (n > 1 ? `<span class="ssn-strip-cnt">${n} ·</span> ` : '') + html : 'No notes yet. Tap to add one'}</span>
       <span class="ssn-strip-add" data-add="1" role="button" aria-label="Add a note"><i class="ti ti-plus" aria-hidden="true"></i></span>`;
   }
   function stripEl(bar) {
@@ -534,11 +592,60 @@
       b.addEventListener('click', e => { e.stopPropagation(); setDock(lsGet(LS.dock, '1') !== '1'); });
       edit.parentElement.insertBefore(b, edit);
     }
+    // Only needed while the notes column is hidden: a small icon (with the count) to bring it back.
+    // When the column is showing, its own › button hides it, so the header keeps just Edit / ⋯ / ✕.
     const on = lsGet(LS.dock, '1') === '1' && !state.floating;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
-    b.innerHTML = '<i class="ti ti-notes" aria-hidden="true"></i>Notes · ' + count(state.jobId);
+    const n = count(state.jobId);
+    b.hidden = on;
+    b.setAttribute('aria-label', 'Show notes' + (n ? ' (' + n + ')' : ''));
+    b.title = 'Show notes';
+    b.innerHTML = '<i class="ti ti-notes" aria-hidden="true"></i>' + (n ? '<span class="ssn-hbtn-n">' + n + '</span>' : '');
+    fitTitle();
   }
+  // Desktop job header: the buttons sit in the top-right corner over a centered name, so pad the
+  // name on both sides by the buttons' real width (keeps it centered and never covered).
+  function contactLine() {
+    const panel = $('detailPanel'); const j = jobById(state.jobId);
+    if (!panel || !j) return;
+    const anchor = panel.querySelector('.dp-status-group');
+    let el = panel.querySelector('.ssn-cline');
+    if (!anchor) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('button'); el.type = 'button'; el.className = 'ssn-cline';
+      el.addEventListener('click', e => { e.stopPropagation(); openForContact(); });
+    }
+    if (el.previousElementSibling !== anchor) anchor.insertAdjacentElement('afterend', el);
+    const lc = typeof window.lastContact === 'function' ? window.lastContact : null;
+    const st = typeof window.followUpStatus === 'function' ? (window.followUpStatus(j) || { due: [] }) : { due: [] };
+    const over = p => st.due.some(d => d.party === p);
+    const part = (label, party) => {
+      const e = lc ? lc(j, party) : null;
+      return `<span class="${over(party) ? 'bad' : e ? 'ok' : 'none'}">${label} <b>${e ? daysAgoTxt(e.at) : 'never'}</b></span>`;
+    };
+    const today = new Date().toISOString().slice(0, 10);
+    const fu = j.nextFollowUp ? `<span class="${j.nextFollowUp <= today ? 'bad' : 'fu'}">Follow up ${esc(niceDate(j.nextFollowUp))}</span>` : '';
+    const ins = (j.pipeline || 'insurance') === 'insurance';
+    el.innerHTML = `<i class="ti ti-phone" aria-hidden="true"></i>${part('Homeowner', 'client')}${ins ? '<i class="sep">·</i>' + part('Insurance', 'insurance') : ''}${fu ? '<i class="sep">·</i>' + fu : ''}`;
+    el.setAttribute('aria-label', 'Last contact: ' + el.textContent.replace(/\s+/g, ' ').trim() + '. Tap to log a contact.');
+  }
+  // Open the notes ready to log a contact (phone: sheet; desktop: notes column)
+  function openForContact() {
+    state.contact = { party: 'client', method: 'call', next: 'none' };
+    state.tab = 'job';
+    if (wide()) { lsSet(LS.dock, '1'); state.floating = false; render(true); setTimeout(() => { const t = document.querySelector('#ssnDock .ssn-input'); if (t) t.focus(); }, 30); }
+    else openSheet(true);
+  }
+
+  function fitTitle() {
+    const panel = $('detailPanel'); if (!panel) return;
+    const tg = panel.querySelector('.rd-job .dp-title-group, .dp-title-group');
+    const g = panel.querySelector('.dp-name-row > div:last-child');
+    if (!tg || !g) return;
+    if (!window.matchMedia('(min-width:761px)').matches || getComputedStyle(g).position !== 'absolute') { tg.style.paddingLeft = tg.style.paddingRight = ''; return; }
+    const w = Math.ceil(g.getBoundingClientRect().width) + 16;
+    tg.style.paddingLeft = tg.style.paddingRight = w + 'px';
+  }
+  window.addEventListener('resize', () => { try { fitTitle(); } catch (e) {} });
 
   let lastScrollKey = '';
   function render(scrollToEnd) {
@@ -556,7 +663,8 @@
       if (dockOn) paint(dock, 'dock', scrollToEnd);
     }
     document.documentElement.classList.toggle('ssn-docked', dockOn);
-    if (jobInModal && isWide) headerButton();
+    if (jobInModal) contactLine();
+    if (jobInModal && isWide) headerButton(); else if (jobInModal) fitTitle();
 
     // Floating
     const fl = floatOn ? floatEl() : $('ssnFloat');
@@ -608,7 +716,7 @@
 
   function switchJob(jobId) {
     state.jobId = jobId;
-    state.editing = null; editDraft = null;
+    state.editing = null; editDraft = null; state.contact = null;
     state.tag = null;
     state.status = '';
     if (jobId) { load(jobId); subscribe(jobId); }
@@ -627,9 +735,17 @@
     const root = inNotes(e.target);
     if (!root) return;
     e.stopPropagation();   // keep clicks from reaching the job overlay (which closes the job)
-    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit]');
+    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit],[data-cparty],[data-cmethod],[data-cnext]');
     if (!b) return;
     if (b.dataset.tab) { state.tab = b.dataset.tab; state.status = ''; if (state.tab === 'pad') loadPad(); render(); return; }
+    if (b.dataset.cparty || b.dataset.cmethod || b.dataset.cnext) {
+      if (state.contact) {
+        if (b.dataset.cparty) state.contact.party = b.dataset.cparty;
+        if (b.dataset.cmethod) state.contact.method = b.dataset.cmethod;
+        if (b.dataset.cnext) state.contact.next = b.dataset.cnext;
+      }
+      render(); const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); return;
+    }
     if (b.dataset.tag) { state.tag = state.tag === b.dataset.tag ? null : b.dataset.tag; render(); const t = root.querySelector('.ssn-input'); if (t) t.focus(); return; }
     if (b.dataset.pin) { togglePin(b.dataset.pin); return; }
     if (b.dataset.del) { remove(b.dataset.del); return; }
@@ -637,6 +753,7 @@
     switch (b.dataset.act) {
       case 'pad': state.tab = state.tab === 'pad' ? 'job' : 'pad'; state.status = ''; if (state.tab === 'pad') loadPad(); render(true); break;
       case 'post': post(root); break;
+      case 'contact': state.contact = state.contact ? null : { party: 'client', method: 'call', next: 'none' }; state.status = ''; render(); { const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); } break;
       case 'edit-save': saveEdit(root); break;
       case 'edit-cancel': cancelEdit(); break;
       case 'editjob': if (typeof window.openEditJob === 'function' && state.jobId) { state.sheetOpen = false; render(); window.openEditJob(state.jobId); } break;
@@ -855,14 +972,16 @@
 .ssn-hint{font-size:12px;color:var(--n-mute)}
 .ssn-pad{min-height:0;height:100%}
 .ssn-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.ssn-hbtn{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line,#253241);background:transparent;color:var(--text-2,#C4CBD8);display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex-shrink:0}
-.ssn-hbtn.on{border-color:#38BDF8;background:#10283A;color:#7DD3FC}
+.ssn-hbtn{position:relative;width:36px;height:36px;padding:0;border-radius:10px;border:1px solid var(--line,#253241);background:var(--panel-2,#181D27);color:#7DD3FC;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;flex-shrink:0}
+.ssn-hbtn[hidden]{display:none!important}
+.ssn-hbtn:hover{background:#10283A;border-color:#38BDF8}
+.ssn-hbtn-n{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:#38BDF8;color:#06202E;font-size:10px;font-weight:700;line-height:17px;text-align:center}
 .ssn-strip[hidden]{display:none!important}
 .ssn-strip{grid-column:1/-1;display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:6px 6px 6px 8px;margin:0 0 4px;border:0;border-bottom:1px solid rgba(255,255,255,0.07);border-radius:12px 12px 0 0;background:transparent;color:#E8ECF3;text-align:left;cursor:pointer;font:inherit}
 .ssn-strip-ic{position:relative;width:30px;height:30px;flex:none;border-radius:9px;background:#10283A;color:#38BDF8;display:flex;align-items:center;justify-content:center;font-size:17px}
 .ssn-strip-ic.pin{background:#2A2210;color:#FCD34D}
 .ssn-strip-n{position:absolute;top:-6px;right:-7px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:#38BDF8;color:#06202E;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}
-.ssn-strip-text{flex:1;min-width:0;font-size:14px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ssn-strip-text{flex:1;min-width:0;padding-left:4px;font-size:14px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ssn-strip-text.empty{color:#8B94A7}
 .ssn-strip-add{width:40px;height:40px;flex:none;border-radius:999px;background:#38BDF8;color:#06202E;display:flex;align-items:center;justify-content:center;font-size:20px}
 .ssn-strip.solo{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:130;width:auto;margin:0;padding:8px 8px 8px 10px;border:1px solid rgba(255,255,255,0.07);border-radius:18px;background:rgba(18,22,30,0.96);box-shadow:0 10px 30px rgba(0,0,0,0.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
@@ -936,6 +1055,32 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-mopt .ssn-av{width:26px;height:26px}
 .ssn-mrole{margin-left:auto;font-size:11px;color:var(--n-mute);text-transform:capitalize}
 .ssn-sheet .ssn-mopt{min-height:48px;font-size:16px}
+.ssn-cbtn{width:38px;height:38px;flex:none;border-radius:999px;border:1px solid var(--n-line);background:#1A2430;color:#CBD5E1;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ssn-cbtn.on{border-color:#34D399;background:#0E1A14;color:#34D399}
+.ssn-contact{display:flex;flex-direction:column;gap:7px}
+.ssn-crow{display:flex;align-items:center;gap:8px}
+.ssn-clab{width:36px;flex:none;font-size:10px;color:var(--n-mute);text-transform:uppercase;letter-spacing:.06em}
+.ssn-cchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
+.ssn-cchips::-webkit-scrollbar{display:none}
+.ssn-cchips .ssn-chip{flex:none}
+.ssn-compose.contact .ssn-chip.on{border-color:#34D399;background:#0E1A14;color:#A7F3D0}
+.ssn-compose.contact .ssn-chip.on.fu{border-color:#FBBF24;background:#2A2210;color:#FCD34D}
+.ssn-dot.contact{background:#10B981}
+.ssn-card.contact{background:#0E1A14;border-color:#1F4A33}
+.ssn-c-head{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#A7F3D0}
+.ssn-c-head i{font-size:14px;color:#34D399}
+.ssn-card.contact .ssn-text{margin-top:3px}
+.ssn-strip-cnt{color:#8B94A7;font-weight:600}
+.ssn-strip-pin{color:#FCD34D;font-weight:600}
+.ssn-strip-c{color:#A7F3D0;font-weight:600}
+.ssn-cline{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;margin:8px auto 2px;padding:6px 12px;border-radius:999px;border:1px solid var(--line,#253241);background:rgba(14,20,27,.7);color:#C4CBD8;font:inherit;font-size:12px;cursor:pointer;max-width:100%}
+.ssn-cline:hover{border-color:#34D399}
+.ssn-cline > .ti{color:#34D399;font-size:14px}
+.ssn-cline .sep{font-style:normal;color:#3A4A5A}
+.ssn-cline .ok b{color:#A7F3D0}.ssn-cline .bad b,.ssn-cline span.bad{color:#FCA5A5}.ssn-cline .none b{color:#8B94A7;font-weight:500}.ssn-cline .fu{color:#FBBF24}
+.ssn-sheet .ssn-cbtn{width:46px;height:46px;font-size:20px}
+.ssn-sheet .ssn-crow .ssn-chip{height:34px}
+@media (max-width:760px){.ssn-cline{font-size:13px;padding:7px 12px}}
 @media (min-width:1181px){html.ssn-docked.ui-new .detail-overlay{align-items:stretch}}
 @media (max-width:1180px){.ssn-hbtn{display:none}}
 `;
