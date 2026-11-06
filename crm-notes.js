@@ -29,11 +29,22 @@
   const C_PARTY = [['client', 'Homeowner'], ['adjuster', 'Adjuster'], ['carrier', 'Carrier']];
   const C_METHOD = [['call', 'Call'], ['text', 'Text'], ['email', 'Email'], ['voicemail', 'Voicemail'], ['in-person', 'In person']];
   const C_NEXT = [['none', 'No follow-up'], ['1', 'Tomorrow'], ['3', '3 days'], ['7', '1 week']];
+  const C_DIR = [['out', 'Outbound'], ['in', 'Inbound']];
+  // When they reached us: "Homeowner called", "Adjuster left a voicemail"
+  const C_VERB_IN = { call: 'called', text: 'texted', email: 'emailed', voicemail: 'left a voicemail', 'in-person': 'stopped by' };
+  const C_PARTY_NAME = { client: 'Homeowner', adjuster: 'Adjuster', carrier: 'Carrier' };
   const C_VERB = { call: 'Called', text: 'Texted', email: 'Emailed', voicemail: 'Left voicemail for', 'in-person': 'Met with' };
   const C_WHO = { client: 'homeowner', adjuster: 'adjuster', carrier: 'carrier' };
   const C_SHORT = { client: 'HO', adjuster: 'adjuster', carrier: 'carrier' };
   const C_ICON = { call: 'ti-phone', text: 'ti-message-2', email: 'ti-mail', voicemail: 'ti-phone-pause', 'in-person': 'ti-user-check' };
-  function contactHead(e) { return (C_VERB[e.method] || 'Contacted') + ' ' + (C_WHO[e.party] || e.party || ''); }
+  function contactHead(e) {
+    if (e.dir === 'in') return (C_PARTY_NAME[e.party] || 'They') + ' ' + (C_VERB_IN[e.method] || 'reached out');
+    return (C_VERB[e.method] || 'Contacted') + ' ' + (C_WHO[e.party] || e.party || '');
+  }
+  function contactShort(e) {
+    if (e.dir === 'in') return (C_SHORT[e.party] === 'HO' ? 'HO' : (C_PARTY_NAME[e.party] || 'They')) + ' ' + (C_VERB_IN[e.method] || 'reached out');
+    return (C_VERB[e.method] || 'Contacted') + ' ' + (C_SHORT[e.party] || '');
+  }
   function daysAgoTxt(iso) {
     const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
     return isNaN(d) ? '' : d <= 0 ? 'today' : d + 'd';
@@ -93,6 +104,7 @@
 
   // ── State ───────────────────────────────────────────────────────────────
   const state = {
+    menuFor: null,        // note whose Pin / Edit / Delete row is open
     contact: null,        // { party, method, next } while the phone button is on
     jobId: null,          // job whose notes are showing
     notes: {},            // jobId -> array of rows
@@ -135,9 +147,21 @@
       state.loaded[jobId] = true;
       cacheSave(jobId);
       render();
+      loadLinks(jobId);
     } catch (e) {
       console.warn('[notes] load failed, showing saved copy', e);
     }
+  }
+
+  // Packet signing links: when the homeowner opened / signed the link.
+  const linkTimes = {};
+  async function loadLinks(jobId) {
+    try {
+      const { data, error } = await sbc().from('packet_links').select('id,created_at,viewed_at,signed_at').eq('job_id', jobId);
+      if (error) throw error;
+      linkTimes[jobId] = data || [];
+      render();
+    } catch (e) { console.warn('[notes] packet links', e); }
   }
 
   function subscribe(jobId) {
@@ -203,13 +227,14 @@
   function postContact(ta, body) {
     const j = jobById(state.jobId), c = state.contact;
     if (!j || !c || typeof window.logContact !== 'function') return;
-    const opts = c.next && c.next !== 'none' ? { followUp: addDays(parseInt(c.next, 10)) } : undefined;
+    const opts = { dir: c.dir === 'in' ? 'in' : 'out' };
+    if (c.next && c.next !== 'none') opts.followUp = addDays(parseInt(c.next, 10));
     try { window.logContact(j, c.party, c.method, body, opts); }
     catch (e) { setStatus('Could not log the contact', 'warn'); return; }
     if (ta) { ta.value = ''; const host = ta.closest('.ssn'); if (host) host.dataset.justPosted = '1'; }
     lsSet(LS.draft(state.jobId), null);
     state.contact = null;
-    setStatus(contactHead({ party: c.party, method: c.method }) + ' · logged', 'ok');
+    setStatus(contactHead({ party: c.party, method: c.method, dir: c.dir }) + ' · logged', 'ok');
     render(true);
   }
 
@@ -365,6 +390,59 @@
     return label + (to ? ': ' + niceDate(to) : (e.detail ? ': ' + e.detail : ''));
   }
 
+  // Money lines in the notes: supplement approved.
+  // Read from the job's activity log (the same place stage changes come from).
+  function moneyText(e) {
+    const label = String(e.label || ''), detail = String(e.detail || '');
+    if (e.type === 'accounting' && /^supplement (added|updated)/i.test(label)) {
+      const parts = detail.split(/→|->/);
+      const after = parts[parts.length - 1].trim();
+      const before = parts.length > 1 ? parts[0].trim() : '';
+      const m = after.match(/^(\$[\d,.]+)\s*·\s*(Approved|Partial)\b/i);
+      if (!m) return '';
+      const st = m[2].toLowerCase();
+      // An edit that leaves it approved (e.g. a note change) isn't news.
+      if (before && new RegExp('·\\s*' + m[2] + '\\b', 'i').test(before) && before.split('·')[0].trim() === m[1]) return '';
+      return (st === 'partial' ? 'Supplement partly approved · ' : 'Supplement approved · ') + m[1];
+    }
+    return '';
+  }
+
+  function packetText(e, haveLinks) {
+    if (e.type !== 'file') return '';
+    const label = String(e.label || ''), detail = String(e.detail || '');
+    if (/^claim packet sent for signature/i.test(label)) return 'Packet sent for signature';
+    if (/^claim packet signing link resent/i.test(label)) return 'Packet link resent';
+    if (/^claim packet signed/i.test(label)) {
+      if (/in person/i.test(detail)) return 'Packet signed in person';
+      return haveLinks ? '' : 'Packet signed by homeowner';   // link rows give the exact signing time
+    }
+    if (/^claim packet uploaded/i.test(label)) return 'Signed packet uploaded';
+    return '';
+  }
+
+  // Checks come from the job's checks list itself (not the activity log), so a check
+  // that was removed or corrected later shows once, as it is now.
+  function checkItems(j) {
+    const deps = (j && Array.isArray(j.deposits) ? j.deposits : []).filter(d => d && d.date);
+    // The log has the time of day a check was added; borrow it when the day matches.
+    const logged = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.type === 'deposit_add' && e.at).map(e => e.at);
+    const used = new Set();
+    return deps.map(d => {
+      const day = new Date(d.date + (d.time ? ' ' + d.time : ''));
+      if (isNaN(day)) return null;
+      let at = d.time ? day : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 12);
+      if (!d.time) {
+        const hit = logged.find(t => !used.has(t) && new Date(t).toDateString() === day.toDateString());
+        if (hit) { used.add(hit); at = new Date(hit); }
+      }
+      const amt = parseFloat(d.amount) || 0;
+      const money = '$' + amt.toLocaleString('en-US', { minimumFractionDigits: amt % 1 ? 2 : 0, maximumFractionDigits: 2 });
+      return { kind: 'sys', at: at.toISOString(), text: 'Check collected · ' + money + (d.desc ? ' · ' + d.desc : ''), money: true };
+    }).filter(Boolean);
+  }
+
   function feedItems(jobId) {
     const notes = (state.notes[jobId] || []).filter(n => n && !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
@@ -372,10 +450,23 @@
       .filter(e => e && e.type === 'stage' && e.at)
       .slice(-12)
       .map(e => ({ kind: 'sys', at: e.at, text: sysText(e), stage: /stage changed/i.test(e.label || '') }));
+    const money = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.at).map(e => ({ e, text: moneyText(e) })).filter(x => x.text)
+      .slice(-20)
+      .map(x => ({ kind: 'sys', at: x.e.at, text: x.text, money: true }))
+      .concat(checkItems(j));
+    const links = linkTimes[jobId] || [];
+    const packet = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.at).map(e => ({ at: e.at, text: packetText(e, links.length > 0) })).filter(x => x.text);
+    links.forEach(l => {
+      if (l.viewed_at) packet.push({ at: l.viewed_at, text: 'Packet opened by homeowner' });
+      if (l.signed_at) packet.push({ at: l.signed_at, text: 'Packet signed by homeowner' });
+    });
+    const packets = packet.slice(-20).map(x => ({ kind: 'sys', at: x.at, text: x.text, packet: true }));
     const contacts = (j && Array.isArray(j.contactLog) ? j.contactLog : [])
       .filter(e => e && e.at).slice(-30)
       .map(e => ({ kind: 'contact', at: e.at, e }));
-    return notes.concat(stages, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
+    return notes.concat(stages, money, packets, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
   }
 
   function count(jobId) { return (state.notes[jobId] || []).length; }
@@ -390,37 +481,52 @@
     return d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: '2-digit' });
   }
 
+  // Timeline row (version 5): date in the left column (shown once per day), then the box.
+  // Box header: label on the left, "time · who" on the right; the text underneath.
+  function dayKey(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toDateString(); }
+  function dayLabel(iso) {
+    const d = new Date(iso); if (isNaN(d)) return '';
+    if (d.toDateString() === new Date().toDateString()) return 'Today';
+    return shortDate(iso);
+  }
+  function timeOnly(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+  function dcol(it) { return `<span class="ssn-tl-d">${it.showDay ? esc(dayLabel(it.at)) : ''}</span>`; }
+
   function noteHTML(it) {
+    if (it.kind === 'sys') {
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}">${esc(it.text)}</span></div>`;
+    }
     if (it.kind === 'contact') {
       const e = it.e;
       const mine = e.by && (e.by === myName() || (state.myMemberId && e.by === state.myMemberId));
-      return `<div class="ssn-tl-note"><span class="ssn-dot contact" aria-hidden="true"></span>
+      const who = mine ? 'You' : firstName(e.by && e.by !== 'system' ? e.by : 'Team');
+      const icon = e.dir === 'in' && (e.method === 'call' || !e.method) ? 'ti-phone-incoming' : (C_ICON[e.method] || 'ti-phone');
+      return `<div class="ssn-tl-note"><span class="ssn-dot contact" aria-hidden="true"></span>${dcol(it)}
         <div class="ssn-card contact">
-          <div class="ssn-c-head"><i class="ti ${C_ICON[e.method] || 'ti-phone'}" aria-hidden="true"></i>${esc(contactHead(e))}</div>
+          <div class="ssn-h"><span class="ssn-h-l"><i class="ti ${icon}" aria-hidden="true"></i>${esc(contactHead(e))}</span><span class="ssn-h-r">${esc(timeOnly(e.at))} · ${esc(who)}</span></div>
           ${e.note ? `<div class="ssn-text">${noteText(e.note)}</div>` : ''}
-          <div class="ssn-meta"><span>${esc(mine ? 'You' : firstName(e.by && e.by !== 'system' ? e.by : 'Team'))} · ${esc(timeLabel(e.at))}</span></div>
         </div></div>`;
-    }
-    if (it.kind === 'sys') {
-      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}" aria-hidden="true"></span><span class="ssn-tl-d">${esc(shortDate(it.at))}</span><span class="ssn-tl-t">${esc(it.text)}</span></div>`;
     }
     const n = it.n;
     const mine = n._pending || (state.myAuthId && n.author_id === state.myAuthId);
     const who = mine ? 'You' : firstName(n.author_name);
     if (state.editing === n.id) {
-      return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
+      return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>${dcol(it)}
         <div class="ssn-card mine editing">${editBoxHTML(n)}</div></div>`;
     }
-    return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
-      <div class="ssn-card${mine ? ' mine' : ''}${n._pending ? ' pending' : ''}">
+    const open = state.menuFor === n.id;
+    return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>${dcol(it)}
+      <div class="ssn-card note${mine ? ' mine' : ''}${n._pending ? ' pending' : ''}">
+        <div class="ssn-h"><span class="ssn-h-l"><i class="ti ti-pencil" aria-hidden="true"></i>Note</span>
+          <span class="ssn-h-r">${n._pending ? 'sending…' : esc(timeOnly(n.created_at)) + ' · ' + esc(who)}${n.edited_at ? ' · <em class="ssn-edited">edited</em>' : ''}</span>
+          ${n._pending ? '' : `<button type="button" class="ssn-more${open ? ' on' : ''}" data-menu="${esc(n.id)}" aria-expanded="${open}" aria-label="Note actions"><i class="ti ti-dots" aria-hidden="true"></i></button>`}</div>
         <div class="ssn-text">${noteText(n.body)}</div>
         ${n.tag ? `<span class="ssn-tag">${esc(n.tag)}</span>` : ''}
-        <div class="ssn-meta"><span>${esc(who)} · ${n._pending ? 'sending…' : esc(timeLabel(n.created_at))}${n.edited_at ? ' · <em class="ssn-edited">edited</em>' : ''}</span>
-          <span class="ssn-acts">
-            ${n._pending ? '' : `<button type="button" class="ssn-link" data-pin="${esc(n.id)}" aria-label="Pin note"><i class="ti ti-pin" aria-hidden="true"></i>Pin</button>`}
-            ${mine && !n._pending ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}" aria-label="Edit note"><i class="ti ti-pencil" aria-hidden="true"></i>Edit</button>` : ''}
-            ${mine ? `<button type="button" class="ssn-link" data-del="${esc(n.id)}" aria-label="Delete note"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
-          </span></div>
+        ${open ? `<div class="ssn-acts-row">
+            <button type="button" class="ssn-link" data-pin="${esc(n.id)}"><i class="ti ti-pin" aria-hidden="true"></i>Pin</button>
+            ${mine ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}"><i class="ti ti-pencil" aria-hidden="true"></i>Edit</button>
+            <button type="button" class="ssn-link danger" data-del="${esc(n.id)}"><i class="ti ti-trash" aria-hidden="true"></i>Delete</button>` : ''}
+          </div>` : ''}
       </div></div>`;
   }
 
@@ -442,6 +548,8 @@
   }
 
   function timelineHTML(items) {
+    let prev = '';
+    items.forEach(it => { const k = dayKey(it.at); it.showDay = k !== prev; prev = k; });
     const out = items.map(noteHTML).join('');
     return `<div class="ssn-tl">${out}</div>`;
   }
@@ -461,7 +569,7 @@
     const c = state.contact;
     const row = (label, key, opts, cur) => `<div class="ssn-crow"><span class="ssn-clab">${label}</span><div class="ssn-cchips">${opts.map(([v, l]) =>
       `<button type="button" class="ssn-chip${cur === v ? ' on' : ''}${key === 'next' && v !== 'none' && cur === v ? ' fu' : ''}" data-c${key}="${esc(v)}" aria-pressed="${cur === v}">${esc(l)}</button>`).join('')}</div></div>`;
-    return `<div class="ssn-contact">${row('Who', 'party', C_PARTY, c.party)}${row('How', 'method', C_METHOD, c.method)}${row('Next', 'next', C_NEXT, c.next)}</div>`;
+    return `<div class="ssn-contact">${row('Way', 'dir', C_DIR, c.dir || 'out')}${row('Who', 'party', C_PARTY, c.party)}${row('How', 'method', C_METHOD, c.method)}${row('Next', 'next', C_NEXT, c.next)}</div>`;
   }
 
   function bodyHTML(mode) {
@@ -554,7 +662,7 @@
     const latest = items[items.length - 1];
     let html;
     if (pin) html = '<b class="ssn-strip-pin">Pinned:</b> ' + esc(pin.body);
-    else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc((C_VERB[latest.e.method] || 'Contacted') + ' ' + (C_SHORT[latest.e.party] || '')) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
+    else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc(contactShort(latest.e)) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
     else if (latest) html = esc(latest.n.body);
     const n = count(state.jobId);
     return `<span class="ssn-strip-text${html ? '' : ' empty'}">${html ? (n > 1 ? `<span class="ssn-strip-cnt">${n} ·</span> ` : '') + html : 'No notes yet. Tap to add one'}</span>
@@ -630,10 +738,10 @@
   }
   // Open the notes ready to log a contact (phone: sheet; desktop: notes column)
   function openForContact() {
-    state.contact = { party: 'client', method: 'call', next: 'none' };
+    state.contact = { dir: 'out', party: 'client', method: 'call', next: 'none' };
     state.tab = 'job';
     if (wide()) { lsSet(LS.dock, '1'); state.floating = false; render(true); setTimeout(() => { const t = document.querySelector('#ssnDock .ssn-input'); if (t) t.focus(); }, 30); }
-    else openSheet(true);
+    else openSheet(false);
   }
 
   function fitTitle() {
@@ -716,7 +824,7 @@
 
   function switchJob(jobId) {
     state.jobId = jobId;
-    state.editing = null; editDraft = null; state.contact = null;
+    state.editing = null; editDraft = null; state.contact = null; state.menuFor = null;
     state.tag = null;
     state.status = '';
     if (jobId) { load(jobId); subscribe(jobId); }
@@ -735,16 +843,19 @@
     const root = inNotes(e.target);
     if (!root) return;
     e.stopPropagation();   // keep clicks from reaching the job overlay (which closes the job)
-    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit],[data-cparty],[data-cmethod],[data-cnext]');
+    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit],[data-cparty],[data-cmethod],[data-cnext],[data-cdir],[data-menu]');
     if (!b) return;
     if (b.dataset.tab) { state.tab = b.dataset.tab; state.status = ''; if (state.tab === 'pad') loadPad(); render(); return; }
-    if (b.dataset.cparty || b.dataset.cmethod || b.dataset.cnext) {
+    if (b.dataset.menu) { state.menuFor = state.menuFor === b.dataset.menu ? null : b.dataset.menu; render(); return; }
+    if (b.dataset.pin || b.dataset.edit || b.dataset.del) state.menuFor = null;
+    if (b.dataset.cparty || b.dataset.cmethod || b.dataset.cnext || b.dataset.cdir) {
       if (state.contact) {
+        if (b.dataset.cdir) state.contact.dir = b.dataset.cdir;
         if (b.dataset.cparty) state.contact.party = b.dataset.cparty;
         if (b.dataset.cmethod) state.contact.method = b.dataset.cmethod;
         if (b.dataset.cnext) state.contact.next = b.dataset.cnext;
       }
-      render(); const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); return;
+      render(); if (wide()) { const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); } return;
     }
     if (b.dataset.tag) { state.tag = state.tag === b.dataset.tag ? null : b.dataset.tag; render(); const t = root.querySelector('.ssn-input'); if (t) t.focus(); return; }
     if (b.dataset.pin) { togglePin(b.dataset.pin); return; }
@@ -753,7 +864,14 @@
     switch (b.dataset.act) {
       case 'pad': state.tab = state.tab === 'pad' ? 'job' : 'pad'; state.status = ''; if (state.tab === 'pad') loadPad(); render(true); break;
       case 'post': post(root); break;
-      case 'contact': state.contact = state.contact ? null : { party: 'client', method: 'call', next: 'none' }; state.status = ''; render(); { const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); } break;
+      case 'contact': {
+        state.contact = state.contact ? null : { dir: 'out', party: 'client', method: 'call', next: 'none' }; state.status = '';
+        // Phone: keep the keyboard down so Who / How / Next are visible; type after picking.
+        if (!wide() && document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        render();
+        if (wide()) { const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); }
+        break;
+      }
       case 'edit-save': saveEdit(root); break;
       case 'edit-cancel': cancelEdit(); break;
       case 'editjob': if (typeof window.openEditJob === 'function' && state.jobId) { state.sheetOpen = false; render(); window.openEditJob(state.jobId); } break;
@@ -841,6 +959,50 @@
     }
     if (e.key === 'Escape' && state.sheetOpen) { state.sheetOpen = false; render(); }
   });
+
+  // Phone: swipe the notes sheet down to close it. Starts from the handle / header, or from
+  // the list when it's scrolled to the top; the note box and the sideways chip rows are left alone.
+  (function sheetSwipe() {
+    let sh = null, sy = 0, sx = 0, dy = 0, armed = false, mode = '', samples = [];
+    const reset = () => { if (!sh) return; sh.style.transition = ''; sh.style.transform = ''; const sc = document.querySelector('.ssn-sheet-wrap .ssn-scrim'); if (sc) { sc.style.transition = ''; sc.style.opacity = ''; } };
+    document.addEventListener('touchstart', e => {
+      armed = false; mode = '';
+      const t = e.target; sh = t.closest && t.closest('.ssn-sheet');
+      if (!sh || e.touches.length !== 1 || !state.sheetOpen) return;
+      if (t.closest('.ssn-compose, textarea, input, .ssn-cchips, .ssn-chips, .ssn-edit')) return;
+      const feed = sh.querySelector('.ssn-feed');
+      const inHead = !!t.closest('.ssn-head, .ssn-grab');
+      if (!inHead && feed && feed.contains(t) && feed.scrollTop > 0) return;
+      sy = e.touches[0].clientY; sx = e.touches[0].clientX; dy = 0; samples = [[sy, performance.now()]]; armed = true;
+    }, { passive: true, capture: true });
+    document.addEventListener('touchmove', e => {
+      if (!armed) return;
+      const t = e.touches[0], my = t.clientY - sy, mx = t.clientX - sx;
+      if (!mode) {
+        if (Math.abs(my) < 8 && Math.abs(mx) < 8) return;
+        const feed = sh.querySelector('.ssn-feed');
+        if (my > 0 && my > Math.abs(mx) * 1.2 && (!feed || feed.scrollTop <= 0 || e.target.closest('.ssn-head, .ssn-grab'))) mode = 'down';
+        else { armed = false; return; }
+      }
+      e.preventDefault();
+      dy = Math.max(0, my);
+      const now = performance.now(); samples.push([t.clientY, now]); while (samples.length > 2 && now - samples[0][1] > 90) samples.shift();
+      sh.style.transition = 'none'; sh.style.transform = `translateY(${dy}px)`;
+      const sc = document.querySelector('.ssn-sheet-wrap .ssn-scrim'); if (sc) { sc.style.transition = 'none'; sc.style.opacity = String(Math.max(0, 1 - dy / 500)); }
+    }, { passive: false, capture: true });
+    const end = () => {
+      if (!armed) return; armed = false;
+      if (mode !== 'down') return;
+      const [y0, t0] = samples[0], [y1, t1] = samples[samples.length - 1];
+      const v = (y1 - y0) / Math.max(1, t1 - t0);
+      const close = dy > Math.min(160, sh.offsetHeight * 0.25) || (v > 0.5 && dy > 40);
+      if (!close) { sh.style.transition = 'transform .2s ease'; sh.style.transform = ''; const sc = document.querySelector('.ssn-sheet-wrap .ssn-scrim'); if (sc) { sc.style.transition = 'opacity .2s'; sc.style.opacity = ''; } setTimeout(reset, 220); return; }
+      sh.style.transition = 'transform .18s ease-in'; sh.style.transform = `translateY(${sh.offsetHeight}px)`;
+      setTimeout(() => { reset(); state.sheetOpen = false; render(); }, 180);
+    };
+    document.addEventListener('touchend', end, { passive: true, capture: true });
+    document.addEventListener('touchcancel', () => { armed = false; reset(); }, { passive: true, capture: true });
+  })();
 
   // Tapping a tag chip keeps the keyboard up (chips only show while writing)
   document.addEventListener('pointerdown', e => {
@@ -1014,6 +1176,10 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-tl-m:first-child{margin-top:2px}
 .ssn-dot{position:absolute;left:-18px;width:10px;height:10px;border-radius:999px;background:#3A4A5A;border:2px solid var(--n-bg);box-sizing:content-box;margin-left:-1px}
 .ssn-dot.stage{background:#8B5CF6}
+.ssn-dot.money{background:#F59E0B}
+.ssn-tl-t.money{color:#FCD34D;font-weight:600}
+.ssn-dot.packet{background:#2DD4BF}
+.ssn-tl-t.packet{color:#5EEAD4;font-weight:600}
 .ssn-dot.note{background:#38BDF8;top:14px}
 .ssn-tl-sys{position:relative;display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;color:#8E9BAA}
 .ssn-tl-sys .ssn-dot{top:7px}
@@ -1081,6 +1247,30 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-sheet .ssn-cbtn{width:46px;height:46px;font-size:20px}
 .ssn-sheet .ssn-crow .ssn-chip{height:34px}
 @media (max-width:760px){.ssn-cline{font-size:13px;padding:7px 12px}}
+.ssn-tl-note{display:flex;gap:10px;align-items:flex-start}
+.ssn-dot.contact,.ssn-dot.note{top:14px}
+.ssn-tl-note > .ssn-tl-d{padding-top:10px}
+.ssn-tl-note > .ssn-card{flex:1;min-width:0}
+.ssn-tl-d{width:46px;flex:none;font-size:12px;color:#6B7686;white-space:nowrap}
+.ssn-card.note{background:#14202C;border-color:#1E3A52}
+.ssn-card.note.mine{background:#14202C}
+.ssn-h{display:flex;align-items:center;gap:6px;min-width:0}
+.ssn-h-l{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;font-weight:600;color:#7DD3FC;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ssn-card.contact .ssn-h-l{color:#A7F3D0}
+.ssn-h-l .ti{font-size:14px;flex:none}
+.ssn-card.contact .ssn-h-l .ti{color:#34D399}
+.ssn-card.note .ssn-h-l .ti{color:#38BDF8}
+.ssn-h-l .ssn-tag{margin:0 0 0 2px;font-weight:500}
+.ssn-h-r{margin-left:auto;flex:none;font-size:12px;color:#8E9BAA;white-space:nowrap}
+.ssn-more{width:28px;height:24px;margin-right:-6px;flex:none;border:0;border-radius:6px;background:transparent;color:#8E9BAA;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer}
+.ssn-more:hover,.ssn-more.on{background:#1F2D3B;color:#E6EDF3}
+.ssn-card .ssn-text{margin-top:4px}
+.ssn-acts-row{display:flex;gap:4px;margin-top:8px;padding-top:6px;border-top:1px solid #22344A}
+.ssn-acts-row .ssn-link{font-size:12px;padding:5px 8px}
+.ssn-acts-row .ssn-link.danger{color:#FCA5A5}
+.ssn-sheet .ssn-acts-row .ssn-link{font-size:14px;padding:8px 10px}
+.ssn-sheet .ssn-more{width:34px;height:26px;margin:-3px -6px -3px 0;font-size:18px}
+.ssn-sheet .ssn-tl-d{font-size:13px;width:50px}
 @media (min-width:1181px){html.ssn-docked.ui-new .detail-overlay{align-items:stretch}}
 @media (max-width:1180px){.ssn-hbtn{display:none}}
 `;

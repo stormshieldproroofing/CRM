@@ -659,7 +659,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=17"></script>
-<script src="crm-notes.js?v=12"></script>
+<script src="crm-notes.js?v=19"></script>
 <script src="crm-notifications.js?v=5"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -2529,11 +2529,13 @@ function logContact(jobOrId, party, method, note, opts){
   if(!j) return;
   if(!Array.isArray(j.contactLog)) j.contactLog = [];
   const by = (window.currentMember && (window.currentMember.name || window.currentMember.id)) || 'system';
-  j.contactLog.push({ at: new Date().toISOString(), party, method, note: note || '', by });
+  const entry = { at: new Date().toISOString(), party, method, note: note || '', by };
+  if(opts && opts.dir === 'in') entry.dir = 'in';                  // they reached out to us
+  j.contactLog.push(entry);
   if(opts && opts.followUp) j.nextFollowUp = opts.followUp;        // 'YYYY-MM-DD'
   if(opts && opts.clearFollowUp) delete j.nextFollowUp;
   const partyLabel = party === 'client' ? 'Client' : (party === 'adjuster' ? 'Adjuster' : 'Carrier');
-  logActivity(j, 'contact', `${partyLabel} contact — ${method}`, note || '');
+  logActivity(j, 'contact', `${partyLabel} contact — ${method}${entry.dir === 'in' ? ' (inbound)' : ''}`, note || '');
   saveToStorage();
 }
 window.logContact = logContact;
@@ -6715,6 +6717,51 @@ function watchDpTabBadges(){
   _dpBadgeObserver.observe(body, { childList:true });
 }
 
+// Shared look for the job's document tabs (Insurance docs, Roof measurement):
+// compact upload cards (.idoc) and collapsible field sections (.idf-*).
+const JOB_DOC_CSS = `
+        .idoc-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+        .idoc{min-width:0;border:1.5px dashed var(--idoc-c);border-radius:12px;padding:12px;background:color-mix(in srgb, var(--idoc-c) 6%, transparent);transition:background .15s}
+        .idoc.dragover{background:color-mix(in srgb, var(--idoc-c) 14%, transparent)}
+        .idoc-t{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--idoc-c)}
+        .idoc-s{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.35}
+        .idoc-btns{display:flex;gap:6px;margin-top:10px}
+        .idoc-up{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:8px;background:var(--idoc-c);color:#0B0F17;font-size:12px;font-weight:700;cursor:pointer}
+        .idoc-cam{display:inline-flex;align-items:center;justify-content:center;width:34px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:transparent;padding:0;font-family:inherit;color:var(--brand);cursor:pointer;font-size:15px}
+        .idoc-file{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 9px;border-radius:8px;background:#141927;border:1px solid var(--border);cursor:pointer;min-width:0}
+        .idoc-file .n{flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .idoc-file .x{width:24px;height:24px;border-radius:6px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+        .idoc-note{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#C4B5FD;font-size:12.5px}
+        .idoc-note button{margin-left:auto;border:0;background:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+        @media(max-width:380px){.idoc-row{grid-template-columns:1fr}}
+      
+        .idf-bar{display:flex;align-items:center;gap:10px;width:100%;margin:4px 0 12px;padding:13px 14px;border:1px solid var(--border);border-radius:11px;background:#141927;color:var(--brand);font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;text-align:left}
+        .idf-bar[aria-expanded="true"]{border-color:#33405A}
+        .idf-bar .t{flex:1}
+        .idf-bar .c{display:flex;color:#8B94A7;transition:transform .15s}
+        .idf-bar[aria-expanded="true"] .c{transform:rotate(180deg)}
+        .idf-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;letter-spacing:0;text-transform:none}
+        .idf-badge.need{background:rgba(242,196,107,.14);color:#F2C46B}
+        .idf-badge.ok{background:rgba(52,211,153,.14);color:#34D399}
+        .idf-sec{background:var(--card,#161B26);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+        .idf-sec h4{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:12px;letter-spacing:.04em;color:var(--brand);text-transform:uppercase}
+        .idf-sec h4 .idf-badge{margin-left:auto}
+        .idf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+        .idf-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px}
+        .idf-fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+        .idf-fld.full{grid-column:1/-1}
+        .idf-fld label{font-size:11px;color:var(--muted);font-weight:600}
+        .idf-fld input,.idf-fld select,.idf-fld textarea{background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text,#E8ECF3);font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box;outline:none}
+        .idf-fld input:focus,.idf-fld select:focus,.idf-fld textarea:focus{border-color:var(--brand-light)}
+        .idf-fld textarea{resize:vertical;min-height:76px}
+        .idf-money{display:flex;align-items:center;gap:4px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:0 10px}
+        .idf-money span{color:var(--muted);font-size:13px}
+        .idf-money input{border:0;background:none;padding:9px 0}
+        .idf-auto{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;border:1px solid rgba(139,92,246,0.4);background:rgba(139,92,246,0.12);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:0;text-transform:none}
+        .idf-foot{font-size:11.5px;color:var(--muted);margin:-2px 2px 8px}
+        @media (max-width:640px){.idf-grid:not(.keep2),.idf-grid3{grid-template-columns:1fr}}
+      `;
+
 function renderDetailTab(j,u,col,jobPipeline,jobColumns){
   if(!u) u=jobRep(j);
   const body=$('dpBody');
@@ -9495,22 +9542,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       </style>
 
       <!-- Insurance documents: declaration page + loss statement, side by side -->
-      <style>
-        .idoc-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-        .idoc{min-width:0;border:1.5px dashed var(--idoc-c);border-radius:12px;padding:12px;background:color-mix(in srgb, var(--idoc-c) 6%, transparent);transition:background .15s}
-        .idoc.dragover{background:color-mix(in srgb, var(--idoc-c) 14%, transparent)}
-        .idoc-t{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--idoc-c)}
-        .idoc-s{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.35}
-        .idoc-btns{display:flex;gap:6px;margin-top:10px}
-        .idoc-up{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:8px;background:var(--idoc-c);color:#0B0F17;font-size:12px;font-weight:700;cursor:pointer}
-        .idoc-cam{display:inline-flex;align-items:center;justify-content:center;width:34px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:transparent;padding:0;font-family:inherit;color:var(--brand);cursor:pointer;font-size:15px}
-        .idoc-file{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 9px;border-radius:8px;background:#141927;border:1px solid var(--border);cursor:pointer;min-width:0}
-        .idoc-file .n{flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .idoc-file .x{width:24px;height:24px;border-radius:6px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
-        .idoc-note{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#C4B5FD;font-size:12.5px}
-        .idoc-note button{margin-left:auto;border:0;background:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-        @media(max-width:380px){.idoc-row{grid-template-columns:1fr}}
-      </style>
+      <style>${JOB_DOC_CSS}</style>
       <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Insurance documents</div>
       <div class="idoc-row">
         ${idocSlot('dec','Declaration page','Policy #, deductible, carrier','#7AA2FF',j.decFiles)}
@@ -9520,33 +9552,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       ${analyzing==='dec' ? `<div class="idoc-note"><i class="ti ti-loader-2" style="animation:spin .7s linear infinite" aria-hidden="true"></i><span>Reading the declaration page…</span></div>` : ''}
 
       <!-- Insurance claim details: one collapsible bar like the Packet / Contract tabs -->
-      <style>
-        .idf-bar{display:flex;align-items:center;gap:10px;width:100%;margin:4px 0 12px;padding:13px 14px;border:1px solid var(--border);border-radius:11px;background:#141927;color:var(--brand);font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;text-align:left}
-        .idf-bar[aria-expanded="true"]{border-color:#33405A}
-        .idf-bar .t{flex:1}
-        .idf-bar .c{display:flex;color:#8B94A7;transition:transform .15s}
-        .idf-bar[aria-expanded="true"] .c{transform:rotate(180deg)}
-        .idf-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;letter-spacing:0;text-transform:none}
-        .idf-badge.need{background:rgba(242,196,107,.14);color:#F2C46B}
-        .idf-badge.ok{background:rgba(52,211,153,.14);color:#34D399}
-        .idf-sec{background:var(--card,#161B26);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
-        .idf-sec h4{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:12px;letter-spacing:.04em;color:var(--brand);text-transform:uppercase}
-        .idf-sec h4 .idf-badge{margin-left:auto}
-        .idf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
-        .idf-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px}
-        .idf-fld{display:flex;flex-direction:column;gap:4px;min-width:0}
-        .idf-fld.full{grid-column:1/-1}
-        .idf-fld label{font-size:11px;color:var(--muted);font-weight:600}
-        .idf-fld input,.idf-fld select,.idf-fld textarea{background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text,#E8ECF3);font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box;outline:none}
-        .idf-fld input:focus,.idf-fld select:focus,.idf-fld textarea:focus{border-color:var(--brand-light)}
-        .idf-fld textarea{resize:vertical;min-height:76px}
-        .idf-money{display:flex;align-items:center;gap:4px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:0 10px}
-        .idf-money span{color:var(--muted);font-size:13px}
-        .idf-money input{border:0;background:none;padding:9px 0}
-        .idf-auto{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:7px;border:1px solid rgba(139,92,246,0.4);background:rgba(139,92,246,0.12);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:0;text-transform:none}
-        .idf-foot{font-size:11.5px;color:var(--muted);margin:-2px 2px 8px}
-        @media (max-width:640px){.idf-grid:not(.keep2),.idf-grid3{grid-template-columns:1fr}}
-      </style>
       ${(()=>{
         const open = !!(window._insFormOpen && window._insFormOpen[j.id]);
         const need = [['carrier'],['claimNum'],['policyNum'],['dateOfLoss'],['deductible'],['adjName'],['adjPhone']].filter(([k])=>!String(ins[k]||'').trim()).length;
@@ -9685,116 +9690,88 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
   } else if(activeTab==='roof'){
     if(!j.roofFiles) j.roofFiles=[];
     function roofHTML(){
+      const re = j.roofEstimate || {};
+      const val = v => (v == null ? '' : String(v));
+      const sq = re.dwellingSquares ?? re.totalSquares;
+      const open = k => !!(window._roofOpen && window._roofOpen[j.id + ':' + k]);
+      const tog = k => `window._roofOpen=window._roofOpen||{};window._roofOpen['${j.id}:${k}']=${!open(k)};roofRerender()`;
+      const chev = '<span class="c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>';
+      const filled = [sq, re.pitch, re.ridges, re.valleys, re.eaves, re.rakes];
+      const missing = filled.filter(v => v == null || String(v).trim() === '').length;
+      const badge = n => n ? `<span class="idf-badge need">${n} missing</span>` : '<span class="idf-badge ok">Done</span>';
+      const num = (id, label, v, unit, step) => `<div class="idf-fld"><label for="${id}">${label}</label><div class="idf-money"><input type="number" inputmode="decimal" step="${step||'1'}" id="${id}" value="${val(v)}" placeholder="0"><span>${unit}</span></div></div>`;
+      // What the job has, as a clean read-out (shown with the section closed)
+      const facts = [
+        ['Squares', sq != null && sq !== '' ? sq + ' SQ' : ''], ['Pitch', re.pitch || ''], ['Stories', re.stories || ''],
+        ['Ridge', re.ridges != null ? re.ridges + ' LF' : ''], ['Valley', re.valleys != null ? re.valleys + ' LF' : ''],
+        ['Eave', re.eaves != null ? re.eaves + ' LF' : ''], ['Rake', re.rakes != null ? re.rakes + ' LF' : ''],
+        ['Shingle', re.shingle || ''],
+      ].filter(([, v]) => v !== '');
+      const files = j.roofFiles.map((f, i) => `<div class="idoc-file" onclick="openJobStoredFile('roofFiles',${i})">${retainedFileIcon(f, '#4D9DE0')}<span class="n">${escapeHtml(f.name || 'Report')}</span>
+          ${f.isPdf ? `<button type="button" class="imp" title="Read the measurements out of this report" onclick="event.stopPropagation();roofImportMeasure(${i})">Read</button>` : ''}
+          <button type="button" class="x" aria-label="Remove" onclick="event.stopPropagation();roofDelete(${i})"><i class="ti ti-x" aria-hidden="true"></i></button></div>`).join('');
+      const has = j.roofFiles.length > 0;
       return `
-      <style>
-        .roof-zone{border:2px dashed var(--border);border-radius:10px;padding:24px 16px;text-align:center;transition:border-color 0.15s,background 0.15s}
-        .roof-zone.dragover{background:rgba(77,157,224,0.05);border-color:#4D9DE0}
-        .roof-file-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#141927;border-radius:8px;border:1px solid var(--border);margin-bottom:6px}
-        .roof-upload-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif;transition:background 0.12s}
-        .roof-upload-btn:hover{background:rgba(255,255,255,0.1);border-color:var(--brand-light)}
-        .roof-upload-btn.primary{background:#1557A8;border-color:#1557A8;color:#fff}
-        .roof-upload-btn.primary:hover{background:#0F4282}
+      <style>${JOB_DOC_CSS}
+        .roof-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin:-4px 0 12px;border:1px solid var(--border);border-radius:11px;overflow:hidden;background:#141927}
+        .roof-facts div{padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-width:0}
+        .roof-facts div:nth-child(4n){border-right:0}
+        .roof-facts span{display:block;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+        .roof-facts b{display:block;margin-top:2px;font-size:14px;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .idoc-file .imp{height:24px;padding:0 9px;border-radius:6px;border:1px solid rgba(52,211,153,.35);background:rgba(52,211,153,.12);color:#34D399;cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;flex:none}
+        .roof-addr{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;background:#1E253A;border:1px solid var(--border);margin-bottom:12px;font-size:13px;color:var(--brand)}
+        .roof-btns{display:flex;gap:8px;flex-wrap:wrap}
+        .roof-save{margin-top:2px}
+        @media (max-width:640px){.roof-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.roof-facts div:nth-child(4n){border-right:1px solid var(--border)}.roof-facts div:nth-child(2n){border-right:0}}
       </style>
 
-      <div class="dp-card" style="margin-bottom:10px">
-        <div class="dp-card-title"><i class="ti ti-satellite" style="font-size:15px;color:var(--brand-light)" aria-hidden="true"></i>Order Roof Measurements</div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Order an aerial measurement report for this property address. Reports typically arrive within 1–2 hours.</p>
-        <div style="background:rgba(77,157,224,0.1);border:1px solid rgba(77,157,224,0.3);border-radius:8px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
-          <i class="ti ti-map-pin" style="font-size:18px;color:var(--brand-light);flex-shrink:0" aria-hidden="true"></i>
-          <div style="flex:1">
-            <div style="font-size:12px;font-weight:700;color:var(--brand)">${j.address}</div>
-            <div style="font-size:10px;color:var(--muted)">Property address on file</div>
-          </div>
-          <button class="pill-btn" style="font-size:11px">Edit</button>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Measurement report</div>
+      <div class="idoc" style="--idoc-c:#4D9DE0;margin-bottom:12px" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="event.preventDefault();this.classList.remove('dragover');roofAddFiles(event.dataTransfer.files)">
+        <div class="idoc-t"><i class="ti ${has ? 'ti-circle-check' : 'ti-ruler-measure'}" aria-hidden="true"></i>Roof report</div>
+        ${has ? '' : '<div class="idoc-s">GAF QuickMeasure, FirstMate, EagleView, Roofr or Hover PDF. The measurements are read automatically.</div>'}
+        ${files}
+        <div class="idoc-btns">
+          <label class="idoc-up"><i class="ti ti-upload" aria-hidden="true"></i>${has ? 'Add' : 'Upload'}<input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="roofAddFiles(this.files)"></label>
+          <button type="button" class="idoc-cam" aria-label="Scan with camera" onclick="ssScan('doc', f => roofAddFiles(f), { title:'Scan report' })"><i class="ti ti-camera" aria-hidden="true"></i></button>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+      </div>
+      ${re.vendor ? `<div class="idoc-note"><i class="ti ti-sparkles" aria-hidden="true"></i><span>Read from ${escapeHtml(re.vendor)}${re.reportName ? ' · ' + escapeHtml(re.reportName) : ''}${re.steepSquares ? ` · ${re.steepSquares} SQ steep` : ''}${re.flatSqFt ? ` · ${re.flatSqFt} SF low-slope held out` : ''}</span></div>` : ''}
+
+      <button type="button" class="idf-bar" aria-expanded="${open('specs')}" onclick="${tog('specs')}">
+        <i class="ti ti-home-2" style="font-size:15px" aria-hidden="true"></i>
+        <span class="t">Roof measurements</span>${badge(missing)}${chev}</button>
+      ${!open('specs') && facts.length ? `<div class="roof-facts">${facts.map(([k, v]) => `<div><span>${k}</span><b>${escapeHtml(String(v))}</b></div>`).join('')}</div>` : ''}
+      ${open('specs') ? `
+      <div class="idf-sec"><h4>Roof${badge([sq, re.pitch].filter(v => v == null || String(v).trim() === '').length)}</h4>
+        <div class="idf-grid">
+          ${num('rsSquares', 'Total squares', sq, 'SQ', '0.1')}
+          <div class="idf-fld"><label for="rsPitch">Pitch</label><input id="rsPitch" value="${escapeHtml(val(re.pitch))}" placeholder="e.g. 6/12"></div>
+          <div class="idf-fld"><label for="rsStories">Stories</label><select id="rsStories">${['1', '2', '3+'].map(o => `<option${(re.stories || '1') === o ? ' selected' : ''}>${o}</option>`).join('')}</select></div>
+          <div class="idf-fld"><label for="rsShingle">Shingle</label><input id="rsShingle" value="${escapeHtml(val(re.shingle))}" placeholder="e.g. GAF Timberline HDZ"></div>
+        </div></div>
+      <div class="idf-sec"><h4>Lengths${badge([re.ridges, re.valleys, re.eaves, re.rakes].filter(v => v == null || String(v).trim() === '').length)}</h4>
+        <div class="idf-grid keep2">
+          ${num('rsRidges', 'Ridge', re.ridges, 'LF')}
+          ${num('rsValleys', 'Valley', re.valleys, 'LF')}
+          ${num('rsEaves', 'Eave', re.eaves, 'LF')}
+          ${num('rsRakes', 'Rake', re.rakes, 'LF')}
+        </div></div>
+      <button class="btn-primary roof-save" style="font-size:13px;margin-bottom:14px" onclick="roofSpecSave()">Save measurements</button>` : ''}
+
+      <button type="button" class="idf-bar" aria-expanded="${open('order')}" onclick="${tog('order')}">
+        <i class="ti ti-satellite" style="font-size:15px" aria-hidden="true"></i>
+        <span class="t">Order a measurement report</span>${chev}</button>
+      ${open('order') ? `
+      <div class="idf-sec">
+        <div class="roof-addr"><i class="ti ti-map-pin" style="font-size:16px;color:var(--brand-light)" aria-hidden="true"></i><span style="flex:1;min-width:0">${escapeHtml(j.address || 'No address on file')}</span></div>
+        <div class="roof-btns">
           <button class="btn-primary" style="font-size:12px;display:flex;align-items:center;gap:4px"><i class="ti ti-satellite" style="font-size:13px" aria-hidden="true"></i>Order EagleView Report</button>
           <button class="pill-btn" style="font-size:12px;display:flex;align-items:center;gap:4px"><i class="ti ti-drone" style="font-size:13px" aria-hidden="true"></i>Order GAF QuickMeasure</button>
         </div>
-      </div>
-
-      <div class="dp-card" style="margin-bottom:10px">
-        <div class="dp-card-title"><i class="ti ti-home-2" style="font-size:15px;color:var(--brand-light)" aria-hidden="true"></i>Roof Specifications</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Total Squares</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsSquares" value="${j.roofEstimate?.dwellingSquares ?? j.roofEstimate?.totalSquares ?? ''}" placeholder="e.g. 28.5 SQ" type="number" step="0.1">
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Pitch / Slope</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsPitch" value="${j.roofEstimate?.pitch || ''}" placeholder="e.g. 6/12">
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Ridge (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsRidges" value="${j.roofEstimate?.ridges ?? ''}" placeholder="Linear feet" type="number">
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Valley (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsValleys" value="${j.roofEstimate?.valleys ?? ''}" placeholder="Linear feet" type="number">
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Eave (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsEaves" value="${j.roofEstimate?.eaves ?? ''}" placeholder="Linear feet" type="number">
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Rake (LF)</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsRakes" value="${j.roofEstimate?.rakes ?? ''}" placeholder="Linear feet" type="number">
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Stories</label>
-            <select id="rsStories" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A">${['1','2','3+'].map(o=>`<option${(j.roofEstimate?.stories||'1')===o?' selected':''}>${o}</option>`).join('')}</select>
-          </div>
-          <div>
-            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Shingle Type</label>
-            <input style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;color:var(--brand);background:#1E253A" id="rsShingle" value="${j.roofEstimate?.shingle || ''}" placeholder="e.g. GAF Timberline HDZ">
-          </div>
-        </div>
-        <button class="btn-primary" style="font-size:12px" onclick="roofSpecSave()">Save Measurements</button>
-        ${j.roofEstimate?.vendor?`<div style="margin-top:8px;font-size:10px;color:var(--muted)">From <b style="color:var(--brand-light)">${escapeHtml(j.roofEstimate.vendor)}</b>${j.roofEstimate.reportName?' \u00b7 '+escapeHtml(j.roofEstimate.reportName):''}${j.roofEstimate.steepSquares?` \u00b7 ${j.roofEstimate.steepSquares} SQ steep`:''}${j.roofEstimate.flatSqFt?` \u00b7 ${j.roofEstimate.flatSqFt} SF low-slope held out`:''}</div>`:''}
-      </div>
-
-      <div class="dp-card">
-        <div class="dp-card-title"><i class="ti ti-file-analytics" style="font-size:15px;color:var(--brand-light)" aria-hidden="true"></i>Measurement Report</div>
-
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Upload Report Document</div>
-
-        <div class="roof-zone" id="roof-zone"
-          ondragover="event.preventDefault();this.classList.add('dragover')"
-          ondragleave="this.classList.remove('dragover')"
-          ondrop="event.preventDefault();this.classList.remove('dragover');roofAddFiles(event.dataTransfer.files)">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4D9DE0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 8px;display:block;opacity:.55"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:3px">Drag & drop measurement report here</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:14px">PDF — GAF QuickMeasure, FirstMate, EagleView, Roofr or Hover. Measurements are read automatically.</div>
-          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-            <label class="roof-upload-btn primary">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Upload File
-              <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="roofAddFiles(this.files)">
-            </label>
-            <button type="button" class="roof-upload-btn" onclick="ssScan('doc', f => roofAddFiles(f), { title:'Scan report' })">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              Scan / Photo
-            </button>
-          </div>
-        </div>
-
-        ${j.roofFiles.length>0?`
-        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px">Uploaded Files</div>
-        ${j.roofFiles.map((f,i)=>`
-        <div class="roof-file-row" onclick="openJobStoredFile('roofFiles',${i})" style="cursor:pointer">
-          ${retainedFileIcon(f,'#4D9DE0')}
-          <div style="flex:1;min-width:0">
-            <div style="font-size:12px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
-            <div style="font-size:10px;color:var(--muted)">${f.date}</div>
-          </div>
-          ${f.isPdf?`<button onclick="event.stopPropagation();roofImportMeasure(${i})" title="Read the measurements out of this report" style="height:24px;padding:0 9px;border-radius:5px;border:1px solid rgba(52,211,153,0.35);background:rgba(52,211,153,0.12);color:#34D399;cursor:pointer;font-size:10px;font-weight:700;font-family:'Barlow',sans-serif;flex-shrink:0">Import</button>`:''}
-          ${previewFileBtn('roofFiles',i)}
-          <button onclick="event.stopPropagation();roofDelete(${i})" style="width:24px;height:24px;border-radius:5px;border:none;background:rgba(248,113,113,0.1);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-          </button>
-        </div>`).join('')}`:''}
-      </div>`;
+        <div class="idf-foot" style="margin:10px 0 0">Reports typically arrive within 1–2 hours.</div>
+      </div>` : ''}`;
     }
+    window.roofRerender = function(){ body.innerHTML = roofHTML(); };
     body.innerHTML = roofHTML();
     window.roofAddFiles=async function(files){
       const pending=Array.from(files);
@@ -9848,6 +9825,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       ['ridges','valleys','eaves','rakes'].forEach(k=>{ if(re[k]!=null) ab[k]=re[k]; });
       j.abcOrder=ab;
       saveToStorage();
+      if(window._roofOpen) window._roofOpen[j.id + ':specs'] = false;   // back to the read-out
       if(typeof renderDetailPanel==='function') renderDetailPanel();
       toast('Measurements saved to job');
     };
