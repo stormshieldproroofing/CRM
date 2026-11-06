@@ -316,6 +316,13 @@
 .ssn-bell:hover,.ssn-bell.on{background:#10283A;color:#7DD3FC;border-color:#38BDF8}
 .ssn-bell-n{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:#F87171;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center}
 .ssn-bell-n[hidden]{display:none}
+@media (max-width:760px){
+  /* phone top bar: logo · Search · bell · profile, bell matches the Search box */
+  html.ui-new .topnav > div[style*="flex:1"]{display:none}
+  html.ui-new .topnav #ssnBell{order:1;width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border,#252B38);color:var(--brand-light,#7DD3FC);font-size:20px}
+  html.ui-new .topnav .agent-view-wrap{order:2}
+  html.ui-new .topnav #ssnBell .ssn-bell-n{top:-5px;right:-5px}
+}
 @media (min-width:1181px){
   html.ui-new .topnav #ssnBell{position:absolute;top:18px;right:12px;order:0}
   html.ui-new .topnav .logo{margin-right:48px!important}
