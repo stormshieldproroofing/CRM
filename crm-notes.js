@@ -378,6 +378,29 @@
     return label + (to ? ': ' + niceDate(to) : (e.detail ? ': ' + e.detail : ''));
   }
 
+  // Money lines in the notes: supplement approved and checks collected.
+  // Read from the job's activity log (the same place stage changes come from).
+  function moneyText(e) {
+    const label = String(e.label || ''), detail = String(e.detail || '');
+    if (e.type === 'deposit_add') {
+      const bits = detail.split(' · ').map(t => t.trim())
+        .filter(t => t && !/^from checks tab/i.test(t) && !/^check photo attached$/i.test(t));
+      return 'Check collected' + (bits.length ? ' · ' + bits.join(' · ') : '');
+    }
+    if (e.type === 'accounting' && /^supplement (added|updated)/i.test(label)) {
+      const parts = detail.split(/→|->/);
+      const after = parts[parts.length - 1].trim();
+      const before = parts.length > 1 ? parts[0].trim() : '';
+      const m = after.match(/^(\$[\d,.]+)\s*·\s*(Approved|Partial)\b/i);
+      if (!m) return '';
+      const st = m[2].toLowerCase();
+      // An edit that leaves it approved (e.g. a note change) isn't news.
+      if (before && new RegExp('·\\s*' + m[2] + '\\b', 'i').test(before) && before.split('·')[0].trim() === m[1]) return '';
+      return (st === 'partial' ? 'Supplement partly approved · ' : 'Supplement approved · ') + m[1];
+    }
+    return '';
+  }
+
   function feedItems(jobId) {
     const notes = (state.notes[jobId] || []).filter(n => n && !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
@@ -385,10 +408,14 @@
       .filter(e => e && e.type === 'stage' && e.at)
       .slice(-12)
       .map(e => ({ kind: 'sys', at: e.at, text: sysText(e), stage: /stage changed/i.test(e.label || '') }));
+    const money = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.at).map(e => ({ e, text: moneyText(e) })).filter(x => x.text)
+      .slice(-20)
+      .map(x => ({ kind: 'sys', at: x.e.at, text: x.text, money: true }));
     const contacts = (j && Array.isArray(j.contactLog) ? j.contactLog : [])
       .filter(e => e && e.at).slice(-30)
       .map(e => ({ kind: 'contact', at: e.at, e }));
-    return notes.concat(stages, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
+    return notes.concat(stages, money, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
   }
 
   function count(jobId) { return (state.notes[jobId] || []).length; }
@@ -416,7 +443,7 @@
 
   function noteHTML(it) {
     if (it.kind === 'sys') {
-      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t">${esc(it.text)}</span></div>`;
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}">${esc(it.text)}</span></div>`;
     }
     if (it.kind === 'contact') {
       const e = it.e;
@@ -1098,6 +1125,8 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-tl-m:first-child{margin-top:2px}
 .ssn-dot{position:absolute;left:-18px;width:10px;height:10px;border-radius:999px;background:#3A4A5A;border:2px solid var(--n-bg);box-sizing:content-box;margin-left:-1px}
 .ssn-dot.stage{background:#8B5CF6}
+.ssn-dot.money{background:#F59E0B}
+.ssn-tl-t.money{color:#FCD34D;font-weight:600}
 .ssn-dot.note{background:#38BDF8;top:14px}
 .ssn-tl-sys{position:relative;display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;color:#8E9BAA}
 .ssn-tl-sys .ssn-dot{top:7px}
