@@ -633,7 +633,7 @@
     state.contact = { party: 'client', method: 'call', next: 'none' };
     state.tab = 'job';
     if (wide()) { lsSet(LS.dock, '1'); state.floating = false; render(true); setTimeout(() => { const t = document.querySelector('#ssnDock .ssn-input'); if (t) t.focus(); }, 30); }
-    else openSheet(true);
+    else openSheet(false);
   }
 
   function fitTitle() {
@@ -744,7 +744,7 @@
         if (b.dataset.cmethod) state.contact.method = b.dataset.cmethod;
         if (b.dataset.cnext) state.contact.next = b.dataset.cnext;
       }
-      render(); const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); return;
+      render(); if (wide()) { const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); } return;
     }
     if (b.dataset.tag) { state.tag = state.tag === b.dataset.tag ? null : b.dataset.tag; render(); const t = root.querySelector('.ssn-input'); if (t) t.focus(); return; }
     if (b.dataset.pin) { togglePin(b.dataset.pin); return; }
@@ -753,7 +753,14 @@
     switch (b.dataset.act) {
       case 'pad': state.tab = state.tab === 'pad' ? 'job' : 'pad'; state.status = ''; if (state.tab === 'pad') loadPad(); render(true); break;
       case 'post': post(root); break;
-      case 'contact': state.contact = state.contact ? null : { party: 'client', method: 'call', next: 'none' }; state.status = ''; render(); { const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); } break;
+      case 'contact': {
+        state.contact = state.contact ? null : { party: 'client', method: 'call', next: 'none' }; state.status = '';
+        // Phone: keep the keyboard down so Who / How / Next are visible; type after picking.
+        if (!wide() && document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        render();
+        if (wide()) { const t = root.querySelector('.ssn-input'); if (t) t.focus({ preventScroll: true }); }
+        break;
+      }
       case 'edit-save': saveEdit(root); break;
       case 'edit-cancel': cancelEdit(); break;
       case 'editjob': if (typeof window.openEditJob === 'function' && state.jobId) { state.sheetOpen = false; render(); window.openEditJob(state.jobId); } break;
