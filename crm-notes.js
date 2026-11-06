@@ -398,12 +398,17 @@
       const parts = detail.split(/→|->/);
       const after = parts[parts.length - 1].trim();
       const before = parts.length > 1 ? parts[0].trim() : '';
-      const m = after.match(/^(\$[\d,.]+)\s*·\s*(Approved|Partial)\b/i);
+      const m = after.match(/^(\$[\d,.]+)\s*·\s*(Approved|Partial|Submitted)\b(?:\s*·\s*(.+))?$/i);
       if (!m) return '';
       const st = m[2].toLowerCase();
-      // An edit that leaves it approved (e.g. a note change) isn't news.
+      // An edit that keeps the same status and amount (e.g. a note change) isn't news.
       if (before && new RegExp('·\\s*' + m[2] + '\\b', 'i').test(before) && before.split('·')[0].trim() === m[1]) return '';
-      return (st === 'partial' ? 'Supplement partly approved · ' : 'Supplement approved · ') + m[1];
+      let what = (m[3] || '').trim();
+      if (what.length > 40) what = what.slice(0, 38).trim() + '…';
+      const head = st === 'submitted' ? 'Supplement submitted · ' : st === 'partial' ? 'Supplement partly approved · ' : 'Supplement approved · ';
+      const n = parseFloat(m[1].replace(/[$,]/g, '')) || 0;
+      const amt = '$' + n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+      return head + amt + (what ? ' · ' + what : '');
     }
     return '';
   }
