@@ -471,8 +471,12 @@
     const j = jobById(jobId);
     const stages = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.type === 'stage' && e.at)
-      .slice(-12)
-      .map(e => ({ kind: 'sys', at: e.at, text: sysText(e), stage: /stage changed/i.test(e.label || '') }));
+      .slice(-40)
+      .map(e => {
+        const st = /stage changed/i.test(e.label || '');
+        const parts = String(e.detail || '').split(/→|->/).map(t => t.trim());
+        return { kind: 'sys', at: e.at, text: sysText(e), stage: st, from: st && parts.length > 1 ? parts[0] : '', to: st ? parts[parts.length - 1] : '' };
+      });
     const supp = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.at).map(e => { const l = legacySupp(e); return l && Object.assign({ at: e.at }, l); }).filter(Boolean)
       .concat(suppItems(j)).slice(-30)
@@ -489,7 +493,23 @@
     const contacts = (j && Array.isArray(j.contactLog) ? j.contactLog : [])
       .filter(e => e && e.at).slice(-30)
       .map(e => ({ kind: 'contact', at: e.at, e }));
-    return notes.concat(stages, money, packets, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
+    return collapseMoves(notes.concat(stages, money, packets, contacts).sort((a, b) => new Date(a.at) - new Date(b.at)));
+  }
+  // Stage moves back and forth within a few minutes (with nothing else in between) show as
+  // one line: where the job ended up. If it ended up where it started, they don't show at all.
+  function collapseMoves(items) {
+    const out = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!it.stage) { out.push(it); continue; }
+      let k = i;
+      // moves within 30 minutes of each other count as one
+      while (k + 1 < items.length && items[k + 1].stage && new Date(items[k + 1].at) - new Date(items[k].at) < 30 * 60000) k++;
+      const first = items[i], last = items[k];
+      if (!(first.from && first.from === last.to)) out.push(last);   // ended where it started: nothing to show
+      i = k;
+    }
+    return out;
   }
 
   function count(jobId) { return (state.notes[jobId] || []).length; }
