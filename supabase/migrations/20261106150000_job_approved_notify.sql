@@ -1,6 +1,6 @@
 -- Alert when a job moves into an "Approved" stage (any pipeline).
 -- Reads: Approved / homeowner name / address. Goes to the assigned rep and to
--- admins/managers, not to whoever moved it. Shows in the bell and on the lock screen.
+-- admins/managers, including whoever moved it. Shows in the bell and on the lock screen.
 alter table public.notifications drop constraint if exists notifications_kind_check;
 alter table public.notifications add constraint notifications_kind_check
   check (kind = any (array['note','mention','packet_viewed','packet_signed','test','supplement_approved','job_approved']));
@@ -36,7 +36,7 @@ begin
       union all
       select auth_id from team_members where role in ('admin', 'manager') and coalesce(status, 'active') = 'active'
     ) x
-    where a is not null and a is distinct from auth.uid()
+    where a is not null          -- includes whoever moved it, so their phone gets it too
   loop
     insert into notifications(recipient, kind, job_id, job_label, actor_name, title, body, ref)
     values (r, 'job_approved', new.id, new.name, null, ttl, bdy, key);
