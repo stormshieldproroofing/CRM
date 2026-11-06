@@ -680,11 +680,15 @@
   function stripHTML() {
     const list = state.notes[state.jobId] || [];
     const pin = list.slice().reverse().find(n => n && n.pinned);
-    // Latest note or logged contact, whichever is newer (a pinned note always wins)
-    const items = feedItems(state.jobId).filter(it => it.kind !== 'sys');
+    // The newest line in the notes, whatever it is (a pinned note always wins)
+    const items = feedItems(state.jobId);
     const latest = items[items.length - 1];
     let html;
     if (pin) html = '<b class="ssn-strip-pin">Pinned:</b> ' + esc(pin.body);
+    else if (latest && latest.kind === 'sys') {
+      const cls = latest.money ? 'money' : latest.packet ? 'packet' : latest.sent ? 'sent' : latest.denied ? 'denied' : latest.stage ? 'stage' : 'sys';
+      html = '<b class="ssn-strip-s ' + cls + '">' + esc(latest.text) + '</b>';
+    }
     else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc(contactShort(latest.e)) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
     else if (latest) html = esc(latest.n.body);
     const n = count(state.jobId);
@@ -1297,6 +1301,7 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-strip-cnt{color:#8B94A7;font-weight:600}
 .ssn-strip-pin{color:#FCD34D;font-weight:600}
 .ssn-strip-c{color:#A7F3D0;font-weight:600}
+.ssn-strip-s{font-weight:600;color:#CBD5E1}.ssn-strip-s.money{color:#FCD34D}.ssn-strip-s.packet{color:#5EEAD4}.ssn-strip-s.sent{color:#7DD3FC}.ssn-strip-s.denied{color:#FCA5A5}.ssn-strip-s.stage{color:#C4B5FD}
 .ssn-cline{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;margin:8px auto 2px;padding:6px 12px;border-radius:999px;border:1px solid var(--line,#253241);background:rgba(14,20,27,.7);color:#C4CBD8;font:inherit;font-size:12px;cursor:pointer;max-width:100%}
 .ssn-cline:hover{border-color:#34D399}
 .ssn-cline > .ti{color:#34D399;font-size:14px}
