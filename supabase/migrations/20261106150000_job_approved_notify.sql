@@ -13,7 +13,6 @@ set search_path to 'public'
 as $function$
 declare
   r      uuid;
-  who    text;
   ttl    text;
   bdy    text;
   key    text;
@@ -27,9 +26,8 @@ begin
   key := new.id || ':approved:' || to_char(now() at time zone 'America/Chicago', 'YYYY-MM-DD');
   if exists (select 1 from notifications where ref = key) then return new; end if;
 
-  select name into who from team_members where auth_id = auth.uid() limit 1;
   ttl := case when coalesce(new.pipeline_id, 'insurance') = 'insurance' then 'Claim approved' else 'Job approved' end;
-  bdy := 'Moved to Approved' || coalesce(' by ' || split_part(who, ' ', 1), '') || '.';
+  bdy := 'Moved to Approved.';
 
   for r in
     select distinct a from (
@@ -40,7 +38,7 @@ begin
     where a is not null and a is distinct from auth.uid()
   loop
     insert into notifications(recipient, kind, job_id, job_label, actor_name, title, body, ref)
-    values (r, 'job_approved', new.id, new.name, who, ttl, bdy, key);
+    values (r, 'job_approved', new.id, new.name, null, ttl, bdy, key);
   end loop;
   return new;
 end $function$;
