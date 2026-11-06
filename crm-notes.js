@@ -29,7 +29,7 @@
   const C_PARTY = [['client', 'Homeowner'], ['adjuster', 'Adjuster'], ['carrier', 'Carrier']];
   const C_METHOD = [['call', 'Call'], ['text', 'Text'], ['email', 'Email'], ['voicemail', 'Voicemail'], ['in-person', 'In person']];
   const C_NEXT = [['none', 'No follow-up'], ['1', 'Tomorrow'], ['3', '3 days'], ['7', '1 week']];
-  const C_DIR = [['out', 'We reached out'], ['in', 'They reached out']];
+  const C_DIR = [['out', 'Outbound'], ['in', 'Inbound']];
   // When they reached us: "Homeowner called", "Adjuster left a voicemail"
   const C_VERB_IN = { call: 'called', text: 'texted', email: 'emailed', voicemail: 'left a voicemail', 'in-person': 'stopped by' };
   const C_PARTY_NAME = { client: 'Homeowner', adjuster: 'Adjuster', carrier: 'Carrier' };
