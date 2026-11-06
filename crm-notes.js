@@ -104,6 +104,7 @@
 
   // ── State ───────────────────────────────────────────────────────────────
   const state = {
+    menuFor: null,        // note whose Pin / Edit / Delete row is open
     contact: null,        // { party, method, next } while the phone button is on
     jobId: null,          // job whose notes are showing
     notes: {},            // jobId -> array of rows
@@ -402,37 +403,52 @@
     return d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: '2-digit' });
   }
 
+  // Timeline row (version 5): date in the left column (shown once per day), then the box.
+  // Box header: label on the left, "time · who" on the right; the text underneath.
+  function dayKey(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toDateString(); }
+  function dayLabel(iso) {
+    const d = new Date(iso); if (isNaN(d)) return '';
+    if (d.toDateString() === new Date().toDateString()) return 'Today';
+    return shortDate(iso);
+  }
+  function timeOnly(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+  function dcol(it) { return `<span class="ssn-tl-d">${it.showDay ? esc(dayLabel(it.at)) : ''}</span>`; }
+
   function noteHTML(it) {
+    if (it.kind === 'sys') {
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t">${esc(it.text)}</span></div>`;
+    }
     if (it.kind === 'contact') {
       const e = it.e;
       const mine = e.by && (e.by === myName() || (state.myMemberId && e.by === state.myMemberId));
-      return `<div class="ssn-tl-note"><span class="ssn-dot contact" aria-hidden="true"></span>
+      const who = mine ? 'You' : firstName(e.by && e.by !== 'system' ? e.by : 'Team');
+      const icon = e.dir === 'in' && (e.method === 'call' || !e.method) ? 'ti-phone-incoming' : (C_ICON[e.method] || 'ti-phone');
+      return `<div class="ssn-tl-note"><span class="ssn-dot contact" aria-hidden="true"></span>${dcol(it)}
         <div class="ssn-card contact">
-          <div class="ssn-c-head"><i class="ti ${e.dir === 'in' && (e.method === 'call' || !e.method) ? 'ti-phone-incoming' : (C_ICON[e.method] || 'ti-phone')}" aria-hidden="true"></i>${esc(contactHead(e))}</div>
+          <div class="ssn-h"><span class="ssn-h-l"><i class="ti ${icon}" aria-hidden="true"></i>${esc(contactHead(e))}</span><span class="ssn-h-r">${esc(timeOnly(e.at))} · ${esc(who)}</span></div>
           ${e.note ? `<div class="ssn-text">${noteText(e.note)}</div>` : ''}
-          <div class="ssn-meta"><span>${esc(mine ? 'You' : firstName(e.by && e.by !== 'system' ? e.by : 'Team'))} · ${esc(timeLabel(e.at))}</span></div>
         </div></div>`;
-    }
-    if (it.kind === 'sys') {
-      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}" aria-hidden="true"></span><span class="ssn-tl-d">${esc(shortDate(it.at))}</span><span class="ssn-tl-t">${esc(it.text)}</span></div>`;
     }
     const n = it.n;
     const mine = n._pending || (state.myAuthId && n.author_id === state.myAuthId);
     const who = mine ? 'You' : firstName(n.author_name);
     if (state.editing === n.id) {
-      return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
+      return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>${dcol(it)}
         <div class="ssn-card mine editing">${editBoxHTML(n)}</div></div>`;
     }
-    return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>
-      <div class="ssn-card${mine ? ' mine' : ''}${n._pending ? ' pending' : ''}">
+    const open = state.menuFor === n.id;
+    return `<div class="ssn-tl-note"><span class="ssn-dot note" aria-hidden="true"></span>${dcol(it)}
+      <div class="ssn-card note${mine ? ' mine' : ''}${n._pending ? ' pending' : ''}">
+        <div class="ssn-h"><span class="ssn-h-l"><i class="ti ti-pencil" aria-hidden="true"></i>Note</span>
+          <span class="ssn-h-r">${n._pending ? 'sending…' : esc(timeOnly(n.created_at)) + ' · ' + esc(who)}${n.edited_at ? ' · <em class="ssn-edited">edited</em>' : ''}</span>
+          ${n._pending ? '' : `<button type="button" class="ssn-more${open ? ' on' : ''}" data-menu="${esc(n.id)}" aria-expanded="${open}" aria-label="Note actions"><i class="ti ti-dots" aria-hidden="true"></i></button>`}</div>
         <div class="ssn-text">${noteText(n.body)}</div>
         ${n.tag ? `<span class="ssn-tag">${esc(n.tag)}</span>` : ''}
-        <div class="ssn-meta"><span>${esc(who)} · ${n._pending ? 'sending…' : esc(timeLabel(n.created_at))}${n.edited_at ? ' · <em class="ssn-edited">edited</em>' : ''}</span>
-          <span class="ssn-acts">
-            ${n._pending ? '' : `<button type="button" class="ssn-link" data-pin="${esc(n.id)}" aria-label="Pin note"><i class="ti ti-pin" aria-hidden="true"></i>Pin</button>`}
-            ${mine && !n._pending ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}" aria-label="Edit note"><i class="ti ti-pencil" aria-hidden="true"></i>Edit</button>` : ''}
-            ${mine ? `<button type="button" class="ssn-link" data-del="${esc(n.id)}" aria-label="Delete note"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
-          </span></div>
+        ${open ? `<div class="ssn-acts-row">
+            <button type="button" class="ssn-link" data-pin="${esc(n.id)}"><i class="ti ti-pin" aria-hidden="true"></i>Pin</button>
+            ${mine ? `<button type="button" class="ssn-link" data-edit="${esc(n.id)}"><i class="ti ti-pencil" aria-hidden="true"></i>Edit</button>
+            <button type="button" class="ssn-link danger" data-del="${esc(n.id)}"><i class="ti ti-trash" aria-hidden="true"></i>Delete</button>` : ''}
+          </div>` : ''}
       </div></div>`;
   }
 
@@ -454,6 +470,8 @@
   }
 
   function timelineHTML(items) {
+    let prev = '';
+    items.forEach(it => { const k = dayKey(it.at); it.showDay = k !== prev; prev = k; });
     const out = items.map(noteHTML).join('');
     return `<div class="ssn-tl">${out}</div>`;
   }
@@ -728,7 +746,7 @@
 
   function switchJob(jobId) {
     state.jobId = jobId;
-    state.editing = null; editDraft = null; state.contact = null;
+    state.editing = null; editDraft = null; state.contact = null; state.menuFor = null;
     state.tag = null;
     state.status = '';
     if (jobId) { load(jobId); subscribe(jobId); }
@@ -747,9 +765,11 @@
     const root = inNotes(e.target);
     if (!root) return;
     e.stopPropagation();   // keep clicks from reaching the job overlay (which closes the job)
-    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit],[data-cparty],[data-cmethod],[data-cnext],[data-cdir]');
+    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit],[data-cparty],[data-cmethod],[data-cnext],[data-cdir],[data-menu]');
     if (!b) return;
     if (b.dataset.tab) { state.tab = b.dataset.tab; state.status = ''; if (state.tab === 'pad') loadPad(); render(); return; }
+    if (b.dataset.menu) { state.menuFor = state.menuFor === b.dataset.menu ? null : b.dataset.menu; render(); return; }
+    if (b.dataset.pin || b.dataset.edit || b.dataset.del) state.menuFor = null;
     if (b.dataset.cparty || b.dataset.cmethod || b.dataset.cnext || b.dataset.cdir) {
       if (state.contact) {
         if (b.dataset.cdir) state.contact.dir = b.dataset.cdir;
@@ -861,6 +881,50 @@
     }
     if (e.key === 'Escape' && state.sheetOpen) { state.sheetOpen = false; render(); }
   });
+
+  // Phone: swipe the notes sheet down to close it. Starts from the handle / header, or from
+  // the list when it's scrolled to the top; the note box and the sideways chip rows are left alone.
+  (function sheetSwipe() {
+    let sh = null, sy = 0, sx = 0, dy = 0, armed = false, mode = '', samples = [];
+    const reset = () => { if (!sh) return; sh.style.transition = ''; sh.style.transform = ''; const sc = document.querySelector('.ssn-sheet-wrap .ssn-scrim'); if (sc) { sc.style.transition = ''; sc.style.opacity = ''; } };
+    document.addEventListener('touchstart', e => {
+      armed = false; mode = '';
+      const t = e.target; sh = t.closest && t.closest('.ssn-sheet');
+      if (!sh || e.touches.length !== 1 || !state.sheetOpen) return;
+      if (t.closest('.ssn-compose, textarea, input, .ssn-cchips, .ssn-chips, .ssn-edit')) return;
+      const feed = sh.querySelector('.ssn-feed');
+      const inHead = !!t.closest('.ssn-head, .ssn-grab');
+      if (!inHead && feed && feed.contains(t) && feed.scrollTop > 0) return;
+      sy = e.touches[0].clientY; sx = e.touches[0].clientX; dy = 0; samples = [[sy, performance.now()]]; armed = true;
+    }, { passive: true, capture: true });
+    document.addEventListener('touchmove', e => {
+      if (!armed) return;
+      const t = e.touches[0], my = t.clientY - sy, mx = t.clientX - sx;
+      if (!mode) {
+        if (Math.abs(my) < 8 && Math.abs(mx) < 8) return;
+        const feed = sh.querySelector('.ssn-feed');
+        if (my > 0 && my > Math.abs(mx) * 1.2 && (!feed || feed.scrollTop <= 0 || e.target.closest('.ssn-head, .ssn-grab'))) mode = 'down';
+        else { armed = false; return; }
+      }
+      e.preventDefault();
+      dy = Math.max(0, my);
+      const now = performance.now(); samples.push([t.clientY, now]); while (samples.length > 2 && now - samples[0][1] > 90) samples.shift();
+      sh.style.transition = 'none'; sh.style.transform = `translateY(${dy}px)`;
+      const sc = document.querySelector('.ssn-sheet-wrap .ssn-scrim'); if (sc) { sc.style.transition = 'none'; sc.style.opacity = String(Math.max(0, 1 - dy / 500)); }
+    }, { passive: false, capture: true });
+    const end = () => {
+      if (!armed) return; armed = false;
+      if (mode !== 'down') return;
+      const [y0, t0] = samples[0], [y1, t1] = samples[samples.length - 1];
+      const v = (y1 - y0) / Math.max(1, t1 - t0);
+      const close = dy > Math.min(160, sh.offsetHeight * 0.25) || (v > 0.5 && dy > 40);
+      if (!close) { sh.style.transition = 'transform .2s ease'; sh.style.transform = ''; const sc = document.querySelector('.ssn-sheet-wrap .ssn-scrim'); if (sc) { sc.style.transition = 'opacity .2s'; sc.style.opacity = ''; } setTimeout(reset, 220); return; }
+      sh.style.transition = 'transform .18s ease-in'; sh.style.transform = `translateY(${sh.offsetHeight}px)`;
+      setTimeout(() => { reset(); state.sheetOpen = false; render(); }, 180);
+    };
+    document.addEventListener('touchend', end, { passive: true, capture: true });
+    document.addEventListener('touchcancel', () => { armed = false; reset(); }, { passive: true, capture: true });
+  })();
 
   // Tapping a tag chip keeps the keyboard up (chips only show while writing)
   document.addEventListener('pointerdown', e => {
@@ -1101,6 +1165,30 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-sheet .ssn-cbtn{width:46px;height:46px;font-size:20px}
 .ssn-sheet .ssn-crow .ssn-chip{height:34px}
 @media (max-width:760px){.ssn-cline{font-size:13px;padding:7px 12px}}
+.ssn-tl-note{display:flex;gap:10px;align-items:flex-start}
+.ssn-dot.contact,.ssn-dot.note{top:14px}
+.ssn-tl-note > .ssn-tl-d{padding-top:10px}
+.ssn-tl-note > .ssn-card{flex:1;min-width:0}
+.ssn-tl-d{width:46px;flex:none;font-size:12px;color:#6B7686;white-space:nowrap}
+.ssn-card.note{background:#14202C;border-color:#1E3A52}
+.ssn-card.note.mine{background:#14202C}
+.ssn-h{display:flex;align-items:center;gap:6px;min-width:0}
+.ssn-h-l{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;font-weight:600;color:#7DD3FC;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ssn-card.contact .ssn-h-l{color:#A7F3D0}
+.ssn-h-l .ti{font-size:14px;flex:none}
+.ssn-card.contact .ssn-h-l .ti{color:#34D399}
+.ssn-card.note .ssn-h-l .ti{color:#38BDF8}
+.ssn-h-l .ssn-tag{margin:0 0 0 2px;font-weight:500}
+.ssn-h-r{margin-left:auto;flex:none;font-size:12px;color:#8E9BAA;white-space:nowrap}
+.ssn-more{width:28px;height:24px;margin-right:-6px;flex:none;border:0;border-radius:6px;background:transparent;color:#8E9BAA;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer}
+.ssn-more:hover,.ssn-more.on{background:#1F2D3B;color:#E6EDF3}
+.ssn-card .ssn-text{margin-top:4px}
+.ssn-acts-row{display:flex;gap:4px;margin-top:8px;padding-top:6px;border-top:1px solid #22344A}
+.ssn-acts-row .ssn-link{font-size:12px;padding:5px 8px}
+.ssn-acts-row .ssn-link.danger{color:#FCA5A5}
+.ssn-sheet .ssn-acts-row .ssn-link{font-size:14px;padding:8px 10px}
+.ssn-sheet .ssn-more{width:34px;height:26px;margin:-3px -6px -3px 0;font-size:18px}
+.ssn-sheet .ssn-tl-d{font-size:13px;width:50px}
 @media (min-width:1181px){html.ssn-docked.ui-new .detail-overlay{align-items:stretch}}
 @media (max-width:1180px){.ssn-hbtn{display:none}}
 `;
