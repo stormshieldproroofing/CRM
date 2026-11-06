@@ -688,9 +688,31 @@
     else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc(contactShort(latest.e)) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
     else if (latest) html = esc(latest.n.body);
     const n = count(state.jobId);
-    return `<span class="ssn-strip-text${html ? '' : ' empty'}">${html ? (n > 1 ? `<span class="ssn-strip-cnt">${n} ·</span> ` : '') + html : 'No notes yet. Tap to add one'}</span>
+    return `<span class="ssn-strip-text${html ? '' : ' empty'}"><span class="ssn-mq">${html ? (n > 1 ? `<span class="ssn-strip-cnt">${n} ·</span> ` : '') + html : 'No notes yet. Tap to add one'}</span></span>
       <span class="ssn-strip-add" data-add="1" role="button" aria-label="Add a note"><i class="ti ti-plus" aria-hidden="true"></i></span>`;
   }
+  // A note too long for one line scrolls sideways so you can read all of it:
+  // pause, slide to the end, pause, start over. Short notes just sit still.
+  function marquee(strip) {
+    requestAnimationFrame(() => {
+      const box = strip.querySelector('.ssn-strip-text'), mq = box && box.querySelector('.ssn-mq');
+      if (!mq || !box.clientWidth) return;
+      const over = mq.scrollWidth - box.clientWidth;
+      const key = over + '|' + strip._html;
+      if (strip._mq === key) return;
+      strip._mq = key;
+      mq.classList.remove('run');
+      if (over > 4) {
+        const secs = Math.max(6, (over / 35) + 4);   // ~35px a second, plus the pauses
+        mq.style.setProperty('--mq-d', -over + 'px');
+        mq.style.setProperty('--mq-t', secs.toFixed(1) + 's');
+        void mq.offsetWidth;
+        mq.classList.add('run');
+      }
+    });
+  }
+  window.addEventListener('resize', () => { const s = $('ssnStrip'); if (s) { s._mq = ''; marquee(s); } });
+
   function stripEl(bar) {
     let el = $('ssnStrip');
     if (!el) {
@@ -806,7 +828,12 @@
     const strip = sheetMode ? stripEl(bar) : $('ssnStrip');
     if (strip) {
       strip.hidden = !sheetMode;
-      if (sheetMode) strip.innerHTML = stripHTML();
+      if (sheetMode) {
+        const h = stripHTML();
+        // Only touch it when the text changed, so the scrolling doesn't restart on every update
+        if (strip._html !== h) { strip._html = h; strip.innerHTML = h; }
+        marquee(strip);
+      }
     }
     document.documentElement.classList.toggle('ssn-strip-solo', !!(sheetMode && !bar));
     const wrap = sheetMode && state.sheetOpen ? sheetEl() : $('ssnSheetWrap');
@@ -1166,7 +1193,11 @@
 .ssn-strip-ic{position:relative;width:30px;height:30px;flex:none;border-radius:9px;background:#10283A;color:#38BDF8;display:flex;align-items:center;justify-content:center;font-size:17px}
 .ssn-strip-ic.pin{background:#2A2210;color:#FCD34D}
 .ssn-strip-n{position:absolute;top:-6px;right:-7px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:#38BDF8;color:#06202E;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}
-.ssn-strip-text{flex:1;min-width:0;padding-left:4px;font-size:14px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ssn-strip-text{flex:1;min-width:0;padding-left:4px;font-size:15px;line-height:1.3;white-space:nowrap;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}
+.ssn-mq{display:inline-block;white-space:nowrap;padding-right:20px;will-change:transform}
+.ssn-mq.run{animation:ssn-mq var(--mq-t,10s) linear infinite}
+@keyframes ssn-mq{0%,18%{transform:translateX(0)}82%,100%{transform:translateX(var(--mq-d,0))}}
+@media (prefers-reduced-motion:reduce){.ssn-mq.run{animation:none}.ssn-mq{display:inline}.ssn-strip-text{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;-webkit-mask-image:none;mask-image:none}}
 .ssn-strip-text.empty{color:#8B94A7}
 .ssn-strip-add{width:40px;height:40px;flex:none;border-radius:999px;background:#38BDF8;color:#06202E;display:flex;align-items:center;justify-content:center;font-size:20px}
 .ssn-strip.solo{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:130;width:auto;margin:0;padding:8px 8px 8px 10px;border:1px solid rgba(255,255,255,0.07);border-radius:18px;background:rgba(18,22,30,0.96);box-shadow:0 10px 30px rgba(0,0,0,0.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
