@@ -659,7 +659,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=17"></script>
-<script src="crm-notes.js?v=11"></script>
+<script src="crm-notes.js?v=12"></script>
 <script src="crm-notifications.js?v=4"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -4310,6 +4310,8 @@ const STAGE_STALE_DAYS = 7;
 // ── Pipeline card badge toggles ───────────────────────────────────────
 // Temporarily hidden. Flip either back to true to restore that badge on the
 // job cards; nothing else needs changing, the underlying data is still tracked.
+// Last contact now lives in the job notes (crm-notes.js: phone button + header line)
+const SHOW_LAST_CONTACT_CARD    = false;
 const SHOW_CARD_CONTACT_BADGE   = false;  // "Nd since last contact" (phone-x)
 const SHOW_CARD_CHECKLIST_BADGE = false;  // checklist progress (checkbox)
 
@@ -6831,7 +6833,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
             <button onclick="textLeadCardPhoto('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.4);color:#FB923C;font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-id" style="font-size:15px"></i>Send Card</button>
             <button onclick="saveJobContactToPhone('${j.id}')" style="flex:1;min-width:130px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.4);color:#34D399;font-size:12px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif"><i class="ti ti-user-plus" style="font-size:15px"></i>Save to Contacts</button>
           </div>
-          ${(() => {
+          ${SHOW_LAST_CONTACT_CARD ? (() => {
             const ageColor = d => d === null ? 'var(--muted)' : (d >= 14 ? '#F87171' : (d >= 7 ? '#FBBF24' : '#34D399'));
             const methodIcon = m => ({call:'ti-phone', text:'ti-message-2', email:'ti-mail', voicemail:'ti-phone-pause'})[m] || 'ti-message-dots';
             const row = (label, entry) => {
@@ -6854,7 +6856,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               ${row('Insurance', lastContact(j,'insurance'))}
               ${fu ? `<div style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:${fuOverdue?'#F87171':'var(--brand-mid)'}"><i class="ti ti-bell${fuOverdue?'-ringing':''}" style="font-size:13px"></i><span>${fuOverdue?'Follow-up due':'Follow up'}: <strong>${new Date(fu+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</strong></span></div>` : ''}
             </div>`;
-          })()}
+          })() : ''}
           ${window.currentMember?.role === 'admin' ? (() => {
             const z = j.zoho || {};
             const synced = !!z.invoiceId;
