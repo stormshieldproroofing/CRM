@@ -14,6 +14,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="StormShield">
 <style>
+/* Stop iPhone Safari from enlarging text it thinks is a long paragraph
+   (it was blowing up long call notes in the notes bar). */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --brand:#E2E8F4;--brand-mid:#93B4E0;--brand-light:#4D9DE0;
