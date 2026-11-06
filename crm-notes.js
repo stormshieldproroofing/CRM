@@ -390,15 +390,10 @@
     return label + (to ? ': ' + niceDate(to) : (e.detail ? ': ' + e.detail : ''));
   }
 
-  // Money lines in the notes: supplement approved and checks collected.
+  // Money lines in the notes: supplement approved.
   // Read from the job's activity log (the same place stage changes come from).
   function moneyText(e) {
     const label = String(e.label || ''), detail = String(e.detail || '');
-    if (e.type === 'deposit_add') {
-      const bits = detail.split(' · ').map(t => t.trim())
-        .filter(t => t && !/^from checks tab/i.test(t) && !/^check photo attached$/i.test(t));
-      return 'Check collected' + (bits.length ? ' · ' + bits.join(' · ') : '');
-    }
     if (e.type === 'accounting' && /^supplement (added|updated)/i.test(label)) {
       const parts = detail.split(/→|->/);
       const after = parts[parts.length - 1].trim();
@@ -426,6 +421,28 @@
     return '';
   }
 
+  // Checks come from the job's checks list itself (not the activity log), so a check
+  // that was removed or corrected later shows once, as it is now.
+  function checkItems(j) {
+    const deps = (j && Array.isArray(j.deposits) ? j.deposits : []).filter(d => d && d.date);
+    // The log has the time of day a check was added; borrow it when the day matches.
+    const logged = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.type === 'deposit_add' && e.at).map(e => e.at);
+    const used = new Set();
+    return deps.map(d => {
+      const day = new Date(d.date + (d.time ? ' ' + d.time : ''));
+      if (isNaN(day)) return null;
+      let at = d.time ? day : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 12);
+      if (!d.time) {
+        const hit = logged.find(t => !used.has(t) && new Date(t).toDateString() === day.toDateString());
+        if (hit) { used.add(hit); at = new Date(hit); }
+      }
+      const amt = parseFloat(d.amount) || 0;
+      const money = '$' + amt.toLocaleString('en-US', { minimumFractionDigits: amt % 1 ? 2 : 0, maximumFractionDigits: 2 });
+      return { kind: 'sys', at: at.toISOString(), text: 'Check collected · ' + money + (d.desc ? ' · ' + d.desc : ''), money: true };
+    }).filter(Boolean);
+  }
+
   function feedItems(jobId) {
     const notes = (state.notes[jobId] || []).filter(n => n && !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
@@ -436,7 +453,8 @@
     const money = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.at).map(e => ({ e, text: moneyText(e) })).filter(x => x.text)
       .slice(-20)
-      .map(x => ({ kind: 'sys', at: x.e.at, text: x.text, money: true }));
+      .map(x => ({ kind: 'sys', at: x.e.at, text: x.text, money: true }))
+      .concat(checkItems(j));
     const links = linkTimes[jobId] || [];
     const packet = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.at).map(e => ({ at: e.at, text: packetText(e, links.length > 0) })).filter(x => x.text);
