@@ -147,9 +147,21 @@
       state.loaded[jobId] = true;
       cacheSave(jobId);
       render();
+      loadLinks(jobId);
     } catch (e) {
       console.warn('[notes] load failed, showing saved copy', e);
     }
+  }
+
+  // Packet signing links: when the homeowner opened / signed the link.
+  const linkTimes = {};
+  async function loadLinks(jobId) {
+    try {
+      const { data, error } = await sbc().from('packet_links').select('id,created_at,viewed_at,signed_at').eq('job_id', jobId);
+      if (error) throw error;
+      linkTimes[jobId] = data || [];
+      render();
+    } catch (e) { console.warn('[notes] packet links', e); }
   }
 
   function subscribe(jobId) {
@@ -401,6 +413,19 @@
     return '';
   }
 
+  function packetText(e, haveLinks) {
+    if (e.type !== 'file') return '';
+    const label = String(e.label || ''), detail = String(e.detail || '');
+    if (/^claim packet sent for signature/i.test(label)) return 'Packet sent for signature';
+    if (/^claim packet signing link resent/i.test(label)) return 'Packet link resent';
+    if (/^claim packet signed/i.test(label)) {
+      if (/in person/i.test(detail)) return 'Packet signed in person';
+      return haveLinks ? '' : 'Packet signed by homeowner';   // link rows give the exact signing time
+    }
+    if (/^claim packet uploaded/i.test(label)) return 'Signed packet uploaded';
+    return '';
+  }
+
   function feedItems(jobId) {
     const notes = (state.notes[jobId] || []).filter(n => n && !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
@@ -412,10 +437,18 @@
       .filter(e => e && e.at).map(e => ({ e, text: moneyText(e) })).filter(x => x.text)
       .slice(-20)
       .map(x => ({ kind: 'sys', at: x.e.at, text: x.text, money: true }));
+    const links = linkTimes[jobId] || [];
+    const packet = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.at).map(e => ({ at: e.at, text: packetText(e, links.length > 0) })).filter(x => x.text);
+    links.forEach(l => {
+      if (l.viewed_at) packet.push({ at: l.viewed_at, text: 'Packet opened by homeowner' });
+      if (l.signed_at) packet.push({ at: l.signed_at, text: 'Packet signed by homeowner' });
+    });
+    const packets = packet.slice(-20).map(x => ({ kind: 'sys', at: x.at, text: x.text, packet: true }));
     const contacts = (j && Array.isArray(j.contactLog) ? j.contactLog : [])
       .filter(e => e && e.at).slice(-30)
       .map(e => ({ kind: 'contact', at: e.at, e }));
-    return notes.concat(stages, money, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
+    return notes.concat(stages, money, packets, contacts).sort((a, b) => new Date(a.at) - new Date(b.at));
   }
 
   function count(jobId) { return (state.notes[jobId] || []).length; }
@@ -443,7 +476,7 @@
 
   function noteHTML(it) {
     if (it.kind === 'sys') {
-      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}">${esc(it.text)}</span></div>`;
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}">${esc(it.text)}</span></div>`;
     }
     if (it.kind === 'contact') {
       const e = it.e;
@@ -1127,6 +1160,8 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-dot.stage{background:#8B5CF6}
 .ssn-dot.money{background:#F59E0B}
 .ssn-tl-t.money{color:#FCD34D;font-weight:600}
+.ssn-dot.packet{background:#2DD4BF}
+.ssn-tl-t.packet{color:#5EEAD4;font-weight:600}
 .ssn-dot.note{background:#38BDF8;top:14px}
 .ssn-tl-sys{position:relative;display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;color:#8E9BAA}
 .ssn-tl-sys .ssn-dot{top:7px}
