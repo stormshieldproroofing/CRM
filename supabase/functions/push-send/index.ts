@@ -41,10 +41,10 @@ Deno.serve(async (req) => {
   if (!subs || !subs.length) return json({ sent: 0, note: "no devices" });
 
   const unread = await admin.from("notifications").select("id", { count: "exact", head: true }).eq("recipient", n.recipient).is("read_at", null);
-  const open = n.kind === "packet_viewed" || n.kind === "packet_signed" ? "packet" : n.kind === "supplement_approved" ? "job" : "notes";
+  const open = n.kind === "packet_viewed" || n.kind === "packet_signed" ? "packet" : n.kind === "supplement_approved" || n.kind === "job_approved" ? "job" : "notes";
   const payload = {
     title: n.title,
-    body: (n.job_label ? n.job_label + " · " : "") + (n.body || ""),
+    body: [n.job_label, n.body].filter(Boolean).join(" · "),
     tag: n.id,
     url: n.job_id ? `./?job=${n.job_id}&open=${open}&nid=${n.id}` : `./?nid=${n.id}`,
     badge: unread.count ?? undefined,

@@ -25,6 +25,7 @@
     packet_signed: { icon: 'ti-writing-sign', cls: 'signed' },
     test:          { icon: 'ti-bell',         cls: 'note' },
     supplement_approved: { icon: 'ti-file-dollar', cls: 'signed' },
+    job_approved:  { icon: 'ti-shield-check', cls: 'signed' },
   };
   // Public half of the push signing key (the private half is in Supabase Vault)
   const VAPID_PUBLIC = 'BLRj0hCYCe-5aEHlpstRTFEiH6CVeGYJBplZUM-2oRWIP_o5taZTm_FWU6qmfDApRYZFBcqWt2Ok-rf3GynF0VQ';
@@ -145,8 +146,10 @@
       <span class="ssn-ni-ic ${k.cls}"><i class="ti ${k.icon}" aria-hidden="true"></i></span>
       <span class="ssn-ni-main">
         <span class="ssn-ni-top"><span class="ssn-ni-t">${esc(n.title)}</span><span class="ssn-ni-when">${esc(ago(n.created_at))}</span></span>
-        ${n.body ? `<span class="ssn-ni-b">${esc(n.body)}</span>` : ''}
-        ${n.job_label ? `<span class="ssn-ni-job">${esc(n.job_label)}</span>` : ''}
+        ${n.kind === 'job_approved'
+          ? `${n.job_label ? `<span class="ssn-ni-b">${esc(n.job_label)}</span>` : ''}${n.body ? `<span class="ssn-ni-job">${esc(n.body)}</span>` : ''}`
+          : `${n.body ? `<span class="ssn-ni-b">${esc(n.body)}</span>` : ''}
+        ${n.job_label ? `<span class="ssn-ni-job">${esc(n.job_label)}</span>` : ''}`}
       </span>
       ${n.read_at ? '' : '<span class="ssn-ni-dot" aria-label="Unread"></span>'}
     </button>`;
@@ -164,13 +167,14 @@
     if (!S.open) return;
     const list = S.filter === 'mention' ? S.items.filter(n => n.kind === 'mention')
       : S.filter === 'packet' ? S.items.filter(n => n.kind.indexOf('packet') === 0)
-      : S.filter === 'supp' ? S.items.filter(n => n.kind === 'supplement_approved') : S.items;
+      : S.filter === 'supp' ? S.items.filter(n => n.kind === 'supplement_approved')
+      : S.filter === 'approved' ? S.items.filter(n => n.kind === 'job_approved') : S.items;
     panel().innerHTML = `
       <div class="ssn-np-h"><div class="ssn-np-title">Notifications</div>
         ${u ? '<button type="button" class="ssn-np-link" data-act="readall">Mark all read</button>' : ''}
         <button type="button" class="ssn-np-x" data-act="close" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button></div>
       <div class="ssn-np-f">
-        ${[['all', 'All'], ['mention', 'Mentions'], ['packet', 'Packets'], ['supp', 'Supplements']].map(([k, l]) => `<button type="button" class="ssn-np-chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}
+        ${[['all', 'All'], ['mention', 'Mentions'], ['approved', 'Approved'], ['packet', 'Packets'], ['supp', 'Supplements']].map(([k, l]) => `<button type="button" class="ssn-np-chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}
       </div>
       <div class="ssn-np-list">${list.length ? list.map(itemHTML).join('') : '<div class="ssn-np-empty">You\'re all caught up.</div>'}</div>
       ${pushRowHTML() ? `<div class="ssn-np-foot">${pushRowHTML()}</div>` : ''}`;
