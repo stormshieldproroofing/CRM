@@ -692,30 +692,37 @@
     else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc(contactShort(latest.e)) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
     else if (latest) html = esc(latest.n.body);
     const n = count(state.jobId);
-    return `<span class="ssn-strip-text${html ? '' : ' empty'}"><span class="ssn-mq">${html ? (n > 1 ? `<span class="ssn-strip-cnt">${n} ·</span> ` : '') + html : 'No notes yet. Tap to add one'}</span></span>
+    const line = html ? (n > 1 ? `<span class="ssn-strip-cnt">${n} ·</span> ` : '') + html : '';
+    // Two copies side by side so the line can loop like a ticker without a gap jump
+    return `<span class="ssn-strip-text${html ? '' : ' empty'}">${html
+      ? `<span class="ssn-mq"><span class="ssn-mq-a">${line}</span><span class="ssn-mq-b" aria-hidden="true">${line}</span></span>`
+      : 'No notes yet. Tap to add one'}</span>
       <span class="ssn-strip-add" data-add="1" role="button" aria-label="Add a note"><i class="ti ti-plus" aria-hidden="true"></i></span>`;
   }
-  // A note too long for one line scrolls sideways so you can read all of it:
-  // pause, slide to the end, pause, start over. Short notes just sit still.
+  // The latest line scrolls sideways like a ticker, always: it sits for a second,
+  // then slides left and loops (the second copy follows right behind it).
   function marquee(strip) {
     requestAnimationFrame(() => {
       const box = strip.querySelector('.ssn-strip-text'), mq = box && box.querySelector('.ssn-mq');
-      if (!mq || !box.clientWidth) return;
-      const over = mq.scrollWidth - box.clientWidth;
-      const key = over + '|' + strip._html;
+      const a = mq && mq.querySelector('.ssn-mq-a'), b = mq && mq.querySelector('.ssn-mq-b');
+      if (!a || !b || !box.clientWidth) return;
+      // Keep the copies at least a bar-width apart, so a short line never shows twice at once
+      a.style.paddingRight = b.style.paddingRight = '0px';
+      const tw = a.offsetWidth, pad = Math.max(48, box.clientWidth - tw + 24);
+      a.style.paddingRight = b.style.paddingRight = pad + 'px';
+      const w = tw + pad;
+      const key = w + '|' + strip._html;
       if (strip._mq === key) return;
       strip._mq = key;
       if (mq._anim) { mq._anim.cancel(); mq._anim = null; }
-      if (over > 4 && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) && mq.animate) {
-        // Same short pauses whatever the length: 1s before it moves, 1.5s at the end.
-        const move = over / 45 * 1000, wait1 = 1000, wait2 = 1500, total = wait1 + move + wait2;
-        mq._anim = mq.animate([
-          { transform: 'translateX(0)', offset: 0 },
-          { transform: 'translateX(0)', offset: wait1 / total },
-          { transform: 'translateX(' + (-over) + 'px)', offset: (wait1 + move) / total },
-          { transform: 'translateX(' + (-over) + 'px)', offset: 1 },
-        ], { duration: total, iterations: Infinity, easing: 'linear' });
-      }
+      if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (!mq.animate || !w) return;
+      const move = w / 45 * 1000, wait = 1000, total = wait + move;
+      mq._anim = mq.animate([
+        { transform: 'translateX(0)', offset: 0 },
+        { transform: 'translateX(0)', offset: wait / total },
+        { transform: 'translateX(' + (-w) + 'px)', offset: 1 },
+      ], { duration: total, iterations: Infinity, easing: 'linear' });
     });
   }
   window.addEventListener('resize', () => { const s = $('ssnStrip'); if (s) { s._mq = ''; marquee(s); } });
@@ -1201,8 +1208,9 @@
 .ssn-strip-ic.pin{background:#2A2210;color:#FCD34D}
 .ssn-strip-n{position:absolute;top:-6px;right:-7px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:#38BDF8;color:#06202E;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}
 .ssn-strip-text{flex:1;min-width:0;padding-left:4px;font-size:14px;line-height:1.3;white-space:nowrap;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}
-.ssn-mq{display:inline-block;white-space:nowrap;padding-right:20px;will-change:transform}
-@media (prefers-reduced-motion:reduce){.ssn-mq{display:inline}.ssn-strip-text{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;-webkit-mask-image:none;mask-image:none}}
+.ssn-mq{display:inline-flex;white-space:nowrap;will-change:transform}
+.ssn-mq-a,.ssn-mq-b{flex:none;padding-right:48px}
+@media (prefers-reduced-motion:reduce){.ssn-mq{display:inline}.ssn-mq-b{display:none}.ssn-mq-a{padding:0}.ssn-strip-text{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;-webkit-mask-image:none;mask-image:none}}
 .ssn-strip-text.empty{color:#8B94A7}
 .ssn-strip-add{width:40px;height:40px;flex:none;border-radius:999px;background:#38BDF8;color:#06202E;display:flex;align-items:center;justify-content:center;font-size:20px}
 .ssn-strip.solo{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:130;width:auto;margin:0;padding:8px 8px 8px 10px;border:1px solid rgba(255,255,255,0.07);border-radius:18px;background:rgba(18,22,30,0.96);box-shadow:0 10px 30px rgba(0,0,0,0.45);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
