@@ -659,7 +659,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=17"></script>
-<script src="crm-notes.js?v=13"></script>
+<script src="crm-notes.js?v=15"></script>
 <script src="crm-notifications.js?v=4"></script>
 
 <div style="position:relative;overflow:hidden">
@@ -2529,11 +2529,13 @@ function logContact(jobOrId, party, method, note, opts){
   if(!j) return;
   if(!Array.isArray(j.contactLog)) j.contactLog = [];
   const by = (window.currentMember && (window.currentMember.name || window.currentMember.id)) || 'system';
-  j.contactLog.push({ at: new Date().toISOString(), party, method, note: note || '', by });
+  const entry = { at: new Date().toISOString(), party, method, note: note || '', by };
+  if(opts && opts.dir === 'in') entry.dir = 'in';                  // they reached out to us
+  j.contactLog.push(entry);
   if(opts && opts.followUp) j.nextFollowUp = opts.followUp;        // 'YYYY-MM-DD'
   if(opts && opts.clearFollowUp) delete j.nextFollowUp;
   const partyLabel = party === 'client' ? 'Client' : (party === 'adjuster' ? 'Adjuster' : 'Carrier');
-  logActivity(j, 'contact', `${partyLabel} contact — ${method}`, note || '');
+  logActivity(j, 'contact', `${partyLabel} contact — ${method}${entry.dir === 'in' ? ' (inbound)' : ''}`, note || '');
   saveToStorage();
 }
 window.logContact = logContact;
