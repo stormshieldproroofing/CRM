@@ -390,27 +390,45 @@
     return label + (to ? ': ' + niceDate(to) : (e.detail ? ': ' + e.detail : ''));
   }
 
-  // Money lines in the notes: supplement approved.
-  // Read from the job's activity log (the same place stage changes come from).
-  function moneyText(e) {
+  // Supplement lines in the notes: one when it's sent to the carrier, one for the decision.
+  const fmt$ = n => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: (Number(n) || 0) % 1 ? 2 : 0, maximumFractionDigits: 2 });
+  const short = t => { t = String(t || '').trim(); return t.length > 40 ? t.slice(0, 38).trim() + '…' : t; };
+  function suppLine(kind, what, amt, req) {
+    const w = what ? ' · ' + short(what) : '';
+    if (kind === 'sent') return { text: 'Supplement sent' + w + ' · ' + fmt$(amt), cls: 'sent' };
+    if (kind === 'Denied') return { text: 'Supplement denied' + w + ' · ' + fmt$(req != null ? req : amt), cls: 'denied' };
+    if (kind === 'Partial') return { text: 'Partly approved' + w + ' · ' + fmt$(amt) + (req != null && req > amt ? ' of ' + fmt$(req) : ''), cls: 'money' };
+    return { text: 'Supplement approved' + w + ' · ' + fmt$(amt), cls: 'money' };
+  }
+  // Supplements saved with dates (the new supplement section) give their own lines.
+  function suppItems(j) {
+    const out = [];
+    (j && Array.isArray(j.supplements) ? j.supplements : []).forEach(s => {
+      if (!s) return;
+      const req = parseFloat(s.requested != null ? s.requested : s.amount) || 0;
+      if (s.submittedAt) out.push(Object.assign({ at: s.submittedAt }, suppLine('sent', s.note, req)));
+      if (s.decidedAt && /^(Approved|Partial|Denied)$/.test(s.status)) out.push(Object.assign({ at: s.decidedAt }, suppLine(s.status, s.note, parseFloat(s.amount) || 0, req)));
+    });
+    return out;
+  }
+  // Older supplements only exist in the activity log ("Supplement added / updated").
+  // Show the add, and later updates only when the status changed, so fixing an
+  // amount doesn't stack up extra lines.
+  function legacySupp(e) {
     const label = String(e.label || ''), detail = String(e.detail || '');
-    if (e.type === 'accounting' && /^supplement (added|updated)/i.test(label)) {
-      const parts = detail.split(/→|->/);
-      const after = parts[parts.length - 1].trim();
-      const before = parts.length > 1 ? parts[0].trim() : '';
-      const m = after.match(/^(\$[\d,.]+)\s*·\s*(Approved|Partial|Submitted)\b(?:\s*·\s*(.+))?$/i);
-      if (!m) return '';
-      const st = m[2].toLowerCase();
-      // An edit that keeps the same status and amount (e.g. a note change) isn't news.
-      if (before && new RegExp('·\\s*' + m[2] + '\\b', 'i').test(before) && before.split('·')[0].trim() === m[1]) return '';
-      let what = (m[3] || '').trim();
-      if (what.length > 40) what = what.slice(0, 38).trim() + '…';
-      const head = st === 'submitted' ? 'Supplement submitted · ' : st === 'partial' ? 'Supplement partly approved · ' : 'Supplement approved · ';
-      const n = parseFloat(m[1].replace(/[$,]/g, '')) || 0;
-      const amt = '$' + n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
-      return head + amt + (what ? ' · ' + what : '');
-    }
-    return '';
+    if (e.type !== 'accounting' || !/^supplement (added|updated)/i.test(label)) return null;
+    const parts = detail.split(/→|->/);
+    const after = parts[parts.length - 1].trim();
+    const before = parts.length > 1 ? parts[0].trim() : '';
+    const m = after.match(/^(\$[\d,.]+)\s*·\s*(Approved|Partial|Submitted|Denied)\b(?:\s*·\s*(.+))?$/i);
+    if (!m) return null;
+    const st = m[2][0].toUpperCase() + m[2].slice(1).toLowerCase();
+    const bm = before.match(/^(\$[\d,.]+)\s*·\s*(\w+)/);
+    if (bm && bm[2].toLowerCase() === st.toLowerCase()) return null;   // same status: just an edit
+    const amt = parseFloat(m[1].replace(/[$,]/g, '')) || 0;
+    const prev = bm ? parseFloat(bm[1].replace(/[$,]/g, '')) || 0 : null;
+    if (st === 'Partial' && prev != null && prev <= amt) return null;   // marked partial before the amount was known
+    return suppLine(st === 'Submitted' ? 'sent' : st, m[3], amt, st === 'Partial' ? prev : null);
   }
 
   function packetText(e, haveLinks) {
@@ -455,11 +473,11 @@
       .filter(e => e && e.type === 'stage' && e.at)
       .slice(-12)
       .map(e => ({ kind: 'sys', at: e.at, text: sysText(e), stage: /stage changed/i.test(e.label || '') }));
-    const money = (j && Array.isArray(j.timeline) ? j.timeline : [])
-      .filter(e => e && e.at).map(e => ({ e, text: moneyText(e) })).filter(x => x.text)
-      .slice(-20)
-      .map(x => ({ kind: 'sys', at: x.e.at, text: x.text, money: true }))
-      .concat(checkItems(j));
+    const supp = (j && Array.isArray(j.timeline) ? j.timeline : [])
+      .filter(e => e && e.at).map(e => { const l = legacySupp(e); return l && Object.assign({ at: e.at }, l); }).filter(Boolean)
+      .concat(suppItems(j)).slice(-30)
+      .map(x => ({ kind: 'sys', at: x.at, text: x.text, money: x.cls === 'money', sent: x.cls === 'sent', denied: x.cls === 'denied' }));
+    const money = supp.concat(checkItems(j));
     const links = linkTimes[jobId] || [];
     const packet = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.at).map(e => ({ at: e.at, text: packetText(e, links.length > 0) })).filter(x => x.text);
@@ -499,7 +517,7 @@
 
   function noteHTML(it) {
     if (it.kind === 'sys') {
-      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}">${esc(it.text)}</span></div>`;
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}">${esc(it.text)}</span></div>`;
     }
     if (it.kind === 'contact') {
       const e = it.e;
@@ -1183,6 +1201,10 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-dot.stage{background:#8B5CF6}
 .ssn-dot.money{background:#F59E0B}
 .ssn-tl-t.money{color:#FCD34D;font-weight:600}
+.ssn-dot.sent{background:#7DD3FC}
+.ssn-tl-t.sent{color:#7DD3FC;font-weight:600}
+.ssn-dot.denied{background:#F87171}
+.ssn-tl-t.denied{color:#FCA5A5;font-weight:600}
 .ssn-dot.packet{background:#2DD4BF}
 .ssn-tl-t.packet{color:#5EEAD4;font-weight:600}
 .ssn-dot.note{background:#38BDF8;top:14px}
