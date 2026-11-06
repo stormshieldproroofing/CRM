@@ -146,8 +146,10 @@
       <span class="ssn-ni-ic ${k.cls}"><i class="ti ${k.icon}" aria-hidden="true"></i></span>
       <span class="ssn-ni-main">
         <span class="ssn-ni-top"><span class="ssn-ni-t">${esc(n.title)}</span><span class="ssn-ni-when">${esc(ago(n.created_at))}</span></span>
-        ${n.body ? `<span class="ssn-ni-b">${esc(n.body)}</span>` : ''}
-        ${n.job_label ? `<span class="ssn-ni-job">${esc(n.job_label)}</span>` : ''}
+        ${n.kind === 'job_approved'
+          ? `${n.job_label ? `<span class="ssn-ni-b">${esc(n.job_label)}</span>` : ''}${n.body ? `<span class="ssn-ni-job">${esc(n.body)}</span>` : ''}`
+          : `${n.body ? `<span class="ssn-ni-b">${esc(n.body)}</span>` : ''}
+        ${n.job_label ? `<span class="ssn-ni-job">${esc(n.job_label)}</span>` : ''}`}
       </span>
       ${n.read_at ? '' : '<span class="ssn-ni-dot" aria-label="Unread"></span>'}
     </button>`;

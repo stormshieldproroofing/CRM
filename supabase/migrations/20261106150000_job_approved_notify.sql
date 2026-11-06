@@ -1,5 +1,5 @@
--- Alert when a job moves into an "Approved" stage (insurance: claim approved;
--- other pipelines: their own Approved stage). Goes to the assigned rep and to
+-- Alert when a job moves into an "Approved" stage (any pipeline).
+-- Reads: Approved / homeowner name / address. Goes to the assigned rep and to
 -- admins/managers, not to whoever moved it. Shows in the bell and on the lock screen.
 alter table public.notifications drop constraint if exists notifications_kind_check;
 alter table public.notifications add constraint notifications_kind_check
@@ -26,8 +26,9 @@ begin
   key := new.id || ':approved:' || to_char(now() at time zone 'America/Chicago', 'YYYY-MM-DD');
   if exists (select 1 from notifications where ref = key) then return new; end if;
 
-  ttl := case when coalesce(new.pipeline_id, 'insurance') = 'insurance' then 'Claim approved' else 'Job approved' end;
-  bdy := 'Moved to Approved.';
+  ttl := 'Approved';
+  -- street and city: "10439 Acacia Forest Trail, Houston"
+  bdy := nullif(trim(both ', ' from concat_ws(',', split_part(coalesce(new.address, ''), ',', 1), split_part(coalesce(new.address, ''), ',', 2))), '');
 
   for r in
     select distinct a from (
