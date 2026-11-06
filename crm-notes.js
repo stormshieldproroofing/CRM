@@ -29,11 +29,22 @@
   const C_PARTY = [['client', 'Homeowner'], ['adjuster', 'Adjuster'], ['carrier', 'Carrier']];
   const C_METHOD = [['call', 'Call'], ['text', 'Text'], ['email', 'Email'], ['voicemail', 'Voicemail'], ['in-person', 'In person']];
   const C_NEXT = [['none', 'No follow-up'], ['1', 'Tomorrow'], ['3', '3 days'], ['7', '1 week']];
+  const C_DIR = [['out', 'We reached out'], ['in', 'They reached out']];
+  // When they reached us: "Homeowner called", "Adjuster left a voicemail"
+  const C_VERB_IN = { call: 'called', text: 'texted', email: 'emailed', voicemail: 'left a voicemail', 'in-person': 'stopped by' };
+  const C_PARTY_NAME = { client: 'Homeowner', adjuster: 'Adjuster', carrier: 'Carrier' };
   const C_VERB = { call: 'Called', text: 'Texted', email: 'Emailed', voicemail: 'Left voicemail for', 'in-person': 'Met with' };
   const C_WHO = { client: 'homeowner', adjuster: 'adjuster', carrier: 'carrier' };
   const C_SHORT = { client: 'HO', adjuster: 'adjuster', carrier: 'carrier' };
   const C_ICON = { call: 'ti-phone', text: 'ti-message-2', email: 'ti-mail', voicemail: 'ti-phone-pause', 'in-person': 'ti-user-check' };
-  function contactHead(e) { return (C_VERB[e.method] || 'Contacted') + ' ' + (C_WHO[e.party] || e.party || ''); }
+  function contactHead(e) {
+    if (e.dir === 'in') return (C_PARTY_NAME[e.party] || 'They') + ' ' + (C_VERB_IN[e.method] || 'reached out');
+    return (C_VERB[e.method] || 'Contacted') + ' ' + (C_WHO[e.party] || e.party || '');
+  }
+  function contactShort(e) {
+    if (e.dir === 'in') return (C_SHORT[e.party] === 'HO' ? 'HO' : (C_PARTY_NAME[e.party] || 'They')) + ' ' + (C_VERB_IN[e.method] || 'reached out');
+    return (C_VERB[e.method] || 'Contacted') + ' ' + (C_SHORT[e.party] || '');
+  }
   function daysAgoTxt(iso) {
     const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
     return isNaN(d) ? '' : d <= 0 ? 'today' : d + 'd';
@@ -203,13 +214,14 @@
   function postContact(ta, body) {
     const j = jobById(state.jobId), c = state.contact;
     if (!j || !c || typeof window.logContact !== 'function') return;
-    const opts = c.next && c.next !== 'none' ? { followUp: addDays(parseInt(c.next, 10)) } : undefined;
+    const opts = { dir: c.dir === 'in' ? 'in' : 'out' };
+    if (c.next && c.next !== 'none') opts.followUp = addDays(parseInt(c.next, 10));
     try { window.logContact(j, c.party, c.method, body, opts); }
     catch (e) { setStatus('Could not log the contact', 'warn'); return; }
     if (ta) { ta.value = ''; const host = ta.closest('.ssn'); if (host) host.dataset.justPosted = '1'; }
     lsSet(LS.draft(state.jobId), null);
     state.contact = null;
-    setStatus(contactHead({ party: c.party, method: c.method }) + ' · logged', 'ok');
+    setStatus(contactHead({ party: c.party, method: c.method, dir: c.dir }) + ' · logged', 'ok');
     render(true);
   }
 
@@ -396,7 +408,7 @@
       const mine = e.by && (e.by === myName() || (state.myMemberId && e.by === state.myMemberId));
       return `<div class="ssn-tl-note"><span class="ssn-dot contact" aria-hidden="true"></span>
         <div class="ssn-card contact">
-          <div class="ssn-c-head"><i class="ti ${C_ICON[e.method] || 'ti-phone'}" aria-hidden="true"></i>${esc(contactHead(e))}</div>
+          <div class="ssn-c-head"><i class="ti ${e.dir === 'in' && (e.method === 'call' || !e.method) ? 'ti-phone-incoming' : (C_ICON[e.method] || 'ti-phone')}" aria-hidden="true"></i>${esc(contactHead(e))}</div>
           ${e.note ? `<div class="ssn-text">${noteText(e.note)}</div>` : ''}
           <div class="ssn-meta"><span>${esc(mine ? 'You' : firstName(e.by && e.by !== 'system' ? e.by : 'Team'))} · ${esc(timeLabel(e.at))}</span></div>
         </div></div>`;
@@ -461,7 +473,7 @@
     const c = state.contact;
     const row = (label, key, opts, cur) => `<div class="ssn-crow"><span class="ssn-clab">${label}</span><div class="ssn-cchips">${opts.map(([v, l]) =>
       `<button type="button" class="ssn-chip${cur === v ? ' on' : ''}${key === 'next' && v !== 'none' && cur === v ? ' fu' : ''}" data-c${key}="${esc(v)}" aria-pressed="${cur === v}">${esc(l)}</button>`).join('')}</div></div>`;
-    return `<div class="ssn-contact">${row('Who', 'party', C_PARTY, c.party)}${row('How', 'method', C_METHOD, c.method)}${row('Next', 'next', C_NEXT, c.next)}</div>`;
+    return `<div class="ssn-contact">${row('Way', 'dir', C_DIR, c.dir || 'out')}${row('Who', 'party', C_PARTY, c.party)}${row('How', 'method', C_METHOD, c.method)}${row('Next', 'next', C_NEXT, c.next)}</div>`;
   }
 
   function bodyHTML(mode) {
@@ -554,7 +566,7 @@
     const latest = items[items.length - 1];
     let html;
     if (pin) html = '<b class="ssn-strip-pin">Pinned:</b> ' + esc(pin.body);
-    else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc((C_VERB[latest.e.method] || 'Contacted') + ' ' + (C_SHORT[latest.e.party] || '')) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
+    else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc(contactShort(latest.e)) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
     else if (latest) html = esc(latest.n.body);
     const n = count(state.jobId);
     return `<span class="ssn-strip-text${html ? '' : ' empty'}">${html ? (n > 1 ? `<span class="ssn-strip-cnt">${n} ·</span> ` : '') + html : 'No notes yet. Tap to add one'}</span>
@@ -630,7 +642,7 @@
   }
   // Open the notes ready to log a contact (phone: sheet; desktop: notes column)
   function openForContact() {
-    state.contact = { party: 'client', method: 'call', next: 'none' };
+    state.contact = { dir: 'out', party: 'client', method: 'call', next: 'none' };
     state.tab = 'job';
     if (wide()) { lsSet(LS.dock, '1'); state.floating = false; render(true); setTimeout(() => { const t = document.querySelector('#ssnDock .ssn-input'); if (t) t.focus(); }, 30); }
     else openSheet(false);
@@ -735,11 +747,12 @@
     const root = inNotes(e.target);
     if (!root) return;
     e.stopPropagation();   // keep clicks from reaching the job overlay (which closes the job)
-    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit],[data-cparty],[data-cmethod],[data-cnext]');
+    const b = e.target.closest('[data-act],[data-tab],[data-tag],[data-pin],[data-del],[data-edit],[data-cparty],[data-cmethod],[data-cnext],[data-cdir]');
     if (!b) return;
     if (b.dataset.tab) { state.tab = b.dataset.tab; state.status = ''; if (state.tab === 'pad') loadPad(); render(); return; }
-    if (b.dataset.cparty || b.dataset.cmethod || b.dataset.cnext) {
+    if (b.dataset.cparty || b.dataset.cmethod || b.dataset.cnext || b.dataset.cdir) {
       if (state.contact) {
+        if (b.dataset.cdir) state.contact.dir = b.dataset.cdir;
         if (b.dataset.cparty) state.contact.party = b.dataset.cparty;
         if (b.dataset.cmethod) state.contact.method = b.dataset.cmethod;
         if (b.dataset.cnext) state.contact.next = b.dataset.cnext;
@@ -754,7 +767,7 @@
       case 'pad': state.tab = state.tab === 'pad' ? 'job' : 'pad'; state.status = ''; if (state.tab === 'pad') loadPad(); render(true); break;
       case 'post': post(root); break;
       case 'contact': {
-        state.contact = state.contact ? null : { party: 'client', method: 'call', next: 'none' }; state.status = '';
+        state.contact = state.contact ? null : { dir: 'out', party: 'client', method: 'call', next: 'none' }; state.status = '';
         // Phone: keep the keyboard down so Who / How / Next are visible; type after picking.
         if (!wide() && document.activeElement && document.activeElement.blur) document.activeElement.blur();
         render();
