@@ -434,9 +434,10 @@
     if (!m) return null;
     const st = m[2][0].toUpperCase() + m[2].slice(1).toLowerCase();
     const bm = before.match(/^(\$[\d,.]+)\s*·\s*(\w+)/);
-    if (bm && bm[2].toLowerCase() === st.toLowerCase()) return null;   // same status: just an edit
     const amt = parseFloat(m[1].replace(/[$,]/g, '')) || 0;
     const prev = bm ? parseFloat(bm[1].replace(/[$,]/g, '')) || 0 : null;
+    // Same status is just an edit, except an approved amount that changed (the carrier approved more)
+    if (bm && bm[2].toLowerCase() === st.toLowerCase() && !(/^(approved|partial)$/i.test(st) && Math.abs(prev - amt) >= 0.01)) return null;
     if (st === 'Partial' && prev != null && prev <= amt) return null;   // marked partial before the amount was known
     const rec = suppFor(j, m[3], amt);
     const name = rec ? rec.note : m[3];
