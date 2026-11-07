@@ -5893,6 +5893,29 @@ function earnedThisYear(j){
   return d ? d.getFullYear() === new Date().getFullYear() : createdThisYear(j);
 }
 
+// Commission earned (Summary) = commission actually marked paid this year, by payment date.
+function _payoutDate(p){
+  const d = new Date(p && p.date ? p.date + 'T12:00:00' : (p && p.paidAt) || '');
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+function commissionPaidThisYear(j, userId){
+  const y = new Date().getFullYear();
+  return jobCommissionPayouts(j)
+    .filter(p => (!userId || p.paidTo === userId) && (_payoutDate(p)?.getFullYear() === y))
+    .reduce((s,p) => s + (moneyValue(p.amount) || 0), 0);
+}
+function lastCommissionPaidDate(j, userId){
+  let best = null;
+  jobCommissionPayouts(j).forEach(p => { if(userId && p.paidTo !== userId) return; const d = _payoutDate(p); if(d && (!best || d > best)) best = d; });
+  return best;
+}
+// Commission not paid yet on a job: what's estimated minus what's been paid (any year).
+function commissionUnpaid(j, user){
+  if(user) return Math.max(0, estimatedCommissionForUser(j, user) - commissionPaidToUser(j, user.id));
+  const paid = jobCommissionPayouts(j).reduce((s,p) => s + (moneyValue(p.amount) || 0), 0);
+  return Math.max(0, estimatedTotalCommission(j) - paid);
+}
+
 function salesmanSummary(user){
   if(!user) return {revenue:0,commissionYtd:0,jobsInPipeline:0,receivable:0,pendingCommission:0};
   const assigned=jobs.filter(j=>j.user===user.id);
@@ -5901,10 +5924,10 @@ function salesmanSummary(user){
   const receivable=assigned.reduce((s,j)=>s+jobBalanceDue(j),0);
   return {
     revenue:ytd.reduce((s,j)=>s+moneyValue(j.potVal),0),
-    commissionYtd:assigned.filter(earnedThisYear).reduce((s,j)=>s+estimatedCommissionForUser(j,user),0),
+    commissionYtd:assigned.reduce((s,j)=>s+commissionPaidThisYear(j,user.id),0),
     jobsInPipeline:active.length,
     receivable,
-    pendingCommission:assigned.filter(j=>!jobFullyPaid(j)).reduce((s,j)=>s+estimatedCommissionForUser(j,user),0)
+    pendingCommission:assigned.reduce((s,j)=>s+commissionUnpaid(j,user),0)
   };
 }
 
@@ -5915,10 +5938,10 @@ function summaryForJobs(summaryJobs,user=null){
   const commissionCalc=job=>user?estimatedCommissionForUser(job,user):estimatedTotalCommission(job);
   return {
     revenue:ytd.reduce((s,j)=>s+moneyValue(j.potVal),0),
-    commissionYtd:summaryJobs.filter(earnedThisYear).reduce((s,j)=>s+commissionCalc(j),0),
+    commissionYtd:summaryJobs.reduce((s,j)=>s+commissionPaidThisYear(j,user?user.id:null),0),
     jobsInPipeline:active.length,
     receivable,
-    pendingCommission:summaryJobs.filter(j=>!jobFullyPaid(j)).reduce((s,j)=>s+commissionCalc(j),0)
+    pendingCommission:summaryJobs.reduce((s,j)=>s+commissionUnpaid(j,user),0)
   };
 }
 
@@ -5936,8 +5959,8 @@ function refreshSalesSummaryUI(){
 // ── Summary tiles → the jobs behind each number ─────────────────────────
 // Same rules as summaryForJobs, so the rows always add up to the tile:
 // Revenue = contract of jobs created this year; Commission earned = commission
-// on jobs paid in full this year (by last check date); Receivable = contract − checks on jobs still owing;
-// Pending commission = commission on jobs still owing.
+// marked paid this year (by payment date); Receivable = contract − checks on jobs still owing;
+// Pending commission = commission not paid yet (jobs still owing, or paid in full and waiting to be paid).
 function openSummaryDetail(key){
   const ctx = window.__sumCtx; if(!ctx) return;
   const { jobs: list, user, summary } = ctx;
@@ -5951,18 +5974,19 @@ function openSummaryDetail(key){
     rev:  { title:'Revenue', total:summary.revenue, color:'var(--brand)',
             rows: list.filter(createdThisYear).map(j => ({ j, amt:moneyValue(j.potVal), sub:stage(j) })) },
     com:  { title:'Commission earned', total:summary.commissionYtd, color:'#60C4FF',
-            rows: list.filter(earnedThisYear).map(j => { const d = jobLastCheckDate(j);
-              return { j, amt:cc(j), lead:dot(j), sub: d ? `Paid in full ${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}` : 'Paid in full' }; }) },
+            rows: list.map(j => { const amt = commissionPaidThisYear(j, user ? user.id : null), d = lastCommissionPaidDate(j, user ? user.id : null);
+              return { j, amt, lead:dot(j), sub: d ? `Commission paid ${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}` : 'Commission paid' }; }) },
     recv: { title:'Receivable', total:summary.receivable, color:'#FBBF24',
             rows: list.filter(j => bal(j) > 0).map(j => { const c = jobAmountOwed(j), paid = jobDepositTotal(j), pct = c > 0 ? Math.min(100, Math.round(paid/c*100)) : 0;
               return { j, amt:bal(j), sub:`Paid ${m0(paid)} of ${m0(c)}`, bar:pct }; }) },
     pend: { title:'Pending commission', total:summary.pendingCommission, color:'#A78BFA',
-            rows: list.filter(j => !jobFullyPaid(j)).map(j => ({ j, amt:cc(j), lead:dot(j), sub: bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending' })) }
+            rows: list.map(j => ({ j, amt:commissionUnpaid(j, user), lead:dot(j),
+              sub: !jobFullyPaid(j) ? (bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending') : 'Paid in full · ready to pay' })) }
   }[key];
   if(!cfg) return;
   // Newest first: Commission earned by the date it was paid in full, the rest by
   // when the job was created. Undated jobs go last, biggest amount first.
-  const when = j => { const d = key === 'com' ? jobLastCheckDate(j) : new Date(String(j.createdAt||j.created||'').replace(' at ', ' ')); return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0; };
+  const when = j => { const d = key === 'com' ? lastCommissionPaidDate(j, user ? user.id : null) : new Date(String(j.createdAt||j.created||'').replace(' at ', ' ')); return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0; };
   const rows = cfg.rows.filter(r => r.amt > 0.004).sort((a,b) => (when(b.j) - when(a.j)) || (b.amt - a.amt));
   document.getElementById('sdOverlay')?.remove();
   if(!document.getElementById('sdStyle')){
@@ -6380,9 +6404,9 @@ function renderBoardSalesSummary(){
           ${stagesHtml}
         </div>
         ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)', '', 'rev')}
-        ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid in full this year', '#60C4FF', '', 'com')}
+        ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid out this year', '#60C4FF', '', 'com')}
         ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`, 'recv')}
-        ${kpi('Pending commission', money0(summary.pendingCommission), 'On jobs not fully paid', '#A78BFA', '', 'pend')}
+        ${kpi('Pending commission', money0(summary.pendingCommission), 'Not paid out yet', '#A78BFA', '', 'pend')}
       </div>
       <div class="sm-cols">
         <div class="sm-col">
