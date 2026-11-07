@@ -483,7 +483,7 @@
         if (!at || isNaN(at)) return null;
         const who = ((team.find(u => u.id === p.paidTo) || {}).name || '').split(' ')[0];
         const amt = parseFloat(p.amount) || 0;
-        const how = p.checkNo ? 'Check #' + p.checkNo : (p.method || '');
+        const how = p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '';
         return { kind: 'sys', at: at.toISOString(), comm: true,
           text: 'Commission paid' + (who ? ' · ' + who : '') + ' · ' + fmt$(amt) + (how ? ' · ' + how : '') };
       }).filter(Boolean);
