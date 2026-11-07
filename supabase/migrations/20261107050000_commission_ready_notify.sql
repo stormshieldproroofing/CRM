@@ -16,7 +16,6 @@ declare
   k    text;
   r    uuid;
   amt  numeric;
-  how  text;
   key  text;
 begin
   if jsonb_typeof(new.commission_payouts) is distinct from 'array' then return new; end if;
@@ -34,10 +33,9 @@ begin
     select auth_id into r from team_members where id = p ->> 'paidTo' and auth_id is not null limit 1;
     if r is null then continue; end if;
     amt := nullif(regexp_replace(coalesce(p ->> 'amount', ''), '[^0-9.]', '', 'g'), '')::numeric;
-    how := nullif(initcap(coalesce(p ->> 'method', '')), '');
     insert into notifications(recipient, kind, job_id, job_label, actor_name, title, body, ref)
     values (r, 'commission_ready', new.id, new.name, null, 'Commission check ready',
-            concat_ws(' · ', case when amt is not null then regexp_replace('$' || to_char(amt, 'FM999,999,990.00'), '\.00$', '') end, how),
+            case when amt is not null then regexp_replace('$' || to_char(amt, 'FM999,999,990.00'), '\.00$', '') end,
             key);
   end loop;
   return new;
