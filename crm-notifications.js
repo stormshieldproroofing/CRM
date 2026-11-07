@@ -40,10 +40,23 @@
     try {
       const { data, error } = await sbc().from('notifications').select('*').order('created_at', { ascending: false }).limit(60);
       if (error) throw error;
-      S.items = data || [];
+      const cutoff = Date.now() - 30 * 86400000;
+      const old = (data || []).filter(n => n.read_at && new Date(n.created_at) < cutoff).map(n => n.id);
+      S.items = (data || []).filter(n => !old.includes(n.id));
       paint();
+      // Read alerts older than 30 days clear on their own
+      if (old.length) sbc().from('notifications').delete().in('id', old).then(() => {}, () => {});
     } catch (e) { console.warn('[notifications] load failed', e); }
   }
+  // Clearing removes the alert for you only; the job's notes and history don't change.
+  async function clearIds(ids) {
+    ids = (ids || []).filter(Boolean); if (!ids.length) return;
+    S.items = S.items.filter(n => !ids.includes(n.id));
+    paint();
+    try { const { error } = await sbc().from('notifications').delete().in('id', ids); if (error) throw error; }
+    catch (e) { console.warn('[notifications] clear failed', e); load(); }
+  }
+  function clearRead() { clearIds(S.items.filter(n => n.read_at).map(n => n.id)); }
   function subscribe() {
     if (S.channel || !S.uid) return;
     try {
@@ -54,6 +67,10 @@
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: 'recipient=eq.' + S.uid }, p => {
           const i = S.items.findIndex(x => x.id === p.new.id); if (i >= 0) { S.items[i] = p.new; paint(); }
+        })
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notifications' }, p => {
+          const id = p.old && p.old.id; if (!id) return;
+          const n = S.items.length; S.items = S.items.filter(x => x.id !== id); if (S.items.length !== n) paint();
         })
         .subscribe();
     } catch (e) { console.warn('[notifications] live updates off', e); }
@@ -122,11 +139,18 @@
       document.body.appendChild(p);
       p.addEventListener('click', e => {
         e.stopPropagation();
+        const clr = e.target.closest('[data-clear]');
+        if (clr) { clearIds([clr.dataset.clear]); return; }
         const it = e.target.closest('[data-nid]');
-        if (it) { const n = S.items.find(x => x.id === it.dataset.nid); if (n) openItem(n); return; }
+        if (it) {
+          const w = it.closest('.ssn-nw');
+          if (w && w.classList.contains('open')) { w.classList.remove('open'); it.style.transform = ''; return; }   // tap closes a swiped row
+          const n = S.items.find(x => x.id === it.dataset.nid); if (n) openItem(n); return;
+        }
         const f = e.target.closest('[data-filter]'); if (f) { S.filter = f.dataset.filter; paint(); return; }
         const a = e.target.closest('[data-act]'); if (!a) return;
         if (a.dataset.act === 'readall') markAllRead();
+        if (a.dataset.act === 'clearread') clearRead();
         if (a.dataset.act === 'close') closePanel();
         if (a.dataset.act === 'push-on') turnOnPush();
         if (a.dataset.act === 'push-off') turnOffPush();
@@ -135,6 +159,39 @@
     }
     return p;
   }
+  // Swipe an alert left to show its Clear button (phones)
+  (function swipeToClear() {
+    let w = null, it = null, sx = 0, sy = 0, dx = 0, mode = '';
+    document.addEventListener('touchstart', e => {
+      const t = e.target.closest && e.target.closest('#ssnNotifPanel .ssn-ni');
+      if (!t) return;
+      document.querySelectorAll('#ssnNotifPanel .ssn-nw.open').forEach(o => { if (o !== t.parentElement) { o.classList.remove('open'); o.querySelector('.ssn-ni').style.transform = ''; } });
+      it = t; w = t.parentElement; sx = e.touches[0].clientX; sy = e.touches[0].clientY; dx = 0; mode = '';
+    }, { passive: true });
+    document.addEventListener('touchmove', e => {
+      if (!it) return;
+      const x = e.touches[0].clientX - sx, y = e.touches[0].clientY - sy;
+      if (!mode) { if (Math.abs(x) > 8 || Math.abs(y) > 8) mode = Math.abs(x) > Math.abs(y) ? 'x' : 'y'; else return; }
+      if (mode !== 'x') return;
+      e.preventDefault();
+      const base = w.classList.contains('open') ? -88 : 0;
+      dx = Math.min(0, Math.max(-120, base + x));
+      it.style.transition = 'none'; it.style.transform = 'translateX(' + dx + 'px)';
+    }, { passive: false });
+    document.addEventListener('touchend', () => {
+      if (!it) return;
+      if (mode === 'x') {
+        it.style.transition = '';
+        const open = dx < -44;
+        w.classList.toggle('open', open);
+        it.style.transform = open ? 'translateX(-88px)' : '';
+        it.dataset.swiped = '1'; setTimeout(() => { if (it) delete it.dataset.swiped; }, 350);
+      }
+      it = null; w = null; mode = '';
+    });
+    // a swipe shouldn't also open the alert
+    document.addEventListener('click', e => { const t = e.target.closest && e.target.closest('#ssnNotifPanel .ssn-ni[data-swiped]'); if (t) { e.stopPropagation(); e.preventDefault(); } }, true);
+  })();
   function openPanel() { S.open = true; const pop = $('ssnPop'); if (pop) pop.classList.remove('show'); paint(); const p = panel(); p.hidden = false; const f = p.querySelector('.ssn-np-list'); if (f) f.scrollTop = 0; }
   function closePanel() { if (!S.open) return; S.open = false; const p = $('ssnNotifPanel'); if (p) p.hidden = true; paint(); }
   document.addEventListener('click', e => { if (S.open && !e.target.closest('#ssnNotifPanel,#ssnBell')) closePanel(); });
@@ -142,7 +199,8 @@
 
   function itemHTML(n) {
     const k = KIND[n.kind] || KIND.note;
-    return `<button type="button" class="ssn-ni${n.read_at ? '' : ' unread'}" data-nid="${esc(n.id)}">
+    return `<div class="ssn-nw"><button type="button" class="ssn-nclr" data-clear="${esc(n.id)}" aria-label="Clear this alert"><i class="ti ti-trash" aria-hidden="true"></i>Clear</button>
+    <button type="button" class="ssn-ni${n.read_at ? '' : ' unread'}" data-nid="${esc(n.id)}">
       <span class="ssn-ni-ic ${k.cls}"><i class="ti ${k.icon}" aria-hidden="true"></i></span>
       <span class="ssn-ni-main">
         <span class="ssn-ni-top"><span class="ssn-ni-t">${esc(n.title)}</span><span class="ssn-ni-when">${esc(ago(n.created_at))}</span></span>
@@ -152,7 +210,28 @@
         ${n.job_label ? `<span class="ssn-ni-job">${esc(n.job_label)}</span>` : ''}`}
       </span>
       ${n.read_at ? '' : '<span class="ssn-ni-dot" aria-label="Unread"></span>'}
-    </button>`;
+    </button>
+    <span class="ssn-nx" role="button" tabindex="0" data-clear="${esc(n.id)}" aria-label="Clear" title="Clear"><i class="ti ti-x" aria-hidden="true"></i></span></div>`;
+  }
+  // Today / Yesterday / Earlier this week / Older
+  function dayGroup(iso) {
+    const d = new Date(iso), t = new Date(); t.setHours(0, 0, 0, 0);
+    const day = new Date(d); day.setHours(0, 0, 0, 0);
+    const diff = Math.round((t - day) / 86400000);
+    return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : diff < 7 ? 'Earlier this week' : 'Older';
+  }
+  function listHTML(list) {
+    let out = '', cur = '';
+    list.forEach(n => {
+      const g = dayGroup(n.created_at);
+      if (g !== cur) {
+        cur = g;
+        const fresh = g === 'Today' ? list.filter(x => !x.read_at && dayGroup(x.created_at) === 'Today').length : 0;
+        out += `<div class="ssn-np-g"><span>${g}</span>${fresh ? `<span class="ssn-np-gn">${fresh} new</span>` : ''}</div>`;
+      }
+      out += itemHTML(n);
+    });
+    return out;
   }
   function paint() {
     const u = unread();
@@ -165,18 +244,24 @@
     }
     try { if (navigator.setAppBadge) { u ? navigator.setAppBadge(u) : navigator.clearAppBadge(); } } catch (e) {}
     if (!S.open) return;
-    const list = S.filter === 'mention' ? S.items.filter(n => n.kind === 'mention')
-      : S.filter === 'packet' ? S.items.filter(n => n.kind.indexOf('packet') === 0)
-      : S.filter === 'supp' ? S.items.filter(n => n.kind === 'supplement_approved')
-      : S.filter === 'approved' ? S.items.filter(n => n.kind === 'job_approved') : S.items;
+    // Unread first within each day, newest first
+    const sorted = S.items.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const list = S.filter === 'unread' ? sorted.filter(n => !n.read_at)
+      : S.filter === 'mention' ? sorted.filter(n => n.kind === 'mention')
+      : S.filter === 'packet' ? sorted.filter(n => n.kind.indexOf('packet') === 0)
+      : S.filter === 'supp' ? sorted.filter(n => n.kind === 'supplement_approved')
+      : S.filter === 'approved' ? sorted.filter(n => n.kind === 'job_approved') : sorted;
+    const anyRead = S.items.some(n => n.read_at);
     panel().innerHTML = `
       <div class="ssn-np-h"><div class="ssn-np-title">Notifications</div>
         ${u ? '<button type="button" class="ssn-np-link" data-act="readall">Mark all read</button>' : ''}
         <button type="button" class="ssn-np-x" data-act="close" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button></div>
       <div class="ssn-np-f">
-        ${[['all', 'All'], ['mention', 'Mentions'], ['approved', 'Approved'], ['packet', 'Packets'], ['supp', 'Supplements']].map(([k, l]) => `<button type="button" class="ssn-np-chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}
+        ${[['all', 'All'], ['unread', u ? 'Unread ' + u : 'Unread'], ['mention', 'Mentions'], ['approved', 'Approved'], ['packet', 'Packets'], ['supp', 'Money']].map(([k, l]) => `<button type="button" class="ssn-np-chip${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}">${l}</button>`).join('')}
       </div>
-      <div class="ssn-np-list">${list.length ? list.map(itemHTML).join('') : '<div class="ssn-np-empty">You\'re all caught up.</div>'}</div>
+      <div class="ssn-np-list">${list.length ? listHTML(list) : '<div class="ssn-np-empty">You\'re all caught up.</div>'}
+        ${anyRead && S.filter !== 'unread' ? `<div class="ssn-np-clr"><button type="button" class="ssn-np-cbtn" data-act="clearread">Clear read</button>
+          <div class="ssn-np-ch">Swipe left to clear one · unread alerts stay<br>Read alerts older than 30 days clear on their own</div></div>` : ''}</div>
       ${pushRowHTML() ? `<div class="ssn-np-foot">${pushRowHTML()}</div>` : ''}`;
   }
 
@@ -361,9 +446,21 @@
 .ssn-np-btn{height:34px;padding:0 14px;border-radius:9px;border:0;background:#38BDF8;color:#06202E;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .ssn-np-btn[disabled]{opacity:.6}
 @media (max-width:760px){.ssn-np-btn{height:40px;padding:0 16px;font-size:14px}.ssn-np-push{font-size:14px}}
-.ssn-ni{width:100%;display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border:0;border-bottom:1px solid #172029;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.ssn-nw{position:relative;overflow:hidden;border-bottom:1px solid #172029}
+.ssn-nclr{position:absolute;top:0;right:0;bottom:0;width:88px;border:0;background:#DC2626;color:#fff;font:inherit;font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer}
+.ssn-nclr i{font-size:18px}
+.ssn-ni{position:relative;width:100%;display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border:0;background:#121A23;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:transform .2s ease}
+.ssn-nx{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:7px;display:none;align-items:center;justify-content:center;color:#8E9BAA;background:#1F2A36;cursor:pointer;font-size:14px}
+@media (hover:hover){.ssn-nw:hover .ssn-nx{display:flex}.ssn-nw:hover .ssn-ni-when{visibility:hidden}}
+.ssn-np-g{display:flex;align-items:center;padding:12px 16px 6px;font-size:11px;color:#8E9BAA;text-transform:uppercase;letter-spacing:.8px;position:sticky;top:0;background:#121A23;z-index:1}
+.ssn-np-g span:first-child{flex:1}
+.ssn-np-gn{text-transform:none;letter-spacing:0;color:#6B7686}
+.ssn-np-clr{padding:16px;text-align:center}
+.ssn-np-cbtn{padding:8px 16px;border-radius:10px;border:1px solid #253241;background:transparent;color:#C4CBD8;font:inherit;font-size:13px;cursor:pointer}
+.ssn-np-ch{font-size:11px;color:#6B7686;margin-top:8px;line-height:1.5}
 .ssn-ni:hover{background:#16212C}
-.ssn-ni.unread{background:#152030}
+.ssn-ni.unread{background:#152030;font-weight:inherit}
+.ssn-ni.unread .ssn-ni-t{font-weight:700}
 .ssn-ni-ic{width:34px;height:34px;flex:none;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;background:#1A2430;color:#CBD5E1}
 .ssn-ni-ic.mention{background:#10283A;color:#7DD3FC}
 .ssn-ni-ic.note{background:#1A2430;color:#CBD5E1}
