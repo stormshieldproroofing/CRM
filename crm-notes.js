@@ -466,6 +466,29 @@
     }).filter(Boolean);
   }
 
+  // Commission payments, read from the job's payouts (a reverted payment drops off).
+  // Admins and managers see every one; a rep sees only their own; nobody else sees any.
+  function commissionItems(j) {
+    const me = window.currentMember || {};
+    const boss = me.role === 'admin' || me.role === 'manager';
+    const team = window.TEAM || window.USERS || [];
+    return (j && Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [])
+      .filter(p => p && (boss || (me.id && p.paidTo === me.id)))
+      .map(p => {
+        let at = p.paidAt ? new Date(p.paidAt) : null;
+        if (p.date) {
+          const d = new Date(p.date + 'T12:00:00');
+          if (!isNaN(d) && (!at || isNaN(at) || at.toDateString() !== d.toDateString())) at = d;   // the payment date wins
+        }
+        if (!at || isNaN(at)) return null;
+        const who = ((team.find(u => u.id === p.paidTo) || {}).name || '').split(' ')[0];
+        const amt = parseFloat(p.amount) || 0;
+        const how = p.checkNo ? 'Check #' + p.checkNo : (p.method || '');
+        return { kind: 'sys', at: at.toISOString(), comm: true,
+          text: 'Commission paid' + (who ? ' · ' + who : '') + ' · ' + fmt$(amt) + (how ? ' · ' + how : '') };
+      }).filter(Boolean);
+  }
+
   function feedItems(jobId) {
     const notes = (state.notes[jobId] || []).filter(n => n && !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
@@ -481,7 +504,7 @@
       .filter(e => e && e.at).map(e => { const l = legacySupp(e); return l && Object.assign({ at: e.at }, l); }).filter(Boolean)
       .concat(suppItems(j)).slice(-30)
       .map(x => ({ kind: 'sys', at: x.at, text: x.text, money: x.cls === 'money', sent: x.cls === 'sent', denied: x.cls === 'denied' }));
-    const money = supp.concat(checkItems(j));
+    const money = supp.concat(checkItems(j), commissionItems(j));
     const links = linkTimes[jobId] || [];
     const packet = (j && Array.isArray(j.timeline) ? j.timeline : [])
       .filter(e => e && e.at).map(e => ({ at: e.at, text: packetText(e, links.length > 0) })).filter(x => x.text);
@@ -537,7 +560,7 @@
 
   function noteHTML(it) {
     if (it.kind === 'sys') {
-      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}">${esc(it.text)}</span></div>`;
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}">${esc(it.text)}</span></div>`;
     }
     if (it.kind === 'contact') {
       const e = it.e;
@@ -706,7 +729,7 @@
     let html;
     if (pin) html = '<b class="ssn-strip-pin">Pinned:</b> ' + esc(pin.body);
     else if (latest && latest.kind === 'sys') {
-      const cls = latest.money ? 'money' : latest.check ? 'check' : latest.packet ? 'packet' : latest.sent ? 'sent' : latest.denied ? 'denied' : latest.stage ? 'stage' : 'sys';
+      const cls = latest.money ? 'money' : latest.check ? 'check' : latest.comm ? 'comm' : latest.packet ? 'packet' : latest.sent ? 'sent' : latest.denied ? 'denied' : latest.stage ? 'stage' : 'sys';
       html = '<b class="ssn-strip-s ' + cls + '">' + esc(latest.text) + '</b>';
     }
     else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc(contactShort(latest.e)) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
@@ -1265,6 +1288,8 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-dot.stage{background:#8B5CF6}
 .ssn-dot.money{background:#F59E0B}
 .ssn-dot.check{background:#22C55E}
+.ssn-dot.comm{background:#F472B6}
+.ssn-tl-t.comm{color:#F9A8D4;font-weight:600}
 .ssn-tl-t.check{color:#86EFAC;font-weight:600}
 .ssn-tl-t.money{color:#FCD34D;font-weight:600}
 .ssn-dot.sent{background:#7DD3FC}
@@ -1332,7 +1357,7 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-strip-cnt{color:#8B94A7;font-weight:600}
 .ssn-strip-pin{color:#FCD34D;font-weight:600}
 .ssn-strip-c{color:#A7F3D0;font-weight:600}
-.ssn-strip-s{font-weight:600;color:#CBD5E1}.ssn-strip-s.money{color:#FCD34D}.ssn-strip-s.check{color:#86EFAC}.ssn-strip-s.packet{color:#5EEAD4}.ssn-strip-s.sent{color:#7DD3FC}.ssn-strip-s.denied{color:#FCA5A5}.ssn-strip-s.stage{color:#C4B5FD}
+.ssn-strip-s{font-weight:600;color:#CBD5E1}.ssn-strip-s.money{color:#FCD34D}.ssn-strip-s.check{color:#86EFAC}.ssn-strip-s.comm{color:#F9A8D4}.ssn-strip-s.packet{color:#5EEAD4}.ssn-strip-s.sent{color:#7DD3FC}.ssn-strip-s.denied{color:#FCA5A5}.ssn-strip-s.stage{color:#C4B5FD}
 .ssn-cline{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;margin:8px auto 2px;padding:6px 12px;border-radius:999px;border:1px solid var(--line,#253241);background:rgba(14,20,27,.7);color:#C4CBD8;font:inherit;font-size:12px;cursor:pointer;max-width:100%}
 .ssn-cline:hover{border-color:#34D399}
 .ssn-cline > .ti{color:#34D399;font-size:14px}
