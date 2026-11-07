@@ -16896,9 +16896,9 @@ function openCommVoucherEditor(jobId, userId, fromList){
   const payoutRows = d.payouts.length ? d.payouts.map((p, i) => {
     if(!p._pid){ p._pid = _cvNewId(); backfilled = true; }   // back-fill ids on older payouts
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#1A1F2E">
-      <div style="flex:1;min-width:0">
+      <div class="cv-payrow" data-pid="${p._pid}" title="Edit this payment" style="flex:1;min-width:0;cursor:pointer">
         <div style="font-size:12px;font-weight:700;color:#fff">${_cvMoney(moneyValue(p.amount))} <span style="font-weight:400;color:var(--muted);font-size:10px">· ${escapeHtml(p.date||'')} · ${escapeHtml(p.method||'')}${p.checkNo?' #'+escapeHtml(p.checkNo):''}</span></div>
-        <div style="font-size:10px;color:${p.checkFile?'#34D399':'var(--muted)'}">${p.checkFile?'<i class="ti ti-paperclip"></i> Check copy attached':'No check copy'}</div>
+        <div style="font-size:10px;color:${p.checkFile?'#34D399':'var(--muted)'}">${p.checkFile?'<i class="ti ti-paperclip"></i> Check copy attached':'No check copy'} <span style="color:var(--muted);opacity:.7">· <i class="ti ti-pencil" style="font-size:10px"></i> tap to edit</span></div>
       </div>
       ${p.checkFile?`<button class="cv-mini" data-act="view" data-pid="${p._pid}" title="View check"><i class="ti ti-eye"></i></button>`:''}
       <button class="cv-mini" data-act="attach" data-pid="${p._pid}" title="${p.checkFile?'Replace':'Attach'} check copy"><i class="ti ti-paperclip"></i></button>
@@ -16935,7 +16935,11 @@ function openCommVoucherEditor(jobId, userId, fromList){
         </div>
         ${!d.fullyPaid?`<div style="font-size:11px;color:#F59E0B;margin:-4px 0 12px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(d.collected)} of ${_cvMoney(d.owed)}${d.supplements>0?' incl. supplements':''}) — this would be an advance.</div>`:''}
 
-        <div class="cv-lbl">New payment</div>
+        <div class="cv-lbl" id="cvFormLbl">New payment</div>
+        <div id="cvEditBanner" style="display:none;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#FBBF24;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:7px;padding:7px 10px;margin-bottom:8px">
+          <span><i class="ti ti-pencil"></i> Editing payment <span id="cvEditWhat"></span></span>
+          <button type="button" class="cv-edit-cancel" style="background:none;border:none;color:#FBBF24;font-size:11px;font-weight:700;cursor:pointer;padding:0">Cancel</button>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Amount</div><input id="cvAmt" class="ie-inp" type="number" step="0.01" min="0" value="${d.balance.toFixed(2)}"></div>
           <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Date</div><input id="cvDate" class="ie-inp" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
@@ -16961,6 +16965,8 @@ function openCommVoucherEditor(jobId, userId, fromList){
         <div style="display:flex;gap:8px;margin-bottom:16px">
           <button type="button" class="btn-cancel cv-preview" style="flex:1;font-size:12px;padding:9px"><i class="ti ti-printer"></i> Print preview</button>
           <button type="button" class="btn-primary cv-record" style="flex:1.4;font-size:12px;padding:9px"><i class="ti ti-check"></i> Record payment &amp; print</button>
+          <button type="button" class="btn-primary cv-save" style="display:none;flex:1.4;font-size:12px;padding:9px"><i class="ti ti-check"></i> Save changes</button>
+          <button type="button" class="cv-delete" title="Delete this payment" style="display:none;width:38px;border-radius:6px;border:1px solid rgba(248,113,113,0.4);background:rgba(248,113,113,0.08);color:#F87171;cursor:pointer;font-size:15px;align-items:center;justify-content:center"><i class="ti ti-trash"></i></button>
         </div>
 
         <div class="cv-lbl">Payment history</div>
@@ -17031,6 +17037,83 @@ function openCommVoucherEditor(jobId, userId, fromList){
     _cvAfterChange(j);
     toast(`Recorded ${_cvMoney(f.amount)} commission payment`);
     printCommVoucher(j, user, payout, false);
+    close();
+    openCommVoucherEditor(jobId, userId, fromList);
+  });
+
+  // Edit / delete an existing payout. Editing reuses the New payment form:
+  // the row's values are loaded in, Record becomes Save, and Delete appears.
+  let editingPid = null;
+  const setEditMode = (p) => {
+    editingPid = p ? p._pid : null;
+    q('#cvFormLbl').textContent = p ? 'Edit payment' : 'New payment';
+    q('#cvEditBanner').style.display = p ? 'flex' : 'none';
+    q('.cv-record').style.display = p ? 'none' : '';
+    q('.cv-save').style.display = p ? '' : 'none';
+    q('.cv-delete').style.display = p ? 'flex' : 'none';
+    if(p){
+      q('#cvEditWhat').textContent = `· ${_cvMoney(moneyValue(p.amount))} on ${p.date||'—'}`;
+      q('#cvAmt').value = moneyValue(p.amount).toFixed(2);
+      q('#cvDate').value = p.date || '';
+      q('#cvMethod').value = p.method || 'Check';
+      q('#cvCheckNo').value = p.checkNo || '';
+      q('#cvNotes').value = p.notes || '';
+      draftCheck = p.checkFile || null;
+      q('#cvCheckName').textContent = draftCheck ? '— ' + (draftCheck.name || 'attached') : '— none attached';
+      q('#cvAmt').scrollIntoView({ behavior:'smooth', block:'center' });
+    } else {
+      q('#cvAmt').value = d.balance.toFixed(2);
+      q('#cvDate').value = new Date().toISOString().slice(0,10);
+      q('#cvMethod').value = 'Check';
+      q('#cvCheckNo').value = ''; q('#cvNotes').value = '';
+      draftCheck = null;
+      q('#cvCheckName').textContent = '— none attached';
+    }
+  };
+  overlay.querySelectorAll('.cv-payrow').forEach(r => r.addEventListener('click', () => {
+    if(!canEditJobFinancials()){ toast('Only admins and managers can edit commission payments'); return; }
+    const p = jobCommissionPayouts(j).find(x => x._pid === r.dataset.pid);
+    if(p) setEditMode(p);
+  }));
+  q('.cv-edit-cancel').addEventListener('click', () => setEditMode(null));
+
+  q('.cv-save').addEventListener('click', () => {
+    if(!canEditJobFinancials()){ toast('Only admins and managers can edit commission payments'); return; }
+    const p = jobCommissionPayouts(j).find(x => x._pid === editingPid);
+    if(!p){ toast('Payment not found'); return; }
+    const f = readForm();
+    if(!isFinite(f.amount) || f.amount <= 0){ toast('Enter a valid amount'); return; }
+    if(!f.date){ toast('Enter a payment date'); return; }
+    const was = `${_cvMoney(moneyValue(p.amount))} · ${p.date||''} · ${p.method||''}${p.checkNo?' #'+p.checkNo:''}`;
+    p.amount = f.amount.toFixed(2);
+    p.date = f.date; p.method = f.method; p.notes = f.notes;
+    p.checkNo = f.checkNo || '';
+    p.checkFile = draftCheck || null;
+    p.editedAt = new Date().toISOString();
+    p.editedBy = window.currentMember?.id || '';
+    if(typeof logActivity === 'function'){
+      logActivity(j, 'commission', 'Commission payment edited', `${user.name}: ${_cvMoney(f.amount)} · ${f.method}${f.checkNo?' #'+f.checkNo:''} (was ${was})`);
+    }
+    _cvAfterChange(j);
+    toast('Payment updated');
+    close();
+    openCommVoucherEditor(jobId, userId, fromList);
+  });
+
+  q('.cv-delete').addEventListener('click', () => {
+    if(!canEditJobFinancials()){ toast('Only admins and managers can delete commission payments'); return; }
+    const list = jobCommissionPayouts(j);
+    const p = list.find(x => x._pid === editingPid);
+    if(!p){ toast('Payment not found'); return; }
+    const desc = `${_cvMoney(moneyValue(p.amount))} paid to ${user.name||'rep'} on ${p.date||'—'}${p.checkNo?' (check #'+p.checkNo+')':''}`;
+    if(!confirm(`Delete this commission payment?\n\n${desc}\n\nThis can't be undone. The rep's balance due will go back up by ${_cvMoney(moneyValue(p.amount))}.`)) return;
+    if(p.checkFile && !confirm('This payment has a check copy attached. Delete the payment anyway?')) return;
+    j.commissionPayouts = list.filter(x => x._pid !== editingPid);
+    if(typeof logActivity === 'function'){
+      logActivity(j, 'commission', 'Commission payment deleted', `${user.name}: ${desc}`);
+    }
+    _cvAfterChange(j);
+    toast('Payment deleted');
     close();
     openCommVoucherEditor(jobId, userId, fromList);
   });
