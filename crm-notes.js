@@ -393,14 +393,15 @@
   // Supplement lines in the notes: one when it's sent to the carrier, one for the decision.
   const fmt$ = n => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: (Number(n) || 0) % 1 ? 2 : 0, maximumFractionDigits: 2 });
   const short = t => { t = String(t || '').trim(); return t.length > 40 ? t.slice(0, 38).trim() + '…' : t; };
+  // The colored line says what happened and the amount; the supplement's name goes
+  // underneath in small grey text (`sub`).
   function suppLine(kind, what, amt, req) {
-    const w = what ? ' · ' + short(what) : '';
-    if (kind === 'sent') return { text: 'Supplement sent' + w + ' · ' + fmt$(amt), cls: 'sent' };
-    if (kind === 'Denied') return { text: 'Supplement denied' + w + ' · ' + fmt$(req != null ? req : amt), cls: 'denied' };
-    if (kind === 'Partial') return { text: 'Partly approved' + w + ' · ' + fmt$(amt) + (req != null && req > amt ? ' of ' + fmt$(req) : ''), cls: 'money' };
-    return { text: 'Supplement approved' + w + ' · ' + fmt$(amt), cls: 'money' };
+    const sub = String(what || '').trim();
+    if (kind === 'sent') return { text: 'Supplement sent · ' + fmt$(amt), cls: 'sent', sub };
+    if (kind === 'Denied') return { text: 'Supplement denied · ' + fmt$(req != null ? req : amt), cls: 'denied', sub };
+    if (kind === 'Partial') return { text: 'Partly approved · ' + fmt$(amt) + (req != null && req > amt ? ' of ' + fmt$(req) : ''), cls: 'money', sub };
+    return { text: 'Supplement approved · ' + fmt$(amt), cls: 'money', sub };
   }
-  // Supplements saved with dates (the new supplement section) give their own lines.
   function suppItems(j) {
     const out = [];
     (j && Array.isArray(j.supplements) ? j.supplements : []).forEach(s => {
@@ -414,7 +415,16 @@
   // Older supplements only exist in the activity log ("Supplement added / updated").
   // Show the add, and later updates only when the status changed, so fixing an
   // amount doesn't stack up extra lines.
-  function legacySupp(e) {
+  // Which supplement an old log line is about, so the line can show its current name.
+  function suppFor(j, loggedNote, amt) {
+    const list = (j && Array.isArray(j.supplements) ? j.supplements : []).filter(Boolean);
+    if (list.length === 1) return list[0];
+    const n = String(loggedNote || '').trim();
+    return (n && list.find(s => String(s.note || '').trim() === n))
+      || list.find(s => Math.abs((parseFloat(s.amount) || 0) - amt) < 0.01 || Math.abs((parseFloat(s.requested) || 0) - amt) < 0.01)
+      || null;
+  }
+  function legacySupp(e, j) {
     const label = String(e.label || ''), detail = String(e.detail || '');
     if (e.type !== 'accounting' || !/^supplement (added|updated)/i.test(label)) return null;
     const parts = detail.split(/→|->/);
@@ -424,11 +434,17 @@
     if (!m) return null;
     const st = m[2][0].toUpperCase() + m[2].slice(1).toLowerCase();
     const bm = before.match(/^(\$[\d,.]+)\s*·\s*(\w+)/);
-    if (bm && bm[2].toLowerCase() === st.toLowerCase()) return null;   // same status: just an edit
     const amt = parseFloat(m[1].replace(/[$,]/g, '')) || 0;
     const prev = bm ? parseFloat(bm[1].replace(/[$,]/g, '')) || 0 : null;
+    // Same status is just an edit, except an approved amount that changed (the carrier approved more)
+    if (bm && bm[2].toLowerCase() === st.toLowerCase() && !(/^(approved|partial)$/i.test(st) && Math.abs(prev - amt) >= 0.01)) return null;
     if (st === 'Partial' && prev != null && prev <= amt) return null;   // marked partial before the amount was known
-    return suppLine(st === 'Submitted' ? 'sent' : st, m[3], amt, st === 'Partial' ? prev : null);
+    const rec = suppFor(j, m[3], amt);
+    const name = rec ? rec.note : m[3];
+    // Older approvals that were really partial (asked-for amount filled in later)
+    if (rec && st === 'Approved' && rec.status === 'Partial' && Math.abs((parseFloat(rec.amount) || 0) - amt) < 0.01)
+      return suppLine('Partial', name, amt, parseFloat(rec.requested) || null);
+    return suppLine(st === 'Submitted' ? 'sent' : st, name, amt, st === 'Partial' ? prev : null);
   }
 
   function packetText(e, haveLinks) {
@@ -501,9 +517,9 @@
         return { kind: 'sys', at: e.at, text: sysText(e), stage: st, from: st && parts.length > 1 ? parts[0] : '', to: st ? parts[parts.length - 1] : '' };
       });
     const supp = (j && Array.isArray(j.timeline) ? j.timeline : [])
-      .filter(e => e && e.at).map(e => { const l = legacySupp(e); return l && Object.assign({ at: e.at }, l); }).filter(Boolean)
+      .filter(e => e && e.at).map(e => { const l = legacySupp(e, j); return l && Object.assign({ at: e.at }, l); }).filter(Boolean)
       .concat(suppItems(j)).slice(-30)
-      .map(x => ({ kind: 'sys', at: x.at, text: x.text, money: x.cls === 'money', sent: x.cls === 'sent', denied: x.cls === 'denied' }));
+      .map(x => ({ kind: 'sys', at: x.at, text: x.text, sub: x.sub, money: x.cls === 'money', sent: x.cls === 'sent', denied: x.cls === 'denied' }));
     const money = supp.concat(checkItems(j), commissionItems(j));
     const links = linkTimes[jobId] || [];
     const packet = (j && Array.isArray(j.timeline) ? j.timeline : [])
@@ -560,7 +576,7 @@
 
   function noteHTML(it) {
     if (it.kind === 'sys') {
-      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}">${esc(it.text)}</span></div>`;
+      return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}">${esc(it.text)}${it.sub ? `<span class="ssn-tl-sub">${esc(it.sub)}</span>` : ''}</span></div>`;
     }
     if (it.kind === 'contact') {
       const e = it.e;
@@ -730,7 +746,7 @@
     if (pin) html = '<b class="ssn-strip-pin">Pinned:</b> ' + esc(pin.body);
     else if (latest && latest.kind === 'sys') {
       const cls = latest.money ? 'money' : latest.check ? 'check' : latest.comm ? 'comm' : latest.packet ? 'packet' : latest.sent ? 'sent' : latest.denied ? 'denied' : latest.stage ? 'stage' : 'sys';
-      html = '<b class="ssn-strip-s ' + cls + '">' + esc(latest.text) + '</b>';
+      html = '<b class="ssn-strip-s ' + cls + '">' + esc(latest.text) + '</b>' + (latest.sub ? ' <span class="ssn-strip-sub">· ' + esc(latest.sub) + '</span>' : '');
     }
     else if (latest && latest.kind === 'contact') html = '<b class="ssn-strip-c">' + esc(contactShort(latest.e)) + (latest.e.note ? ':' : '') + '</b> ' + esc(latest.e.note || '');
     else if (latest) html = esc(latest.n.body);
@@ -1292,6 +1308,9 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-tl-t.comm{color:#F9A8D4;font-weight:600}
 .ssn-tl-t.check{color:#86EFAC;font-weight:600}
 .ssn-tl-t.money{color:#FCD34D;font-weight:600}
+.ssn-tl-t{flex:1}
+.ssn-tl-sub{display:block;margin-top:1px;font-size:12px;font-weight:400;color:#8B94A7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ssn-strip-sub{color:#8B94A7}
 .ssn-dot.sent{background:#7DD3FC}
 .ssn-tl-t.sent{color:#7DD3FC;font-weight:600}
 .ssn-dot.denied{background:#F87171}
