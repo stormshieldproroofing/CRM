@@ -16782,10 +16782,10 @@ function commBreakdownData(j, user, excludePid){
     for(const p of payouts){ if(p._pid === excludePid) break; prior += moneyValue(p.amount); }
   } else prior = payouts.reduce((s,p)=>s+moneyValue(p.amount),0);
   const paidAll = payouts.reduce((s,p)=>s+moneyValue(p.amount),0);
-  return { contract, supplements, costs, returns, byCat, netProfit, ovFlat, ovPct, overhead, netAfterOH,
+  return { contract, supplements, revenue: contract + supplements, costs, returns, byCat, netProfit, ovFlat, ovPct, overhead, netAfterOH,
            rate, parts, earned, payouts, prior, paidAll,
            balance: Math.max(0, earned - paidAll),
-           collected: jobDepositTotal(j), fullyPaid: jobFullyPaid(j) };
+           collected: jobDepositTotal(j), owed: jobAmountOwed(j), fullyPaid: jobFullyPaid(j) };
 }
 
 async function commAttachCheckFile(j, file){
@@ -16858,7 +16858,7 @@ function openCommVoucher(jobId){
         <button class="icon-btn cv-close"><i class="ti ti-x"></i></button>
       </div>
       <div style="padding:16px 18px">
-        ${!jobFullyPaid(j) ? `<div style="font-size:11px;color:#F59E0B;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:7px;padding:7px 10px;margin-bottom:10px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(jobDepositTotal(j))} of ${_cvMoney(moneyValue(j.potVal))}). Any payment now is an advance.</div>` : ''}
+        ${!jobFullyPaid(j) ? `<div style="font-size:11px;color:#F59E0B;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:7px;padding:7px 10px;margin-bottom:10px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(jobDepositTotal(j))} of ${_cvMoney(jobAmountOwed(j))}${supplementsApprovedTotal(j)>0?' incl. supplements':''}). Any payment now is an advance.</div>` : ''}
         ${rows}
         ${agents.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.9">
           <div style="display:flex;justify-content:space-between"><span>Total commission</span><span style="font-weight:700;color:#fff">${_cvMoney(tEarned)}</span></div>
@@ -16923,6 +16923,8 @@ function openCommVoucherEditor(jobId, userId, fromList){
         <div class="cv-lbl">Breakdown</div>
         <div style="background:#1A1F2E;border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:12px">
           ${ln('Contract price', _cvMoney(d.contract))}
+          ${d.supplements>0?ln('Plus approved supplements', '+'+_cvMoney(d.supplements), {color:'#34D399'}):''}
+          ${d.supplements>0?ln('Total revenue', _cvMoney(d.revenue), {strong:true, top:true}):''}
           ${ln('Less job costs', '−'+_cvMoney(Math.abs(d.costs - d.returns)), {color:'#F87171'})}
           ${ln(`Less overhead (${d.ovFlat!=null?'flat':d.ovPct+'%'})`, '−'+_cvMoney(d.overhead).replace('−',''), {color:'#F87171'})}
           ${ln('Net profit', _cvMoney(d.netAfterOH), {strong:true, top:true})}
@@ -16931,7 +16933,7 @@ function openCommVoucherEditor(jobId, userId, fromList){
           ${d.paidAll>0?ln('Already paid', '−'+_cvMoney(d.paidAll).replace('−',''), {color:'#34D399'}):''}
           ${ln('Balance due', _cvMoney(d.balance), {strong:true, top:true, color:d.balance>0.5?'#FBBF24':'#34D399'})}
         </div>
-        ${!d.fullyPaid?`<div style="font-size:11px;color:#F59E0B;margin:-4px 0 12px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(d.collected)} of ${_cvMoney(d.contract)}) — this would be an advance.</div>`:''}
+        ${!d.fullyPaid?`<div style="font-size:11px;color:#F59E0B;margin:-4px 0 12px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(d.collected)} of ${_cvMoney(d.owed)}${d.supplements>0?' incl. supplements':''}) — this would be an advance.</div>`:''}
 
         <div class="cv-lbl">New payment</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
@@ -17176,6 +17178,8 @@ async function printCommVoucher(j, user, pay, isDraft){
       <div class="v-label">Commission Breakdown</div>
       <table>
         ${row('Contract price', fmt(d.contract))}
+        ${d.supplements>0?row('Plus approved supplements', '+'+fmt(d.supplements)):''}
+        ${d.supplements>0?row('Total revenue', fmt(d.revenue), 'v-subtot'):''}
         ${row('Less job costs', neg(d.costs - d.returns))}
         ${row(`Less overhead (${d.ovFlat!=null?'flat amount':d.ovPct+'%'})`, neg(d.overhead))}
         ${row('Net profit', fmt(d.netAfterOH), 'v-subtot')}
@@ -17183,7 +17187,7 @@ async function printCommVoucher(j, user, pay, isDraft){
         ${d.prior>0?row('Less prior commission payments', neg(d.prior)):''}
         <tr class="v-total"><td>THIS PAYMENT</td><td class="n">${fmt(amount)}</td></tr>
       </table>
-      <div class="v-after">${remainingAfter>0.5?`Remaining commission after this payment: <strong>${fmt(remainingAfter)}</strong>`:'Commission paid in full on this job with this payment.'}${!d.fullyPaid?` · <span style="color:#c0392b">Advance — contract ${fmt(d.collected)} of ${fmt(d.contract)} collected</span>`:''}</div>`;
+      <div class="v-after">${remainingAfter>0.5?`Remaining commission after this payment: <strong>${fmt(remainingAfter)}</strong>`:'Commission paid in full on this job with this payment.'}${!d.fullyPaid?` · <span style="color:#c0392b">Advance — ${fmt(d.collected)} of ${fmt(d.owed)} collected${d.supplements>0?' (contract + supplements)':''}</span>`:''}</div>`;
 
   const signRow = `
       <div class="v-sign">
