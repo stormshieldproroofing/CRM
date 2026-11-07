@@ -500,7 +500,7 @@
         const who = ((team.find(u => u.id === p.paidTo) || {}).name || '').split(' ')[0];
         const amt = parseFloat(p.amount) || 0;
         return { kind: 'sys', at: at.toISOString(), comm: true,
-          text: 'Commission check ready' + (who ? ' · ' + who : '') + ' · ' + fmt$(amt) };
+          text: 'Commission ready' + (who ? ' · ' + who : '') + ' · ' + fmt$(amt) };
       }).filter(Boolean);
   }
 
