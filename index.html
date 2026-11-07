@@ -16886,9 +16886,10 @@ function openCommVoucherEditor(jobId, userId, fromList){
 
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
-  const ln = (label, val, opts={}) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;${opts.top?'border-top:1px solid var(--border);margin-top:3px;padding-top:6px;':''}font-size:12px">
-      <span style="color:${opts.strong?'#fff':'var(--muted)'};font-weight:${opts.strong?700:400}">${label}</span>
+  const ln = (label, val, opts={}) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;${opts.in?'padding-left:14px;':''}${opts.top?'border-top:1px solid var(--border);margin-top:3px;padding-top:6px;':''}font-size:12px">
+      <span style="color:${opts.strong?'#fff':'var(--muted)'};font-weight:${opts.strong?700:400}">${opts.eq?'<span style="color:var(--muted);font-weight:400">= </span>':''}${label}</span>
       <span style="font-weight:${opts.strong?700:600};color:${opts.color||'#fff'};font-variant-numeric:tabular-nums;white-space:nowrap">${val}</span></div>`;
+  const grp = (label) => `<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--brand-light);border-bottom:1px solid rgba(96,196,255,0.3);padding:8px 0 3px;margin-bottom:2px">${label}</div>`;
   const catText = Object.entries(d.byCat).map(([k,v])=>`${escapeHtml(k)} ${_cvMoney(v)}`).join(' · ');
   const rateText = d.parts.map(p=>`${p.label} ${p.pct}%`).join(' + ') || '0%';
 
@@ -16922,15 +16923,15 @@ function openCommVoucherEditor(jobId, userId, fromList){
       <div style="padding:14px 18px">
         <div class="cv-lbl">Breakdown</div>
         <div style="background:#1A1F2E;border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:12px">
-          ${ln('Contract price', _cvMoney(d.contract))}
-          ${d.supplements>0?ln('Plus approved supplements', '+'+_cvMoney(d.supplements), {color:'#34D399'}):''}
-          ${d.supplements>0?ln('Total revenue', _cvMoney(d.revenue), {strong:true, top:true}):''}
-          ${ln('Less job costs', '−'+_cvMoney(Math.abs(d.costs - d.returns)), {color:'#F87171'})}
-          ${ln(`Less overhead (${d.ovFlat!=null?'flat':d.ovPct+'%'})`, '−'+_cvMoney(d.overhead).replace('−',''), {color:'#F87171'})}
-          ${ln('Net profit', _cvMoney(d.netAfterOH), {strong:true, top:true})}
-          ${ln(`Commission rate <span style="font-size:10px">(${escapeHtml(rateText)})</span>`, d.rate+'%')}
-          ${ln('Commission earned', _cvMoney(d.earned), {strong:true, top:true, color:'#60C4FF'})}
-          ${d.paidAll>0?ln('Already paid', '−'+_cvMoney(d.paidAll).replace('−',''), {color:'#34D399'}):''}
+          ${grp('Job profit')}
+          ${ln('Contract price', _cvMoney(d.contract), {in:true})}
+          ${d.supplements>0?ln('Approved supplements', '+ '+_cvMoney(d.supplements).replace('$',''), {in:true, color:'#34D399'}):''}
+          ${ln('Job costs', '− '+_cvMoney(Math.abs(d.costs - d.returns)).replace('$',''), {in:true, color:'#F87171'})}
+          ${ln(`Overhead <span style="font-size:10px;color:var(--muted)">${d.ovFlat!=null?'flat':d.ovPct+'%'}</span>`, '− '+_cvMoney(d.overhead).replace('−','').replace('$',''), {in:true, color:'#F87171'})}
+          ${ln('Net profit', _cvMoney(d.netAfterOH), {strong:true, top:true, in:true, eq:true})}
+          ${grp('Commission')}
+          ${ln(`Net profit × ${d.rate}%${d.parts.length>1?` <span style="font-size:10px;color:var(--muted)">${escapeHtml(rateText)}</span>`:''}`, _cvMoney(d.earned), {in:true, color:'#60C4FF'})}
+          ${d.paidAll>0?ln('Paid previously', '− '+_cvMoney(d.paidAll).replace('−','').replace('$',''), {in:true, color:'#34D399'}):''}
           ${ln('Balance due', _cvMoney(d.balance), {strong:true, top:true, color:d.balance>0.5?'#FBBF24':'#34D399'})}
         </div>
         ${!d.fullyPaid?`<div style="font-size:11px;color:#F59E0B;margin:-4px 0 12px"><i class="ti ti-alert-triangle"></i> Contract not fully collected (${_cvMoney(d.collected)} of ${_cvMoney(d.owed)}${d.supplements>0?' incl. supplements':''}) — this would be an advance.</div>`:''}
@@ -17175,6 +17176,14 @@ function paymentVoucherCss(accent){
     td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;width:1.3in}
     .v-sub{font-size:7.5pt;color:#777;margin-left:6px}
     .v-subtot td{font-weight:700;background:#f5f7fa}
+    tr.v-grp td{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:${accent};border-bottom:1px solid ${accent};padding-top:7px}
+    tr.v-in td{border-bottom:1px solid #f0f0f0}
+    tr.v-in td:first-child{padding-left:18px;color:#444}
+    tr.v-res td{font-weight:700;background:#f5f7fa}
+    tr.v-res td:first-child{padding-left:18px}
+    tr.v-res td:first-child::before{content:'= ';color:#999}
+    .v-pct{font-weight:400;color:#777;font-size:8pt;margin-left:4px}
+    .v-total .v-pct{text-transform:none;letter-spacing:0;font-weight:400;color:#777;font-size:8pt}
     .v-total td{font-size:12pt;font-weight:800;color:${accent};border-top:2px solid ${accent};border-bottom:none;padding-top:5px;background:none}
     .v-after{font-size:8pt;color:#444;margin-top:3px}
     .v-sign{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
@@ -17230,6 +17239,8 @@ async function printCommVoucher(j, user, pay, isDraft){
   const rateText = d.parts.map(p=>`${p.label} ${p.pct}%`).join(' + ');
   const row = (label, val, cls='') => `<tr class="${cls}"><td>${label}</td><td class="n">${val}</td></tr>`;
   const neg = n => '−' + fmt(Math.abs(n));
+  const plus = n => '+ ' + fmt(Math.abs(n)).replace('$','');
+  const minus = n => '− ' + fmt(Math.abs(n)).replace('$','');
 
   const headBlock = (tag) => `
       <div class="v-copytag">${tag}</div>
@@ -17260,15 +17271,16 @@ async function printCommVoucher(j, user, pay, isDraft){
   const breakdownBlock = `
       <div class="v-label">Commission Breakdown</div>
       <table>
-        ${row('Contract price', fmt(d.contract))}
-        ${d.supplements>0?row('Plus approved supplements', '+'+fmt(d.supplements)):''}
-        ${d.supplements>0?row('Total revenue', fmt(d.revenue), 'v-subtot'):''}
-        ${row('Less job costs', neg(d.costs - d.returns))}
-        ${row(`Less overhead (${d.ovFlat!=null?'flat amount':d.ovPct+'%'})`, neg(d.overhead))}
-        ${row('Net profit', fmt(d.netAfterOH), 'v-subtot')}
-        ${row(`Commission earned — ${d.rate}%${d.parts.length>1?` <span class="v-sub">${escapeHtml(rateText)}</span>`:''}`, fmt(d.earned), 'v-subtot')}
-        ${d.prior>0?row('Less prior commission payments', neg(d.prior)):''}
-        <tr class="v-total"><td>THIS PAYMENT</td><td class="n">${fmt(amount)}</td></tr>
+        <tr class="v-grp"><td colspan="2">Job profit</td></tr>
+        ${row('Contract price', fmt(d.contract), 'v-in')}
+        ${d.supplements>0?row('Approved supplements', plus(d.supplements), 'v-in'):''}
+        ${row('Job costs', minus(d.costs - d.returns), 'v-in')}
+        ${row(`Overhead<span class="v-pct">${d.ovFlat!=null?'flat':d.ovPct+'%'}</span>`, minus(d.overhead), 'v-in')}
+        ${row('Net profit', fmt(d.netAfterOH), 'v-res')}
+        <tr class="v-grp"><td colspan="2">Commission</td></tr>
+        ${row(`Net profit × ${d.rate}%${d.parts.length>1?`<span class="v-pct">${escapeHtml(rateText)}</span>`:''}`, fmt(d.earned), 'v-in')}
+        ${d.prior>0?row('Paid previously', minus(d.prior), 'v-in'):''}
+        <tr class="v-total"><td>THIS PAYMENT${d.prior<=0&&remainingAfter<=0.5?'<span class="v-pct">· full commission</span>':''}</td><td class="n">${fmt(amount)}</td></tr>
       </table>
       <div class="v-after">${remainingAfter>0.5?`Remaining commission after this payment: <strong>${fmt(remainingAfter)}</strong>`:'Commission paid in full on this job with this payment.'}${!d.fullyPaid?` · <span style="color:#c0392b">Advance — ${fmt(d.collected)} of ${fmt(d.owed)} collected${d.supplements>0?' (contract + supplements)':''}</span>`:''}</div>`;
 
