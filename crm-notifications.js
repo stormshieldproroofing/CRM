@@ -25,6 +25,7 @@
     packet_signed: { icon: 'ti-writing-sign', cls: 'signed' },
     test:          { icon: 'ti-bell',         cls: 'note' },
     supplement_approved: { icon: 'ti-file-dollar', cls: 'signed' },
+    commission_ready: { icon: 'ti-cash', cls: 'signed' },
     job_approved:  { icon: 'ti-shield-check', cls: 'signed' },
   };
   // Public half of the push signing key (the private half is in Supabase Vault)
@@ -249,7 +250,7 @@
     const list = S.filter === 'unread' ? sorted.filter(n => !n.read_at)
       : S.filter === 'mention' ? sorted.filter(n => n.kind === 'mention')
       : S.filter === 'packet' ? sorted.filter(n => n.kind.indexOf('packet') === 0)
-      : S.filter === 'supp' ? sorted.filter(n => n.kind === 'supplement_approved')
+      : S.filter === 'supp' ? sorted.filter(n => n.kind === 'supplement_approved' || n.kind === 'commission_ready')
       : S.filter === 'approved' ? sorted.filter(n => n.kind === 'job_approved') : sorted;
     const anyRead = S.items.some(n => n.read_at);
     panel().innerHTML = `
