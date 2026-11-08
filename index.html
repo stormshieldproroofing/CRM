@@ -6845,7 +6845,11 @@ function openJobStageMenu(e){
   drop.innerHTML=opts;
   $('stageSelector').parentNode.style.position='relative';
   $('stageSelector').parentNode.appendChild(drop);
-  drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();if(j.col!==d.dataset.stage&&!canMoveToStage(j,d.dataset.stage))return;j.col=d.dataset.stage;saveToStorage();drop.remove();renderBoard();renderDetailPanel()}));
+  drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();const tc=d.dataset.stage;if(j.col===tc){drop.remove();return}if(!canMoveToStage(j,tc))return;
+    const cdef=jobColumns.find(c=>c.id===tc);if(cdef&&typeof canEnterContractStage==='function'&&!canEnterContractStage(j,cdef))return;
+    // Log it like a board drag does — this is what fires the stage alerts (Claim Filed, Contract Signed, invoice-ready).
+    const fromStage=jobColumns.find(c=>c.id===j.col)?.name||j.col;j.col=tc;logActivity(j,'stage','Stage changed',`${fromStage} → ${cdef?.name||tc}`);
+    saveToStorage();drop.remove();toast(`Moved to ${cdef?.name||tc}`);renderBoard();renderDetailPanel()}));
   setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
 }
 window.openJobStageMenu = openJobStageMenu;
