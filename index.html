@@ -12261,13 +12261,53 @@ function calJobsOnDay(dateKey){
 }
 // True if the job is at the "contract" stage or later (Contract Signed, Invoiced, ...),
 // excluding closed/fork stages.
+// Stage ids are only the bare default ids ("approved", "contract", …) on the
+// Insurance pipeline. Every other pipeline (Retail, Repairs, Denial/Appeals…)
+// gets prefixed copies like "cash-1780115027877-approved", and custom stages
+// have auto-generated ids. Normalize to the base id so the calendar's stage
+// logic works for every pipeline, falling back to the stage NAME when the id
+// doesn't match a default (e.g. Retail's "Proposal Sent" = approved).
+function calBaseStageId(stage, pipelineId){
+  if(!stage) return '';
+  let id = String(stage.id || '').toLowerCase();
+  const pre = String(pipelineId || '').toLowerCase() + '-';
+  if(pipelineId && pipelineId !== 'insurance' && id.startsWith(pre)) id = id.slice(pre.length);
+  const KNOWN = ['lead','inspection','approved','contract','invoiced','completed','denied','appeal','retail','closed-denied'];
+  if(KNOWN.includes(id)) return id;
+  const nm = String(stage.name || '').toLowerCase();
+  if(nm.includes('complet')) return 'completed';
+  if(nm.includes('closed') && nm.includes('deni')) return 'closed-denied';
+  if(nm.includes('denied') || nm.includes('denial')) return 'denied';
+  if(nm.includes('appeal') || nm.includes('appraisal')) return 'appeal';
+  if(nm.includes('retail')) return 'retail';
+  if(nm.includes('invoice')) return 'invoiced';
+  if(nm.includes('contract') || nm.includes('production') || nm.includes('build') || nm.includes('closing')) return 'contract';
+  if(nm.includes('approv') || nm.includes('proposal') || nm.includes('estimate') || nm.includes('quote') || nm.includes('overturned')) return 'approved';
+  if(nm.includes('inspect') || nm.includes('adjuster') || nm.includes('claim') || nm.includes('engineer') || nm.includes('awaiting')) return 'inspection';
+  return id;
+}
+// Index of the first stage in this pipeline that normalizes to baseId, or -1.
+function calStageIndexFor(cols, pipelineId, baseId){
+  return cols.findIndex(c => calBaseStageId(c, pipelineId) === baseId);
+}
+// Closed/dead-end stage? Uses the closed flag when present, else the name,
+// since only the Insurance pipeline gets the closed flag backfilled.
+function calStageIsClosed(stage, pipelineId){
+  if(!stage) return false;
+  if(stage.closed === true) return true;
+  const base = calBaseStageId(stage, pipelineId);
+  if(base === 'completed' || base === 'denied' || base === 'closed-denied') return true;
+  const nm = String(stage.name || '').toLowerCase();
+  return nm.includes('lost') || nm.includes('off-track') || nm.includes('off track');
+}
 function calIsContractOrAfter(j){
-  const cols = columnsForPipeline(j?.pipeline || 'insurance');
-  const contractIndex = cols.findIndex(c => c.id === 'contract');
+  const pid = j?.pipeline || 'insurance';
+  const cols = columnsForPipeline(pid);
+  const contractIndex = calStageIndexFor(cols, pid, 'contract');
   const jobIndex = cols.findIndex(c => c.id === j?.col);
   if(contractIndex < 0 || jobIndex < 0) return false;
   const stage = cols[jobIndex];
-  return jobIndex >= contractIndex && stage?.closed !== true;
+  return jobIndex >= contractIndex && !calStageIsClosed(stage, pid);
 }
 // Readiness bucket for a job, based on its stage:
 //   build_ready  = Contract Signed or Invoiced (post-contract, pre-completion)
@@ -12275,12 +12315,14 @@ function calIsContractOrAfter(j){
 //   not_ready    = anything before Approved (Lead, Inspection)
 // Returns null for closed/completed/fork stages.
 function calReadinessBucket(j){
-  const cols = columnsForPipeline(j?.pipeline || 'insurance');
-  const idxOf = id => cols.findIndex(c => c.id === id);
+  const pid = j?.pipeline || 'insurance';
+  const cols = columnsForPipeline(pid);
+  const idxOf = id => calStageIndexFor(cols, pid, id);
   const jobIndex = cols.findIndex(c => c.id === j?.col);
   if(jobIndex < 0) return null;
   const stage = cols[jobIndex];
-  const stageId = (stage?.id || '').toLowerCase();
+  // Normalized id — works for Retail/Repairs ("cash-…-approved") and custom stages.
+  const stageId = calBaseStageId(stage, pid);
   const stageName = (stage?.name || '').toLowerCase();
 
   // 1) Successfully completed jobs are DONE — not part of readiness tracking.
@@ -12396,12 +12438,17 @@ function calJobAddressFull(j){
   return j?.address || '';
 }
 function calIsApprovedOrAfterStage(j){
-  const cols = columnsForPipeline(j?.pipeline || 'insurance');
-  const approvedIndex = cols.findIndex(c => c.id === 'approved');
+  const pid = j?.pipeline || 'insurance';
+  const cols = columnsForPipeline(pid);
+  const approvedIndex = calStageIndexFor(cols, pid, 'approved');
   const jobIndex = cols.findIndex(c => c.id === j?.col);
   if(approvedIndex < 0 || jobIndex < 0) return false;
   const stage = cols[jobIndex];
-  return jobIndex >= approvedIndex && stage?.closed !== true;
+  if(calStageIsClosed(stage, pid)) return false;
+  // Pre-build fork stages (Appeal / Going Retail) still need approval first.
+  const base = calBaseStageId(stage, pid);
+  if(base === 'appeal' || base === 'retail') return false;
+  return jobIndex >= approvedIndex;
 }
 let calUnschedSearch = '';
 function calUnscheduledJobs(){
