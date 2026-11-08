@@ -3048,11 +3048,14 @@ function onContractSigned(j){
 }
 window.onContractSigned = onContractSigned;
 
-// De-dupe guard for claim-filed alerts.
+// De-dupe guard for claim-filed alerts. In-session Set plus a persisted
+// j.claimFiledAt stamp so the alert fires exactly once per job, ever.
 const __claimFiledFired = new Set();
 function onClaimFiled(j){
-  if(!j || __claimFiledFired.has(j.id)) return;
+  if(!j || __claimFiledFired.has(j.id) || j.claimFiledAt) return;
   __claimFiledFired.add(j.id);
+  j.claimFiledAt = new Date().toISOString();
+  if(typeof logActivity === 'function') logActivity(j, 'insurance', 'Claim filed', j.claimNum ? `Claim # ${j.claimNum}` : '');
   const name = j.name || 'New customer';
   const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
   // Assigned salesman, not whoever moved the card.
@@ -3074,6 +3077,28 @@ function onClaimFiled(j){
   notifyDiscord(lines.join('\n'));
 }
 window.onClaimFiled = onClaimFiled;
+
+// Claim Filed now triggers off the claim-number field, not a pipeline stage
+// (the default pipeline has no "Claim Filed" column). Call after any save that
+// may have set j.claimNum; it fires once, the first time a claim # is present.
+// Skips jobs that were already past filing when this shipped, so old jobs
+// don't all alert at once: anything created before the cutoff is stamped quietly.
+const CLAIM_FILED_CUTOFF = '2026-11-08T00:00:00Z';
+function checkClaimFiled(j){
+  if(!j || j.claimFiledAt) return;
+  const num = (j.claimNum || '').trim();
+  if(!num || num === '—') return;
+  const createdAt = j.timeline?.[0]?.at || '';
+  if(createdAt && createdAt < CLAIM_FILED_CUTOFF){ j.claimFiledAt = createdAt; return; }
+  onClaimFiled(j);
+}
+window.checkClaimFiled = checkClaimFiled;
+const __claimFiledTimers = {};
+function checkClaimFiledDebounced(j){
+  if(!j) return;
+  clearTimeout(__claimFiledTimers[j.id]);
+  __claimFiledTimers[j.id] = setTimeout(() => { checkClaimFiled(j); if(j.claimFiledAt) saveToStorage(); }, 2500);
+}
 
 // ── PAYROLL ALERT: final check collected → time to break down commissions ──
 // Fires once when a job first reaches paid-in-full (auto), or on demand via the
@@ -9814,7 +9839,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       saveToStorage();
       body.innerHTML=lossHTML(false);
     };
-    window.lossSyncField=function(field,val){ j[field]=val; saveToStorage(); };  // live sync to job + persist
+    window.lossSyncField=function(field,val){ j[field]=val; saveToStorage(); if(field==='claimNum') checkClaimFiledDebounced(j); };  // live sync to job + persist
     window.lossRerender=function(){ body.innerHTML=lossHTML(false); };
     window.lossSave=function(){saveToStorage();toast('Insurance details saved');};
     window.lossAutofill=async function(){
@@ -11437,6 +11462,7 @@ $('saveJob').onclick=async ()=>{
       if(oldUser  !== newUser)  logActivity(j, 'assigned', 'Reassigned',   `${userName(oldUser) || '—'} → ${userName(newUser) || '—'}`);
       if(oldPipeline !== newPipeline) logActivity(j, 'pipeline', 'Pipeline changed', `${pipeName(oldPipeline)} → ${pipeName(newPipeline)}`);
       if(insChanged) logActivity(j, 'insurance', 'Insurance details updated', '');
+      checkClaimFiled(j);
     }
     saveToStorage();
     __ajSaving = true;
@@ -11454,6 +11480,7 @@ $('saveJob').onclick=async ()=>{
     syncPmExpense(newJob);
     jobs.push(newJob);
     logActivity(newJob, 'created', 'Job created', `Stage: ${columnsForPipeline(newJob.pipeline).find(c=>c.id===newJob.col)?.name || newJob.col}`);
+    checkClaimFiled(newJob);
     saveToStorage();
     __ajSaving = true;
     __ajSnapshot = null;
@@ -15674,7 +15701,7 @@ function openCertificateOptions(jobId, mode){
       signed: q('ccSigned').checked,
       updatedAt: new Date().toISOString()
     };
-    if(live.cert.claimNum && !live.claimNum) live.claimNum = live.cert.claimNum;
+    if(live.cert.claimNum && !live.claimNum){ live.claimNum = live.cert.claimNum; checkClaimFiled(live); }
     let ok = true;
     try { (window.saveToStorage||saveToStorage)(); }
     catch(e){ ok = false; console.warn('cert save failed', e); }
