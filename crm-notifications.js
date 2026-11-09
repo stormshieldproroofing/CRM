@@ -20,6 +20,7 @@
 
   const KIND = {
     note:          { icon: 'ti-notes',        cls: 'note' },
+    contact:       { icon: 'ti-phone',        cls: 'note' },
     mention:       { icon: 'ti-at',           cls: 'mention' },
     packet_viewed: { icon: 'ti-eye',          cls: 'viewed' },
     packet_signed: { icon: 'ti-writing-sign', cls: 'signed' },
@@ -94,7 +95,7 @@
     closePanel();
     if (!n.job_id) return;
     if (!canOpen(n.job_id)) { toastMsg("That job isn't on your board"); return; }
-    if ((n.kind === 'note' || n.kind === 'mention') && typeof window.ssOpenJobNotes === 'function') { window.ssOpenJobNotes(n.job_id); return; }
+    if ((n.kind === 'note' || n.kind === 'mention' || n.kind === 'contact') && typeof window.ssOpenJobNotes === 'function') { window.ssOpenJobNotes(n.job_id); return; }
     if (typeof window.openDetail === 'function') {
       window.openDetail(n.job_id);
       if (n.kind === 'packet_viewed' || n.kind === 'packet_signed') {
