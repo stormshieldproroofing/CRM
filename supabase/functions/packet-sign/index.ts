@@ -11,11 +11,11 @@ import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 // use) and the PDF templates are loaded from the GitHub repo at a fixed commit and checked
 // against SHA-256 pins, so the server always runs exactly the reviewed code.
 // Run ./pin.sh <commit> to update.
-const ASSETS_REF = "5ef2002ea2680a88effc7d80982643e8dfa18595";
-const PACKET_JS_SHA256 = "7564ed033c1dcacbb45389fdb467ee1dc2a290e5ae88794c987035efcd84281d";
+const ASSETS_REF = "4f24b4b05660da4d2bd6100d903b58ae1c552a0b";
+const PACKET_JS_SHA256 = "60696ac6fda7162f28c4ce4e72293eb9549d56fbfb52b6f86f9355348a5a3d30";
 const TEMPLATE_SHA256 = "1cb199af66fa5d65b3db7b2889b66654dcbbd831d43516b81a43c45766f06f37";
-const CONTRACT_JS_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000";
-const CONTRACT_PDF_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000";
+const CONTRACT_JS_SHA256 = "44994c2bb1aec1a49d48f93be0104a9273505b7b0ca5a5e3d2bc0d0ad314d227";
+const CONTRACT_PDF_SHA256 = "9e6604c10f4fff4552638c5e9d829a0a3e079f3d6abf6cdaf3bc0397fa0cbc42";
 const ASSET_BASE = `https://raw.githubusercontent.com/stormshieldproroofing/CRM/${ASSETS_REF}/`;
 
 (globalThis as any).PDFLib = { PDFDocument, StandardFonts, rgb };
