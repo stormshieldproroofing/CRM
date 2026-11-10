@@ -1,5 +1,5 @@
-// packet-sign — the homeowner's side of a remote Claim Packet signing link.
-//   GET  ?t=<token>          -> packet answers + link status (marks the link "viewed")
+// packet-sign — the homeowner's side of a remote signing link (Claim Packet or Contract).
+//   GET  ?t=<token>          -> the document's answers + link status (marks the link "viewed")
 //   POST { t, result }       -> builds the signed PDF, saves it to the job, returns a copy
 // The token is never stored; links are looked up by its SHA-256 hash. Runs with the
 // service role, so every check on the link happens here. Deployed with verify_jwt off
@@ -7,16 +7,20 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
-// The packet code (crm-packet.js — the same file the CRM and sign.html use) and the PDF
-// template are loaded from the GitHub repo at a fixed commit and checked against SHA-256
-// pins, so the server always runs exactly the reviewed code. Run ./pin.sh <commit> to update.
-const ASSETS_REF = "5ef2002ea2680a88effc7d80982643e8dfa18595";
-const PACKET_JS_SHA256 = "7564ed033c1dcacbb45389fdb467ee1dc2a290e5ae88794c987035efcd84281d";
+// The signing code (crm-packet.js + crm-contract.js — the same files the CRM and sign.html
+// use) and the PDF templates are loaded from the GitHub repo at a fixed commit and checked
+// against SHA-256 pins, so the server always runs exactly the reviewed code.
+// Run ./pin.sh <commit> to update.
+const ASSETS_REF = "4f24b4b05660da4d2bd6100d903b58ae1c552a0b";
+const PACKET_JS_SHA256 = "60696ac6fda7162f28c4ce4e72293eb9549d56fbfb52b6f86f9355348a5a3d30";
 const TEMPLATE_SHA256 = "1cb199af66fa5d65b3db7b2889b66654dcbbd831d43516b81a43c45766f06f37";
+const CONTRACT_JS_SHA256 = "44994c2bb1aec1a49d48f93be0104a9273505b7b0ca5a5e3d2bc0d0ad314d227";
+const CONTRACT_PDF_SHA256 = "9e6604c10f4fff4552638c5e9d829a0a3e079f3d6abf6cdaf3bc0397fa0cbc42";
 const ASSET_BASE = `https://raw.githubusercontent.com/stormshieldproroofing/CRM/${ASSETS_REF}/`;
 
 (globalThis as any).PDFLib = { PDFDocument, StandardFonts, rgb };
 let _pk: Promise<any> | null = null;
+let _ct: Promise<any> | null = null;
 async function fetchPinned(name: string, sha: string) {
   const r = await fetch(ASSET_BASE + name);
   if (!r.ok) throw new Error(`asset ${name}: HTTP ${r.status}`);
@@ -36,6 +40,20 @@ function packet() {
     })().catch((e) => { _pk = null; throw e; });
   }
   return _pk;
+}
+// The contract module builds on the packet's signing engine, so load that first.
+function contract() {
+  if (!_ct) {
+    _ct = (async () => {
+      await packet();
+      const [js, pdf] = await Promise.all([fetchPinned("crm-contract.js", CONTRACT_JS_SHA256), fetchPinned("StormShield_Contract.pdf", CONTRACT_PDF_SHA256)]);
+      new Function("module", new TextDecoder().decode(js))(undefined); // defines globalThis.crmContract
+      const ct = (globalThis as any).crmContract;
+      ct.setTemplateBytes(pdf);
+      return ct;
+    })().catch((e) => { _ct = null; throw e; });
+  }
+  return _ct;
 }
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -84,11 +102,12 @@ Deno.serve(async (req) => {
       const l = await findLink(t);
       const state = linkState(l);
       if (state === "missing") return fail("This signing link isn't valid.", 404);
-      if (state !== "open") return json({ state, signed_at: l.signed_at || null });
+      const doc = l?.doc === "contract" ? "contract" : "packet";
+      if (state !== "open") return json({ state, doc, signed_at: l.signed_at || null });
       if (!l.viewed_at) {
         await sb.from("packet_links").update({ status: "viewed", viewed_at: new Date().toISOString() }).eq("id", l.id).eq("status", "sent");
       }
-      return json({ state, fields: l.fields, rep_name: l.rep_name, expires_at: l.expires_at });
+      return json({ state, doc, fields: l.fields, rep_name: l.rep_name, expires_at: l.expires_at });
     }
 
     if (req.method !== "POST") return fail("Method not allowed", 405);
@@ -98,42 +117,51 @@ Deno.serve(async (req) => {
     const l = await findLink(body.t);
     const state = linkState(l);
     if (state === "missing") return fail("This signing link isn't valid.", 404);
-    if (state !== "open") return fail(state === "signed" ? "This packet was already signed." : "This signing link is no longer active.", 409);
+    const isContract = l.doc === "contract";
+    const docWord = isContract ? "contract" : "packet";
+    if (state !== "open") return fail(state === "signed" ? `This ${docWord} was already signed.` : "This signing link is no longer active.", 409);
 
     // Validate what the homeowner did on their phone.
     const r = body.result || {};
     const initialed = r.initialed || {};
-    const allInitialed = [0, 1, 2, 3, 4].every((i) => initialed[i] === true || initialed[String(i)] === true) && initialed.ded === true;
-    const coowner = r.coowner === true;
+    const coowner = !isContract && r.coowner === true;
     const sig = r.sig || {};
     const tpa = r.tpaApplied || {};
     if (!r.consentAt) return fail("Please agree to sign electronically.");
-    if (!allInitialed || !isPng(r.initials)) return fail("Please initial every key term.");
-    if (!str(r.homeownerName) || !isPng(sig.homeowner)) return fail("Please sign the agreement.");
-    if (coowner && (!str(r.coownerName) || !isPng(sig.coowner))) return fail("The co-owner still needs to sign.");
-    if (tpa.homeowner !== true || (coowner && tpa.coowner !== true)) return fail("Please sign the authorization.");
+    if (isContract) {
+      if (initialed.supp !== true || initialed.terms !== true || !isPng(r.initials)) return fail("Please initial the supplements paragraph and the terms.");
+      if (!str(r.homeownerName) || !isPng(sig.homeowner)) return fail("Please sign the contract.");
+    } else {
+      const allInitialed = [0, 1, 2, 3, 4].every((i) => initialed[i] === true || initialed[String(i)] === true) && initialed.ded === true;
+      if (!allInitialed || !isPng(r.initials)) return fail("Please initial every key term.");
+      if (!str(r.homeownerName) || !isPng(sig.homeowner)) return fail("Please sign the agreement.");
+      if (coowner && (!str(r.coownerName) || !isPng(sig.coowner))) return fail("The co-owner still needs to sign.");
+      if (tpa.homeowner !== true || (coowner && tpa.coowner !== true)) return fail("Please sign the authorization.");
+    }
 
     const pk = await packet();
+    const mod = isContract ? await contract() : pk;
     const at = r.at || {};
     const clean = {
       consentAt: iso(r.consentAt),
       homeownerName: str(r.homeownerName), coowner, coownerName: coowner ? str(r.coownerName) : "",
       initials: r.initials, initialed,
       sig: { homeowner: sig.homeowner, coowner: coowner ? sig.coowner : undefined }, // rep signature comes from the link only
-      tpaApplied: { homeowner: true, coowner },
+      tpaApplied: { homeowner: !isContract, coowner },
       at: { homeowner: iso(at.homeowner), coowner: coowner ? iso(at.coowner) : undefined, sspr: l.rep_signed_at || l.created_at },
       repName: l.rep_name || "",
+      reviewedAt: r.reviewedAt ? iso(r.reviewedAt) : null,
     };
 
     const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
     const ua = str(req.headers.get("user-agent"), 300) || "unknown";
     const signedAt = new Date();
     const fields = l.fields || {};
-    const out = await pk.finalizeSigned(fields, clean, {
+    const out = await mod.finalizeSigned(fields, clean, {
       signedAt, repSig: l.rep_sig, repName: l.rep_name, repSignedAt: l.rep_signed_at,
       how: "Remotely, on the signer's own device, through a private one-time link sent by " +
         (l.rep_name || "a StormShield representative") + (l.sent_to ? " to " + l.sent_to : "") +
-        ". Each signer agreed to sign electronically, initialed each key term, and drew their own signature.",
+        ". Each signer agreed to sign electronically, initialed where asked, and drew their own signature.",
       details: [
         "Link created " + pk.fmtDateTime(l.created_at) + (l.viewed_at ? " · first opened " + pk.fmtDateTime(l.viewed_at) : ""),
         "Representative signed " + pk.fmtDateTime(l.rep_signed_at || l.created_at) + " when creating the link",
@@ -143,24 +171,28 @@ Deno.serve(async (req) => {
     });
 
     const safe = (s: string) => String(s || "").replace(/[\\/:*?"<>|]+/g, "").trim();
-    const name = `${safe(fields.name) || "Homeowner"} - ${safe(fields.street) || "Property"} - Claim Packet (signed) - ${pk.fmtDate(signedAt).replace(/(\d+)\/(\d+)\/(\d+)/, "$3-$1-$2")}.pdf`;
-    const path = `${l.job_id}/packet/${Date.now()}-${name.replace(/[^\w.\-]+/g, "_")}`;
+    const day = pk.fmtDate(signedAt).replace(/(\d+)\/(\d+)\/(\d+)/, "$3-$1-$2");
+    const name = isContract
+      ? `${safe(fields.customer) || "Homeowner"} - ${safe(fields.street) || "Property"} - Contract (signed) - ${day}.pdf`
+      : `${safe(fields.name) || "Homeowner"} - ${safe(fields.street) || "Property"} - Claim Packet (signed) - ${day}.pdf`;
+    const kind = isContract ? "signed_contract" : "packet";
+    const path = `${l.job_id}/${kind}/${Date.now()}-${name.replace(/[^\w.\-]+/g, "_")}`;
 
     // Claim the link first so a double-tap can't produce two signed copies.
     const { data: claimed } = await sb.from("packet_links").update({ status: "signed", signed_at: signedAt.toISOString() })
       .eq("id", l.id).in("status", ["sent", "viewed"]).select("id");
-    if (!claimed || !claimed.length) return fail("This packet was already signed.", 409);
+    if (!claimed || !claimed.length) return fail(`This ${docWord} was already signed.`, 409);
 
     const up = await sb.storage.from("job-files").upload(path, out.finalBytes, { contentType: "application/pdf" });
     if (up.error) {
       await sb.from("packet_links").update({ status: l.viewed_at ? "viewed" : "sent", signed_at: null }).eq("id", l.id);
       console.error("upload failed", up.error);
-      return fail("Could not save the signed packet. Please try again.", 500);
+      return fail(`Could not save the signed ${docWord}. Please try again.`, 500);
     }
-    await sb.from("job_files").insert({ job_id: l.job_id, kind: "packet", name, storage_path: path });
+    await sb.from("job_files").insert({ job_id: l.job_id, kind, name, storage_path: path });
 
     const summary = {
-      method: "remote", at: signedAt.toISOString(), cancelBy: out.cancelBy.toISOString(), sha256: out.hash,
+      method: "remote", at: signedAt.toISOString(), cancelBy: out.cancelBy ? out.cancelBy.toISOString() : null, sha256: out.hash,
       homeowner: { name: clean.homeownerName }, coowner: coowner ? { name: clean.coownerName } : null,
       rep: { name: l.rep_name, user: l.created_by }, consentAt: clean.consentAt, file: { name, path }, linkId: l.id,
     };
@@ -170,12 +202,17 @@ Deno.serve(async (req) => {
       rep_sig: null, // no longer needed once it is in the PDF
     }).eq("id", l.id);
 
-    // Best effort: mark the packet signed on the job too (the CRM also reconciles from packet_links).
+    // Best effort: mark the document signed on the job too (the CRM also reconciles from packet_links).
     const { data: job } = await sb.from("jobs").select("contract").eq("id", l.job_id).maybeSingle();
     if (job) {
       const c = job.contract || {};
-      const prev = c.__packet || {};
-      c.__packet = { ...prev, fields: prev.fields || fields, status: "signed", signed: summary, updatedAt: signedAt.toISOString() };
+      if (isContract) {
+        const prev = c.sign || {};
+        c.sign = { ...prev, status: "signed", signed: summary, updatedAt: signedAt.toISOString() };
+      } else {
+        const prev = c.__packet || {};
+        c.__packet = { ...prev, fields: prev.fields || fields, status: "signed", signed: summary, updatedAt: signedAt.toISOString() };
+      }
       await sb.from("jobs").update({ contract: c }).eq("id", l.job_id);
     }
 
@@ -187,7 +224,7 @@ Deno.serve(async (req) => {
         const er = await fetch(Deno.env.get("SUPABASE_URL") + "/functions/v1/packet-email", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") },
-          body: JSON.stringify({ job_id: l.job_id, path, to: copyTo, cancelBy: out.cancelBy.toISOString() }),
+          body: JSON.stringify({ doc: l.doc || "packet", job_id: l.job_id, path, to: copyTo, cancelBy: out.cancelBy ? out.cancelBy.toISOString() : null }),
         });
         const eo = await er.json().catch(() => ({}));
         if (eo.ok) emailedTo = copyTo;
@@ -200,7 +237,7 @@ Deno.serve(async (req) => {
     let b64 = "";
     const bytes = out.finalBytes as Uint8Array;
     for (let i = 0; i < bytes.length; i += 0x8000) b64 += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return json({ ok: true, cancelBy: out.cancelBy.toISOString(), fileName: name, emailedTo, pdf: btoa(b64) });
+    return json({ ok: true, cancelBy: out.cancelBy ? out.cancelBy.toISOString() : null, fileName: name, emailedTo, pdf: btoa(b64) });
   } catch (e) {
     console.error("packet-sign error", e);
     return fail("Something went wrong. Please try again or call 832-910-7735.", 500);
