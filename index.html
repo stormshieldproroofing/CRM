@@ -658,12 +658,13 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=5"></script>
+<script src="supabase-crm.js?v=6"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=17"></script>
 <script src="crm-notes.js?v=32"></script>
 <script src="crm-notifications.js?v=9"></script>
+<script src="crm-certs.js?v=1"></script>
 
 <div style="position:relative;overflow:hidden">
 
@@ -7087,6 +7088,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         <span class="ap-pill" style="background:none;border-color:var(--border);color:var(--muted)"><i class="ti ti-world" style="font-size:12px" aria-hidden="true"></i>Customer Portal</span>
         <span class="ap-pill" style="background:rgba(249,115,22,0.15);border-color:rgba(249,115,22,0.35);color:#FB923C"><i class="ti ti-search" style="font-size:12px" aria-hidden="true"></i>Inspection</span>
         <span class="ap-pill" title="Certificate of Completion" onclick="printCertificateOfCompletion('${j.id}')" style="background:rgba(52,211,153,0.15);border-color:rgba(52,211,153,0.3);color:#34D399"><i class="ti ti-certificate" style="font-size:12px" aria-hidden="true"></i>COC</span>
+        <span class="ap-pill" title="Lifetime Workmanship Warranty" role="button" onclick="printWarrantyCertificate('${j.id}')" style="cursor:pointer;background:rgba(184,145,47,0.15);border-color:rgba(184,145,47,0.35);color:#E2B857"><i class="ti ti-shield-check" style="font-size:12px" aria-hidden="true"></i>Warranty</span>
         <span class="ap-pill" style="background:rgba(56,189,248,0.15);border-color:rgba(56,189,248,0.3);color:#38BDF8"><i class="ti ti-cloud" style="font-size:12px" aria-hidden="true"></i>Weather DOL</span>
         <span class="ap-pill" id="jobSchedPill" role="button" onclick="openScheduleSheet('${j.id}')" title="${j.buildDate?'Build date '+j.buildDate+' — tap to reschedule':'Schedule build date'}" style="cursor:pointer;${j.buildDate?'background:rgba(77,157,224,0.15);border-color:rgba(77,157,224,0.35);color:var(--brand-light)':'background:none;border-color:var(--border);color:var(--muted)'}"><i class="ti ti-calendar${j.buildDate?'-event':'-plus'}" style="font-size:12px" aria-hidden="true"></i>${j.buildDate?schedPillLabel(j.buildDate):'Schedule'}</span>
         </div>
@@ -15712,180 +15714,25 @@ function openCertificateOptions(jobId, mode){
   q('ccEmail').onclick = () => { const id = collect(); close(); sendCertificateEmail(id); };
 }
 
+// Absolute URLs for the certificate artwork, so the print window (about:blank)
+// can load them.
+function certAssetUrl(file){
+  try { return new URL(file, window.location.href).href; } catch(e){ return file; }
+}
+
 function renderCertificateOfCompletion(jobId){
   const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j){ toast('Job not found'); return; }
   const d = certCompletionData(j);
-  const ci = d.ci;
-  const coName = ci.name || 'StormShield Pro Roofing';
-  // Always use the current StormShield logo on the certificate.
-  const certLogo = (typeof defaultCompanyInfo==='function' && defaultCompanyInfo().logoDataUrl) || ci.logoDataUrl || '';
-  const navy = '#0F2A4A', blue = '#2B7BC0', gold = '#B8912F';
   const photos = d.includePhotos ? certCompletionPhotos(j) : [];
   const win = window.open('','_blank');
   if(!win){ toast('Allow pop-ups to print'); return; }
-  const esc = s => escapeHtml(String(s==null?'':s));
-  const money = v => { const n = moneyNum(v); return n ? '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''; };
-  const field = (label, val, span) => val ? `<div class="f"${span?` style="grid-column:span ${span}"`:''}><div class="fl">${label}</div><div class="fv">${esc(val)}</div></div>` : '';
-  const fields = [
-    field('Homeowner', d.customer),
-    field('Property Address', d.addr || '—', 2),
-    field('Date of Completion', d.compDate),
-    field('Claim No.', d.claimNum),
-    field('Project Representative', d.rep),
-    field('Insurance Carrier', d.carrier),
-    field('Policy No.', d.policyNum),
-    field('Date of Loss', d.dateOfLoss)
-  ].join('');
-  const dedAmt = money(d.deductible);
-  const photoPages = photos.map((p,i)=>`
-    <div class="pp">
-      <div class="pp-head"><span>${esc(coName)}</span><span>Certificate No. ${esc(d.certNo)}</span></div>
-      <div class="pp-cap">Completion Photo ${i+1} of ${photos.length}${d.addr?' &mdash; '+esc(d.addr.split(',')[0]):''}</div>
-      <img src="${p.url}" class="pp-img">
-    </div>`).join('');
-
-  const materialLine = d.material
-    ? `<div class="mat"><span><b>Roofing System:</b> ${esc(d.material)}${d.color?` &mdash; ${esc(d.color)}`:''}</span>${d.mfrWarranty?`<span><b>Manufacturer Warranty:</b> ${esc(d.mfrWarranty)}</span>`:''}</div>`
-    : (d.mfrWarranty ? `<div class="mat"><span><b>Manufacturer Warranty:</b> ${esc(d.mfrWarranty)}</span></div>` : '');
-
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Certificate of Completion - ${esc(d.customer)}</title>
-  <style>
-    @page{size:letter;margin:0}
-    *{box-sizing:border-box}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1b1b1b;margin:0;font-size:9.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .pg{width:8.5in;height:11in;padding:0.4in;page-break-after:always;position:relative;overflow:hidden}
-    .fr{height:100%;border:2.5px solid #0F2A4A;padding:5px;position:relative}
-    .in{height:100%;border:1px solid #2B7BC0;position:relative;display:flex;flex-direction:column}
-    .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0}
-    .wm img{width:4.6in;opacity:.05}
-    .in > *:not(.wm){position:relative;z-index:1}
-    .band{background:#0F2A4A;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:9px 20px}
-    .co{display:flex;align-items:center;gap:12px}
-    .logo{height:74px;width:80px;object-fit:contain;background:#fff;border-radius:6px;padding:3px}
-    .co-n{font-size:15pt;font-weight:800;letter-spacing:.02em}
-    .co-t{font-size:7.5pt;letter-spacing:.3em;text-transform:uppercase;color:#9CC8F0;margin-top:2px}
-    .co-r{text-align:right;font-size:7.8pt;line-height:1.55;color:#DCE7F3}
-    .stripe{height:4px;background:linear-gradient(90deg,#2B7BC0,#9CC8F0,#2B7BC0)}
-    .body{padding:14px 26px 10px;flex:1;display:flex;flex-direction:column}
-    .ttl{text-align:center;margin:4px 0 2px}
-    .ttl .t1{font-family:Georgia,'Times New Roman',serif;font-size:30pt;color:#0F2A4A;letter-spacing:.08em;text-transform:uppercase;line-height:1}
-    .ttl .t2{display:flex;align-items:center;justify-content:center;gap:12px;font-size:10pt;letter-spacing:.35em;text-transform:uppercase;color:#2B7BC0;font-weight:700;margin-top:4px}
-    .ttl .t2:before,.ttl .t2:after{content:"";height:1px;width:1.1in;background:#2B7BC0}
-    .cno{text-align:center;font-size:8pt;color:#777;margin-top:4px;letter-spacing:.05em}
-    .lead{text-align:center;font-size:9.5pt;line-height:1.55;color:#333;margin:12px 30px 12px}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px 0;background:transparent}
-    .f{padding:4px 10px 4px 0}
-    .fl{font-size:6.8pt;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#2B7BC0;margin-bottom:1px}
-    .fv{font-size:9.5pt;font-weight:600;color:#111}
-    .h{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#0F2A4A;margin:10px 0 3px;display:flex;align-items:center;gap:8px}
-    .h:after{content:"";flex:1;height:1px;background:#d5dde8}
-    .p{font-size:8.6pt;line-height:1.5;margin:2px 0;color:#262626;text-align:justify}
-    .mat{display:flex;flex-wrap:wrap;gap:4px 22px;font-size:8.6pt;margin:4px 0 0;padding:5px 9px;border-left:3px solid #2B7BC0;background:#F6F9FC}
-    .mat b{color:#0F2A4A}
-    .ack{margin:2px 0 0 0;padding-left:14px}
-    .ack li{font-size:8.4pt;line-height:1.45;margin:1px 0;color:#262626}
-    .sigwrap{display:flex;align-items:flex-end;gap:18px;margin-top:auto;padding-top:10px}
-    .sigs{flex:1;display:grid;grid-template-columns:2fr 1fr;gap:10px 26px}
-    .sl{border-top:1.2px solid #111;padding-top:3px;font-size:7.6pt;color:#444;margin-top:24px}
-    .sl b{color:#111}
-    .seal{width:1.15in;height:1.15in;border-radius:50%;border:3px double #B8912F;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#B8912F;flex-shrink:0;transform:rotate(-8deg)}
-    .seal .s1{font-size:6pt;letter-spacing:.2em;font-weight:700}
-    .seal .s2{font-family:Georgia,serif;font-size:12pt;font-weight:700;letter-spacing:.04em;line-height:1.05;margin:2px 0}
-    .seal .s3{font-size:6pt;letter-spacing:.14em;font-weight:700}
-    .foot{background:#0F2A4A;color:#DCE7F3;font-size:7.4pt;text-align:center;padding:6px 10px;letter-spacing:.04em}
-    .foot b{color:#fff}
-    .pp{width:8.5in;height:11in;padding:0.5in;page-break-after:always;display:flex;flex-direction:column}
-    .pp-head{display:flex;justify-content:space-between;font-size:8pt;color:#fff;background:#0F2A4A;padding:6px 10px;font-weight:700;letter-spacing:.04em}
-    .pp-cap{font-size:10pt;font-weight:700;color:#0F2A4A;margin:10px 0}
-    .pp-img{flex:1;min-height:0;width:100%;object-fit:contain;border:1px solid #d5dde8}
-    .btn{position:fixed;top:12px;right:12px;background:#0F2A4A;color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;z-index:10}
-    @media print{.btn{display:none}}
-    @media screen{body{background:#e9edf2}.pg,.pp{background:#fff;margin:14px auto;box-shadow:0 2px 12px rgba(0,0,0,.15)}}
-  
-    .body{padding:26px 26px 4px!important}
-    .ttl .t1{font-size:34pt!important}
-    .lead{margin:14px 30px 16px!important}
-    .h{margin:13px 0 4px!important}
-    .p,.ack li{font-size:9pt!important;line-height:1.55!important}
-    .sigwrap{padding-bottom:10px}
-    .ft{display:flex;justify-content:space-between;align-items:center;background:#0F2A4A;border-top:4px solid #2B7BC0;padding:9px 22px}
-    .ft-l{display:flex;align-items:center;gap:12px}
-    .ft-logo{height:62px;width:auto;background:#fff;border-radius:5px;padding:3px}
-    .ft-n{font-size:13pt;font-weight:800;color:#fff}
-    .ft-t{font-size:7pt;letter-spacing:.3em;text-transform:uppercase;color:#9CC8F0;margin-top:2px}
-    .ft-r{text-align:right;font-size:7.8pt;line-height:1.5;color:#DCE7F3}
-      /* readability: indented sections, left-aligned text, accent headings */
-    .h + .p, .h ~ .p, .h ~ .mat, .h ~ .grid{margin-left:18px}
-    .h:before{content:"";width:4px;height:12px;background:#2B7BC0;border-radius:1px}
-    .p{text-align:left!important;font-size:9pt!important;line-height:1.5!important;margin:3px 0 3px 18px!important}
-    .ack{list-style:none;padding-left:18px!important;margin:3px 0 0!important}
-    .ack li{position:relative;padding-left:18px;margin:3px 0!important;font-size:9pt!important;line-height:1.5!important}
-    .ack li:before{content:"\\2713";position:absolute;left:0;top:0;color:#2B7BC0;font-weight:800}
-    .lead{margin:8px 34px 2px!important}
-    .h{margin:10px 0 3px!important}
-    .body{padding-top:20px!important}
-    .sl{margin-top:18px!important}
-    .sigs{align-items:end}
-    .sl.sgn{position:relative;margin-top:50px!important}
-    .sig{position:absolute;left:50%;transform:translateX(-50%);bottom:100%;height:66px;width:auto;margin-bottom:-26px}
-    .dv{position:absolute;left:4px;bottom:100%;margin-bottom:4px;font-size:10.5pt;color:#111;font-family:Georgia,'Times New Roman',serif}
-  </style></head><body>
-    <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
-    <div class="pg"><div class="fr"><div class="in">
-      ${certLogo?`<div class="wm"><img src="${certLogo}"></div>`:''}
-      <div class="body">
-        <div class="ttl">
-          <div class="t1">Certificate</div>
-          <div class="t2">of Completion</div>
-        </div>
-        <div class="cno">Certificate No. <b style="color:${navy}">${esc(d.certNo)}</b></div>
-        <div class="lead">This certificate confirms <b>completion</b> of the roofing work described below at the property listed.</div>
-
-        <div class="h">Project Details</div>
-        <div class="grid">${fields}</div>
-
-        <div class="h">Scope of Work Completed</div>
-        <p class="p">${esc(d.scope)}</p>
-        ${d.notes?`<p class="p"><b>Notes:</b> ${esc(d.notes)}</p>`:''}
-        ${materialLine}
-
-        <div class="h">Warranty</div>
-        <p class="p"><b>Workmanship.</b> ${esc(coName)} warrants its installation workmanship for <b>${d.warrYears} year${d.warrYears==1?'':'s'}</b> from the date of completion. If a leak or defect results from an installation error during this period, we will repair it at no charge.</p>
-        <p class="p"><b>Materials.</b> Roofing materials are covered by the manufacturer's limited warranty under the manufacturer's published terms${d.mfrWarranty?` (${esc(d.mfrWarranty)})`:''}.</p>
-
-        <div class="h">Acknowledgments</div>
-        <p class="p">${esc(coName)} hereby certifies that the roofing repairs and related work performed at the property listed above have been completed in accordance with the contracted scope of work${(d.carrier||d.claimNum)?`, the applicable insurance-approved scope`:''}, the manufacturer's installation requirements, and applicable building codes and industry standards.</p>
-
-        <div class="sigwrap">
-          <div class="sigs">
-            ${d.signed ? `
-            <div class="sl sgn"><img class="sig" src="${CERT_SIGNATURE_URL}" alt="Signature"><b>${esc(CERT_SIGNER_NAME)}</b> &mdash; Authorized Representative, ${esc(coName)}</div>
-            <div class="sl sgn"><span class="dv">${esc(certFmtDate(certTodayISO()))}</span><b>Date</b></div>` : `
-            <div class="sl"><b>${esc(coName)}</b> &mdash; Authorized Representative${d.rep?` (${esc(d.rep)})`:''}</div>
-            <div class="sl"><b>Date</b></div>`}
-          </div>
-          <div class="seal">
-            <div class="s1">STORMSHIELD</div>
-            <div class="s2">CERTIFIED<br>COMPLETE</div>
-            <div class="s3">${esc((d.compISO||'').slice(0,4))}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="ft">
-        <div class="ft-l">
-          ${certLogo?`<img src="${certLogo}" class="ft-logo">`:''}
-          <div><div class="ft-n">${esc(coName)}</div><div class="ft-t">Storm Damage Experts</div></div>
-        </div>
-        <div class="ft-r">
-          ${ci.address?esc(ci.address)+'<br>':''}${ci.cityStateZip?esc(ci.cityStateZip)+'<br>':''}
-          ${esc(ci.phone||'')}${ci.email?' &middot; '+esc(ci.email):''}<br>
-          ${esc(d.website)}${d.license?' &middot; Lic. '+esc(d.license):''}
-        </div>
-      </div>
-    </div></div></div>
-    ${photoPages}
-  </body></html>`);
+  win.document.write(window.crmCerts.completionHtml(d, {
+    logoUrl: certAssetUrl('cert-logo.png'),
+    signatureUrl: CERT_SIGNATURE_URL,
+    signerName: CERT_SIGNER_NAME,
+    company: d.ci,
+    photos
+  }));
   win.document.close();
 }
 
@@ -15935,6 +15782,139 @@ ${d.website}`
   if(typeof logContact==='function') logContact(jobId, 'client', 'email', 'Certificate of Completion emailed ('+d.certNo+')');
 }
 window.sendCertificateEmail = sendCertificateEmail;
+
+// ── LIFETIME WORKMANSHIP WARRANTY ──
+// Same flow as the Certificate of Completion: an options panel first, choices
+// saved on the job as j.warranty so reprints match, then a one-page
+// license-style certificate (crm-certs.js) in a print window.
+function openWarrantyOptions(jobId, mode){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j){ toast('Job not found'); return; }
+  const d = window.crmCerts.warrantyData(j, certTodayISO());
+  const esc = v => escapeHtml(String(v==null?'':v));
+  const lbl = t => `<label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">${t}</label>`;
+  const overlay = document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:14px';
+  overlay.innerHTML = `
+    <div style="background:#141927;border:1px solid var(--border);border-radius:12px;width:560px;max-width:100%;max-height:94vh;overflow:auto">
+      <div style="position:sticky;top:0;background:#141927;padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;z-index:2">
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#fff">Lifetime Workmanship Warranty</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(d.owner)}${d.addr?' · '+esc(d.addr.split(',')[0]):''}</div>
+        </div>
+        <button id="wcClose" class="icon-btn" aria-label="Close"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:14px 18px 16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="grid-column:span 2">${lbl('Property Owner')}<input id="wcOwner" class="ie-inp" type="text" value="${esc(d.owner)}"></div>
+          <div style="grid-column:span 2">${lbl('Property Address')}<input id="wcAddr" class="ie-inp" type="text" value="${esc(d.addr)}"></div>
+          <div>${lbl('Date of Installation')}<input id="wcInstall" class="ie-inp" type="date" value="${esc(d.installISO)}"></div>
+          <div>${lbl('Date Issued')}<input id="wcIssued" class="ie-inp" type="date" value="${esc(d.issuedISO)}"></div>
+          <div>${lbl('Certificate No.')}<input id="wcNo" class="ie-inp" type="text" value="${esc(d.certNo)}"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);margin-top:14px;cursor:pointer">
+          <input id="wcSigned" type="checkbox" ${d.signed?'checked':''}> Sign with ${esc(CERT_SIGNER_NAME)}'s signature
+        </label>
+        ${d.installISO ? '' : '<div style="font-size:11px;color:#FBBF24;margin-top:10px">No build date on this job yet — enter the installation date.</div>'}
+      </div>
+      <div style="position:sticky;bottom:0;background:#141927;padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+        <button id="wcCancel" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:12px;font-weight:600;padding:8px 14px;border-radius:6px;cursor:pointer">Cancel</button>
+        <button id="wcEmail" style="background:#2563EB;color:#fff;border:none;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;cursor:pointer"><i class="ti ti-mail"></i> Save &amp; Email</button>
+        <button id="wcPrint" style="background:#B8912F;color:#fff;border:none;font-size:12px;font-weight:700;padding:8px 14px;border-radius:6px;cursor:pointer"><i class="ti ti-printer"></i> Save &amp; Print</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const q = id => overlay.querySelector('#'+id);
+  const close = () => overlay.remove();
+  const snapshot = () => Array.from(overlay.querySelectorAll('input'))
+    .map(el => el.type==='checkbox' ? el.checked : el.value).join('\u0001');
+  const initial = snapshot();
+  const tryClose = () => {
+    if(snapshot() !== initial && !confirm('Discard the changes you made to this warranty?')) return;
+    close();
+  };
+  q('wcClose').onclick = tryClose;
+  q('wcCancel').onclick = tryClose;
+  if(mode==='email') q('wcEmail').style.boxShadow = '0 0 0 2px rgba(37,99,235,.45)';
+  else q('wcPrint').style.boxShadow = '0 0 0 2px rgba(184,145,47,.45)';
+
+  const collect = () => {
+    const live = (window.jobs||[]).find(x=>String(x.id)===String(j.id)) || j;
+    const install = q('wcInstall').value;
+    live.warranty = {
+      owner: q('wcOwner').value.trim(),
+      addr: q('wcAddr').value.trim(),
+      installDate: install,
+      issuedDate: q('wcIssued').value || install,
+      certNo: q('wcNo').value.trim(),
+      signed: q('wcSigned').checked,
+      updatedAt: new Date().toISOString()
+    };
+    let ok = true;
+    try { (window.saveToStorage||saveToStorage)(); }
+    catch(e){ ok = false; console.warn('warranty save failed', e); }
+    toast(ok ? 'Warranty details saved' : 'Could not save warranty details');
+    return live.id;
+  };
+  q('wcPrint').onclick = () => { const id = collect(); close(); renderWarrantyCertificate(id); };
+  q('wcEmail').onclick = () => { const id = collect(); close(); sendWarrantyEmail(id); };
+}
+
+function renderWarrantyCertificate(jobId){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j){ toast('Job not found'); return; }
+  const d = window.crmCerts.warrantyData(j, certTodayISO());
+  const win = window.open('','_blank');
+  if(!win){ toast('Allow pop-ups to print'); return; }
+  win.document.write(window.crmCerts.warrantyHtml(d, {
+    logoUrl: certAssetUrl('cert-logo.png'),
+    signatureUrl: CERT_SIGNATURE_URL,
+    signerName: CERT_SIGNER_NAME,
+    company: getCompanyInfo()
+  }));
+  win.document.close();
+}
+
+function sendWarrantyEmail(jobId){
+  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j){ toast('Job not found'); return; }
+  const d = window.crmCerts.warrantyData(j, certTodayISO());
+  const ci = getCompanyInfo();
+  const coName = ci.name || 'StormShield Pro Roofing';
+  const to = ((j.contract&&j.contract.email)||j.email||'').trim();
+  const subject = encodeURIComponent(`Lifetime Workmanship Warranty — ${d.owner} (${d.certNo})`);
+  const body = encodeURIComponent(
+`Hi ${d.owner},
+
+Attached is the Lifetime Workmanship Warranty for your roof at ${d.addr||'your property'} (Certificate No. ${d.certNo}).
+
+It covers defects in our installation workmanship for the life of the roof. Please keep it with your home records. If you sell the home, the warranty can be transferred to the new owner — they just need to contact us within 90 days of closing.
+
+Questions? Just reply to this email or call ${ci.phone||'us'}.
+
+Thank you for choosing ${coName}.
+
+${coName}
+${ci.address||''}${ci.cityStateZip?', '+ci.cityStateZip:''}
+${ci.phone||''}${ci.email?' | '+ci.email:''}`
+  );
+  const proceed = confirm(
+    "To email the warranty:\n\n" +
+    "1. The warranty will open in a print window — choose \"Save as PDF\".\n" +
+    "2. Your email will open pre-filled to the homeowner" + (to ? "" : " (no email on file — add the address)") + ".\n" +
+    "3. Attach the saved PDF and send.\n\n" +
+    "Open the warranty now?"
+  );
+  if(!proceed) return;
+  renderWarrantyCertificate(jobId);
+  setTimeout(()=>{ window.location.href = `mailto:${to}?subject=${subject}&body=${body}`; }, 800);
+  if(typeof logContact==='function') logContact(jobId, 'client', 'email', 'Lifetime Workmanship Warranty emailed ('+d.certNo+')');
+}
+
+function printWarrantyCertificate(jobId){ openWarrantyOptions(jobId, 'print'); }
+function emailWarrantyCertificate(jobId){ openWarrantyOptions(jobId, 'email'); }
+window.printWarrantyCertificate = printWarrantyCertificate;
+window.emailWarrantyCertificate = emailWarrantyCertificate;
+window.renderWarrantyCertificate = renderWarrantyCertificate;
+window.openWarrantyOptions = openWarrantyOptions;
+window.sendWarrantyEmail = sendWarrantyEmail;
 
 function draftDepreciationEmail(j, a){
   const ci = getCompanyInfo();
@@ -19080,6 +19060,12 @@ function renderContractTab(j){
     <div class="ct-actions" style="margin-top:0">
       <button class="ct-btn" style="background:#059669;color:#fff" onclick="printCertificateOfCompletion('${j.id}')"><i class="ti ti-certificate"></i> Print Certificate</button>
       <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailCertificateOfCompletion('${j.id}')"><i class="ti ti-mail"></i> Email Certificate</button>
+    </div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:20px 0 8px">Lifetime Workmanship Warranty</div>
+    <div class="ct-actions" style="margin-top:0">
+      <button class="ct-btn" style="background:#B8912F;color:#fff" onclick="printWarrantyCertificate('${j.id}')"><i class="ti ti-shield-check"></i> Print Warranty</button>
+      <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailWarrantyCertificate('${j.id}')"><i class="ti ti-mail"></i> Email Warranty</button>
     </div>
 
 
