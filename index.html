@@ -6846,7 +6846,11 @@ function openJobStageMenu(e){
   drop.innerHTML=opts;
   $('stageSelector').parentNode.style.position='relative';
   $('stageSelector').parentNode.appendChild(drop);
-  drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();if(j.col!==d.dataset.stage&&!canMoveToStage(j,d.dataset.stage))return;j.col=d.dataset.stage;saveToStorage();drop.remove();renderBoard();renderDetailPanel()}));
+  drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();
+    // Same path as dragging the card: records "Stage changed" (notes line) and fires the
+    // stage alerts (Cliq "Claim Filed" / "Contract Signed", ready to invoice, Approved alert).
+    if(j.col!==d.dataset.stage) moveJobToStage(j.id,d.dataset.stage);
+    drop.remove();renderDetailPanel()}));
   setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
 }
 window.openJobStageMenu = openJobStageMenu;
