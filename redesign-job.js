@@ -1025,6 +1025,18 @@
       if (editing && sub && nm) sub.textContent = nm;
     }, 60);
     const sc = document.querySelector('#addJobModal .rf-scroll'); if (sc) sc.scrollTop = 0;
+    // "Add email" / "Add insurance info" etc.: open that section and put the cursor in the field
+    const focus = window.__ajFocus; window.__ajFocus = null;
+    const FOCUS = { phone: ['cust', 'f-phone'], email: ['cust', 'f-email'], carrier: ['ins', 'f-carrier'] };
+    if (focus && FOCUS[focus]) {
+      const [sec, fid] = FOCUS[focus];
+      if (S[sec]) S[sec].wrap.classList.add('open');
+      setTimeout(() => {
+        const el = $(fid); if (!el) return;
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+      }, 120);
+    }
   }
   // If Save stops on a missing name, open Customer so the reason is visible.
   document.addEventListener('click', e => {
