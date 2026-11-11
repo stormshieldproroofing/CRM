@@ -644,9 +644,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=42">'
+    +'<link rel="stylesheet" href="redesign.css?v=43">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=21"><\/script>');
+    +'<script src="redesign-job.js?v=22"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -658,7 +658,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=5"></script>
+<script src="supabase-crm.js?v=6"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=18"></script>
@@ -1332,6 +1332,12 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sched-day.full .sched-cap{color:var(--danger)}
 .sched-more{width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif}
 .sched-other{display:flex;gap:8px}
+.sched-times{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:7px}
+.sched-time{height:44px;border-radius:9px;border:1px solid var(--border);background:#1E253A;color:var(--brand);font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.sched-time.cur{border-color:var(--appt,var(--brand-light));background:rgba(255,255,255,0.08);box-shadow:inset 0 0 0 1px var(--appt,var(--brand-light));color:#fff}
+.sched-sheet[style*="--appt"] .sched-day.cur{border-color:var(--appt);box-shadow:inset 0 0 0 1px var(--appt);background:rgba(255,255,255,0.08)}
+.sched-save{width:100%;height:48px;margin-top:14px;font-size:14px}
+.sched-save:disabled{opacity:.5}
 .sched-other input{flex:1;min-width:0;height:42px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--brand);font-size:16px;font-family:'Barlow',sans-serif;color-scheme:dark}
 .sched-other .btn-primary{padding:0 18px;height:42px;font-size:13px}
 .cal-pop-act{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--brand-light);font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif}
@@ -13404,6 +13410,154 @@ function openScheduleSheet(jobId){
   requestAnimationFrame(() => bg.classList.add('open'));
 }
 window.openScheduleSheet = openScheduleSheet;
+
+// ── Appointments on a job: adjuster inspection + closing ─────────────────
+// Same sheet as Schedule Build (day tiles), plus a time. The inspection date
+// stays in j.inspDate (its own column); the times and the closing live in
+// j.appts = { inspTime:'09:30', closingDate:'2026-11-12', closingTime:'18:30' }
+// which syncs inside the job's contract JSON (__appts).
+const APPT_KINDS = {
+  inspection: { title:'Adjuster Inspection', label:'Adjuster inspection', color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
+  closing:    { title:'Closing',             label:'Closing',             color:'#A78BFA', times:['10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30','19:00'] },
+};
+function apptGet(j, kind){
+  const a = (j && j.appts) || {};
+  return kind === 'inspection' ? { date: (j && j.inspDate) || '', time: a.inspTime || '' }
+                               : { date: a.closingDate || '', time: a.closingTime || '' };
+}
+function apptTimeLabel(t){
+  const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); if(!m) return '';
+  const h = +m[1];
+  return ((h % 12) || 12) + ':' + m[2] + (h < 12 ? ' AM' : ' PM');
+}
+// "Thu, Nov 12 · 9:30 AM" (or just the day when no time is set)
+function apptLabel(j, kind){
+  const a = apptGet(j, kind);
+  if(!a.date) return '';
+  return schedPillLabel(a.date.slice(0,10)) + (a.time ? ' · ' + apptTimeLabel(a.time) : '');
+}
+function apptSet(j, kind, date, time){
+  if(!j.appts || typeof j.appts !== 'object') j.appts = {};
+  if(kind === 'inspection'){ j.inspDate = date || ''; j.appts.inspTime = date ? (time || '') : ''; }
+  else { j.appts.closingDate = date || ''; j.appts.closingTime = date ? (time || '') : ''; }
+  const k = APPT_KINDS[kind];
+  logActivity(j, 'stage', date ? k.label + ' scheduled' : k.label + ' removed', date ? apptLabel(j, kind) : '');
+  saveToStorage();
+  if(typeof openJobId !== 'undefined' && openJobId === j.id && typeof renderDetailPanel === 'function') try{ renderDetailPanel(); }catch(_){}
+  toast(date ? k.label + ': ' + apptLabel(j, kind) : k.label + ' removed');
+}
+window.apptLabel = apptLabel; window.apptGet = apptGet;
+
+function openApptSheet(jobId, kind){
+  const j = jobs.find(x => x.id === jobId);
+  const k = APPT_KINDS[kind];
+  if(!j || !k) return;
+  document.getElementById('schedSheetBg')?.remove();
+  if(typeof fetchWeatherForecast === 'function' && (!window.__wxByDate || (Date.now() - (window.__wxLoaded||0)) > WX_CACHE_MS)){
+    fetchWeatherForecast(false).then(()=>{ if(document.getElementById('schedSheetBg')) renderDays(); }).catch(()=>{});
+  }
+  const cur = apptGet(j, kind);
+  let selDate = cur.date ? cur.date.slice(0,10) : '';
+  let selTime = cur.time || '';
+  const bg = document.createElement('div');
+  bg.id = 'schedSheetBg';
+  bg.className = 'sched-sheet-bg';
+  const addr = (j.address && j.address !== '—') ? j.address.split(',')[0] : '';
+  const who = kind === 'inspection' && j.adjName ? ' · ' + j.adjName : '';
+  bg.innerHTML = `
+    <div class="sched-sheet" role="dialog" aria-label="Schedule ${escapeHtml(k.label.toLowerCase())}" style="--appt:${k.color}">
+      <div class="sched-grab"></div>
+      <div class="sched-head">
+        <div style="min-width:0">
+          <div class="sched-title">${escapeHtml(k.title)}</div>
+          <div class="sched-sub">${escapeHtml(j.name||'—')}${addr?' · '+escapeHtml(addr):''}${escapeHtml(who)}</div>
+        </div>
+        <button class="icon-btn" id="schedClose" title="Close" aria-label="Close"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="schedCurrent"></div>
+      <div class="sched-label">Pick a day</div>
+      <div class="sched-days" id="schedDays"></div>
+      <button class="sched-more" id="schedMore"><i class="ti ti-chevron-down"></i>Show 2 more weeks</button>
+      <div class="sched-label" style="margin-top:12px">Or choose another date</div>
+      <div class="sched-other"><input type="date" id="schedOtherDate" aria-label="Another date"></div>
+      <div class="sched-label" style="margin-top:12px">Time</div>
+      <div class="sched-times" id="schedTimes"></div>
+      <div class="sched-other" style="margin-top:8px"><input type="time" id="schedOtherTime" aria-label="Another time"></div>
+      <button id="schedApptSave" class="btn-primary sched-save"></button>
+    </div>`;
+  document.body.appendChild(bg);
+
+  let span = 14;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const other = bg.querySelector('#schedOtherDate');
+  const otherT = bg.querySelector('#schedOtherTime');
+  const save = bg.querySelector('#schedApptSave');
+
+  function renderCurrent(){
+    const el = bg.querySelector('#schedCurrent');
+    if(!cur.date){ el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div class="sched-current">
+        <i class="ti ti-calendar-event" style="font-size:18px;color:${k.color}"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#fff">${escapeHtml(apptLabel(j, kind))}</div>
+          <div style="font-size:10px;color:var(--muted)">Currently scheduled</div>
+        </div>
+        <button id="schedUnsched" class="sched-unsched"><i class="ti ti-calendar-off"></i>Remove</button>
+      </div>`;
+    el.querySelector('#schedUnsched').addEventListener('click', () => {
+      if(!confirm(`Remove the ${k.label.toLowerCase()} for ${j.name}?`)) return;
+      apptSet(j, kind, '', ''); close();
+    });
+  }
+  function renderDays(){
+    const wrap = bg.querySelector('#schedDays');
+    let html = '';
+    for(let i=0;i<span;i++){
+      const d = new Date(today); d.setDate(today.getDate()+i);
+      const key = calDateKey(d);
+      const w = (typeof getWeatherForDate === 'function') ? getWeatherForDate(key) : null;
+      const lvl = w ? classifyWeather(w).level : '';
+      const wxColor = lvl === 'bad' ? '#EF4444' : (lvl === 'caution' ? '#F59E0B' : '#34D399');
+      const wx = w ? `<span class="sched-wx" style="color:${wxColor}"><i class="ti ${weatherIconFor(w)}"></i>${w.precip!=null?Math.round(w.precip)+'%':''}</span>` : '<span class="sched-wx"></span>';
+      // other appointments of this kind already on that day (any job)
+      const n = jobs.filter(x => x.id !== j.id && (apptGet(x, kind).date || '').slice(0,10) === key).length;
+      html += `
+        <button class="sched-day${selDate===key?' cur':''}${d.getDay()===0?' sun':''}" data-key="${key}" aria-pressed="${selDate===key}">
+          <span class="sched-dow">${i===0?'Today':(i===1?'Tmrw':d.toLocaleDateString('en-US',{weekday:'short'}))}</span>
+          <span class="sched-date">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+          ${wx}
+          <span class="sched-cap">${n ? n + ' booked' : '&nbsp;'}</span>
+        </button>`;
+    }
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.sched-day').forEach(b => b.addEventListener('click', () => { selDate = b.dataset.key; other.value = selDate; renderDays(); renderSave(); }));
+  }
+  function renderTimes(){
+    const wrap = bg.querySelector('#schedTimes');
+    wrap.innerHTML = k.times.map(t => `<button class="sched-time${selTime===t?' cur':''}" data-t="${t}" aria-pressed="${selTime===t}">${apptTimeLabel(t)}</button>`).join('')
+      + `<button class="sched-time${!selTime?' cur':''}" data-t="" aria-pressed="${!selTime}">No time</button>`;
+    wrap.querySelectorAll('.sched-time').forEach(b => b.addEventListener('click', () => { selTime = b.dataset.t; otherT.value = selTime; renderTimes(); renderSave(); }));
+  }
+  function renderSave(){
+    save.disabled = !selDate;
+    save.textContent = selDate ? 'Save · ' + schedPillLabel(selDate) + (selTime ? ' · ' + apptTimeLabel(selTime) : '') : 'Pick a day';
+  }
+  function close(){ bg.classList.remove('open'); setTimeout(()=>bg.remove(), 180); }
+
+  bg.querySelector('#schedClose').addEventListener('click', close);
+  bg.addEventListener('click', e => { if(e.target === bg) close(); });
+  bg.querySelector('#schedMore').addEventListener('click', e => { span += 14; renderDays(); if(span >= 56) e.currentTarget.style.display = 'none'; });
+  other.value = selDate; other.min = calDateKey(today);
+  other.addEventListener('change', () => { selDate = other.value; renderDays(); renderSave(); });
+  otherT.value = selTime;
+  otherT.addEventListener('change', () => { selTime = otherT.value; renderTimes(); renderSave(); });
+  save.addEventListener('click', () => { if(!selDate) return; apptSet(j, kind, selDate, selTime); close(); });
+
+  renderCurrent(); renderDays(); renderTimes(); renderSave();
+  requestAnimationFrame(() => bg.classList.add('open'));
+}
+window.openApptSheet = openApptSheet;
 
 // Push a job's build date to Zoho Calendar as an all-day event. Stores the
 // returned event UID on the job so re-scheduling UPDATES the same event.

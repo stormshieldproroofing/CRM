@@ -227,6 +227,55 @@
     sheetCancel(menu);
   }
 
+  // Message: everything that sends something to the homeowner, in one place.
+  function stageNameOf(j) {
+    try { return (columnsForPipeline(pipelineForJob(j)?.id).find(c => c.id === j.col) || {}).name || ''; }
+    catch (e) { return ''; }
+  }
+  function openMessageMenu(j) {
+    const has = v => !!v && v !== '—';
+    const phone = has(j.phone) ? String(j.phone).replace(/[^\d+]/g, '') : '';
+    const email = has(j.email) ? String(j.email).trim() : '';
+    const first = String(j.name || '').trim().split(/\s+/)[0];
+    const menu = sheet('Message', first && has(j.name) ? 'Message ' + first : 'Message', phone || email ? '' : 'No phone number or email on this job yet');
+    if (!menu) return;
+    const off = b => { b.disabled = true; b.classList.add('off'); };
+    const t = sheetItem(menu, 'ti-message-2', 'Text', () => { window.location.href = 'sms:' + phone; }, { now: true, note: phone ? '' : 'No phone' });
+    if (!phone) off(t);
+    if (typeof textLeadWithCard === 'function') {
+      const st = sheetItem(menu, 'ti-message-dots', 'Text for this stage', () => textLeadWithCard(j.id), { now: true, note: phone ? stageNameOf(j) : 'No phone' });
+      if (!phone) off(st);
+    }
+    if (typeof textLeadCardPhoto === 'function') {
+      sheetItem(menu, 'ti-id', 'Send business card', () => textLeadCardPhoto(j.id), { now: true });
+    }
+    const em = sheetItem(menu, 'ti-mail', 'Email', () => { window.location.href = 'mailto:' + encodeURIComponent(email); }, { now: true, note: email || 'No email' });
+    if (!email) off(em);
+    sheetCancel(menu);
+  }
+
+  // Schedule: pick what to book for this job; the stage decides which one is suggested.
+  function openScheduleMenu(j) {
+    const stage = stageNameOf(j).toLowerCase();
+    const hasAppt = typeof openApptSheet === 'function' && typeof apptLabel === 'function';
+    const insp = hasAppt ? apptLabel(j, 'inspection') : '';
+    const clos = hasAppt ? apptLabel(j, 'closing') : '';
+    const build = j.buildDate && typeof schedPillLabel === 'function' ? schedPillLabel(j.buildDate) : '';
+    // What this stage is waiting on (first one not booked yet)
+    let next = '';
+    if (/lead|claim|inspect|adjuster/.test(stage)) next = insp ? '' : 'inspection';
+    else if (/approv/.test(stage)) next = clos ? (build ? '' : 'build') : 'closing';
+    else if (/contract|sign|production|build/.test(stage)) next = build ? '' : 'build';
+    const menu = sheet('Schedule', 'Schedule for this job', j.name && j.name !== '—' ? j.name : '');
+    if (!menu) return;
+    const row = (kind, icon, label, set, fn) => sheetItem(menu, icon, label, fn,
+      { note: set || (next === kind ? 'Suggested' : 'Not scheduled'), noteCls: set ? 'ok' : (next === kind ? 'sug' : ''), cls: 'rd-sched-' + kind });
+    if (hasAppt) row('inspection', 'ti-search', 'Adjuster inspection', insp, () => openApptSheet(j.id, 'inspection'));
+    if (hasAppt) row('closing', 'ti-writing-sign', 'Closing', clos, () => openApptSheet(j.id, 'closing'));
+    row('build', 'ti-home-bolt', 'Build', build, () => openScheduleSheet(j.id));
+    sheetCancel(menu);
+  }
+
   // ── Overview pieces ──────────────────────────────────────────────────
   function quickActions(j) {
     if (j.carrier && !Array.isArray(window.insCarriers) && typeof loadInsuranceCarriers === 'function') {
@@ -235,10 +284,10 @@
     const addr = (j.address && j.address !== '—') ? j.address : '';
     const acts = [
       { label: 'Call', icon: 'ti-phone', tone: 'green', fn: (callTargets(j).length || j.carrier) ? () => openCallMenu(j) : null },
-      { label: 'Text', icon: 'ti-message-2', tone: 'blue', fn: typeof textLeadWithCard === 'function' ? () => textLeadWithCard(j.id) : null },
+      { label: 'Message', icon: 'ti-message-2', tone: 'blue', fn: () => openMessageMenu(j) },
+      { label: 'Schedule', icon: 'ti-calendar-plus', tone: 'primary', fn: typeof openScheduleSheet === 'function' ? () => openScheduleMenu(j) : null },
       { label: 'Directions', icon: 'ti-navigation', href: addr ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(addr) : '', newTab: true },
-      { label: 'Upload', icon: 'ti-upload', tone: 'primary', fn: () => openUpload(j) },
-      { label: 'Send card', icon: 'ti-id', tone: 'orange', fn: typeof textLeadCardPhoto === 'function' ? () => textLeadCardPhoto(j.id) : null }
+      { label: 'Upload', icon: 'ti-upload', fn: () => openUpload(j) }
     ];
     const row = document.createElement('div');
     row.className = 'rd-qa';
