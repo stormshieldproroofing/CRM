@@ -2692,13 +2692,35 @@ window.openLogContact = openLogContact;
 const TEAM_FEED_KEY = 'stormshield_team_feed_v1';
 function teamFeedLoad(){ try{ return JSON.parse(localStorage.getItem(TEAM_FEED_KEY)||'[]'); }catch(e){ return []; } }
 function teamFeedSave(arr){ try{ localStorage.setItem(TEAM_FEED_KEY, JSON.stringify(arr.slice(0,50))); }catch(e){} }
+// Pull the latest team-wide events (everyone's jobs) and merge them into the cache.
+let __teamFeedPulledAt = 0;
+async function teamFeedPull(force){
+  if(!window.sb || (!force && Date.now() - __teamFeedPulledAt < 30000)) return;
+  __teamFeedPulledAt = Date.now();
+  try{
+    const { data, error } = await window.sb.from('team_feed').select('*').order('at', { ascending:false }).limit(50);
+    if(error || !Array.isArray(data)) return;
+    const local = teamFeedLoad(), byId = {};
+    local.concat(data.map(r => ({ id:r.id, at:r.at, by:r.by_name, kind:r.kind, icon:r.icon, color:r.color, title:r.title, sub:r.sub, jobId:r.job_id })))
+      .forEach(e => { if(e && e.id) byId[e.id] = e; });
+    const merged = Object.values(byId).sort((x, y) => new Date(y.at) - new Date(x.at));
+    teamFeedSave(merged);
+    const box = document.getElementById('teamFeedList');
+    if(box && typeof renderTeamFeedRows === 'function') box.innerHTML = renderTeamFeedRows();
+  }catch(e){ console.warn('[team feed] load failed', e); }
+}
+window.teamFeedPull = teamFeedPull;
 
 // Add an event to the board feed (local + Supabase so the whole team sees it).
 async function teamFeedAdd(evt){
   const rec = { id:'f'+Date.now()+Math.random().toString(36).slice(2,6),
                 at:new Date().toISOString(), by:(window.currentMember&&window.currentMember.name)||'system', ...evt };
   const arr = teamFeedLoad(); arr.unshift(rec); teamFeedSave(arr);
-  if(typeof window.saveTeamFeedEvent === 'function'){ try{ await window.saveTeamFeedEvent(rec); }catch(e){} }
+  // Shared with the whole team (team_feed table), so everyone sees every job's events.
+  try{
+    if(window.sb) await window.sb.from('team_feed').insert({ id:rec.id, at:rec.at, by_name:rec.by, kind:rec.kind||null, icon:rec.icon||null,
+      color:rec.color||null, title:rec.title||'', sub:rec.sub||null, job_id:rec.jobId||null });
+  }catch(e){ console.warn('[team feed] save failed', e); }
   if(typeof renderBoardSalesSummary === 'function' && window.__activePage==='summary') renderBoardSalesSummary();
   return rec;
 }
@@ -3035,7 +3057,7 @@ function onContractSigned(j){
   const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';
   const val = (typeof moneyValue==='function' && j.potVal) ? ` · ${moneyText(moneyValue(j.potVal))}` : '';
   // Board feed
-  teamFeedAdd({ kind:'contract_signed', icon:'ti-writing-sign', color:'#A78BFA',
+  teamFeedAdd({ kind:'contract_signed', jobId:(typeof j!=='undefined'&&j)?j.id:null, icon:'ti-writing-sign', color:'#A78BFA',
     title:`Contract signed: ${name}`, sub:`${addr}${rep?' · '+rep:''}${val}` });
   // Discord push
   const lines = [
@@ -3064,7 +3086,7 @@ function onClaimFiled(j){
   const carrier = (j.carrier && j.carrier!=='—') ? j.carrier : '';
   const claimNo = (j.claimNum && j.claimNum!=='—') ? j.claimNum : '';
   // Board feed
-  teamFeedAdd({ kind:'claim_filed', icon:'ti-file-alert', color:'#F59E0B',
+  teamFeedAdd({ kind:'claim_filed', jobId:(typeof j!=='undefined'&&j)?j.id:null, icon:'ti-file-alert', color:'#F59E0B',
     title:`Claim filed: ${name}`, sub:`${addr}${rep?' · '+rep:''}${carrier?' · '+carrier:''}` });
   // Discord push
   const lines = [
@@ -3123,7 +3145,7 @@ function notifyFinalCheck(j, manual){
   const contract = moneyNum(j.potVal);
   const money = n => '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   // Board feed
-  if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'final_check', icon:'ti-cash-banknote', color:'#34D399',
+  if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'final_check', jobId:(typeof j!=='undefined'&&j)?j.id:null, icon:'ti-cash-banknote', color:'#34D399',
     title:`Final check collected: ${name}`, sub:`${rep?rep+' · ':''}ready for commission breakdown` });
   const lines = [
     `**Final Check Collected — ready for commission**`,
@@ -3500,7 +3522,7 @@ function notifyInvoiceReady(j, manual){
   const base = rcv > 0 ? rcv : contract;
   const invTotal = base + supp;
   const baseLabel = rcv > 0 ? 'RCV' : 'Contract';
-  if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'invoice_ready', icon:'ti-file-invoice', color:'#4D9DE0',
+  if(typeof teamFeedAdd==='function') teamFeedAdd({ kind:'invoice_ready', jobId:(typeof j!=='undefined'&&j)?j.id:null, icon:'ti-file-invoice', color:'#4D9DE0',
     title:`Ready to invoice: ${name}`, sub:`${money(invTotal)}${rep?' · '+rep:''}` });
   const lines = [
     `**Ready to Invoice**`,
@@ -6411,7 +6433,7 @@ function renderBoardSalesSummary(){
   const activityHtml = `
     <details class="sm-panel sm-fold"${openAttr('activity')} data-sm-fold="activity">
       <summary class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-bell"></i>Team activity</div><div class="sm-panel-sub">Live updates</div></div><i class="ti ti-chevron-down sm-fold-chev"></i></summary>
-      <div id="teamFeedList">${renderTeamFeedRows()}</div>
+      <div id="teamFeedList">${renderTeamFeedRows()}</div>${(typeof teamFeedPull==='function' && setTimeout(()=>teamFeedPull(), 0), '')}
     </details>`;
 
   const money0 = v => '$' + Math.round(Number(v)||0).toLocaleString('en-US');
