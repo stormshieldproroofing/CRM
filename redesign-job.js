@@ -189,7 +189,23 @@
       const n = cnt != null ? cnt : (counts[tab] || 0);
       sheetItem(menu, icon, label, () => uploadTo(tab, null, handler), { now: true, note: n ? n + ' uploaded' : 'none yet', noteCls: n ? 'ok' : '' });
     });
+    head('Money');
+    const withRcpt = (Array.isArray(j.expenses) ? j.expenses : []).filter(x => x && x.invoiceFile).length;
+    sheetItem(menu, 'ti-receipt-2', 'Expense receipt or invoice', uploadExpenseReceipt, { now: true, note: withRcpt ? withRcpt + ' uploaded' : 'none yet', noteCls: withRcpt ? 'ok' : '' });
     sheetCancel(menu);
+  }
+
+  // Expense receipt: open Overview → Money → Expenses → Add expense, and its file
+  // picker, all in the same tap. The CRM's own form reads the receipt and saves it.
+  function uploadExpenseReceipt() {
+    const tabBtn = document.querySelector('#detailPanel .dp-tab[data-dptab="overview"]');
+    if (tabBtn && !tabBtn.classList.contains('active')) tabBtn.click();
+    const head = $id('expAccHeader'), body = $id('expBody'), toggle = $id('expAddToggle'), form = $id('expAddForm'), file = $id('expRcptFile');
+    if (!toggle || !form || !file) { try { toast('Expenses can’t be added on this job from your login'); } catch (e) {} return; }
+    if (head && body && body.style.display !== 'block') head.click();
+    if (form.style.display === 'none' || !form.style.display) toggle.click();
+    file.click();
+    later(() => { try { form.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {} });
   }
 
   // ── Call: homeowner, adjuster or the carrier's claims line ──────────
