@@ -6174,6 +6174,12 @@ function smCreatedDate(j){
   const d = new Date(String(j.createdAt||j.created||'').replace(' at ', ' '));
   return Number.isNaN(d.getTime()) ? null : d;
 }
+// Payment dates are saved either as "Nov 11, 2026" or "2026-11-11".
+function smPayDate(v){
+  const t = String(v||'').trim(); if(!t) return null;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? new Date(t + 'T12:00:00') : new Date(t);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 // Yearly revenue goals, shared with the team (app_settings, admin sets them).
 // Keyed by pipeline + who the Summary is showing ("all" or a rep's id).
 const SM_GOALS_KEY = 'stormshield_summary_goals';
@@ -6546,7 +6552,7 @@ function renderBoardSalesSummary(){
     let rev = 0, n = 0, coll = 0, comm = 0;
     summaryJobs.forEach(j => {
       if(inMonth(smCreatedDate(j), y, m)){ rev += moneyValue(j.potVal); n++; }
-      (j.deposits||[]).forEach(d => { const t = new Date(String(d.date||'') + 'T12:00:00'); if(!Number.isNaN(t.getTime()) && inMonth(t, y, m)) coll += moneyValue(d.amount); });
+      (j.deposits||[]).forEach(d => { if(inMonth(smPayDate(d.date), y, m)) coll += moneyValue(d.amount); });
       jobCommissionPayouts(j).forEach(p => { if(user && p.paidTo !== user.id) return; if(inMonth(_payoutDate(p), y, m)) comm += moneyValue(p.amount) || 0; });
     });
     return { rev, n, coll, comm };
