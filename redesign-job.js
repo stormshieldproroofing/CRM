@@ -256,23 +256,51 @@
 
   // Schedule: pick what to book for this job; the stage decides which one is suggested.
   function openScheduleMenu(j) {
-    const stage = stageNameOf(j).toLowerCase();
-    const hasAppt = typeof openApptSheet === 'function' && typeof apptLabel === 'function';
-    const insp = hasAppt ? apptLabel(j, 'inspection') : '';
-    const clos = hasAppt ? apptLabel(j, 'closing') : '';
-    const build = j.buildDate && typeof schedPillLabel === 'function' ? schedPillLabel(j.buildDate) : '';
-    // What this stage is waiting on (first one not booked yet)
-    let next = '';
-    if (/lead|claim|inspect|adjuster/.test(stage)) next = insp ? '' : 'inspection';
-    else if (/approv/.test(stage)) next = clos ? (build ? '' : 'build') : 'closing';
-    else if (/contract|sign|production|build/.test(stage)) next = build ? '' : 'build';
-    const menu = sheet('Schedule', 'Schedule for this job', j.name && j.name !== '—' ? j.name : '');
+    const hasAppt = typeof openApptSheet === 'function' && typeof apptLabel === 'function' && typeof apptGet === 'function';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const isPast = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return !!m && new Date(+m[1], +m[2] - 1, +m[3]) < today; };
+    // Every row: [kind, group, icon, label]
+    const ROWS = [
+      ['initial', 'Inspections', 'ti-home-search', 'Initial inspection'],
+      ['inspection', 'Inspections', 'ti-search', 'Adjuster inspection'],
+      ['reinspection', 'Inspections', 'ti-zoom-check', 'Re-inspection'],
+      ['closing', 'Homeowner', 'ti-writing-sign', 'Closing'],
+      ['walkthrough', 'Homeowner', 'ti-checklist', 'Final walkthrough'],
+      ['build', 'Production', 'ti-home-bolt', 'Build'],
+      ['collection', 'Money', 'ti-cash', 'Collection']
+    ].filter(r => r[0] === 'build' || hasAppt);
+    const info = kind => {
+      if (kind === 'build') {
+        const d = j.buildDate || '';
+        return { date: d, label: d && typeof schedPillLabel === 'function' ? schedPillLabel(String(d).slice(0, 10)) : '' };
+      }
+      return { date: apptGet(j, kind).date, label: apptLabel(j, kind) };
+    };
+    // What this stage is waiting on: the first of these that has no date yet.
+    const col = String(j.col || '').toLowerCase(), stage = stageNameOf(j).toLowerCase();
+    const want = /^lead/.test(col) || /lead/.test(stage) ? ['initial', 'inspection']
+      : /inspect|claim|adjuster/.test(col + stage) ? ['inspection']
+      : /approv/.test(col + stage) ? ['closing', 'collection']
+      : /contract|sign/.test(col + stage) ? ['build', 'collection']
+      : /invoic|complet/.test(col + stage) ? ['walkthrough', 'collection']
+      : /denied|appeal/.test(col + stage) ? ['reinspection'] : [];
+    const next = want.filter(k => ROWS.some(r => r[0] === k) && !info(k).date);
+    const menu = sheet('Schedule', 'Schedule for this job', [j.name && j.name !== '—' ? j.name : '', stageNameOf(j)].filter(Boolean).join(' · '));
     if (!menu) return;
-    const row = (kind, icon, label, set, fn) => sheetItem(menu, icon, label, fn,
-      { note: set || (next === kind ? 'Suggested' : 'Not scheduled'), noteCls: set ? 'ok' : (next === kind ? 'sug' : ''), cls: 'rd-sched-' + kind });
-    if (hasAppt) row('inspection', 'ti-search', 'Adjuster inspection', insp, () => openApptSheet(j.id, 'inspection'));
-    if (hasAppt) row('closing', 'ti-writing-sign', 'Closing', clos, () => openApptSheet(j.id, 'closing'));
-    row('build', 'ti-home-bolt', 'Build', build, () => openScheduleSheet(j.id));
+    menu.classList.add('rd-sched-menu');
+    const head = t => { const h = document.createElement('div'); h.className = 'rd-menu-group'; h.textContent = t; menu.appendChild(h); return h; };
+    const add = (r, suggested) => {
+      const i = info(r[0]);
+      const note = suggested ? 'Suggested' : i.label ? (isPast(i.date) ? 'Done · ' : '') + i.label : 'Not set';
+      sheetItem(menu, r[2], r[3], () => (r[0] === 'build' ? openScheduleSheet(j.id) : openApptSheet(j.id, r[0])),
+        { note, noteCls: suggested ? 'sug' : i.label ? 'ok' : '', cls: 'rd-sched-' + r[0] + (suggested ? ' rd-sched-next' : '') });
+    };
+    if (next.length) {
+      head('Up next for this stage').classList.add('next');
+      ROWS.filter(r => next.includes(r[0])).forEach(r => add(r, true));
+    }
+    let group = '';
+    ROWS.filter(r => !next.includes(r[0])).forEach(r => { if (r[1] !== group) { group = r[1]; head(group); } add(r, false); });
     sheetCancel(menu);
   }
 

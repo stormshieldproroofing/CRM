@@ -644,9 +644,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=43">'
+    +'<link rel="stylesheet" href="redesign.css?v=44">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=22"><\/script>');
+    +'<script src="redesign-job.js?v=23"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1337,6 +1337,12 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sched-time.cur{border-color:var(--appt,var(--brand-light));background:rgba(255,255,255,0.08);box-shadow:inset 0 0 0 1px var(--appt,var(--brand-light));color:#fff}
 .sched-sheet[style*="--appt"] .sched-day.cur{border-color:var(--appt);box-shadow:inset 0 0 0 1px var(--appt);background:rgba(255,255,255,0.08)}
 .sched-save{width:100%;height:48px;margin-top:14px;font-size:14px}
+.sched-collect{display:flex;flex-direction:column;gap:6px}
+.sched-pick{display:flex;align-items:center;gap:10px;min-height:46px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:#1E253A;font-size:14px;font-weight:600;color:var(--text);cursor:pointer}
+.sched-pick input{width:18px;height:18px;accent-color:#34D399;flex:none}
+.sched-pick span{flex:1}
+.sched-pick b{font-weight:700}
+.sched-pick:has(input:checked){border-color:#34D399;box-shadow:inset 0 0 0 1px #34D399}
 .sched-save:disabled{opacity:.5}
 .sched-other input{flex:1;min-width:0;height:42px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--brand);font-size:16px;font-family:'Barlow',sans-serif;color-scheme:dark}
 .sched-other .btn-primary{padding:0 18px;height:42px;font-size:13px}
@@ -13417,13 +13423,23 @@ window.openScheduleSheet = openScheduleSheet;
 // j.appts = { inspTime:'09:30', closingDate:'2026-11-12', closingTime:'18:30' }
 // which syncs inside the job's contract JSON (__appts).
 const APPT_KINDS = {
-  inspection: { title:'Adjuster Inspection', label:'Adjuster inspection', color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
-  closing:    { title:'Closing',             label:'Closing',             color:'#A78BFA', times:['10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30','19:00'] },
+  initial:      { title:'Initial Inspection',  label:'Initial inspection',  color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
+  inspection:   { title:'Adjuster Inspection', label:'Adjuster inspection', color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
+  reinspection: { title:'Re-inspection',       label:'Re-inspection',       color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
+  closing:      { title:'Closing',             label:'Closing',             color:'#A78BFA', times:['10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30','19:00'] },
+  walkthrough:  { title:'Final Walkthrough',   label:'Final walkthrough',   color:'#F2C46B', times:['09:00','10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30'] },
+  collection:   { title:'Collection',          label:'Collection',          color:'#34D399', times:['09:00','10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30'] },
 };
+// What a collection visit can pick up (ticked on the Collection sheet).
+const APPT_COLLECT = [
+  { id:'first',      label:'First insurance check' },
+  { id:'deductible', label:'Deductible',                amount: j => j.deductible },
+  { id:'final',      label:'Depreciation / final check', amount: j => j.recoverableDep },
+];
 function apptGet(j, kind){
   const a = (j && j.appts) || {};
-  return kind === 'inspection' ? { date: (j && j.inspDate) || '', time: a.inspTime || '' }
-                               : { date: a.closingDate || '', time: a.closingTime || '' };
+  if(kind === 'inspection') return { date: (j && j.inspDate) || '', time: a.inspTime || '' };
+  return { date: a[kind + 'Date'] || '', time: a[kind + 'Time'] || '', items: Array.isArray(a[kind + 'Items']) ? a[kind + 'Items'] : [] };
 }
 function apptTimeLabel(t){
   const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); if(!m) return '';
@@ -13436,17 +13452,21 @@ function apptLabel(j, kind){
   if(!a.date) return '';
   return schedPillLabel(a.date.slice(0,10)) + (a.time ? ' · ' + apptTimeLabel(a.time) : '');
 }
-function apptSet(j, kind, date, time){
+function apptSet(j, kind, date, time, items){
   if(!j.appts || typeof j.appts !== 'object') j.appts = {};
   if(kind === 'inspection'){ j.inspDate = date || ''; j.appts.inspTime = date ? (time || '') : ''; }
-  else { j.appts.closingDate = date || ''; j.appts.closingTime = date ? (time || '') : ''; }
+  else {
+    j.appts[kind + 'Date'] = date || ''; j.appts[kind + 'Time'] = date ? (time || '') : '';
+    if(kind === 'collection') j.appts.collectionItems = date ? (items || []) : [];
+  }
   const k = APPT_KINDS[kind];
-  logActivity(j, 'stage', date ? k.label + ' scheduled' : k.label + ' removed', date ? apptLabel(j, kind) : '');
+  const what = (kind === 'collection' && date) ? APPT_COLLECT.filter(c => (items || []).includes(c.id)).map(c => c.label).join(', ') : '';
+  logActivity(j, 'stage', date ? k.label + ' scheduled' : k.label + ' removed', date ? apptLabel(j, kind) + (what ? ' · ' + what : '') : '');
   saveToStorage();
   if(typeof openJobId !== 'undefined' && openJobId === j.id && typeof renderDetailPanel === 'function') try{ renderDetailPanel(); }catch(_){}
   toast(date ? k.label + ': ' + apptLabel(j, kind) : k.label + ' removed');
 }
-window.apptLabel = apptLabel; window.apptGet = apptGet;
+window.apptLabel = apptLabel; window.apptGet = apptGet; window.APPT_KINDS = APPT_KINDS;
 
 function openApptSheet(jobId, kind){
   const j = jobs.find(x => x.id === jobId);
@@ -13459,6 +13479,13 @@ function openApptSheet(jobId, kind){
   const cur = apptGet(j, kind);
   let selDate = cur.date ? cur.date.slice(0,10) : '';
   let selTime = cur.time || '';
+  let selItems = (cur.items || []).slice();
+  const collectHtml = kind !== 'collection' ? '' : `
+      <div class="sched-label">What are you picking up</div>
+      <div class="sched-collect" id="schedCollect">${APPT_COLLECT.map(c => {
+        const amt = c.amount ? parseFloat(String(c.amount(j) || '').replace(/[^0-9.]/g, '')) : 0;
+        return `<label class="sched-pick"><input type="checkbox" value="${c.id}" ${selItems.includes(c.id) ? 'checked' : ''}><span>${escapeHtml(c.label)}</span>${amt > 0 ? `<b>$${amt.toLocaleString('en-US', { maximumFractionDigits: 0 })}</b>` : ''}</label>`;
+      }).join('')}</div>`;
   const bg = document.createElement('div');
   bg.id = 'schedSheetBg';
   bg.className = 'sched-sheet-bg';
@@ -13474,8 +13501,8 @@ function openApptSheet(jobId, kind){
         </div>
         <button class="icon-btn" id="schedClose" title="Close" aria-label="Close"><i class="ti ti-x"></i></button>
       </div>
-      <div id="schedCurrent"></div>
-      <div class="sched-label">Pick a day</div>
+      <div id="schedCurrent"></div>${collectHtml}
+      <div class="sched-label"${collectHtml ? ' style="margin-top:12px"' : ''}>Pick a day</div>
       <div class="sched-days" id="schedDays"></div>
       <button class="sched-more" id="schedMore"><i class="ti ti-chevron-down"></i>Show 2 more weeks</button>
       <div class="sched-label" style="margin-top:12px">Or choose another date</div>
@@ -13552,7 +13579,8 @@ function openApptSheet(jobId, kind){
   other.addEventListener('change', () => { selDate = other.value; renderDays(); renderSave(); });
   otherT.value = selTime;
   otherT.addEventListener('change', () => { selTime = otherT.value; renderTimes(); renderSave(); });
-  save.addEventListener('click', () => { if(!selDate) return; apptSet(j, kind, selDate, selTime); close(); });
+  bg.querySelectorAll('#schedCollect input').forEach(cb => cb.addEventListener('change', () => { selItems = [...bg.querySelectorAll('#schedCollect input:checked')].map(x => x.value); }));
+  save.addEventListener('click', () => { if(!selDate) return; apptSet(j, kind, selDate, selTime, selItems); close(); });
 
   renderCurrent(); renderDays(); renderTimes(); renderSave();
   requestAnimationFrame(() => bg.classList.add('open'));
