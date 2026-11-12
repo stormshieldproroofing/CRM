@@ -900,10 +900,7 @@ html.ui-new .rd-sched-inspection .rd-menu-ic{color:#FB923C}
 html.ui-new .rd-sched-closing .rd-menu-ic{color:#A78BFA}
 html.ui-new .rd-sched-build .rd-menu-ic{color:#7AA2FF}
 html.ui-new .rd-menu-group{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3,#8B94A7);padding:10px 12px 2px}
-html.ui-new .rd-menu-group.next{color:#8FB4FF}
 html.ui-new .rd-sched-menu{max-height:calc(100dvh - 60px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 html.ui-new .rd-sched-menu .rd-menu-item{min-height:46px}
-html.ui-new .rd-sched-next{background:rgba(47,111,235,0.12);box-shadow:inset 0 0 0 1px rgba(47,111,235,0.5)}
 html.ui-new .rd-sched-initial .rd-menu-ic,html.ui-new .rd-sched-reinspection .rd-menu-ic{color:#FB923C}
-html.ui-new .rd-sched-walkthrough .rd-menu-ic{color:#F2C46B}
 html.ui-new .rd-sched-collection .rd-menu-ic{color:#34D399}

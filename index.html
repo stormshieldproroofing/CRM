@@ -644,9 +644,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=44">'
+    +'<link rel="stylesheet" href="redesign.css?v=45">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=23"><\/script>');
+    +'<script src="redesign-job.js?v=24"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -13427,7 +13427,6 @@ const APPT_KINDS = {
   inspection:   { title:'Adjuster Inspection', label:'Adjuster inspection', color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
   reinspection: { title:'Re-inspection',       label:'Re-inspection',       color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
   closing:      { title:'Closing',             label:'Closing',             color:'#A78BFA', times:['10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30','19:00'] },
-  walkthrough:  { title:'Final Walkthrough',   label:'Final walkthrough',   color:'#F2C46B', times:['09:00','10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30'] },
   collection:   { title:'Collection',          label:'Collection',          color:'#34D399', times:['09:00','10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30'] },
 };
 // What a collection visit can pick up (ticked on the Collection sheet).

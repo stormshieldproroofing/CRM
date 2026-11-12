@@ -265,7 +265,6 @@
       ['inspection', 'Inspections', 'ti-search', 'Adjuster inspection'],
       ['reinspection', 'Inspections', 'ti-zoom-check', 'Re-inspection'],
       ['closing', 'Homeowner', 'ti-writing-sign', 'Closing'],
-      ['walkthrough', 'Homeowner', 'ti-checklist', 'Final walkthrough'],
       ['build', 'Production', 'ti-home-bolt', 'Build'],
       ['collection', 'Money', 'ti-cash', 'Collection']
     ].filter(r => r[0] === 'build' || hasAppt);
@@ -276,31 +275,17 @@
       }
       return { date: apptGet(j, kind).date, label: apptLabel(j, kind) };
     };
-    // What this stage is waiting on: the first of these that has no date yet.
-    const col = String(j.col || '').toLowerCase(), stage = stageNameOf(j).toLowerCase();
-    const want = /^lead/.test(col) || /lead/.test(stage) ? ['initial', 'inspection']
-      : /inspect|claim|adjuster/.test(col + stage) ? ['inspection']
-      : /approv/.test(col + stage) ? ['closing', 'collection']
-      : /contract|sign/.test(col + stage) ? ['build', 'collection']
-      : /invoic|complet/.test(col + stage) ? ['walkthrough', 'collection']
-      : /denied|appeal/.test(col + stage) ? ['reinspection'] : [];
-    const next = want.filter(k => ROWS.some(r => r[0] === k) && !info(k).date);
     const menu = sheet('Schedule', 'Schedule for this job', [j.name && j.name !== '—' ? j.name : '', stageNameOf(j)].filter(Boolean).join(' · '));
     if (!menu) return;
     menu.classList.add('rd-sched-menu');
-    const head = t => { const h = document.createElement('div'); h.className = 'rd-menu-group'; h.textContent = t; menu.appendChild(h); return h; };
-    const add = (r, suggested) => {
-      const i = info(r[0]);
-      const note = suggested ? 'Suggested' : i.label ? (isPast(i.date) ? 'Done · ' : '') + i.label : 'Not set';
-      sheetItem(menu, r[2], r[3], () => (r[0] === 'build' ? openScheduleSheet(j.id) : openApptSheet(j.id, r[0])),
-        { note, noteCls: suggested ? 'sug' : i.label ? 'ok' : '', cls: 'rd-sched-' + r[0] + (suggested ? ' rd-sched-next' : '') });
-    };
-    if (next.length) {
-      head('Up next for this stage').classList.add('next');
-      ROWS.filter(r => next.includes(r[0])).forEach(r => add(r, true));
-    }
+    const head = t => { const h = document.createElement('div'); h.className = 'rd-menu-group'; h.textContent = t; menu.appendChild(h); };
     let group = '';
-    ROWS.filter(r => !next.includes(r[0])).forEach(r => { if (r[1] !== group) { group = r[1]; head(group); } add(r, false); });
+    ROWS.forEach(r => {
+      if (r[1] !== group) { group = r[1]; head(group); }
+      const i = info(r[0]);
+      sheetItem(menu, r[2], r[3], () => (r[0] === 'build' ? openScheduleSheet(j.id) : openApptSheet(j.id, r[0])),
+        { note: i.label ? (isPast(i.date) ? 'Done · ' : '') + i.label : 'Not set', noteCls: i.label ? 'ok' : '', cls: 'rd-sched-' + r[0] });
+    });
     sheetCancel(menu);
   }
 
