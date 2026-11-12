@@ -217,6 +217,7 @@ async function loadAllFromSupabase() {
         supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         claimFiledAt: (r.contract && r.contract.__claimFiledAt) ? r.contract.__claimFiledAt : undefined,
         appts: (r.contract && r.contract.__appts && typeof r.contract.__appts === 'object') ? r.contract.__appts : undefined,
+        payMeta: (r.contract && r.contract.__payMeta && typeof r.contract.__payMeta === 'object') ? r.contract.__payMeta : undefined,
         supplements: (r.contract && Array.isArray(r.contract.__supplements)) ? r.contract.__supplements : undefined,
         // Overhead & commission settings (admin/manager-editable), stored in contract JSON
         overheadPct:    (r.contract && r.contract.__overheadPct    != null) ? r.contract.__overheadPct    : undefined,
@@ -749,6 +750,7 @@ async function pushAllToSupabase() {
           base.__cpDepreciation= (j.cpDepreciation != null) ? j.cpDepreciation : null;
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           base.__supplementStatus = j.supplementStatus || null;
+          base.__payMeta = (j.payMeta && typeof j.payMeta === 'object' && Object.keys(j.payMeta).length) ? j.payMeta : null;   // how each payment was paid
           base.__appts = (j.appts && typeof j.appts === 'object') ? j.appts : null;   // inspection time + closing appointment
           base.__claimFiledAt = j.claimFiledAt || null;  // Claim Filed alert already sent (once per job)
           base.__supplements = Array.isArray(j.supplements) ? j.supplements : null;

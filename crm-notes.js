@@ -478,7 +478,9 @@
       }
       const amt = parseFloat(d.amount) || 0;
       const money = '$' + amt.toLocaleString('en-US', { minimumFractionDigits: amt % 1 ? 2 : 0, maximumFractionDigits: 2 });
-      return { kind: 'sys', at: at.toISOString(), text: 'Check collected · ' + money + (d.desc ? ' · ' + d.desc : ''), check: true };
+      // Zelle, cash and card payments say so; untagged ones read as a check, as before.
+      const how = (d._did && j.payMeta && j.payMeta[d._did] && j.payMeta[d._did].method) || 'Check';
+      return { kind: 'sys', at: at.toISOString(), text: (how === 'Check' ? 'Check' : how === 'Other' ? 'Payment' : how + ' payment') + ' collected · ' + money + (d.desc ? ' · ' + d.desc : ''), check: true };
     }).filter(Boolean);
   }
 

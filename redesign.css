@@ -904,3 +904,52 @@ html.ui-new .rd-sched-menu{max-height:calc(100dvh - 60px);overflow-y:auto;-webki
 html.ui-new .rd-sched-menu .rd-menu-item{min-height:46px}
 html.ui-new .rd-sched-initial .rd-menu-ic,html.ui-new .rd-sched-reinspection .rd-menu-ic{color:#FB923C}
 html.ui-new .rd-sched-collection .rd-menu-ic{color:#34D399}
+
+/* ── Payments: Collected tile → payment list, Add payment, Paid-by tags ── */
+html.ui-new .rd-tile.tap{cursor:pointer;position:relative}
+html.ui-new .rd-tile.tap:hover,html.ui-new .rd-tile.tap:focus-visible{border-color:rgba(110,231,183,.55);outline:none}
+html.ui-new .rd-tile-l{display:flex;align-items:center;justify-content:space-between;gap:4px}
+html.ui-new .rd-tile-go{font-size:14px;line-height:1;color:var(--muted)}
+.pay-tag{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:700;box-sizing:border-box;white-space:nowrap;background:#222836;color:#C4CBD8;flex:none}
+.pay-tag.pay-check{background:#172443;color:#8FB4FF}
+.pay-tag.pay-zelle{background:#2A1F47;color:#C4B5FD}
+.pay-tag.pay-cash{background:#0D2918;color:#6EE7B7}
+.pay-tag.pay-card{background:#3A2A0E;color:#FCD34D}
+.pay-tag.pay-none{background:transparent;border:1px dashed #3A4256;color:#8B94A7;font-weight:600}
+html.ui-new .rd-menu.rd-pay{max-height:calc(100dvh - 60px);overflow-y:auto;padding-left:16px;padding-right:16px;gap:0}
+html.ui-new .rd-pay .rd-menu-title,html.ui-new .rd-pay .rd-menu-sub{padding-left:0;padding-right:0}
+html.ui-new .rd-pay-bar{margin:4px 0 8px}
+html.ui-new .rd-pay-track{height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden}
+html.ui-new .rd-pay-track > div{height:100%;border-radius:999px;background:#34D399}
+html.ui-new .rd-pay-barrow{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-top:6px}
+html.ui-new .rd-pay-list{display:flex;flex-direction:column}
+html.ui-new .rd-pay-row{display:flex;align-items:center;gap:10px;min-height:58px;padding:6px 0;border:0;border-bottom:1px solid var(--line);background:none;color:var(--brand);font:inherit;text-align:left;cursor:pointer;width:100%}
+html.ui-new .rd-pay-row:last-child{border-bottom:0}
+html.ui-new .rd-pay-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+html.ui-new .rd-pay-what{font-size:14px;font-weight:600}
+html.ui-new .rd-pay-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.ui-new .rd-pay-amt{font-size:15px;font-weight:700;color:#6EE7B7;white-space:nowrap}
+html.ui-new .rd-pay-empty{padding:22px 0;text-align:center;font-size:13px;color:var(--muted)}
+html.ui-new .rd-pay-foot{display:flex;gap:10px;margin-top:14px}
+html.ui-new .rd-pay-btn{flex:1;min-height:50px;padding:0 12px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--brand);font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+html.ui-new .rd-pay-btn.go{flex:2;border:0;background:#34D399;color:#052E1C;font-weight:700}
+html.ui-new .rd-pay-btn.plain{flex:2;background:rgba(255,255,255,.05)}
+html.ui-new .rd-pay-btn:disabled{opacity:.6;cursor:default}
+html.ui-new .rd-pay-form{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+html.ui-new .rd-pay-form label{display:block;min-width:0}
+html.ui-new .rd-pay-lbl{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+html.ui-new .rd-pay-chips{display:flex;gap:6px}
+html.ui-new .rd-pay-chip{flex:1;min-width:0;height:46px;padding:0;border-radius:10px;border:1px solid var(--line);background:#1A1F29;color:#C4CBD8;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+html.ui-new .rd-pay-chip.on{border:2px solid #34D399;background:rgba(52,211,153,.14);color:#fff}
+html.ui-new .rd-pay-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+html.ui-new .rd-pay-in{width:100%;height:48px;box-sizing:border-box;border-radius:10px;border:1px solid var(--line);background:#1A1F29;color:var(--brand);font:inherit;font-size:16px;font-weight:600;padding:0 12px;outline:none}
+html.ui-new .rd-pay-in:focus{border-color:#34D399}
+html.ui-new .rd-pay-in.amt{font-size:18px;font-weight:700}
+html.ui-new .rd-pay-photo{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-height:52px;padding:8px 12px;border-radius:11px;border:1px dashed #3A4256;background:none;color:#8FB4FF;font:inherit;font-size:14px;font-weight:600;text-align:left;cursor:pointer;overflow:hidden}
+html.ui-new .rd-pay-photo.has{border-style:solid;color:var(--brand)}
+html.ui-new .rd-pay-photo-s{font-size:12px;font-weight:500;color:var(--muted)}
+html.ui-new .rd-pay-err{font-size:13px;color:#FCA5A5;min-height:0}
+html.ui-new .rd-pay-err:empty{display:none}
+@media (min-width:761px){
+  html.ui-new .rd-menu.rd-pay{width:400px;padding:14px 16px 16px}
+}

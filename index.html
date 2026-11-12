@@ -644,9 +644,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=45">'
+    +'<link rel="stylesheet" href="redesign.css?v=46">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=24"><\/script>');
+    +'<script src="redesign-job.js?v=25"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -658,12 +658,12 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=6"></script>
+<script src="supabase-crm.js?v=7"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=18"></script>
 <script src="crm-contract.js?v=2"></script>
-<script src="crm-notes.js?v=32"></script>
+<script src="crm-notes.js?v=33"></script>
 <script src="crm-notifications.js?v=9"></script>
 <script src="crm-certs.js?v=1"></script>
 
@@ -4953,6 +4953,52 @@ function jobCollected(j){
 }
 window.jobCollected = jobCollected;
 
+// ── Payments: how each one was paid (check, Zelle, cash …) ──────────────
+// Kept on the job as payMeta[<payment id>] = { method, ref } and saved with
+// the job (contract.__payMeta), so no database change is needed.
+const PAY_METHODS = ['Check','Zelle','Cash','Card','Other'];
+const PAY_DESCS = ['deductible','net claim','recoverable depreciation','supplement','final check'];
+function payMeta(j, d){ return (j && d && d._did && j.payMeta && j.payMeta[d._did]) || {}; }
+function payMetaSet(j, d, patch){
+  if(!j || !d) return;
+  if(!d._did) d._did = (window.crmSync && window.crmSync.mintId) ? window.crmSync.mintId('d') : 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  if(!j.payMeta || typeof j.payMeta !== 'object') j.payMeta = {};
+  j.payMeta[d._did] = Object.assign({}, j.payMeta[d._did], patch);
+}
+function payTagHtml(j, d){
+  const m = payMeta(j, d).method;
+  return m ? `<span class="pay-tag pay-${escapeHtml(m.toLowerCase())}">${escapeHtml(m)}</span>` : '';
+}
+// Add a payment to a job from anywhere. p = { amount, desc, method, ref, date:'YYYY-MM-DD', file }
+async function addJobPayment(jobId, p){
+  const j = jobs.find(x => x.id === jobId);
+  const amt = Math.round((parseFloat(String(p.amount||'').replace(/[^0-9.\-]/g,'')) || 0) * 100) / 100;
+  if(!j || !amt) return false;
+  const now = new Date(), todayIso = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const when = p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date) ? new Date(p.date + 'T12:00:00') : now;
+  const dep = { amount: amt.toFixed(2), desc: p.desc || 'net claim', date: when.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) };
+  if(!p.date || p.date === todayIso) dep.time = now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  if(p.file){
+    const rec = await intakeJobFile(p.file, 'check', null);   // throws if the upload fails; nothing is saved then
+    if(!j.checks) j.checks = [];
+    j.checks.push(rec);
+    dep.checkFile = { id: rec.id, name: rec.name, path: rec.path || undefined };
+  }
+  const method = PAY_METHODS.includes(p.method) ? p.method : 'Check';
+  payMetaSet(j, dep, { method, ref: String(p.ref||'').trim() || undefined });
+  if(!Array.isArray(j.deposits)) j.deposits = [];
+  j.deposits.push(dep);
+  j.paidVal = j.deposits.reduce((s,d) => s + (parseFloat(d.amount)||0), 0).toFixed(2);
+  logActivity(j, 'deposit_add', 'Payment added', `$${amt.toLocaleString()} · ${dep.desc} · ${method}${dep.checkFile?' · photo attached':''}`);
+  saveToStorage();
+  try{ notifyFinalCheck(j); }catch(_){}
+  if(typeof openJobId !== 'undefined' && openJobId === j.id && typeof renderDetailPanel === 'function') try{ renderDetailPanel(); }catch(_){}
+  try{ renderBoard(); }catch(_){}
+  if(typeof refreshDpTabBadges === 'function') try{ refreshDpTabBadges(); }catch(_){}
+  return true;
+}
+window.PAY_METHODS = PAY_METHODS; window.PAY_DESCS = PAY_DESCS; window.payMeta = payMeta; window.payMetaSet = payMetaSet; window.addJobPayment = addJobPayment;
+
 function jobDepositTotal(j){
   return (j.deposits||[]).reduce((s,d)=>s+moneyValue(d.amount),0);
 }
@@ -8059,7 +8105,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                   <div style="min-width:0;flex:1">
                     <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
                       <span style="font-size:13px;font-weight:700;color:var(--brand);flex-shrink:0">$${fmtMoney(d.amount)}</span>
-                      <span style="font-size:11px;color:var(--muted);white-space:nowrap">— ${descLabel}</span>
+                      <span style="font-size:11px;color:var(--muted);white-space:nowrap">— ${descLabel}</span>${payTagHtml(jobs.find(x=>x.id===openJobId), d)}
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
                       <span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px">${svgCal} ${d.date}</span>
