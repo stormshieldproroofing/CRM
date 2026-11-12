@@ -6052,6 +6052,10 @@ function commissionUnpaid(j, user){
   return Math.max(0, estimatedTotalCommission(j) - paid);
 }
 
+// Pending commission only counts once the build is done (same test as revenue:
+// build date reached, or no build date but paid in full).
+function commissionPending(j, user){ return jobRevenueDate(j) ? commissionUnpaid(j, user) : 0; }
+
 function salesmanSummary(user){
   if(!user) return {revenue:0,commissionYtd:0,jobsInPipeline:0,receivable:0,pendingCommission:0};
   const assigned=jobs.filter(j=>j.user===user.id);
@@ -6063,7 +6067,7 @@ function salesmanSummary(user){
     commissionYtd:assigned.reduce((s,j)=>s+commissionPaidThisYear(j,user.id),0),
     jobsInPipeline:active.length,
     receivable,
-    pendingCommission:assigned.reduce((s,j)=>s+commissionUnpaid(j,user),0)
+    pendingCommission:assigned.reduce((s,j)=>s+commissionPending(j,user),0)
   };
 }
 
@@ -6077,7 +6081,7 @@ function summaryForJobs(summaryJobs,user=null){
     commissionYtd:summaryJobs.reduce((s,j)=>s+commissionPaidThisYear(j,user?user.id:null),0),
     jobsInPipeline:active.length,
     receivable,
-    pendingCommission:summaryJobs.reduce((s,j)=>s+commissionUnpaid(j,user),0)
+    pendingCommission:summaryJobs.reduce((s,j)=>s+commissionPending(j,user),0)
   };
 }
 
@@ -6117,7 +6121,7 @@ function openSummaryDetail(key){
             rows: list.filter(j => bal(j) > 0).map(j => { const c = jobAmountOwed(j), paid = jobDepositTotal(j), pct = c > 0 ? Math.min(100, Math.round(paid/c*100)) : 0;
               return { j, amt:bal(j), sub:`Paid ${m0(paid)} of ${m0(c)}`, bar:pct }; }) },
     pend: { title:'Pending commission', total:summary.pendingCommission, color:'#A78BFA',
-            rows: list.map(j => ({ j, amt:commissionUnpaid(j, user), lead:dot(j),
+            rows: list.map(j => ({ j, amt:commissionPending(j, user), lead:dot(j),
               sub: !jobFullyPaid(j) ? (bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending') : 'Paid in full · ready to pay' })) }
   }[key] || (() => {
     // "mo:<0-11>" — jobs created in that month of this year (Revenue by month bars)
@@ -6686,7 +6690,7 @@ function renderBoardSalesSummary(){
         ${kpi('Revenue', money0(summary.revenue), 'Jobs built this year', 'var(--brand)', '', 'rev')}
         ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid out this year', '#60C4FF', '', 'com')}
         ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`, 'recv')}
-        ${kpi('Pending commission', money0(summary.pendingCommission), 'Not paid out yet', '#A78BFA', '', 'pend')}
+        ${kpi('Pending commission', money0(summary.pendingCommission), 'Built jobs, not paid out', '#A78BFA', '', 'pend')}
           </div>
           ${morePagesHtml}
         </div>
