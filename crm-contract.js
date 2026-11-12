@@ -317,18 +317,22 @@
       const first = String(ct.name || '').trim().split(/\s+/)[0] || 'there';
       return `Hi ${first}, this is ${repName || 'your rep'} with StormShield Pro Roofing. Please review and sign your roofing contract for ${ct.street || 'your property'} here (about 3 minutes): ${url}\nQuestions? Call 832-910-7735.`;
     },
-    // ••• menu: certificate of completion + scanning a paper copy with the camera
+    // ••• menu: certificate of completion, lifetime warranty, and scanning a paper copy with the camera
     extraMenu: (j, kind) => {
       const items = [];
       if (typeof root.ssScan === 'function') items.push(`<button type="button" role="menuitem" data-pkact="scan">${ICON.upload}<span>Scan signed paper copy</span></button>`);
       if (typeof root.printCertificateOfCompletion === 'function') items.push(`<button type="button" role="menuitem" data-pkact="cert-print">${ICON.cert}<span>Print Certificate of Completion</span></button>`);
       if (typeof root.emailCertificateOfCompletion === 'function') items.push(`<button type="button" role="menuitem" data-pkact="cert-email">${ICON.send}<span>Email Certificate of Completion</span></button>`);
+      if (typeof root.printWarrantyCertificate === 'function') items.push(`<button type="button" role="menuitem" data-pkact="warranty-print">${ICON.cert}<span>Print Lifetime Warranty</span></button>`);
+      if (typeof root.emailWarrantyCertificate === 'function') items.push(`<button type="button" role="menuitem" data-pkact="warranty-email">${ICON.send}<span>Email Lifetime Warranty</span></button>`);
       return items;
     },
     onAction: (j, a) => {
       if (a === 'scan') { root.ssScan('doc', files => CT.uploadPaper(j.id, files), { title: 'Scan signed contract' }); return true; }
       if (a === 'cert-print') { root.printCertificateOfCompletion(j.id); return true; }
       if (a === 'cert-email') { root.emailCertificateOfCompletion(j.id); return true; }
+      if (a === 'warranty-print') { root.printWarrantyCertificate(j.id); return true; }
+      if (a === 'warranty-email') { root.emailWarrantyCertificate(j.id); return true; }
       return false;
     }
   };

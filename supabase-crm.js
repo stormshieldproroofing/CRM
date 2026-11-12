@@ -255,6 +255,9 @@ async function loadAllFromSupabase() {
         // Claim Packet (Contingency Agreement + Third-Party Authorization):
         // answers + status live in the contract JSON, signed PDFs in job_files.
         packet: (r.contract && r.contract.__packet && typeof r.contract.__packet === 'object') ? r.contract.__packet : null,
+        // Certificate of Completion + Lifetime Warranty print choices (no dedicated columns)
+        cert: (r.contract && r.contract.__cert && typeof r.contract.__cert === 'object') ? r.contract.__cert : undefined,
+        warranty: (r.contract && r.contract.__warranty && typeof r.contract.__warranty === 'object') ? r.contract.__warranty : undefined,
         stageChecklistDone,
       };
     });
@@ -758,6 +761,9 @@ async function pushAllToSupabase() {
             : [];
           // Claim Packet answers + signing status (no dedicated column)
           base.__packet = (j.packet && typeof j.packet === 'object') ? j.packet : null;
+          // Certificate of Completion + Lifetime Warranty print choices (no dedicated columns)
+          base.__cert = (j.cert && typeof j.cert === 'object') ? j.cert : null;
+          base.__warranty = (j.warranty && typeof j.warranty === 'object') ? j.warranty : null;
           return base;
         })(),
         commission_payouts: Array.isArray(j.commissionPayouts) ? j.commissionPayouts : [],
