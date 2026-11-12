@@ -216,6 +216,7 @@ async function loadAllFromSupabase() {
         cpSupplement:   (r.contract && r.contract.__cpSupplement   != null) ? r.contract.__cpSupplement   : undefined,
         supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         claimFiledAt: (r.contract && r.contract.__claimFiledAt) ? r.contract.__claimFiledAt : undefined,
+        appts: (r.contract && r.contract.__appts && typeof r.contract.__appts === 'object') ? r.contract.__appts : undefined,
         supplements: (r.contract && Array.isArray(r.contract.__supplements)) ? r.contract.__supplements : undefined,
         // Overhead & commission settings (admin/manager-editable), stored in contract JSON
         overheadPct:    (r.contract && r.contract.__overheadPct    != null) ? r.contract.__overheadPct    : undefined,
@@ -748,6 +749,7 @@ async function pushAllToSupabase() {
           base.__cpDepreciation= (j.cpDepreciation != null) ? j.cpDepreciation : null;
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           base.__supplementStatus = j.supplementStatus || null;
+          base.__appts = (j.appts && typeof j.appts === 'object') ? j.appts : null;   // inspection time + closing appointment
           base.__claimFiledAt = j.claimFiledAt || null;  // Claim Filed alert already sent (once per job)
           base.__supplements = Array.isArray(j.supplements) ? j.supplements : null;
           // Overhead & commission settings (no dedicated columns — persisted here)

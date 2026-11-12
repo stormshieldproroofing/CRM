@@ -24,6 +24,8 @@
     mention:       { icon: 'ti-at',           cls: 'mention' },
     packet_viewed: { icon: 'ti-eye',          cls: 'viewed' },
     packet_signed: { icon: 'ti-writing-sign', cls: 'signed' },
+    contract_viewed: { icon: 'ti-eye',        cls: 'viewed' },
+    contract_signed: { icon: 'ti-writing-sign', cls: 'signed' },
     test:          { icon: 'ti-bell',         cls: 'note' },
     supplement_approved: { icon: 'ti-file-dollar', cls: 'signed' },
     commission_ready: { icon: 'ti-cash', cls: 'signed' },
@@ -98,9 +100,8 @@
     if ((n.kind === 'note' || n.kind === 'mention' || n.kind === 'contact') && typeof window.ssOpenJobNotes === 'function') { window.ssOpenJobNotes(n.job_id); return; }
     if (typeof window.openDetail === 'function') {
       window.openDetail(n.job_id);
-      if (n.kind === 'packet_viewed' || n.kind === 'packet_signed') {
-        setTimeout(() => { const t = document.querySelector('#detailPanel [data-dptab="packet"]'); if (t) t.click(); }, 60);
-      }
+      const tab = (n.kind === 'packet_viewed' || n.kind === 'packet_signed') ? 'packet' : (n.kind === 'contract_viewed' || n.kind === 'contract_signed') ? 'contract' : '';
+      if (tab) setTimeout(() => { const t = document.querySelector('#detailPanel [data-dptab="' + tab + '"]'); if (t) t.click(); }, 60);
     }
   }
   function toastMsg(m) { try { if (typeof window.toast === 'function') return window.toast(m); } catch (e) {} }
@@ -376,7 +377,7 @@
       if (canOpen(job)) {
         clearInterval(t);
         const known = nid && S.items.find(x => x.id === nid);   // use the alert's real type when we have it
-        const n = { id: nid || '', job_id: job, kind: known ? known.kind : (open === 'packet' ? 'packet_signed' : open === 'job' ? 'supplement_approved' : 'note'), read_at: 1 };
+        const n = { id: nid || '', job_id: job, kind: known ? known.kind : (open === 'packet' ? 'packet_signed' : open === 'contract' ? 'contract_signed' : open === 'job' ? 'supplement_approved' : 'note'), read_at: 1 };
         openItem(n);
       } else if (tries > 40) clearInterval(t);
     }, 500);

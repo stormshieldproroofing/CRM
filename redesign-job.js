@@ -227,6 +227,68 @@
     sheetCancel(menu);
   }
 
+  // Message: everything that sends something to the homeowner, in one place.
+  function stageNameOf(j) {
+    try { return (columnsForPipeline(pipelineForJob(j)?.id).find(c => c.id === j.col) || {}).name || ''; }
+    catch (e) { return ''; }
+  }
+  function openMessageMenu(j) {
+    const has = v => !!v && v !== '—';
+    const phone = has(j.phone) ? String(j.phone).replace(/[^\d+]/g, '') : '';
+    const email = has(j.email) ? String(j.email).trim() : '';
+    const first = String(j.name || '').trim().split(/\s+/)[0];
+    const menu = sheet('Message', first && has(j.name) ? 'Message ' + first : 'Message', phone || email ? '' : 'No phone number or email on this job yet');
+    if (!menu) return;
+    const off = b => { b.disabled = true; b.classList.add('off'); };
+    const t = sheetItem(menu, 'ti-message-2', 'Text', () => { window.location.href = 'sms:' + phone; }, { now: true, note: phone ? '' : 'No phone' });
+    if (!phone) off(t);
+    if (typeof textLeadWithCard === 'function') {
+      const st = sheetItem(menu, 'ti-message-dots', 'Text for this stage', () => textLeadWithCard(j.id), { now: true, note: phone ? stageNameOf(j) : 'No phone' });
+      if (!phone) off(st);
+    }
+    if (typeof textLeadCardPhoto === 'function') {
+      sheetItem(menu, 'ti-id', 'Send business card', () => textLeadCardPhoto(j.id), { now: true });
+    }
+    const em = sheetItem(menu, 'ti-mail', 'Email', () => { window.location.href = 'mailto:' + encodeURIComponent(email); }, { now: true, note: email || 'No email' });
+    if (!email) off(em);
+    sheetCancel(menu);
+  }
+
+  // Schedule: pick what to book for this job; the stage decides which one is suggested.
+  function openScheduleMenu(j) {
+    const hasAppt = typeof openApptSheet === 'function' && typeof apptLabel === 'function' && typeof apptGet === 'function';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const isPast = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return !!m && new Date(+m[1], +m[2] - 1, +m[3]) < today; };
+    // Every row: [kind, group, icon, label]
+    const ROWS = [
+      ['initial', 'Inspections', 'ti-home-search', 'Initial inspection'],
+      ['inspection', 'Inspections', 'ti-search', 'Adjuster inspection'],
+      ['reinspection', 'Inspections', 'ti-zoom-check', 'Re-inspection'],
+      ['closing', 'Homeowner', 'ti-writing-sign', 'Closing'],
+      ['build', 'Production', 'ti-home-bolt', 'Build'],
+      ['collection', 'Money', 'ti-cash', 'Collection']
+    ].filter(r => r[0] === 'build' || hasAppt);
+    const info = kind => {
+      if (kind === 'build') {
+        const d = j.buildDate || '';
+        return { date: d, label: d && typeof schedPillLabel === 'function' ? schedPillLabel(String(d).slice(0, 10)) : '' };
+      }
+      return { date: apptGet(j, kind).date, label: apptLabel(j, kind) };
+    };
+    const menu = sheet('Schedule', 'Schedule for this job', [j.name && j.name !== '—' ? j.name : '', stageNameOf(j)].filter(Boolean).join(' · '));
+    if (!menu) return;
+    menu.classList.add('rd-sched-menu');
+    const head = t => { const h = document.createElement('div'); h.className = 'rd-menu-group'; h.textContent = t; menu.appendChild(h); };
+    let group = '';
+    ROWS.forEach(r => {
+      if (r[1] !== group) { group = r[1]; head(group); }
+      const i = info(r[0]);
+      sheetItem(menu, r[2], r[3], () => (r[0] === 'build' ? openScheduleSheet(j.id) : openApptSheet(j.id, r[0])),
+        { note: i.label ? (isPast(i.date) ? 'Done · ' : '') + i.label : 'Not set', noteCls: i.label ? 'ok' : '', cls: 'rd-sched-' + r[0] });
+    });
+    sheetCancel(menu);
+  }
+
   // ── Overview pieces ──────────────────────────────────────────────────
   function quickActions(j) {
     if (j.carrier && !Array.isArray(window.insCarriers) && typeof loadInsuranceCarriers === 'function') {
@@ -235,10 +297,10 @@
     const addr = (j.address && j.address !== '—') ? j.address : '';
     const acts = [
       { label: 'Call', icon: 'ti-phone', tone: 'green', fn: (callTargets(j).length || j.carrier) ? () => openCallMenu(j) : null },
-      { label: 'Text', icon: 'ti-message-2', tone: 'blue', fn: typeof textLeadWithCard === 'function' ? () => textLeadWithCard(j.id) : null },
+      { label: 'Message', icon: 'ti-message-2', tone: 'blue', fn: () => openMessageMenu(j) },
+      { label: 'Schedule', icon: 'ti-calendar-plus', tone: 'primary', fn: typeof openScheduleSheet === 'function' ? () => openScheduleMenu(j) : null },
       { label: 'Directions', icon: 'ti-navigation', href: addr ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(addr) : '', newTab: true },
-      { label: 'Upload', icon: 'ti-upload', tone: 'primary', fn: () => openUpload(j) },
-      { label: 'Send card', icon: 'ti-id', tone: 'orange', fn: typeof textLeadCardPhoto === 'function' ? () => textLeadCardPhoto(j.id) : null }
+      { label: 'Upload', icon: 'ti-upload', fn: () => openUpload(j) }
     ];
     const row = document.createElement('div');
     row.className = 'rd-qa';
@@ -1025,6 +1087,18 @@
       if (editing && sub && nm) sub.textContent = nm;
     }, 60);
     const sc = document.querySelector('#addJobModal .rf-scroll'); if (sc) sc.scrollTop = 0;
+    // "Add email" / "Add insurance info" etc.: open that section and put the cursor in the field
+    const focus = window.__ajFocus; window.__ajFocus = null;
+    const FOCUS = { phone: ['cust', 'f-phone'], email: ['cust', 'f-email'], carrier: ['ins', 'f-carrier'] };
+    if (focus && FOCUS[focus]) {
+      const [sec, fid] = FOCUS[focus];
+      if (S[sec]) S[sec].wrap.classList.add('open');
+      setTimeout(() => {
+        const el = $(fid); if (!el) return;
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+      }, 120);
+    }
   }
   // If Save stops on a missing name, open Customer so the reason is visible.
   document.addEventListener('click', e => {

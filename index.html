@@ -644,9 +644,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=42">'
+    +'<link rel="stylesheet" href="redesign.css?v=45">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=20"><\/script>');
+    +'<script src="redesign-job.js?v=24"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -661,7 +661,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="supabase-crm.js?v=6"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
-<script src="crm-packet.js?v=17"></script>
+<script src="crm-packet.js?v=18"></script>
+<script src="crm-contract.js?v=2"></script>
 <script src="crm-notes.js?v=32"></script>
 <script src="crm-notifications.js?v=9"></script>
 <script src="crm-certs.js?v=1"></script>
@@ -1332,6 +1333,18 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sched-day.full .sched-cap{color:var(--danger)}
 .sched-more{width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px dashed var(--border);background:none;color:var(--brand-light);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'Barlow',sans-serif}
 .sched-other{display:flex;gap:8px}
+.sched-times{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:7px}
+.sched-time{height:44px;border-radius:9px;border:1px solid var(--border);background:#1E253A;color:var(--brand);font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.sched-time.cur{border-color:var(--appt,var(--brand-light));background:rgba(255,255,255,0.08);box-shadow:inset 0 0 0 1px var(--appt,var(--brand-light));color:#fff}
+.sched-sheet[style*="--appt"] .sched-day.cur{border-color:var(--appt);box-shadow:inset 0 0 0 1px var(--appt);background:rgba(255,255,255,0.08)}
+.sched-save{width:100%;height:48px;margin-top:14px;font-size:14px}
+.sched-collect{display:flex;flex-direction:column;gap:6px}
+.sched-pick{display:flex;align-items:center;gap:10px;min-height:46px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:#1E253A;font-size:14px;font-weight:600;color:var(--text);cursor:pointer}
+.sched-pick input{width:18px;height:18px;accent-color:#34D399;flex:none}
+.sched-pick span{flex:1}
+.sched-pick b{font-weight:700}
+.sched-pick:has(input:checked){border-color:#34D399;box-shadow:inset 0 0 0 1px #34D399}
+.sched-save:disabled{opacity:.5}
 .sched-other input{flex:1;min-width:0;height:42px;background:#1E253A;border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--brand);font-size:16px;font-family:'Barlow',sans-serif;color-scheme:dark}
 .sched-other .btn-primary{padding:0 18px;height:42px;font-size:13px}
 .cal-pop-act{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--brand-light);font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif}
@@ -1693,16 +1706,44 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sm-note{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:var(--muted);margin-top:10px;line-height:1.4}
 .sm-note .ti{font-size:14px;margin-top:1px}
 .sm-bars{display:flex;flex-direction:column;gap:12px}
-.sm-bar-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:#E8ECF3;margin-bottom:6px}
-.sm-bar-name{display:flex;align-items:center;gap:7px;min-width:0}
-.sm-bar-n{color:var(--muted);font-size:12px}
+.sm-mbar-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:#E8ECF3;margin-bottom:6px}
+.sm-mbar-name{display:flex;align-items:center;gap:7px;min-width:0}
+.sm-mbar-n{color:var(--muted);font-size:12px}
 .sm-track{height:8px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden}
 .sm-track > div{height:100%;border-radius:999px}
+.sm-pager,.sm-pg1{display:contents}
+.sm-pgx{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.sm-pg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.sm-pg-card{display:flex;flex-direction:column;box-sizing:border-box}
+.sm-pg-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sm-pg-note{font-size:12px;color:var(--muted);white-space:nowrap}
+.sm-delta{font-weight:600}.sm-delta.up{color:#34D399}.sm-delta.down{color:#F87171}
+.sm-mbars{flex:1;display:flex;align-items:flex-end;gap:4px;min-height:118px;margin-top:8px}
+.sm-mbar{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;padding:0;border:0;background:none;color:var(--muted);font:inherit;cursor:pointer}
+.sm-mbar-v{font-size:9px;font-weight:700;color:#E8ECF3;white-space:nowrap;min-height:11px}
+.sm-mbar-b{width:100%;min-height:2px;border-radius:4px 4px 0 0;background:#33405A}
+.sm-mbar.future .sm-mbar-b{background:#232A38}
+.sm-mbar.now .sm-mbar-b{background:var(--brand-light,#5B8DEF)}
+.sm-mbar-m{font-size:10px;font-weight:500}
+.sm-mbar.now .sm-mbar-m{color:#fff;font-weight:700}
+.sm-goal-top{display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap}
+.sm-goal-of{font-size:13px;color:var(--muted)}
+.sm-goal-track{height:10px;margin-top:10px}
+.sm-goal-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-top:6px}
+.sm-goal-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:auto;padding-top:10px}
+.sm-goal-stats b{display:block;font-size:17px;font-weight:700;color:#fff;margin-top:1px}
+.sm-goal-stats span{font-size:12px;color:var(--muted)}
+.sm-goal-btn{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.05);color:#E8ECF3;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.sm-goal-edit{border:0;background:none;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:8px 0 8px 12px;margin:-8px 0}
+.sm-goal-empty{flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:10px;font-size:13px;color:var(--muted)}
+.sm-dots{display:none}
 .sm-wk-date{width:44px;height:44px;flex-shrink:0;border-radius:12px;background:rgba(56,189,248,.1);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#7DD3FC;line-height:1.1}
 .sm-wk-date span{font-size:10px;font-weight:700;text-transform:uppercase}
 .sm-wk-date b{font-size:16px}
 .sm-wk-date.today{background:var(--brand-light);color:#fff}
 .sm-wk-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-wk-kind{font-weight:700}
+.sm-wk-kind i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .sm-chev{color:var(--muted);font-size:18px}
 .sm-todo-list{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 240px);overflow:auto}
 .sm-todo-job{display:flex;align-items:center;gap:8px;padding:8px 10px;border-left:3px solid;border-radius:6px;background:rgba(255,255,255,.04);cursor:pointer}
@@ -1716,6 +1757,15 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sm-todo-item.locked{opacity:.55;cursor:not-allowed}
 @media (max-width:1180px){
   .sm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sm-pager{grid-column:1/-1;display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+  .sm-pager::-webkit-scrollbar{display:none}
+  .sm-pgx{display:contents}
+  .sm-pg1,.sm-pg{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+  .sm-pg1,.sm-pg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .sm-dots{grid-column:1/-1;display:flex;justify-content:center;gap:2px;margin-top:-4px}
+  .sm-dot{width:28px;height:24px;border:0;background:none;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .sm-dot i{display:block;width:6px;height:6px;border-radius:3px;background:#2A3142;transition:width .15s,background .15s}
+  .sm-dot.on i{width:16px;background:var(--brand-light,#5B8DEF)}
   .sm-kpi-jobs{grid-column:1/-1}
   .sm-cols{grid-template-columns:1fr}
   .sm-todo-list{max-height:none}
@@ -6008,7 +6058,14 @@ function openSummaryDetail(key){
     pend: { title:'Pending commission', total:summary.pendingCommission, color:'#A78BFA',
             rows: list.map(j => ({ j, amt:commissionUnpaid(j, user), lead:dot(j),
               sub: !jobFullyPaid(j) ? (bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending') : 'Paid in full · ready to pay' })) }
-  }[key];
+  }[key] || (() => {
+    // "mo:<0-11>" — jobs created in that month of this year (Revenue by month bars)
+    const m = /^mo:(\d+)$/.exec(key||''); if(!m) return null;
+    const mi = Number(m[1]), y = new Date().getFullYear();
+    const rows = list.filter(j => { const d = smCreatedDate(j); return d && d.getFullYear() === y && d.getMonth() === mi; })
+      .map(j => ({ j, amt:moneyValue(j.potVal), sub:stage(j) }));
+    return { title:'Revenue · ' + new Date(y, mi, 1).toLocaleDateString('en-US',{month:'long'}), total:rows.reduce((t,r) => t + r.amt, 0), color:'var(--brand)', rows };
+  })();
   if(!cfg) return;
   // Newest first: Commission earned by the date it was paid in full, the rest by
   // when the job was created. Undated jobs go last, biggest amount first.
@@ -6069,7 +6126,7 @@ function openSummaryDetail(key){
   const vh = window.innerHeight;
   const nav = document.querySelector('.topnav');
   const navBottom = nav ? Math.max(0, Math.round(nav.getBoundingClientRect().bottom)) : 0;
-  const lastTile = [...document.querySelectorAll('#boardSalesSummary .sm-kpis > .sm-kpi')].pop();
+  const lastTile = document.querySelector('#boardSalesSummary .sm-pager') || [...document.querySelectorAll('#boardSalesSummary .sm-kpis > .sm-kpi')].pop();
   let top = lastTile ? Math.round(lastTile.getBoundingClientRect().bottom) + 8 : Math.round(vh * 0.45);
   top = Math.min(Math.round(vh * 0.55), Math.max(navBottom + 6, 10, top));
   sheet.style.setProperty('--sd-h', `calc(100dvh - ${top}px)`);
@@ -6112,6 +6169,58 @@ function openSummaryDetail(key){
   ov.querySelectorAll('.sd-row').forEach(b => b.addEventListener('click', () => { close(); if(typeof openDetail === 'function') openDetail(b.dataset.job); }));
 }
 window.openSummaryDetail = openSummaryDetail;
+
+// ── Summary swipe pages: this month, revenue by month, yearly goal ──────
+function smCreatedDate(j){
+  const d = new Date(String(j.createdAt||j.created||'').replace(' at ', ' '));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+// Payment dates are saved either as "Nov 11, 2026" or "2026-11-11".
+function smPayDate(v){
+  const t = String(v||'').trim(); if(!t) return null;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? new Date(t + 'T12:00:00') : new Date(t);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+// Yearly revenue goals, shared with the team (app_settings, admin sets them).
+// Keyed by pipeline + who the Summary is showing ("all" or a rep's id).
+const SM_GOALS_KEY = 'stormshield_summary_goals';
+let smGoals = (() => { try{ return JSON.parse(localStorage.getItem(SM_GOALS_KEY)||'{}') || {}; }catch(_){ return {}; } })();
+window.__smGoalsLoaded = false;
+async function loadSummaryGoals(){
+  if(window.__smGoalsLoaded || !window.sb) return;
+  window.__smGoalsLoaded = true;
+  try{
+    const { data, error } = await window.sb.from('app_settings').select('value').eq('key','summary_goals').maybeSingle();
+    if(error){ window.__smGoalsLoaded = false; return; }
+    const v = data && data.value;
+    if(v && typeof v === 'object' && JSON.stringify(v) !== JSON.stringify(smGoals)){
+      smGoals = v;
+      try{ localStorage.setItem(SM_GOALS_KEY, JSON.stringify(v)); }catch(_){}
+      if(document.getElementById('summaryPage')?.style.display !== 'none') renderBoardSalesSummary();
+    }
+  }catch(_){ window.__smGoalsLoaded = false; }
+}
+function smGoalScope(userId){
+  const me = window.currentMember;
+  const seesAll = !me || me.role === 'admin' || me.role === 'manager';
+  return currentPipelineId + '|' + (userId || (seesAll ? 'all' : me.id));
+}
+async function editSummaryGoal(scope, who){
+  if(!isAdmin()){ toast('Only admins can set goals'); return; }
+  const cur = Number(smGoals[scope]) || 0;
+  const raw = prompt(`Revenue goal for ${new Date().getFullYear()} — ${who}\n(leave blank to remove the goal)`, cur ? String(cur) : '');
+  if(raw === null) return;
+  const n = Math.round(Number(String(raw).replace(/[^0-9.]/g,'')) || 0);
+  smGoals = Object.assign({}, smGoals);
+  if(n > 0) smGoals[scope] = n; else delete smGoals[scope];
+  try{ localStorage.setItem(SM_GOALS_KEY, JSON.stringify(smGoals)); }catch(_){}
+  renderBoardSalesSummary();
+  if(!window.sb) return;
+  try{
+    const { error } = await window.sb.from('app_settings').upsert({ key:'summary_goals', value:smGoals, updated_at:new Date().toISOString() }, { onConflict:'key' });
+    if(error) toast('Saved on this device only — could not sync to team');
+  }catch(_){ toast('Saved on this device only — could not sync to team'); }
+}
 
 function renderBoardSalesSummary(){
   const wrap=$('boardSalesSummary');
@@ -6247,17 +6356,32 @@ function renderBoardSalesSummary(){
     if(ar!==br) return br-ar;
     return a.jobName.localeCompare(b.jobName);
   });
-  // ── Upcoming This Week panel — scheduled events (build dates) for the next 7 days ──
+  // ── This week panel — everything on the schedule for the next 7 days: builds plus
+  // every appointment booked from a job (inspections, closing, collection). It covers
+  // all pipelines (a rep's week isn't split by pipeline) and follows the rep filter.
   const weekTeam = window.TEAM || window.USERS || [];
   const wkStart = new Date(); wkStart.setHours(0,0,0,0);
+  const wkJobs = jobs.filter(j => jobMatchesAssigneeFilter(j, userId));
+  const wkKinds = window.APPT_KINDS || {};   // defined further down; empty until that code has run
   const wkDays = [];
   for(let i=0;i<7;i++){
     const d = new Date(wkStart); d.setDate(wkStart.getDate()+i);
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    const dayJobs = summaryJobs.filter(j => j.buildDate === key);
-    wkDays.push({ d, key, jobs:dayJobs });
+    const events = [];
+    wkJobs.forEach(j => {
+      if(String(j.buildDate||'').slice(0,10) === key) events.push({ j, kind:'build', label:'Build', color:'#38BDF8', time:'' });
+      Object.keys(wkKinds).forEach(kind => {
+        const a = window.apptGet(j, kind);
+        if(String(a.date||'').slice(0,10) === key) events.push({ j, kind, label:wkKinds[kind].label, color:wkKinds[kind].color, time:a.time||'' });
+      });
+    });
+    // builds (all day) first, then by time; untimed appointments before timed ones
+    events.sort((x,y) => (y.kind==='build') - (x.kind==='build') || String(x.time).localeCompare(String(y.time)));
+    wkDays.push({ d, key, events });
   }
-  const wkTotal = wkDays.reduce((s,x)=>s+x.jobs.length,0);
+  const wkTotal = wkDays.reduce((s,x)=>s+x.events.length,0);
+  const wkBuilds = wkDays.reduce((s,x)=>s+x.events.filter(e=>e.kind==='build').length,0);
+  const wkAppts = wkTotal - wkBuilds;
 
   // ── Follow-ups: only jobs that are moving. Leads sitting in the Lead stage
   // are left out unless someone set a follow-up date on them. Top 5 shown.
@@ -6318,15 +6442,18 @@ function renderBoardSalesSummary(){
   const upcomingHtml = `
     <section class="sm-panel">
       <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-calendar-week"></i>This week</div>
-      <div class="sm-panel-sub">${wkTotal} build${wkTotal===1?'':'s'} in the next 7 days</div></div></div>
-      ${wkTotal===0 ? `<div class="sm-empty">No builds scheduled in the next 7 days.</div>` : `
+      <div class="sm-panel-sub">${wkTotal===0 ? 'Next 7 days' : `${wkBuilds} build${wkBuilds===1?'':'s'} · ${wkAppts} appointment${wkAppts===1?'':'s'} in the next 7 days`}</div></div></div>
+      ${wkTotal===0 ? `<div class="sm-empty">Nothing scheduled in the next 7 days.</div>` : `
       <div class="sm-list">
-        ${wkDays.filter(x=>x.jobs.length).map(x => x.jobs.map(j => {
+        ${wkDays.filter(x=>x.events.length).map(x => x.events.map(ev => {
+          const j = ev.j;
           const who = jobRep(j).name;
           const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+          const what = ev.label + (ev.time ? ' · ' + window.apptTimeLabel(ev.time) : '');
           return `<div class="sm-wk-row" onclick="openDetail('${j.id}')">
             <div class="sm-wk-date${x.key===todayKey?' today':''}"><span>${x.key===todayKey?'Today':dowShort[x.d.getDay()]}</span><b>${x.d.getDate()}</b></div>
-            <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name||'Job')}</div><div class="sm-wk-sub">${escapeHtml(addr)}${addr&&who?' · ':''}${escapeHtml(who||'')}</div></div>
+            <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name||'Job')}</div>
+              <div class="sm-wk-sub"><span class="sm-wk-kind" style="color:${ev.color}"><i style="background:${ev.color}"></i>${escapeHtml(what)}</span>${addr?' · '+escapeHtml(addr):''}${who?' · '+escapeHtml(who):''}</div></div>
             <i class="ti ti-chevron-right sm-chev"></i>
           </div>`;
         }).join('')).join('')}
@@ -6418,6 +6545,69 @@ function renderBoardSalesSummary(){
   const kpi = (label, value, sub, color, extra='', key='') => key
     ? `<button type="button" class="sm-kpi sm-kpi-btn" data-sumkpi="${key}" aria-label="${label}: ${value}. Show jobs"><div class="sm-kpi-label">${label}</div><div class="sm-kpi-value" style="color:${color}">${value}</div>${sub?`<div class="sm-kpi-sub">${sub}</div>`:''}${extra}<span class="sm-kpi-chev" aria-hidden="true"><i class="ti ti-chevron-right"></i></span></button>`
     : `<div class="sm-kpi"><div class="sm-kpi-label">${label}</div><div class="sm-kpi-value" style="color:${color}">${value}</div>${sub?`<div class="sm-kpi-sub">${sub}</div>`:''}${extra}</div>`;
+  // Swipe pages after the four yearly cards: this month, revenue by month, goal.
+  const smNow = new Date(), smY = smNow.getFullYear(), smM = smNow.getMonth();
+  const smPrev = new Date(smY, smM - 1, 1);
+  const inMonth = (d, y, m) => !!d && d.getFullYear() === y && d.getMonth() === m;
+  const monthStats = (y, m) => {
+    let rev = 0, n = 0, coll = 0, comm = 0;
+    summaryJobs.forEach(j => {
+      if(inMonth(smCreatedDate(j), y, m)){ rev += moneyValue(j.potVal); n++; }
+      (j.deposits||[]).forEach(d => { if(inMonth(smPayDate(d.date), y, m)) coll += moneyValue(d.amount); });
+      jobCommissionPayouts(j).forEach(p => { if(user && p.paidTo !== user.id) return; if(inMonth(_payoutDate(p), y, m)) comm += moneyValue(p.amount) || 0; });
+    });
+    return { rev, n, coll, comm };
+  };
+  const mNow = monthStats(smY, smM), mPrev = monthStats(smPrev.getFullYear(), smPrev.getMonth());
+  const mShort = smNow.toLocaleDateString('en-US',{month:'short'}), pShort = smPrev.toLocaleDateString('en-US',{month:'short'});
+  const delta = (cur, prev, isCount) => {
+    if(Math.round(cur) === Math.round(prev)) return `Same as ${pShort}`;
+    const up = cur > prev, cls = up ? 'up' : 'down', arrow = up ? '▲' : '▼';
+    if(isCount) return `<span class="sm-delta ${cls}">${arrow} ${Math.abs(cur - prev)}</span> vs ${pShort}`;
+    if(prev <= 0) return `<span class="sm-delta ${cls}">${arrow}</span> ${pShort} was $0`;
+    return `<span class="sm-delta ${cls}">${arrow} ${Math.round(Math.abs(cur - prev) / prev * 100)}%</span> vs ${pShort}`;
+  };
+  const byMonth = Array.from({length:12}, (_, m) => summaryJobs.reduce((t, j) => t + (inMonth(smCreatedDate(j), smY, m) ? moneyValue(j.potVal) : 0), 0));
+  const bmMax = Math.max(1, ...byMonth), bmBest = byMonth.indexOf(Math.max(...byMonth));
+  const kShort = v => v >= 1000 ? '$' + (v >= 100000 ? Math.round(v/1000) : Math.round(v/100)/10) + 'k' : '$' + Math.round(v);
+  const barsHtml = byMonth.map((v, m) => {
+    const name = new Date(smY, m, 1).toLocaleDateString('en-US',{month:'long'});
+    const label = v > 0 && (m === smM || m === bmBest) ? kShort(v) : '';
+    return `<button type="button" class="sm-mbar${m===smM?' now':''}${m>smM?' future':''}" data-sumkpi="mo:${m}" aria-label="${name}: ${money0(v)}. Show jobs"><span class="sm-mbar-v">${label}</span><span class="sm-mbar-b" style="height:${Math.round(v / bmMax * 78)}%"></span><span class="sm-mbar-m">${name[0]}</span></button>`;
+  }).join('');
+  const goalScope = smGoalScope(user ? user.id : null);
+  const goalWho = user ? user.name : ((window.currentMember && !['admin','manager'].includes(window.currentMember.role)) ? 'you' : 'the company');
+  const goal = Number(smGoals[goalScope]) || 0;
+  const yStart = new Date(smY, 0, 1), yEnd = new Date(smY + 1, 0, 1);
+  const daysIn = Math.max(1, (smNow - yStart) / 864e5), daysLeft = Math.max(0, Math.ceil((yEnd - smNow) / 864e5));
+  const pace = summary.revenue / daysIn * ((yEnd - yStart) / 864e5);
+  const goalPct = goal ? Math.min(100, Math.round(summary.revenue / goal * 100)) : 0;
+  const toGo = Math.max(0, goal - summary.revenue);
+  const goalHtml = goal ? `
+      <div class="sm-pg-head"><span class="sm-kpi-label">${smY} goal</span><span class="sm-pg-note">${daysLeft} days left${isAdmin()?`<button type="button" class="sm-goal-edit" data-smgoal>Edit</button>`:''}</span></div>
+      <div class="sm-goal-top"><span class="sm-kpi-value" style="margin-top:0">${money0(summary.revenue)}</span><span class="sm-goal-of">of ${money0(goal)}</span></div>
+      <div class="sm-track sm-goal-track"><div style="width:${goalPct}%;background:${toGo<=0?'#34D399':'var(--brand-light,#5B8DEF)'}"></div></div>
+      <div class="sm-goal-row"><span>${goalPct}% of goal</span><span>${toGo>0?money0(toGo)+' to go':'Goal reached'}</span></div>
+      <div class="sm-goal-stats">
+        <div><span>Need per week</span><b style="${toGo>0?'color:#FBBF24':''}">${toGo>0?money0(toGo / Math.max(1, daysLeft / 7)):'$0'}</b></div>
+        <div><span>On pace for</span><b style="${pace>=goal?'color:#34D399':''}">${money0(pace)}</b></div>
+      </div>` : `
+      <div class="sm-pg-head"><span class="sm-kpi-label">${smY} goal</span><span class="sm-pg-note">${daysLeft} days left</span></div>
+      <div class="sm-goal-empty"><span>No revenue goal set for ${escapeHtml(goalWho)} yet. On pace for <b style="color:#fff">${money0(pace)}</b> this year.</span>
+        ${isAdmin()?`<button type="button" class="sm-goal-btn" data-smgoal>Set a goal</button>`:`<span>An admin can set one.</span>`}</div>`;
+  const morePagesHtml = `<div class="sm-pgx">
+          <div class="sm-pg sm-pg-grid">
+            ${kpi(mShort + ' revenue', money0(mNow.rev), delta(mNow.rev, mPrev.rev), 'var(--brand)', '', 'mo:' + smM)}
+            ${kpi(mShort + ' new jobs', String(mNow.n), delta(mNow.n, mPrev.n, true), '#fff')}
+            ${kpi(mShort + ' collected', money0(mNow.coll), delta(mNow.coll, mPrev.coll), '#34D399')}
+            ${kpi(mShort + ' commission', money0(mNow.comm), delta(mNow.comm, mPrev.comm), '#60C4FF')}
+          </div>
+          <div class="sm-pg sm-kpi sm-pg-card">
+            <div class="sm-pg-head"><span class="sm-kpi-label">Revenue by month</span><span class="sm-pg-note">${money0(summary.revenue)} in ${smY}</span></div>
+            <div class="sm-mbars">${barsHtml}</div>
+          </div>
+          <div class="sm-pg sm-kpi sm-pg-card">${goalHtml}</div>
+        </div>`;
   wrap.innerHTML = `
     <div class="sm-page">
       <div class="sm-head">
@@ -6429,10 +6619,16 @@ function renderBoardSalesSummary(){
           <div class="sm-jobs-head"><span class="sm-kpi-label">Jobs in pipeline</span><span class="sm-jobs-total">${shownTotal} total</span></div>
           ${stagesHtml}
         </div>
+        <div class="sm-pager" id="smPager">
+          <div class="sm-pg1">
         ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)', '', 'rev')}
         ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid out this year', '#60C4FF', '', 'com')}
         ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`, 'recv')}
         ${kpi('Pending commission', money0(summary.pendingCommission), 'Not paid out yet', '#A78BFA', '', 'pend')}
+          </div>
+          ${morePagesHtml}
+        </div>
+        <div class="sm-dots" id="smDots" aria-label="Summary pages">${['This year','This month','Revenue by month','Goal'].map((t,i)=>`<button type="button" class="sm-dot${i===0?' on':''}" data-smdot="${i}" aria-label="${t}"><i></i></button>`).join('')}</div>
       </div>
       <div class="sm-cols">
         <div class="sm-col">
@@ -6447,6 +6643,23 @@ function renderBoardSalesSummary(){
       </div>
     </div>`;
   wrap.querySelectorAll('[data-sumkpi]').forEach(b => b.addEventListener('click', () => openSummaryDetail(b.dataset.sumkpi)));
+  wrap.querySelectorAll('[data-smgoal]').forEach(b => b.addEventListener('click', () => editSummaryGoal(goalScope, goalWho)));
+  // Swipe pager (phones/tablets): remember the page across re-renders, keep the dots in sync.
+  const pager = wrap.querySelector('#smPager'), dots = [...wrap.querySelectorAll('[data-smdot]')];
+  if(pager && dots.length){
+    const pages = () => [pager.querySelector('.sm-pg1'), ...pager.querySelectorAll('.sm-pg')];
+    const setDot = i => dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    const goTo = (i, smooth) => { const el = pages()[i]; if(el && getComputedStyle(pager).display === 'flex') pager.scrollTo({ left: el.offsetLeft - pager.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); };
+    const saved = Math.min(dots.length - 1, window.__smPg || 0);
+    if(saved){ goTo(saved, false); setDot(saved); }
+    pager.addEventListener('scroll', () => {
+      const w = pager.clientWidth + 10; if(w <= 10) return;
+      const i = Math.max(0, Math.min(dots.length - 1, Math.round(pager.scrollLeft / w)));
+      if(i !== window.__smPg){ window.__smPg = i; setDot(i); }
+    }, { passive:true });
+    dots.forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.smdot), true)));
+  }
+  loadSummaryGoals();
   wrap.querySelectorAll('[data-sm-fold]').forEach(d => d.addEventListener('toggle', () => {
     window.__sumOpen = Object.assign({}, window.__sumOpen, { [d.dataset.smFold]: d.open });
   }));
@@ -6846,7 +7059,11 @@ function openJobStageMenu(e){
   drop.innerHTML=opts;
   $('stageSelector').parentNode.style.position='relative';
   $('stageSelector').parentNode.appendChild(drop);
-  drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();if(j.col!==d.dataset.stage&&!canMoveToStage(j,d.dataset.stage))return;j.col=d.dataset.stage;saveToStorage();drop.remove();renderBoard();renderDetailPanel()}));
+  drop.querySelectorAll('[data-stage]').forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();
+    // Same path as dragging the card: records "Stage changed" (notes line) and fires the
+    // stage alerts (Cliq "Claim Filed" / "Contract Signed", ready to invoice, Approved alert).
+    if(j.col!==d.dataset.stage) moveJobToStage(j.id,d.dataset.stage);
+    drop.remove();renderDetailPanel()}));
   setTimeout(()=>document.addEventListener('click',()=>drop.remove(),{once:true}),0);
 }
 window.openJobStageMenu = openJobStageMenu;
@@ -6936,8 +7153,8 @@ function dpTabBadgeHTML(tabId, j){
     const what = tabId === 'photos' ? (n===1?'photo':'photos') : (n===1?'file':'files');
     return `<span class="dp-tab-badge ok" title="${n} ${what} uploaded" aria-label="${n} ${what} uploaded">✓</span>`;
   }
-  if(tabId === 'contract' && j.contract && j.contract.sentForSignature){
-    return `<span class="dp-tab-badge wait" title="Sent for signature — signed copy not uploaded yet" aria-label="Sent for signature"></span>`;
+  if(tabId === 'contract' && j.contract && j.contract.sign && j.contract.sign.status === 'signed'){
+    return `<span class="dp-tab-badge ok" title="Contract signed" aria-label="Contract signed">✓</span>`;
   }
   return '';
 }
@@ -7114,10 +7331,10 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
           <div class="dp-card cust-card">
             <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="cc-val cc-name">${escapeHtml(j.name||'')}</span><button type="button" class="cc-copy" aria-label="Copy name" title="Copy name" onclick="copyToClipboard(${JSON.stringify(j.name||'').replace(/"/g,'&quot;')}, 'Name')"><i class="ti ti-copy" aria-hidden="true"></i></button></div>
             <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><a class="cc-val" href="${mapsHref(j.address)}" target="_blank" rel="noopener" title="Open in Maps">${escapeHtml(j.address||'—')}</a><button type="button" class="cc-copy" aria-label="Copy address" title="Copy address" onclick="copyToClipboard(${JSON.stringify(j.address||'').replace(/"/g,'&quot;')}, 'Address')"><i class="ti ti-copy" aria-hidden="true"></i></button></div>
-            <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.16 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>${j.phone && j.phone!=='—' ? `<a class="cc-val" href="tel:${escapeHtml(j.phone)}" title="Call">${escapeHtml(formatPhone(j.phone)||j.phone)}</a><button type="button" class="cc-copy" aria-label="Copy phone" title="Copy phone" onclick="copyToClipboard(${JSON.stringify(formatPhone(j.phone)||j.phone||'').replace(/"/g,'&quot;')}, 'Phone')"><i class="ti ti-copy" aria-hidden="true"></i></button>` : `<button type="button" class="cc-val cc-add" onclick="openEditJob('${j.id}')">Add phone</button><span class="cc-copy"></span>`}</div>
-            <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>${j.email && j.email!=='—' ? `<a class="cc-val" href="mailto:${escapeHtml(j.email)}" title="Send email">${escapeHtml(j.email)}</a><button type="button" class="cc-copy" aria-label="Copy email" title="Copy email" onclick="copyToClipboard(${JSON.stringify(j.email||'').replace(/"/g,'&quot;')}, 'Email')"><i class="ti ti-copy" aria-hidden="true"></i></button>` : `<button type="button" class="cc-val cc-add" onclick="openEditJob('${j.id}')">Add email</button><span class="cc-copy"></span>`}</div>
+            <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.16 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.11 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>${j.phone && j.phone!=='—' ? `<a class="cc-val" href="tel:${escapeHtml(j.phone)}" title="Call">${escapeHtml(formatPhone(j.phone)||j.phone)}</a><button type="button" class="cc-copy" aria-label="Copy phone" title="Copy phone" onclick="copyToClipboard(${JSON.stringify(formatPhone(j.phone)||j.phone||'').replace(/"/g,'&quot;')}, 'Phone')"><i class="ti ti-copy" aria-hidden="true"></i></button>` : `<button type="button" class="cc-val cc-add" onclick="openEditJob('${j.id}','phone')">Add phone</button><span class="cc-copy"></span>`}</div>
+            <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>${j.email && j.email!=='—' ? `<a class="cc-val" href="mailto:${escapeHtml(j.email)}" title="Send email">${escapeHtml(j.email)}</a><button type="button" class="cc-copy" aria-label="Copy email" title="Copy email" onclick="copyToClipboard(${JSON.stringify(j.email||'').replace(/"/g,'&quot;')}, 'Email')"><i class="ti ti-copy" aria-hidden="true"></i></button>` : `<button type="button" class="cc-val cc-add" onclick="openEditJob('${j.id}','email')">Add email</button><span class="cc-copy"></span>`}</div>
             <div class="cc-sep"></div>
-            <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum) ? `${(()=>{const h=(typeof carrierClaimsHref==='function')?carrierClaimsHref(j.carrier):'';return h?`<a class="cc-val" href="${h}" title="Call claims line"><strong>${escapeHtml(j.carrier||'')}</strong>${j.claimNum?`<span class="cc-mute">${j.carrier?' · ':''}#${escapeHtml(j.claimNum)}</span>`:''}</a>`:`<button type="button" class="cc-val cc-plain" title="Add the carrier's claims phone" onclick="openEditJob('${j.id}')"><strong>${escapeHtml(j.carrier||'')}</strong>${j.claimNum?`<span class="cc-mute">${j.carrier?' · ':''}#${escapeHtml(j.claimNum)}</span>`:''}</button>`;})()}${j.claimNum?`<button type="button" class="cc-copy" aria-label="Copy claim #" title="Copy claim #" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"><i class="ti ti-copy" aria-hidden="true"></i></button>`:'<span class="cc-copy"></span>'}` : `<button type="button" class="cc-val cc-add" onclick="openEditJob('${j.id}')">Add insurance info</button><span class="cc-copy"></span>`}</div>
+            <div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>${(j.carrier||j.claimNum) ? `${(()=>{const h=(typeof carrierClaimsHref==='function')?carrierClaimsHref(j.carrier):'';return h?`<a class="cc-val" href="${h}" title="Call claims line"><strong>${escapeHtml(j.carrier||'')}</strong>${j.claimNum?`<span class="cc-mute">${j.carrier?' · ':''}#${escapeHtml(j.claimNum)}</span>`:''}</a>`:`<button type="button" class="cc-val cc-plain" title="Add the carrier's claims phone" onclick="openEditJob('${j.id}','carrier')"><strong>${escapeHtml(j.carrier||'')}</strong>${j.claimNum?`<span class="cc-mute">${j.carrier?' · ':''}#${escapeHtml(j.claimNum)}</span>`:''}</button>`;})()}${j.claimNum?`<button type="button" class="cc-copy" aria-label="Copy claim #" title="Copy claim #" onclick="copyToClipboard(${JSON.stringify(j.claimNum||'').replace(/"/g,'&quot;')}, 'Claim #')"><i class="ti ti-copy" aria-hidden="true"></i></button>`:'<span class="cc-copy"></span>'}` : `<button type="button" class="cc-val cc-add" onclick="openEditJob('${j.id}','carrier')">Add insurance info</button><span class="cc-copy"></span>`}</div>
             ${(j.adjName||j.adjPhone)?`<div class="cc-row"><svg class="cc-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6"/><circle cx="18" cy="17" r="3"/></svg><span class="cc-val">${j.adjName?`<strong>${escapeHtml(j.adjName)}</strong>`:'<span class="cc-mute">Adjuster</span>'}${j.adjName&&j.adjPhone?'<span class="cc-mute"> · </span>':''}${j.adjPhone?`<a href="${adjusterTelHref(j.adjPhone)}">${escapeHtml(formatAdjusterPhone(j.adjPhone))}</a>`:''}</span>${j.adjPhone?`<button type="button" class="cc-copy" aria-label="Copy adjuster phone" title="Copy adjuster phone" onclick="copyToClipboard(${JSON.stringify(j.adjPhone||'').replace(/"/g,'&quot;')}, 'Adjuster phone')"><i class="ti ti-copy" aria-hidden="true"></i></button>`:'<span class="cc-copy"></span>'}</div>`:''}
           </div>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -9431,7 +9648,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     if(window.crmPacket && window.crmPacket.renderPacketTab) window.crmPacket.renderPacketTab(j);
     else body.innerHTML='<div style="padding:20px;color:var(--muted)">Packet module failed to load — refresh the page.</div>';
   } else if(activeTab==='contract'){
-    renderContractTab(j);
+    if(window.crmContract && window.crmContract.renderContractTab) window.crmContract.renderContractTab(j);
+    else body.innerHTML='<div style="padding:20px;color:var(--muted)">Contract module failed to load — refresh the page.</div>';
 
   } else if(activeTab==='contract'){
     if(!j.contracts) j.contracts=[];
@@ -10869,7 +11087,10 @@ function setInsuranceSection(on){
   if(toggle) toggle.style.background = on?'rgba(245,158,11,0.35)':'rgba(245,158,11,0.2)';
 }
 
-function openEditJob(id){
+// `focus` (optional): which field to jump to — 'phone', 'email', 'carrier'. The form
+// opens that section, scrolls to it and puts the cursor there.
+function openEditJob(id, focus){
+  window.__ajFocus = focus || null;
   const j=jobs.find(x=>x.id===id);
   if(!j)return;
   editingJobId=id;
@@ -10919,13 +11140,19 @@ function openEditJob(id){
 
   // Open insurance section if any insurance data is present
   const hasIns = j.carrier||j.policyNum||j.claimNum||j.dateOfLoss||j.rcv||j.deductible||j.recoverableDep||j.nonRecoverableDep||j.netClaim||j.adjName||j.adjPhone||j.inspDate||j.claimNotes||j.claimType||j.claimStatus;
-  setInsuranceSection(!!hasIns);
+  setInsuranceSection(!!hasIns || focus === 'carrier');
 
   // Set assign dropdown to the job's assigned user
   selectAssignUser(j.user || null);
 
   $('addJobModal').classList.add('open');
   setTimeout(() => { __ajSnapshot = snapshotAddJobForm(); }, 30);
+  // Classic layout: jump to the field (the new layout handles this itself and clears the flag)
+  setTimeout(() => {
+    const f = window.__ajFocus; window.__ajFocus = null;
+    const el = f && $({ phone:'f-phone', email:'f-email', carrier:'f-carrier' }[f]);
+    if (el) { el.scrollIntoView({ block:'center' }); el.focus(); }
+  }, 200);
 }
 
 function setSelectByText(sel,val){
@@ -13391,6 +13618,175 @@ function openScheduleSheet(jobId){
   requestAnimationFrame(() => bg.classList.add('open'));
 }
 window.openScheduleSheet = openScheduleSheet;
+
+// ── Appointments on a job: adjuster inspection + closing ─────────────────
+// Same sheet as Schedule Build (day tiles), plus a time. The inspection date
+// stays in j.inspDate (its own column); the times and the closing live in
+// j.appts = { inspTime:'09:30', closingDate:'2026-11-12', closingTime:'18:30' }
+// which syncs inside the job's contract JSON (__appts).
+const APPT_KINDS = {
+  initial:      { title:'Initial Inspection',  label:'Initial inspection',  color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
+  inspection:   { title:'Adjuster Inspection', label:'Adjuster inspection', color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
+  reinspection: { title:'Re-inspection',       label:'Re-inspection',       color:'#FB923C', times:['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'] },
+  closing:      { title:'Closing',             label:'Closing',             color:'#A78BFA', times:['10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30','19:00'] },
+  collection:   { title:'Collection',          label:'Collection',          color:'#34D399', times:['09:00','10:00','12:00','14:00','16:00','17:00','17:30','18:00','18:30'] },
+};
+// What a collection visit can pick up (ticked on the Collection sheet).
+const APPT_COLLECT = [
+  { id:'first',      label:'First insurance check' },
+  { id:'deductible', label:'Deductible',                amount: j => j.deductible },
+  { id:'final',      label:'Depreciation / final check', amount: j => j.recoverableDep },
+];
+function apptGet(j, kind){
+  const a = (j && j.appts) || {};
+  if(kind === 'inspection') return { date: (j && j.inspDate) || '', time: a.inspTime || '' };
+  return { date: a[kind + 'Date'] || '', time: a[kind + 'Time'] || '', items: Array.isArray(a[kind + 'Items']) ? a[kind + 'Items'] : [] };
+}
+function apptTimeLabel(t){
+  const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); if(!m) return '';
+  const h = +m[1];
+  return ((h % 12) || 12) + ':' + m[2] + (h < 12 ? ' AM' : ' PM');
+}
+// "Thu, Nov 12 · 9:30 AM" (or just the day when no time is set)
+function apptLabel(j, kind){
+  const a = apptGet(j, kind);
+  if(!a.date) return '';
+  return schedPillLabel(a.date.slice(0,10)) + (a.time ? ' · ' + apptTimeLabel(a.time) : '');
+}
+function apptSet(j, kind, date, time, items){
+  if(!j.appts || typeof j.appts !== 'object') j.appts = {};
+  if(kind === 'inspection'){ j.inspDate = date || ''; j.appts.inspTime = date ? (time || '') : ''; }
+  else {
+    j.appts[kind + 'Date'] = date || ''; j.appts[kind + 'Time'] = date ? (time || '') : '';
+    if(kind === 'collection') j.appts.collectionItems = date ? (items || []) : [];
+  }
+  const k = APPT_KINDS[kind];
+  const what = (kind === 'collection' && date) ? APPT_COLLECT.filter(c => (items || []).includes(c.id)).map(c => c.label).join(', ') : '';
+  logActivity(j, 'stage', date ? k.label + ' scheduled' : k.label + ' removed', date ? apptLabel(j, kind) + (what ? ' · ' + what : '') : '');
+  saveToStorage();
+  if(typeof openJobId !== 'undefined' && openJobId === j.id && typeof renderDetailPanel === 'function') try{ renderDetailPanel(); }catch(_){}
+  toast(date ? k.label + ': ' + apptLabel(j, kind) : k.label + ' removed');
+}
+window.apptLabel = apptLabel; window.apptGet = apptGet; window.APPT_KINDS = APPT_KINDS; window.apptTimeLabel = apptTimeLabel;
+
+function openApptSheet(jobId, kind){
+  const j = jobs.find(x => x.id === jobId);
+  const k = APPT_KINDS[kind];
+  if(!j || !k) return;
+  document.getElementById('schedSheetBg')?.remove();
+  if(typeof fetchWeatherForecast === 'function' && (!window.__wxByDate || (Date.now() - (window.__wxLoaded||0)) > WX_CACHE_MS)){
+    fetchWeatherForecast(false).then(()=>{ if(document.getElementById('schedSheetBg')) renderDays(); }).catch(()=>{});
+  }
+  const cur = apptGet(j, kind);
+  let selDate = cur.date ? cur.date.slice(0,10) : '';
+  let selTime = cur.time || '';
+  let selItems = (cur.items || []).slice();
+  const collectHtml = kind !== 'collection' ? '' : `
+      <div class="sched-label">What are you picking up</div>
+      <div class="sched-collect" id="schedCollect">${APPT_COLLECT.map(c => {
+        const amt = c.amount ? parseFloat(String(c.amount(j) || '').replace(/[^0-9.]/g, '')) : 0;
+        return `<label class="sched-pick"><input type="checkbox" value="${c.id}" ${selItems.includes(c.id) ? 'checked' : ''}><span>${escapeHtml(c.label)}</span>${amt > 0 ? `<b>$${amt.toLocaleString('en-US', { maximumFractionDigits: 0 })}</b>` : ''}</label>`;
+      }).join('')}</div>`;
+  const bg = document.createElement('div');
+  bg.id = 'schedSheetBg';
+  bg.className = 'sched-sheet-bg';
+  const addr = (j.address && j.address !== '—') ? j.address.split(',')[0] : '';
+  const who = kind === 'inspection' && j.adjName ? ' · ' + j.adjName : '';
+  bg.innerHTML = `
+    <div class="sched-sheet" role="dialog" aria-label="Schedule ${escapeHtml(k.label.toLowerCase())}" style="--appt:${k.color}">
+      <div class="sched-grab"></div>
+      <div class="sched-head">
+        <div style="min-width:0">
+          <div class="sched-title">${escapeHtml(k.title)}</div>
+          <div class="sched-sub">${escapeHtml(j.name||'—')}${addr?' · '+escapeHtml(addr):''}${escapeHtml(who)}</div>
+        </div>
+        <button class="icon-btn" id="schedClose" title="Close" aria-label="Close"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="schedCurrent"></div>${collectHtml}
+      <div class="sched-label"${collectHtml ? ' style="margin-top:12px"' : ''}>Pick a day</div>
+      <div class="sched-days" id="schedDays"></div>
+      <button class="sched-more" id="schedMore"><i class="ti ti-chevron-down"></i>Show 2 more weeks</button>
+      <div class="sched-label" style="margin-top:12px">Or choose another date</div>
+      <div class="sched-other"><input type="date" id="schedOtherDate" aria-label="Another date"></div>
+      <div class="sched-label" style="margin-top:12px">Time</div>
+      <div class="sched-times" id="schedTimes"></div>
+      <div class="sched-other" style="margin-top:8px"><input type="time" id="schedOtherTime" aria-label="Another time"></div>
+      <button id="schedApptSave" class="btn-primary sched-save"></button>
+    </div>`;
+  document.body.appendChild(bg);
+
+  let span = 14;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const other = bg.querySelector('#schedOtherDate');
+  const otherT = bg.querySelector('#schedOtherTime');
+  const save = bg.querySelector('#schedApptSave');
+
+  function renderCurrent(){
+    const el = bg.querySelector('#schedCurrent');
+    if(!cur.date){ el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div class="sched-current">
+        <i class="ti ti-calendar-event" style="font-size:18px;color:${k.color}"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#fff">${escapeHtml(apptLabel(j, kind))}</div>
+          <div style="font-size:10px;color:var(--muted)">Currently scheduled</div>
+        </div>
+        <button id="schedUnsched" class="sched-unsched"><i class="ti ti-calendar-off"></i>Remove</button>
+      </div>`;
+    el.querySelector('#schedUnsched').addEventListener('click', () => {
+      if(!confirm(`Remove the ${k.label.toLowerCase()} for ${j.name}?`)) return;
+      apptSet(j, kind, '', ''); close();
+    });
+  }
+  function renderDays(){
+    const wrap = bg.querySelector('#schedDays');
+    let html = '';
+    for(let i=0;i<span;i++){
+      const d = new Date(today); d.setDate(today.getDate()+i);
+      const key = calDateKey(d);
+      const w = (typeof getWeatherForDate === 'function') ? getWeatherForDate(key) : null;
+      const lvl = w ? classifyWeather(w).level : '';
+      const wxColor = lvl === 'bad' ? '#EF4444' : (lvl === 'caution' ? '#F59E0B' : '#34D399');
+      const wx = w ? `<span class="sched-wx" style="color:${wxColor}"><i class="ti ${weatherIconFor(w)}"></i>${w.precip!=null?Math.round(w.precip)+'%':''}</span>` : '<span class="sched-wx"></span>';
+      // other appointments of this kind already on that day (any job)
+      const n = jobs.filter(x => x.id !== j.id && (apptGet(x, kind).date || '').slice(0,10) === key).length;
+      html += `
+        <button class="sched-day${selDate===key?' cur':''}${d.getDay()===0?' sun':''}" data-key="${key}" aria-pressed="${selDate===key}">
+          <span class="sched-dow">${i===0?'Today':(i===1?'Tmrw':d.toLocaleDateString('en-US',{weekday:'short'}))}</span>
+          <span class="sched-date">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+          ${wx}
+          <span class="sched-cap">${n ? n + ' booked' : '&nbsp;'}</span>
+        </button>`;
+    }
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.sched-day').forEach(b => b.addEventListener('click', () => { selDate = b.dataset.key; other.value = selDate; renderDays(); renderSave(); }));
+  }
+  function renderTimes(){
+    const wrap = bg.querySelector('#schedTimes');
+    wrap.innerHTML = k.times.map(t => `<button class="sched-time${selTime===t?' cur':''}" data-t="${t}" aria-pressed="${selTime===t}">${apptTimeLabel(t)}</button>`).join('')
+      + `<button class="sched-time${!selTime?' cur':''}" data-t="" aria-pressed="${!selTime}">No time</button>`;
+    wrap.querySelectorAll('.sched-time').forEach(b => b.addEventListener('click', () => { selTime = b.dataset.t; otherT.value = selTime; renderTimes(); renderSave(); }));
+  }
+  function renderSave(){
+    save.disabled = !selDate;
+    save.textContent = selDate ? 'Save · ' + schedPillLabel(selDate) + (selTime ? ' · ' + apptTimeLabel(selTime) : '') : 'Pick a day';
+  }
+  function close(){ bg.classList.remove('open'); setTimeout(()=>bg.remove(), 180); }
+
+  bg.querySelector('#schedClose').addEventListener('click', close);
+  bg.addEventListener('click', e => { if(e.target === bg) close(); });
+  bg.querySelector('#schedMore').addEventListener('click', e => { span += 14; renderDays(); if(span >= 56) e.currentTarget.style.display = 'none'; });
+  other.value = selDate; other.min = calDateKey(today);
+  other.addEventListener('change', () => { selDate = other.value; renderDays(); renderSave(); });
+  otherT.value = selTime;
+  otherT.addEventListener('change', () => { selTime = otherT.value; renderTimes(); renderSave(); });
+  bg.querySelectorAll('#schedCollect input').forEach(cb => cb.addEventListener('change', () => { selItems = [...bg.querySelectorAll('#schedCollect input:checked')].map(x => x.value); }));
+  save.addEventListener('click', () => { if(!selDate) return; apptSet(j, kind, selDate, selTime, selItems); close(); });
+
+  renderCurrent(); renderDays(); renderTimes(); renderSave();
+  requestAnimationFrame(() => bg.classList.add('open'));
+}
+window.openApptSheet = openApptSheet;
 
 // Push a job's build date to Zoho Calendar as an all-day event. Stores the
 // returned event UID on the job so re-scheduling UPDATES the same event.
@@ -18778,313 +19174,11 @@ function renderQuoteTab(j){
 }
 
 // ═══════════════════════════════════════════════════════════
-// CONTRACT TAB — editable, checkable, e-signable contract
+// CONTRACT TAB — lives in crm-contract.js (fill out, sign in person, send a
+// signing link, upload a paper copy). The job's contract JSON and the
+// job_files kind 'signed_contract' are the storage; these helpers stay here
+// because other tabs and the file previewer use them.
 // ═══════════════════════════════════════════════════════════
-function renderContractTab(j){
-  // Draw inside the job window's tab body so the name, Pipeline/Stage and
-  // tab bar stay visible, like every other tab.
-  if(typeof activeTab !== 'undefined' && activeTab !== 'contract') return;
-  const panel = document.getElementById('dpBody');
-  if(!panel) return;
-  const scFiles = [
-    ...(Array.isArray(j.signedContractFiles) ? j.signedContractFiles : []).map((f,i)=>({f, col:'signedContractFiles', i, del:`signedContractDelete('${j.id}',${i})`})),
-    ...(Array.isArray(j.contracts) ? j.contracts : []).map((f,i)=>({f, col:'contracts', i, del:`contractFileDelete('${j.id}',${i})`})),
-  ];
-  // Contract form: open by default until a signed copy is on file.
-  const formOpen = (window._ctFormOpen && window._ctFormOpen[j.id] !== undefined) ? window._ctFormOpen[j.id] : false;   // starts closed
-  const c = j.contract || {};
-  // prefill from job
-  const pf = {
-    customer: c.customer || j.name || '',
-    street: c.street || (j.address ? j.address.split(',')[0] : ''),
-    citystatezip: c.citystatezip || (j.address ? j.address.split(',').slice(1).join(',').trim() : ''),
-    email: c.email || j.email || '',
-    cell: c.cell || j.phone || '',
-    rep: c.rep || j.salesman || j.assignedTo || '',
-    contractDate: c.contractDate || new Date().toISOString().slice(0,10),
-    buildDate: c.buildDate || '',
-    rcv: c.rcv || j.rcv || '',
-    netClaim: c.netClaim || '',
-    deductible: c.deductible || j.deductible || '',
-    depreciation: c.depreciation || j.recovDep || '',
-  };
-  const chk = c.checks || {};
-  const qty = c.qty || {};
-  const DEFAULT_ADDL = [
-    'Project manager on site',
-    'Protect landscaping + A/C unit',
-    'Tear-off, haul away, and disposal of all roofing debris.',
-    'Clean up + 3x magnetic sweeping',
-    '', '', '', ''
-  ];
-  const addl = (c.addl && c.addl.some(v=>v && v.trim())) ? c.addl : DEFAULT_ADDL.slice();
-  const isC = (k)=> chk[k] ? 'checked' : '';
-  const qv = (k)=> qty[k]!=null ? String(qty[k]).replace(/"/g,'&quot;') : '';
-
-  const box = (k,label)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> <span>${label}</span></label>`;
-  const boxQ = (k,label,qk,unit)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> <span>${label} <input type="text" class="ct-qty" data-q="${qk}" value="${qv(qk)}" placeholder=""> ${unit||''}</span></label>`;
-  const boxT = (k,label,qk)=>`<label class="ct-chk"><input type="checkbox" data-ck="${k}" ${isC(k)}> <span>${label} <input type="text" class="ct-qty ct-qty-wide" data-q="${qk}" value="${qv(qk)}"></span></label>`;
-
-  panel.innerHTML = `
-  <style>
-    .ct-wrap{padding:4px 2px 40px;color:var(--text)}
-    .ct-head{display:flex;align-items:center;gap:6px;margin-bottom:10px}
-    .ct-back{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px}
-    .ct-sec{background:var(--card,#161B26);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
-    .ct-sec h4{margin:0 0 10px;font-size:12px;letter-spacing:.04em;color:var(--brand);text-transform:uppercase}
-    .ct-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
-    .ct-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 16px}
-    .ct-fld{display:flex;flex-direction:column;gap:3px;margin-bottom:7px}
-    .ct-fld label{font-size:10px;color:var(--muted);font-weight:600}
-    .ct-fld input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:12px;font-family:inherit}
-    .ct-col h5{margin:0 0 6px;font-size:11px;color:var(--text);font-weight:700;border-bottom:1px solid var(--border);padding-bottom:3px}
-    .ct-chk{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:var(--text);padding:3px 0;cursor:pointer;line-height:1.3}
-    .ct-chk > span{flex:1;min-width:0}
-    .ct-chk input[type=checkbox]{accent-color:var(--brand);width:14px;height:14px;cursor:pointer;flex-shrink:0;margin-top:1px}
-    .ct-qty{width:46px;background:#1E253A;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px}
-    .ct-qty-wide{width:90px}
-    .ct-pay{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;max-width:360px}
-    .ct-pay label{font-size:11px;color:var(--text);font-weight:600;text-align:right}
-    .ct-pay input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:12px}
-    .ct-sign{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
-    .ct-sign-pad{border:1px dashed var(--border);border-radius:8px;background:#ffffff;height:120px;position:relative;touch-action:none}
-    .ct-sign-pad canvas{width:100%;height:100%;display:block;border-radius:8px}
-    .ct-sign-lbl{font-size:10px;color:var(--muted);margin-top:4px;display:flex;justify-content:space-between}
-    .ct-sigupload{display:inline-flex;align-items:center;gap:3px;color:var(--brand-light);cursor:pointer;font-size:10px;font-weight:600}
-    .ct-sigupload:hover{text-decoration:underline}
-    .ct-clear{background:none;border:none;color:var(--brand);font-size:10px;cursor:pointer}
-    .ct-addl{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
-    .ct-addl input{background:#1E253A;border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--text);font-size:11px;width:100%}
-    .ct-actions{display:flex;gap:10px;margin-top:16px}
-    .sc-zone{border:2px dashed var(--border);border-radius:10px;padding:20px 16px;text-align:center;transition:border-color .15s,background .15s}
-    .sc-zone.dragover{background:rgba(52,211,153,0.05);border-color:#34D399}
-    .sc-upload-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif}
-    .sc-upload-btn:hover{background:rgba(255,255,255,0.1);border-color:#34D399}
-    .sc-upload-btn.primary{background:#059669;border-color:#059669;color:#fff}
-    .sc-upload-btn.primary:hover{background:#047857}
-    .sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:4px}
-    .sc-thumb{position:relative;border-radius:9px;overflow:hidden;cursor:pointer;background:#141927;border:1px solid var(--border);transition:border-color .15s}
-    .sc-thumb:hover{border-color:#34D399}
-    .sc-thumb-img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#fff}
-    .sc-thumb-pdf{width:100%;aspect-ratio:1;position:relative;overflow:hidden;background:#fff}
-    .sc-thumb-pdf iframe{width:250%;height:250%;transform:scale(0.4);transform-origin:top left;border:none;pointer-events:none}
-    .sc-thumb-blank{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;color:var(--muted)}
-    .sc-thumb-bar{display:flex;align-items:center;gap:5px;padding:6px 8px;border-top:1px solid var(--border);background:#141927}
-    .sc-thumb-name{font-size:9px;font-weight:600;color:var(--brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
-    .sc-thumb-tag{position:absolute;left:5px;top:5px;background:rgba(5,150,105,0.92);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:999px;z-index:1}
-    .sc-thumb-del{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.8);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;padding:0;z-index:2}
-    .sc-thumb:hover .sc-thumb-del,.sc-thumb:focus-within .sc-thumb-del{opacity:1}
-    @media (pointer:coarse){.sc-thumb-del{opacity:1}}
-    .ct-form-toggle{display:flex;align-items:center;gap:9px;width:100%;margin:20px 0 12px;padding:11px 14px;border:1px solid var(--border);border-radius:9px;background:#141927;color:var(--brand);font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;font-family:'Barlow',sans-serif;cursor:pointer;transition:border-color .15s}
-    .ct-form-toggle:hover{border-color:var(--brand-mid)}
-    .ct-form-caret{font-size:10px;color:var(--muted);transition:transform .15s}
-    .ct-form-caret.open{transform:rotate(180deg)}
-
-    .ct-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}
-    .ct-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
-  </style>
-  <div class="ct-wrap">
-    ${(c.sentForSignature && c.sentForSignature.at) ? `<div style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.4);color:#A78BFA;border-radius:8px;padding:9px 12px;font-size:11px;margin-bottom:12px;display:flex;align-items:center;gap:7px"><i class="ti ti-circle-check"></i> Sent for signature to ${esc(c.sentForSignature.to||'')} on ${new Date(c.sentForSignature.at).toLocaleString()}</div>` : ''}
-
-    <!-- Contract uploads (same layout as the Checks tab) -->
-    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Contract Uploads — Signed Copy</div>
-    <div class="sc-zone"
-      ondragover="event.preventDefault();this.classList.add('dragover')"
-      ondragleave="this.classList.remove('dragover')"
-      ondrop="event.preventDefault();this.classList.remove('dragover');signedContractAddFiles('${j.id}', event.dataTransfer.files)">
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 8px;display:block;opacity:.6" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 15l2 2 4-4"/></svg>
-      <div style="font-size:12px;font-weight:600;color:var(--brand);margin-bottom:3px">Drag &amp; drop the signed contract here</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">PDF, JPG, or PNG — the executed/signed contract for your records</div>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <label class="sc-upload-btn primary">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Upload File
-          <input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="signedContractAddFiles('${j.id}', this.files)">
-        </label>
-        <button type="button" class="sc-upload-btn" onclick="ssScan('doc', f => signedContractAddFiles('${j.id}', f), { title:'Scan contract' })">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          Scan Contract
-        </button>
-      </div>
-    </div>
-
-    ${scFiles.length ? `
-    <div style="display:flex;align-items:center;gap:7px;margin:16px 0 10px">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Uploaded Files</div>
-      <span style="background:rgba(52,211,153,0.15);color:#34D399;border:1px solid rgba(52,211,153,0.3);border-radius:10px;font-size:10px;font-weight:700;padding:1px 7px">${scFiles.length}</span>
-    </div>
-    <div class="sc-grid">
-      ${scFiles.map(x=>{
-        const f = x.f || {};
-        const isPdf = !!f.isPdf || /\.pdf(\?|$)/i.test(f.name||'');
-        const url = f.url || f.dataUrl || '';
-        const thumb = !url
-          ? `<div class="sc-thumb-blank"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg></div>`
-          : (isPdf
-            ? `<div class="sc-thumb-pdf"><iframe src="${esc(url)}#toolbar=0&navpanes=0&scrollbar=0&view=FitH" title="${esc(f.name||'Contract')}" tabindex="-1"></iframe></div>`
-            : `<img class="sc-thumb-img" src="${esc(url)}" alt="${esc(f.name||'Contract')}" loading="lazy">`);
-        return `<div class="sc-thumb" onclick="previewJobFile('${x.col}',${x.i})" title="Preview ${esc(f.name||'contract')}">
-          ${x.col==='signedContractFiles' ? '<div class="sc-thumb-tag">Signed</div>' : ''}
-          ${thumb}
-          <button class="sc-thumb-del" onclick="event.stopPropagation();${x.del}" title="Delete" aria-label="Delete ${esc(f.name||'file')}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-          <div class="sc-thumb-bar"><div class="sc-thumb-name">${esc(f.name||'Contract')}</div></div>
-        </div>`;
-      }).join('')}
-    </div>` : ''}
-
-    <!-- Contract form (fill out / print / email / send for signature) -->
-    <button type="button" class="ct-form-toggle" onclick="toggleContractForm('${j.id}')" aria-expanded="${formOpen}">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
-      <span style="flex:1;text-align:left">Fill Out Contract</span>
-      <span style="font-size:10px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0">${formOpen?'Hide':'Print, email or send for signature'}</span>
-      <span class="ct-form-caret${formOpen?' open':''}">&#9662;</span>
-    </button>
-    ${formOpen ? `
-    <div class="ct-sec">
-      <h4>Customer &amp; Project Information</h4>
-      <div class="ct-grid2">
-        <div class="ct-fld"><label>Customer</label><input data-f="customer" value="${esc(pf.customer)}"></div>
-        <div class="ct-fld"><label>Cell #</label><input data-f="cell" value="${esc(pf.cell)}"></div>
-        <div class="ct-fld"><label>Street Address</label><input data-f="street" value="${esc(pf.street)}"></div>
-        <div class="ct-fld"><label>Representative</label><input data-f="rep" value="${esc(pf.rep)}"></div>
-        <div class="ct-fld"><label>City / State / Zip</label><input data-f="citystatezip" value="${esc(pf.citystatezip)}"></div>
-        <div class="ct-fld"><label>Contract Date</label><input data-f="contractDate" type="date" value="${esc(pf.contractDate)}"></div>
-        <div class="ct-fld"><label>Email Address</label><input data-f="email" value="${esc(pf.email)}"></div>
-        <div class="ct-fld"><label>Build Date</label><input data-f="buildDate" type="date" value="${esc(pf.buildDate)}"></div>
-      </div>
-    </div>
-
-    <div class="ct-sec">
-      <h4>Material &amp; Specifications</h4>
-      <div class="ct-grid4">
-        <div class="ct-col">
-          <h5>Shingles — CertainTeed</h5>
-          ${box('shingles_certainteed_1','CertainTeed')}${box('shingles_certainteed_2','Landmark')}${box('shingles_certainteed_3','Landmark Pro')}${box('shingles_certainteed_4','Landmark Climate Flex')}
-          ${box('shingles_certainteed_5','Presidential Shake')}${box('shingles_certainteed_6','Presidential Shake TL')}${box('shingles_certainteed_7','Carriage House')}${box('shingles_certainteed_8','Belmont')}
-          ${box('shingles_certainteed_9','Grand Manor')}${box('shingles_certainteed_10','Solaris')}
-          <h5 style="margin-top:10px">Shingles — Tamko</h5>
-          ${box('shingles_tamko_1','Tamko')}${box('shingles_tamko_2','Heritage')}${box('shingles_tamko_3','Titan XT')}${box('shingles_tamko_4','StormFighter FLEX')}
-          ${box('shingles_tamko_5','HailGuard')}${boxT('shingles_tamko_6','Other','shingles_other')}
-        </div>
-        <div class="ct-col">
-          <h5>Colors</h5>
-          ${box('colors_1','Burnt Sienna / Rustic Hickory')}${box('colors_2','Georgetown / Oxford Gray')}${box('colors_3','Cobblestone Gray / Antique Slate')}${box('colors_4','Thunderstorm Gray')}
-          ${box('colors_5','Espresso / Black Walnut')}${box('colors_6','Heather Blend / Natural Timber')}${box('colors_7','Moire Black / Rustic Black')}${box('colors_8','Silver Birch / Old English Pewter')}
-          ${box('colors_9','Resawn Shake / Rustic Cedar')}${box('colors_10','Weathered Wood')}${boxT('colors_11','Other','color_other')}
-        </div>
-        <div class="ct-col">
-          <h5>Start Strip</h5>
-          ${box('start_strip_1','Swift Start')}${box('start_strip_2','Tamko Starter Strip')}${boxT('start_strip_3','Other','start_strip_other')}
-          <h5 style="margin-top:10px">Underlayment</h5>
-          ${box('underlayment_1','Roof Runner')}${box('underlayment_2','Synthetic')}${box('underlayment_3','Radiant Barrier')}${boxT('underlayment_4','Other','underlayment_other')}
-          <h5 style="margin-top:10px">Ridge</h5>
-          ${box('ridge_1','Shadow Ridge')}${box('ridge_2','Cedar Crest')}${box('ridge_3','Tamko Heritage')}${box('ridge_4','Tamko Heritage Designer')}${box('ridge_5','Tamko Proline')}${boxT('ridge_6','Other','ridge_other')}
-        </div>
-        <div class="ct-col">
-          <h5>Valley</h5>
-          ${box('valley_1','Ice &amp; Watershield')}${box('valley_2','&quot;W&quot; Metal')}${box('valley_3','Valley Metal')}${boxT('valley_4','Other','valley_other')}
-          <h5 style="margin-top:10px">Drip Edge</h5>
-          ${box('drip_edge_1','Use Existing')}${box('drip_edge_2','Pre-Finished Edge')}${boxT('drip_edge_size_box','Material/Size','drip_edge_size')}
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">Color: ${box('de_color_black','Black')}${box('de_color_white','White')}${box('de_color_tan','Tan')}${box('de_color_brown','Brown')}${box('de_color_almond','Almond')}${box('de_color_bronze','Bronze')}${box('de_color_gray','Gray')}</div>
-        </div>
-      </div>
-      <div class="ct-grid4" style="margin-top:14px">
-        <div class="ct-col">
-          <h5>Ventilation</h5>
-          ${boxQ('vent_left_1','Ridge Vent','vent_ridge_lf','LF')}${boxQ('vent_left_2','Power Vents','vent_power_qty','QTY')}${boxQ('vent_left_3','Solar Vents','vent_solar_qty','QTY')}
-          ${boxQ('vent_right_1','Static','vent_static_qty','QTY')}${boxQ('vent_right_2','Turbine','vent_turbine_qty','QTY')}${boxT('vent_right_3','Color','vent_color_qty')}
-        </div>
-        <div class="ct-col">
-          <h5>Plumbing Stacks</h5>
-          ${boxQ('plumbing_1','3in1','plumbing_3in1_qty','')}${boxQ('plumbing_2','1-1/2&quot; Lead','plumbing_1_5_lead_qty','')}${boxQ('plumbing_3','2&quot; Lead','plumbing_2_lead_qty','')}${boxQ('plumbing_4','3&quot; Lead','plumbing_3_lead_qty','')}
-        </div>
-        <div class="ct-col">
-          <h5>Decking</h5>
-          ${box('decking_1','OSB')}${box('decking_2','Plywood')}${box('decking_3','Radiant Barrier')}${boxT('decking_4','Other','decking_other')}
-        </div>
-        <div class="ct-col"></div>
-      </div>
-    </div>
-
-    <div class="ct-sec">
-      <h4>Additional Items</h4>
-      <div class="ct-addl">
-        ${addl.map((v,i)=>`<input data-addl="${i}" value="${esc(v)}" placeholder="${i+1}.">`).join('')}
-      </div>
-    </div>
-
-    <div class="ct-sec">
-      <h4>Warranty</h4>
-      <div style="display:flex;flex-wrap:wrap;gap:14px">
-        ${box('warranty_standard','Standard')}${box('warranty_3star','3-Star (20-Yr Non-Prorated)')}${box('warranty_4star','4-Star (50-Yr Non-Prorated)')}${box('warranty_5star','5-Star')}
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px">
-        ${box('warranty_lifetime','Lifetime Workmanship')}${box('warranty_class3','Class 3 Impact + 160mph wind + 10yr Algae')}
-      </div>
-    </div>
-
-    <div class="ct-sec">
-      <h4>Payment Schedule</h4>
-      <div class="ct-pay">
-        <label>RCV Total Charge $</label><input data-f="rcv" value="${esc(pf.rcv)}">
-        <label>Net Claim Due $</label><input data-f="netClaim" value="${esc(pf.netClaim)}">
-        <label>Deductible Due $</label><input data-f="deductible" value="${esc(pf.deductible)}">
-        <label>Depreciation Due $</label><input data-f="depreciation" value="${esc(pf.depreciation)}">
-      </div>
-      <label class="ct-chk" style="margin-top:8px">${box('review_submitted','All reviews have been submitted')}</label>
-    </div>
-
-    <div class="ct-sec">
-      <h4>Authorization &amp; Signatures</h4>
-      <div class="ct-note" style="margin-bottom:10px">By executing this two-page master restoration agreement, the customer acknowledges receipt, review, and acceptance of both the work order specifications (Page 1) and the Terms &amp; Conditions (Page 2).</div>
-      <div class="ct-sign">
-        <div>
-          <div class="ct-sign-pad" data-sig="homeowner"><canvas></canvas></div>
-          <div class="ct-sign-lbl"><span>Homeowner Signature</span><span style="display:flex;gap:10px"><label class="ct-sigupload" title="Upload a photo of a signature on paper"><i class="ti ti-camera" style="font-size:12px"></i> Upload Photo<input type="file" accept="image/*" style="display:none" onchange="uploadSignaturePhoto('homeowner', this.files[0]); this.value='';"></label><button class="ct-clear" data-clear="homeowner">Clear</button></span></div>
-        </div>
-        <div>
-          <div class="ct-sign-pad" data-sig="rep"><canvas></canvas></div>
-          <div class="ct-sign-lbl"><span>StormShield Pro Representative</span><span style="display:flex;gap:10px"><label class="ct-sigupload" title="Upload a photo of a signature on paper"><i class="ti ti-camera" style="font-size:12px"></i> Upload Photo<input type="file" accept="image/*" style="display:none" onchange="uploadSignaturePhoto('rep', this.files[0]); this.value='';"></label><button class="ct-clear" data-clear="rep">Clear</button></span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="ct-actions">
-      <button class="ct-btn" style="background:#1E253A;color:var(--text);border:1px solid var(--border)" onclick="saveContract('${j.id}')"><i class="ti ti-device-floppy"></i> Save Contract</button>
-      <button class="ct-btn" style="background:var(--brand);color:#0F1117" onclick="printFilledContract('${j.id}')"><i class="ti ti-printer"></i> Print Filled Contract</button>
-      <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailContract('${j.id}')"><i class="ti ti-mail"></i> Email Contract</button>
-      <button class="ct-btn" style="background:#7C3AED;color:#fff" onclick="sendContractForSignature('${j.id}')"><i class="ti ti-signature"></i> Send for Signature</button>
-    </div>
-
-    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:20px 0 8px">Certificate of Completion</div>
-    <div class="ct-actions" style="margin-top:0">
-      <button class="ct-btn" style="background:#059669;color:#fff" onclick="printCertificateOfCompletion('${j.id}')"><i class="ti ti-certificate"></i> Print Certificate</button>
-      <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailCertificateOfCompletion('${j.id}')"><i class="ti ti-mail"></i> Email Certificate</button>
-    </div>
-
-    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:20px 0 8px">Lifetime Workmanship Warranty</div>
-    <div class="ct-actions" style="margin-top:0">
-      <button class="ct-btn" style="background:#B8912F;color:#fff" onclick="printWarrantyCertificate('${j.id}')"><i class="ti ti-shield-check"></i> Print Warranty</button>
-      <button class="ct-btn" style="background:#2563EB;color:#fff" onclick="emailWarrantyCertificate('${j.id}')"><i class="ti ti-mail"></i> Email Warranty</button>
-    </div>
-
-
-    <div class="ct-note">Electronic signatures capture the drawn signature plus a date/time stamp. Have your contract language reviewed by a Texas attorney to ensure it meets home-improvement and insurance-claim disclosure requirements.</div>
-    ` : ''}
-  </div>`;
-
-  if(formOpen) initContractSignPads(j);
-}
-
-// Open / close the contract form (redraws so signature pads size correctly).
-window.toggleContractForm = function(jobId){
-  const j = jobs.find(x => x.id === jobId); if(!j) return;
-  window._ctFormOpen = window._ctFormOpen || {};
-  const cur = window._ctFormOpen[jobId] !== undefined ? window._ctFormOpen[jobId] : false;
-  window._ctFormOpen[jobId] = !cur;
-  renderContractTab(j);
-};
-
 // Delete an older contract upload (kept in j.contracts) from the Contract tab.
 window.contractFileDelete = function(jobId, i){
   const j = jobs.find(x => x.id === jobId); if(!j || !Array.isArray(j.contracts)) return;
@@ -19097,446 +19191,6 @@ window.contractFileDelete = function(jobId, i){
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// Signature pad setup (draw with mouse/finger)
-function initContractSignPads(j){
-  const c = j.contract || {};
-  const sigs = c.signatures || {};
-  document.querySelectorAll('.ct-sign-pad').forEach(pad=>{
-    const key = pad.getAttribute('data-sig');
-    const canvas = pad.querySelector('canvas');
-    const rect = pad.getBoundingClientRect();
-    canvas.width = rect.width || 300; canvas.height = rect.height || 120;
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.lineCap='round'; ctx.lineJoin='round';
-    // restore saved signature
-    if(sigs[key] && sigs[key].img){
-      const img = new Image(); img.onload=()=>ctx.drawImage(img,0,0,canvas.width,canvas.height); img.src = sigs[key].img;
-    }
-    let drawing=false, last=null;
-    const pos = e=>{ const r=canvas.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left, y:t.clientY-r.top}; };
-    const start=e=>{ drawing=true; last=pos(e); e.preventDefault(); };
-    const move=e=>{ if(!drawing)return; const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; canvas.__dirty=true; e.preventDefault(); };
-    const end=()=>{ drawing=false; };
-    canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
-    canvas.addEventListener('touchstart',start,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); canvas.addEventListener('touchend',end);
-  });
-  document.querySelectorAll('.ct-clear').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const key=btn.getAttribute('data-clear');
-      const pad=document.querySelector(`.ct-sign-pad[data-sig="${key}"] canvas`);
-      if(pad){ pad.getContext('2d').clearRect(0,0,pad.width,pad.height); pad.__dirty=true; pad.__cleared=true; }
-    });
-  });
-}
-
-// Take a photo of a signature written on paper, remove the paper background,
-// and keep only the dark ink (as black on transparent). The result is drawn
-// onto the matching signature pad so it saves through the normal flow.
-function uploadSignaturePhoto(key, file){
-  if(!file){ return; }
-  const pad = document.querySelector(`.ct-sign-pad[data-sig="${key}"] canvas`);
-  if(!pad){ toast('Signature pad not found'); return; }
-  toast('Processing signature…');
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        // 1) Draw the photo to an offscreen canvas at a workable size.
-        const maxW = 900;
-        const scale = Math.min(1, maxW / img.width);
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const work = document.createElement('canvas');
-        work.width = w; work.height = h;
-        const wctx = work.getContext('2d');
-        wctx.drawImage(img, 0, 0, w, h);
-        const data = wctx.getImageData(0, 0, w, h);
-        const px = data.data;
-
-        // 2) Compute an adaptive brightness threshold (Otsu-lite): sample the
-        // luminance histogram and pick a cutoff between paper (bright) and ink (dark).
-        const hist = new Array(256).fill(0);
-        for(let i=0;i<px.length;i+=4){
-          const lum = (px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114) | 0;
-          hist[lum]++;
-        }
-        const total = w*h;
-        let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-        let sumB=0, wB=0, wF=0, maxVar=0, threshold=110;
-        for(let t=0;t<256;t++){
-          wB += hist[t]; if(wB===0) continue;
-          wF = total - wB; if(wF===0) break;
-          sumB += t*hist[t];
-          const mB = sumB/wB, mF = (sum - sumB)/wF;
-          const between = wB*wF*(mB-mF)*(mB-mF);
-          if(between > maxVar){ maxVar = between; threshold = t; }
-        }
-        // Bias the threshold a touch toward ink so faint pen still registers,
-        // but not so much that paper shadows get captured.
-        threshold = Math.min(200, Math.max(60, threshold * 0.92));
-
-        // 3) Build the output: ink pixels -> solid black, everything else -> transparent.
-        // Feather partial darkness near the threshold for smoother strokes.
-        const out = wctx.createImageData(w, h);
-        const o = out.data;
-        const soft = 28; // luminance range over which alpha ramps
-        for(let i=0;i<px.length;i+=4){
-          const lum = px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114;
-          let alpha = 0;
-          if(lum <= threshold - soft) alpha = 255;
-          else if(lum >= threshold) alpha = 0;
-          else alpha = Math.round(255 * (threshold - lum) / soft);
-          o[i] = 0; o[i+1] = 0; o[i+2] = 0; o[i+3] = alpha;
-        }
-        wctx.putImageData(out, 0, 0);
-
-        // 4) Crop to the ink bounding box so the signature fills the pad nicely.
-        let minX=w, minY=h, maxX=0, maxY=0, found=false;
-        for(let y=0;y<h;y++){
-          for(let x=0;x<w;x++){
-            if(o[(y*w+x)*4+3] > 30){
-              found=true;
-              if(x<minX)minX=x; if(x>maxX)maxX=x;
-              if(y<minY)minY=y; if(y>maxY)maxY=y;
-            }
-          }
-        }
-        if(!found){ toast('No signature detected — try a clearer photo'); return; }
-        const pad2 = 8;
-        minX=Math.max(0,minX-pad2); minY=Math.max(0,minY-pad2);
-        maxX=Math.min(w-1,maxX+pad2); maxY=Math.min(h-1,maxY+pad2);
-        const cw = maxX-minX+1, ch = maxY-minY+1;
-
-        // 5) Draw the cropped signature centered onto the pad (preserving aspect).
-        const ctx = pad.getContext('2d');
-        ctx.clearRect(0,0,pad.width,pad.height);
-        const s = Math.min(pad.width/cw, pad.height/ch) * 0.92;
-        const dw = cw*s, dh = ch*s;
-        const dx = (pad.width - dw)/2, dy = (pad.height - dh)/2;
-        ctx.drawImage(work, minX, minY, cw, ch, dx, dy, dw, dh);
-        pad.__dirty = true;
-        pad.__cleared = false;
-        toast('Signature added — review, then Save Contract');
-      } catch(e){
-        console.warn('signature photo processing failed', e);
-        toast('Could not process that image');
-      }
-    };
-    img.onerror = () => toast('Could not read that image');
-    img.src = reader.result;
-  };
-  reader.onerror = () => toast('Could not read the file');
-  reader.readAsDataURL(file);
-}
-window.uploadSignaturePhoto = uploadSignaturePhoto;
-
-function gatherContract(j){
-  const c = JSON.parse(JSON.stringify(j.contract || {}));
-  c.checks = c.checks || {}; c.qty = c.qty || {}; c.signatures = c.signatures || {};
-  document.querySelectorAll('[data-f]').forEach(el=>{ c[el.getAttribute('data-f')] = el.value; });
-  document.querySelectorAll('[data-ck]').forEach(el=>{ c.checks[el.getAttribute('data-ck')] = el.checked; });
-  document.querySelectorAll('[data-q]').forEach(el=>{ c.qty[el.getAttribute('data-q')] = el.value; });
-  c.addl = Array.from(document.querySelectorAll('[data-addl]')).map(el=>el.value);
-  // signatures
-  document.querySelectorAll('.ct-sign-pad').forEach(pad=>{
-    const key=pad.getAttribute('data-sig'); const canvas=pad.querySelector('canvas');
-    if(canvas.__cleared && !canvas.__dirty){ c.signatures[key]=null; return; }
-    if(canvas.__dirty){
-      // Check the canvas actually has strokes (non-transparent pixels). A blank/cleared
-      // pad must NOT save a signature (which would wrongly draw a date next to it).
-      let hasInk = false;
-      try {
-        const chk = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
-        for(let i=3;i<chk.length;i+=4){ if(chk[i] > 10){ hasInk = true; break; } }
-      } catch(e){ hasInk = true; } // if we can't check, assume signed
-      if(!hasInk){ c.signatures[key] = null; return; }
-      // The pad draws white strokes (visible on the dark pad). For the PDF we need
-      // black strokes on transparent, so recolor white pixels -> black before saving.
-      let imgData;
-      try {
-        const tmp = document.createElement('canvas');
-        tmp.width = canvas.width; tmp.height = canvas.height;
-        const tctx = tmp.getContext('2d');
-        tctx.drawImage(canvas, 0, 0);
-        const d = tctx.getImageData(0, 0, tmp.width, tmp.height);
-        const px = d.data;
-        for(let i=0;i<px.length;i+=4){
-          if(px[i+3] > 10){ px[i]=0; px[i+1]=0; px[i+2]=0; }
-        }
-        tctx.putImageData(d, 0, 0);
-        imgData = tmp.toDataURL('image/png');
-      } catch(e){
-        imgData = canvas.toDataURL('image/png');
-      }
-      c.signatures[key] = { img: imgData, signedAt: new Date().toISOString() };
-    }
-  });
-  return c;
-}
-
-window.saveContract = function(jobId){
-  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
-  j.contract = gatherContract(j);
-  if(typeof saveToStorage==='function') saveToStorage();
-  if(typeof toast==='function') toast('Contract saved');
-};
-
-// Build a flat { pdf_field_name: value } object from contract data,
-// matching the fillable PDF's field names (used for Verdocs prefill).
-function buildContractFields(c){
-  c = c || {};
-  const f = {};
-  // text fields
-  const tmap = {
-    customer:c.customer, street_address:c.street, city_state_zip:c.citystatezip,
-    email_address:c.email, cell_number:c.cell, representative:c.rep,
-    contract_date: formatContractDate(c.contractDate), build_date: formatContractDate(c.buildDate),
-    rcv_total_charge:c.rcv, net_claim_amount_due:c.netClaim,
-    deductible_amount_due:c.deductible, depreciation_amount_due:c.depreciation,
-  };
-  for(const k in tmap){ if(tmap[k]!=null && tmap[k]!=='') f[k]=String(tmap[k]); }
-  // additional items
-  (c.addl||[]).forEach((v,i)=>{ if(v) f['additional_item_'+(i+1)]=String(v); });
-  // qty/other text
-  const qty=c.qty||{};
-  for(const qk in (window.CONTRACT_QTY_MAP||{})){ if(qty[qk]) f[(window.CONTRACT_QTY_MAP||{})[qk]]=String(qty[qk]); }
-  // checkboxes (keys already match PDF field names)
-  const ck=c.checks||{};
-  for(const k in ck){ if(ck[k]===true) f[k]=true; }
-  return f;
-}
-
-window.sendContractForSignature = async function(jobId){
-  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
-  j.contract = gatherContract(j);
-  if(typeof saveToStorage==='function') saveToStorage();
-  const c = j.contract;
-  const homeownerName = (c.customer||j.name||'').trim();
-  const homeownerEmail = (c.email||j.email||'').trim();
-  if(!homeownerName || !homeownerEmail){
-    alert('Need the customer name and email before sending for signature. Fill them in the Customer Information section.');
-    return;
-  }
-  if(!confirm(`Send this contract to ${homeownerName} (${homeownerEmail}) for electronic signature via Verdocs?`)) return;
-
-  if(typeof toast==='function') toast('Preparing filled contract…');
-  try {
-    // Fill the PDF (same as Print Filled Contract), then send it to Verdocs
-    const pdfBytes = await fillContractPDF(j);
-    if(!pdfBytes){ alert('Could not generate the filled contract PDF.'); return; }
-    // convert to base64
-    let binary = '';
-    const chunk = 0x8000;
-    for(let i=0;i<pdfBytes.length;i+=chunk){
-      binary += String.fromCharCode.apply(null, pdfBytes.subarray(i, i+chunk));
-    }
-    const pdfBase64 = btoa(binary);
-
-    if(typeof toast==='function') toast('Sending contract for signature…');
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-contract`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_ANON}`},
-      body: JSON.stringify({
-        homeownerName,
-        homeownerEmail,
-        repName: (c.rep||j.salesman||'').trim() || undefined,
-        envelopeName: `StormShield Contract - ${homeownerName}`,
-        pdfBase64,
-      }),
-    });
-    const data = await res.json();
-    if(data && data.ok){
-      // record that it was sent
-      c.sentForSignature = { at:new Date().toISOString(), envelopeId:(data.envelope&&data.envelope.id)||null, to:homeownerEmail };
-      j.contract = c;
-      if(typeof saveToStorage==='function') saveToStorage();
-      if(typeof renderContractTab==='function') renderContractTab(j);
-      alert(`Contract sent to ${homeownerName} for signature.\n\nThey'll receive a Verdocs email to sign. You'll get a copy at the office email when complete.`);
-    } else {
-      console.error('Send contract error:', data);
-      alert('Could not send the contract.\n\n'+(data && (data.detail||data.error) || 'Unknown error')+'\n\nCheck that the customer email is valid and try again.');
-    }
-  } catch(e){
-    console.error(e);
-    alert('Network error sending the contract. Please try again.');
-  }
-};
-
-window.emailContract = function(jobId){
-  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
-  j.contract = gatherContract(j);
-  if(typeof saveToStorage==='function') saveToStorage();
-  const c = j.contract;
-  const to = (c.email||'').trim();
-  const customer = c.customer || j.name || 'Customer';
-  const subject = encodeURIComponent(`Your StormShield Pro Roofing Contract — ${customer}`);
-  const body = encodeURIComponent(
-`Hi ${customer},
-
-Please find your StormShield Pro Roofing & Construction contract attached for your review and signature.
-
-A few notes:
-- The contract covers the materials, specifications, and payment schedule we discussed.
-- Page 2 contains the full terms and conditions.
-- If you have any questions before signing, just reply to this email or call us at (832) 910-7735.
-
-Thank you for choosing StormShield Pro Roofing.
-
-StormShield Pro Roofing & Construction
-12111 Forest Sage Ln, Pearland, TX 77584
-(832) 910-7735 | office@stormshieldproroofing.com`
-  );
-
-  // Browsers can't auto-attach a file to a mailto link, so:
-  // 1) generate the PDF (print dialog -> Save as PDF)
-  // 2) open the pre-filled email; user attaches the saved PDF
-  const proceed = confirm(
-    "To email the contract:\n\n" +
-    "1. The contract PDF will open in a print window — choose \"Save as PDF\".\n" +
-    "2. Your email app will open with a message ready for " + (to||"the customer") + ".\n" +
-    "3. Attach the PDF you just saved, then send.\n\n" +
-    (to ? "" : "NOTE: This job has no customer email on file — you'll need to type it in.\n\n") +
-    "Tip: For remote e-signature, attach the PDF in your e-sign tool (Dropbox Sign / Verdocs) instead.\n\n" +
-    "Continue?"
-  );
-  if(!proceed) return;
-
-  // open PDF for saving
-  printContract(jobId);
-  // then open email draft shortly after
-  setTimeout(()=>{
-    window.location.href = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
-  }, 1200);
-  logContact(jobId, 'client', 'email', 'Contract emailed for signature');
-};
-
-// URL of the blank fillable contract template (host alongside index.html on GitHub Pages)
-const CONTRACT_TEMPLATE_URL = 'StormShield_Contract_FILLABLE.pdf';
-window.CONTRACT_FIELD_COORDS = {"shingles_certainteed_1":[41.1,785.6,7.4,7.4,1],"shingles_certainteed_2":[41.1,773,7.4,7.4,1],"shingles_certainteed_4":[41.1,747.8,7.4,7.4,1],"shingles_certainteed_3":[41.1,760.4,7.4,7.4,1],"shingles_certainteed_6":[41.1,722.5,7.4,7.4,1],"shingles_certainteed_5":[41.1,735.1,7.4,7.4,1],"shingles_certainteed_7":[41.1,710,7.4,7.4,1],"shingles_certainteed_8":[41.1,697.4,7.4,7.4,1],"shingles_certainteed_10":[41,672.1,7.4,7.4,1],"shingles_certainteed_9":[41.1,684.7,7.4,7.4,1],"shingles_tamko_1":[177.1,785.8,7.4,7.4,1],"shingles_tamko_2":[177.1,773.2,7.4,7.4,1],"shingles_tamko_4":[177.1,748,7.4,7.4,1],"shingles_tamko_3":[177.1,760.6,7.4,7.4,1],"shingles_tamko_6":[177.1,722.7,7.4,7.4,1],"shingles_tamko_5":[177.1,735.4,7.4,7.4,1],"colors_1":[318.4,785.7,7.4,7.4,1],"colors_2":[318.3,773.1,7.4,7.4,1],"colors_4":[318.3,747.9,7.4,7.4,1],"colors_3":[318.4,760.5,7.4,7.4,1],"colors_6":[318.3,722.6,7.4,7.4,1],"colors_5":[318.4,735.2,7.4,7.4,1],"colors_7":[318.4,710.1,7.4,7.4,1],"colors_8":[318.3,697.4,7.4,7.4,1],"colors_10":[318.3,672.2,7.4,7.4,1],"colors_9":[318.3,684.8,7.4,7.4,1],"colors_11":[318.3,659.6,7.4,7.4,1],"valley_1":[316.2,615.6,7.4,7.4,1],"valley_2":[316.2,603.2,7.4,7.4,1],"valley_4":[316.3,577.8,7.4,7.4,1],"valley_3":[316.3,590.4,7.4,7.4,1],"drip_edge_2":[447.9,602.2,7.4,7.4,1],"ridge_1":[176.1,615.7,7.4,7.4,1],"ridge_2":[176,603.1,7.4,7.4,1],"ridge_4":[176,577.9,7.4,7.4,1],"ridge_3":[176,590.5,7.4,7.4,1],"ridge_5":[176.1,565.2,7.4,7.4,1],"plumbing_1":[318,521.3,7.4,7.4,1],"plumbing_2":[318,508.8,7.4,7.4,1],"plumbing_4":[318.1,483.6,7.4,7.4,1],"plumbing_3":[318,496.1,7.4,7.4,1],"decking_1":[449.4,521.4,7.4,7.4,1],"decking_2":[449.4,508.8,7.4,7.4,1],"decking_4":[449.4,483.6,7.4,7.4,1],"decking_3":[449.4,496.2,7.4,7.4,1],"vent_right_1":[177,521.4,7.4,7.4,1],"vent_right_2":[177,508.8,7.4,7.4,1],"vent_right_3":[177,496.3,7.4,7.4,1],"vent_left_1":[41.1,521.3,7.4,7.4,1],"vent_left_2":[41.1,508.7,7.4,7.4,1],"vent_left_3":[41.1,496,7.4,7.4,1],"warranty_4star":[217.4,350.4,7.4,7.4,1],"warranty_class3":[140.4,337.5,7.4,7.4,1],"warranty_3star":[91,350.2,7.4,7.4,1],"warranty_standard":[33.1,350.3,7.4,7.4,1],"warranty_lifetime":[33,337.3,7.4,7.4,1],"warranty_5star":[344.1,350.3,7.4,7.4,1],"review_submitted":[361.8,269.7,7.4,7.4,1],"underlayment_1":[41.1,615.6,7.4,7.4,1],"underlayment_2":[41.1,603,7.4,7.4,1],"underlayment_4":[41.1,577.8,7.4,7.4,1],"underlayment_3":[41.1,590.5,7.4,7.4,1],"start_strip_1":[453.7,783.8,7.4,7.4,1],"start_strip_2":[453.7,771.2,7.4,7.4,1],"start_strip_3":[453.7,758.6,7.4,7.4,1],"ridge_6":[176,552.6,7.4,7.4,1],"de_color_black":[448.4,564,7.4,7.4,1],"de_color_brown":[482.4,563.8,7.4,7.4,1],"de_color_bronze":[513.4,563.6,7.4,7.4,1],"de_color_tan":[541.4,563.5,7.4,7.4,1],"authorized_homeowner_signature":[29.7,84,150,22,0],"representative_signature":[29.2,24.3,150,22,0],"homeowner_signature_date":[330.8,83.2,150,22,0],"representative_signature_date":[330.8,25.1,150,22,0],"rcv_total_charge":[232.6,288.7,90.7,12.8,0],"net_claim_amount_due":[232.6,275.7,90.7,12.8,0],"deductible_amount_due":[232.5,262.3,90.7,12.8,0],"depreciation_amount_due":[232.8,248.9,90.7,12.8,0],"additional_item_1":[43.3,431.5,253,12.8,0],"additional_item_2":[43.3,417.9,253,12.8,0],"additional_item_3":[43.3,404.6,253,12.8,0],"additional_item_4":[43.3,391.1,253,12.8,0],"additional_item_5":[312.1,431.6,253,12.8,0],"additional_item_6":[312.1,418.1,253,12.8,0],"additional_item_7":[312.1,404.7,253,12.8,0],"additional_item_8":[312.1,391.2,253,12.8,0],"customer":[117.6,907.5,247.7,13.2,0],"street_address":[117.3,889.3,247.7,13.2,0],"city_state_zip":[117.5,870.2,247.7,13.2,0],"email_address":[117.2,852.1,247.7,13.2,0],"cell_number":[459.1,907,122.5,13.2,0],"representative":[459.4,888.8,122.5,13.2,0],"contract_date":[459.5,870.2,122.5,13.2,0],"build_date":[459.7,852,122.5,13.2,0],"start_strip_other":[487.6,756.4,81,13.7,0],"color_other":[348.6,657.2,60.8,12.6,0],"shingles_other":[206.2,722.1,65.1,12.1,0],"underlayment_other":[69.1,576,74.4,13.7,0],"ridge_other":[204.8,550.9,66.8,13.2,0],"drip_edge_size":[344.3,576.8,63.5,13.7,0],"vent_ridge_lf":[87.6,520.4,39.1,11.5,0],"vent_power_qty":[91.3,508.9,34.3,11.5,0],"vent_solar_qty":[88.9,496.7,36.5,11.5,0],"vent_static_qty":[215.7,520.8,39.1,11.5,0],"vent_turbine_qty":[219.3,508.9,34.3,11.5,0],"vent_color_qty":[216.9,497.1,55.7,11.5,0],"plumbing_3in1_qty":[368.8,520.3,39.1,11.5,0],"plumbing_1_5_lead_qty":[368.9,508.6,39.1,11.5,0],"plumbing_2_lead_qty":[368.8,496.9,39.1,11.5,0],"plumbing_3_lead_qty":[368.8,485.1,39.1,11.5,0],"decking_other":[478.3,483.2,85.3,11.5,0],"drip_edge_1":[448,614.6,7.4,7.4,1],"de_color_white":[448.4,576.4,7.4,7.4,1],"de_color_almond":[482.4,576.2,7.4,7.4,1],"de_color_gray":[513.4,576,7.4,7.4,1]};
-
-// QTY text fields: CRM qty key -> PDF text field name
-window.CONTRACT_QTY_MAP = {
-  vent_ridge_lf:'vent_ridge_lf', vent_power_qty:'vent_power_qty', vent_solar_qty:'vent_solar_qty',
-  vent_static_qty:'vent_static_qty', vent_turbine_qty:'vent_turbine_qty', vent_color_qty:'vent_color_qty',
-  plumbing_3in1_qty:'plumbing_3in1_qty', plumbing_1_5_lead_qty:'plumbing_1_5_lead_qty',
-  plumbing_2_lead_qty:'plumbing_2_lead_qty', plumbing_3_lead_qty:'plumbing_3_lead_qty',
-  shingles_other:'shingles_other', color_other:'color_other', start_strip_other:'start_strip_other',
-  underlayment_other:'underlayment_other', ridge_other:'ridge_other', valley_other:'valley_other',
-  drip_edge_size:'drip_edge_size', decking_other:'decking_other',
-};
-
-// Build the filled PDF bytes from a job's contract data. Returns Uint8Array.
-// Maps CRM contract keys -> the REAL fillable-PDF field names (AcroForm).
-// Filling by field name (not coordinate stamping) means checkboxes can never
-// land in the wrong spot -- the field name IS the target.
-window.PDF_CHECKBOX_MAP = {
- 'shingles_certainteed_1':'CERTAINTEED','shingles_certainteed_2':'Landmark',
- 'shingles_certainteed_3':'Landmark Pro','shingles_certainteed_4':'Landmark limate Fle',
- 'shingles_certainteed_5':'Presidential Shake','shingles_certainteed_6':'Presidential Shake TL',
- 'shingles_certainteed_7':'arriage House','shingles_certainteed_8':'elmont',
- 'shingles_certainteed_9':'rand anor','shingles_certainteed_10':'Solaris',
- 'shingles_tamko_1':'T','shingles_tamko_2':'Heritage','shingles_tamko_3':'Titan XT',
- 'shingles_tamko_4':'StormFighter  FLEX','shingles_tamko_5':'Hailuard','shingles_tamko_6':'Other_2',
- 'colors_1':'Burnt Sienna y 2usti  Hi kor','colors_2':'Georgetown y   ord Gray',
- 'colors_3':'Cobblestone Gray  Antique Slate','colors_4':'Thunderstorm ra',
- 'colors_5':'E presso y la k 7alnut','colors_6':'Heather Blend y atural Tim er',
- 'colors_7':'oire la k y 2usti  la k','colors_8':'Sil er ir h y ld English Pe ter',
- 'colors_9':'2ese n Shake  2usti  edar','colors_10':'Weathered Wood','colors_11':'Other_3',
- 'start_strip_1':'Swift Start','start_strip_2':'Tamko Starter Strip',
- 'underlayment_1':'Roof Runner','underlayment_2':'Synthetic','underlayment_3':'Radiant Barrier','underlayment_4':'Other',
- 'ridge_1':'Shadow Ridge','ridge_2':'Cedar Crest','ridge_3':'Tamko Heritage',
- 'ridge_4':'Tamko Heritage Designer','ridge_5':'Tamko Proline',
- 'valley_1':'ICE WATERSHIELD','valley_2':'W Metal','valley_3':'Valley Metal','valley_4':'ther_2',
- 'drip_edge_1':'Use Existing','drip_edge_2':'PreFinished Edge Material Size',
- 'de_color_black':'Drip Edge Black','de_color_white':'Drip Edge White','de_color_brown':'Drip Edge Brown',
- 'de_color_almond':'Drip Edge Almond','de_color_bronze':'Drip Edge Bronze','de_color_gray':'Drip Edge Gray','de_color_tan':'Drip Edge Tan',
- 'vent_left_1':'Ridge Vent','vent_left_2':'Power Vents','vent_left_3':'Solar Vents',
- 'vent_right_1':'Static','vent_right_2':'Turbine','vent_right_3':'Color',
- 'plumbing_1':'3in1','plumbing_2':'112 Lead','plumbing_3':'2 Lead','plumbing_4':'3 Lead',
- 'decking_1':'OSB','decking_2':'PLYWOOD','decking_3':'Radiant Barrier_2','decking_4':'Other_5',
- 'warranty_standard':'Standard Warranty','warranty_3star':'3 star warranty','warranty_4star':'4 star warranty',
- 'warranty_5star':'5 star warranty','warranty_lifetime':'Lifetime Workmanship Warranty','warranty_class3':'tamko warranty',
-};
-window.PDF_TEXT_MAP = {
- 'customer':'Customer','street':'Street Address','citystatezip':'City / State / Zip',
- 'email':'Email Address','cell':'Cell #','rep':'Representative',
-};
-window.PDF_QTY_MAP = {
- 'vent_ridge_lf':'LF','vent_power_qty':'QTY','vent_solar_qty':'QTY_2',
- 'vent_static_qty':'QTY_3','vent_turbine_qty':'QTY_4','vent_color_qty':'undefined_3',
- 'plumbing_3in1_qty':'PLUMBING STACKS','plumbing_1_5_lead_qty':'1','plumbing_2_lead_qty':'2','plumbing_3_lead_qty':'3',
- 'shingles_other':'undefined_2','color_other':'undefined_4','start_strip_other':'Other_4',
- 'underlayment_other':'undefined','ridge_other':'ther','valley_other':'undefined_5',
- 'drip_edge_size':'Drip Edge Size','decking_other':'undefined_6',
-};
-
-async function fillContractPDF(j){
-  if(!window.PDFLib){ alert('PDF library not loaded yet. Please wait a moment and try again.'); return null; }
-  const c = j.contract || {};
-  const ck = c.checks || {}, qty = c.qty || {}, addl = c.addl || [];
-  let bytes;
-  try {
-    const resp = await fetch(CONTRACT_TEMPLATE_URL);
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
-    bytes = await resp.arrayBuffer();
-  } catch(e){
-    alert('Could not load the contract template ('+CONTRACT_TEMPLATE_URL+'). Make sure the fillable PDF is uploaded to the same folder as the CRM on GitHub.');
-    return null;
-  }
-  const { PDFDocument, StandardFonts } = window.PDFLib;
-  const pdf = await PDFDocument.load(bytes);
-  const form = pdf.getForm();
-  const CBMAP = window.PDF_CHECKBOX_MAP, TXMAP = window.PDF_TEXT_MAP, QMAP = window.PDF_QTY_MAP;
-  const setText = (pdfName, val)=>{
-    if(val==null || val==='' || !pdfName) return;
-    try { form.getTextField(pdfName).setText(String(val)); } catch(e){}
-  };
-  const setCheck = (pdfName)=>{
-    if(!pdfName) return;
-    try { form.getCheckBox(pdfName).check(); } catch(e){}
-  };
-  for(const k in TXMAP) setText(TXMAP[k], c[k]);
-  setText('Contract Date', formatContractDate(c.contractDate));
-  setText('Build Date', formatContractDate(c.buildDate));
-  setText('Replacement Cost Value', c.rcv);
-  setText('net claim', c.netClaim);
-  setText('deductible', c.deductible);
-  setText('depreciation', c.depreciation);
-  (addl||[]).forEach((v,i)=>{ if(v) setText('Additional Item '+(i+1), v); });
-  for(const qk in QMAP){ if(qty[qk]) setText(QMAP[qk], qty[qk]); }
-  let checkedCount = 0;
-  for(const key in ck){
-    if(ck[key]===true){ setCheck(CBMAP[key]); checkedCount++; }
-  }
-  const sigs = c.signatures || {};
-  const page = pdf.getPages()[0];
-  const fmtSigDate = (iso)=>{ try{ const d=new Date(iso); return ('0'+(d.getMonth()+1)).slice(-2)+'/'+('0'+d.getDate()).slice(-2)+'/'+d.getFullYear(); }catch(e){ return ''; } };
-  const drawSigAt = async (sigKey, x, y, dateField)=>{
-    const s = sigs[sigKey];
-    if(!s || !s.img || typeof s.img !== 'string' || s.img.length < 200) return;
-    try {
-      const png = await pdf.embedPng(s.img);
-      const dims = png.scale(Math.min(180/png.width, 40/png.height));
-      page.drawImage(png, { x, y, width: dims.width, height: dims.height });
-      if(s.signedAt && dateField) setText(dateField, fmtSigDate(s.signedAt));
-    } catch(e){}
-  };
-  await drawSigAt('homeowner', 30, 84, 'Date10_af_date');
-  await drawSigAt('rep', 30, 25, 'Date11_af_date');
-  try { form.flatten(); } catch(e){ console.warn('[contract] flatten failed', e); }
-  console.log('[contract] filled', checkedCount, 'checks by field name; customer=', c.customer||'(empty)');
-  return await pdf.save();
-}
-
-function formatContractDate(d){
-  if(!d) return '';
-  // input is yyyy-mm-dd; output mm/dd/yyyy
-  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${m[2]}/${m[3]}/${m[1]}` : d;
-}
-
-// Fill the PDF and open it in a new tab for printing / tablet signing
 window.signedContractAddFiles = async function(jobId, files){
   const j = jobs.find(x => x.id === jobId); if(!j) return;
   const pending = Array.from(files || []); if(!pending.length) return;
@@ -19561,143 +19215,6 @@ window.signedContractDelete = async function(jobId, i){
   if(typeof renderDetailPanel === 'function') renderDetailPanel();
 };
 
-window.printFilledContract = async function(jobId){
-  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
-  j.contract = gatherContract(j);
-  if(typeof saveToStorage==='function') saveToStorage();
-  if(typeof toast==='function') toast('Generating filled contract…');
-  const out = await fillContractPDF(j);
-  if(!out) return;
-  const blob = new Blob([out], {type:'application/pdf'});
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, '_blank');
-  if(w){ w.addEventListener('load', ()=>{ try{ w.focus(); }catch(e){} }); }
-  if(typeof toast==='function') toast('Filled contract ready');
-};
-
-window.printContract = function(jobId){
-  const j = (window.jobs||[]).find(x=>String(x.id)===String(jobId)); if(!j) return;
-  j.contract = gatherContract(j);
-  if(typeof saveToStorage==='function') saveToStorage();
-  const c = j.contract; const ck=c.checks||{}; const q=c.qty||{};
-  const on=(k)=>ck[k]?'☑':'☐';
-  const qt=(k)=>q[k]?(' '+q[k]):'';
-  const row=(items)=>items.map(x=>`<span style="display:inline-block;width:48%;font-size:10px;padding:1px 0">${x}</span>`).join('');
-  const sig=(k)=> (c.signatures&&c.signatures[k]&&c.signatures[k].img) ? `<img src="${c.signatures[k].img}" style="height:46px">` : '';
-  const sigDate=(k)=> (c.signatures&&c.signatures[k]&&c.signatures[k].signedAt) ? new Date(c.signatures[k].signedAt).toLocaleDateString() : '';
-
-  const terms = [
-    ['Contractual Payment Terms','Payment is due in full to Storm Shield Pro Roofing & Construction in Houston, Texas immediately upon completion of the work. For projects extending beyond thirty (30) days on site, progress billing for materials delivered and work completed is due and payable on the tenth (10th) day of each calendar month following performance. Customer obligations remain absolute regardless of invoice receipt.'],
-    ['Delinquency & Collection Costs','Payments not received within five (5) calendar days of the due date are deemed in default and shall bear interest from the due date at the lesser of 15% per annum or the maximum legal rate. Customer agrees to pay all collection costs, including reasonable attorney fees and filing fees, incurred to recover delinquent balances.'],
-    ['Structural Workspace Hazard Notice','Roofing work involves heavy construction, tearing, and demolition, creating risks of falling debris. Customer agrees to keep guests, invitees, and occupants clear of the active work area. Storm Shield Pro is not liable for injuries to anyone entering the construction zone.'],
-    ['Internal Structural Dust & Attic Management','Roofing replacement generates significant vibrations and dust. Airborne particles and small debris will enter the attic space. Customer should use extreme caution when lowering attic stairs post-construction to prevent falling debris from causing facial or eye injuries.'],
-    ['Exterior Landscaping Protections','While crews utilize protective tarps and property safeguards, minor accidental impact to vegetation, shrubbery, or lawns may occur during tear-off. Storm Shield Pro is not responsible for minor landscaping or plant damage resulting from standard construction operations.'],
-    ['Driveway Structural Clearance','Customer must provide clear, unobstructed driveway access for material delivery trucks and equipment. The machinery and bundles required are extremely heavy. Storm Shield Pro is not responsible for driveway, curb, or sidewalk damage resulting from natural settling, compression, or inadequate sub-slab structural support.'],
-    ['Hidden Rafter Flaws & Deflection','Stripping existing roof layers frequently exposes pre-existing structural issues. Correcting structural defects, sagging framing, or warped trusses is excluded from this scope unless explicitly added. New shingles may accentuate pre-existing deck deflections, for which Storm Shield Pro bears no responsibility.'],
-    ['Utility Routing Under Sheathing','Standard building codes require mechanical lines, HVAC conduits, water pipes, and electrical lines to be secured a safe distance below the roof deck. Storm Shield Pro is not responsible for accidental punctures caused by fasteners striking lines improperly run flush against the underside of the wood sheathing.'],
-    ['Shingle Surface Settlement & Thermal Variables','Fiberglass and asphalt shingles installed during cooler temperatures require solar heat exposure to activate the thermal sealing strips. Heavier architectural or triple-lam shingles may not lay completely flat immediately. This is a natural material characteristic and does not constitute an installation defect.'],
-    ['Wall Flashing & Exterior Siding Disruption','Proper shingle installation requires integrating flashing with existing wall siding. Brittle, weathered, or aging siding immediately adjacent to flashing zones may crack, chip, or tear during detachment and re-roofing. Storm Shield Pro is not responsible for repairing or replacing such pre-existing fragile siding components.'],
-    ['Vibration Impact on Internal Ceilings & Finishes','Roof demolition transmits significant vibrations throughout the building framework. Customer is strictly required to remove all mirrors, pictures, artifacts, loose light fixtures, and chandeliers from interior walls and ceilings prior to commencement. Storm Shield Pro is not liable for damage to items falling inside or outside the property.'],
-    ['Mechanical Satellites & Rooftop Electronics','It may be operationally necessary to temporarily detach satellite dishes, solar devices, or antennas. Customer is responsible for scheduling and paying for recalibration or realignment. Storm Shield Pro may remove these items to facilitate the installation but holds no obligation to re-align or restore electronic signals.'],
-    ['High Voltage Electrical Accessories','Installation crews are not licensed electrical technicians. Customer must retain a qualified electrician to safely disconnect, reconnect, or wire powered ventilation fans or rooftop electrical systems if required during the roofing process.'],
-    ['Unforeseen Substrate Code Supplements','If building code inspectors require unexpected field modifications during construction (including extensive rotted deck replacement, supplemental insulation, or corrected ventilation), customer authorizes Storm Shield Pro to supplement the insurance carrier for additional funds. These supplemental payments are fully payable directly to Storm Shield Pro.'],
-    ['Exclusive Remedy & Workmanship Standards','We warrant that our installers will perform their work in a good, workmanlike manner and that the roof area handled will remain free from leaks caused by workmanship defects for the period specified. Our liability is strictly limited to providing labor to repair the specific leaked area, which constitutes the sole remedy available under this contract. This labor warranty is transferable to a new owner for up to one year from property transfer or until original expiration, whichever occurs first.'],
-    ['Manufacturer Product Warranties','All material product warranties are issued directly by the shingle manufacturer. Storm Shield Pro will transfer all product warranties to the customer upon receipt of final contract payment in full. Customer is responsible for submitting any registration cards.'],
-    ['Water Intrusion Assessment Deadlines','Customer must notify Storm Shield Pro within seventy-two (72) hours of discovering any roof leak and take immediate reasonable actions to mitigate interior damage. Customer agrees to grant safe access to interior and exterior areas at reasonable times to conduct required multi-stage inspections.'],
-    ['Environmental Mold & Hazard Mitigation Exclusion','Customer explicitly releases Storm Shield Pro Roofing & Construction from any liability, claims, or damages regarding environmental hazards or toxic conditions, including the growth, presence, or mitigation of mold, mildew, or airborne spores resulting from moisture or water entry, regardless of alleged negligence.'],
-    ['Casualty Loss & Insurance Maintenance','Storm Shield Pro is not responsible for damage caused by fire, windstorms, hail, tornadoes, hurricanes, lightning, or acts of God to work in progress or completed systems. Customer must maintain standard homeowner casualty insurance in full force. There are no other warranties, express or implied, including merchantability or fitness for a particular purpose, applicable to this contract.'],
-    ['Binding Arbitration Agreement','Any dispute, claim, or controversy arising out of or relating to the performance of services or materials under this contract shall be settled exclusively via binding arbitration conducted in accordance with the Commercial Arbitration Rules of the American Arbitration Association (AAA). Judgment on the award may be entered in any court of competent jurisdiction in Harris County, Texas, or the county where the work was performed.'],
-    ['Fully Integrated Execution Covenant','This two-page contract represents the complete agreement between both parties and supersedes all prior written or oral representations. Any modifications must be executed in writing by both parties. This contract is governed by and construed under the laws of the State of Texas. If any provision is deemed unenforceable, remaining terms remain in full force.'],
-  ];
-  const termsHtml = terms.map((t,i)=>`<p style="margin:0 0 7px;font-size:8.5px;line-height:1.35"><b>${i+1}. ${t[0]}:</b> ${t[1]}</p>`).join('');
-
-  const w = window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><title>Contract - ${esc(c.customer||j.name||'')}</title>
-  <style>
-    @page{size:letter;margin:0.4in}
-    *{box-sizing:border-box}
-    body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;font-size:11px}
-    .pg{page-break-after:always;padding:6px}
-    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:10px}
-    .hd h1{font-size:16px;margin:0;color:#1e3a5f}.hd .sub{font-size:9px;color:#555}
-    .hd .r{text-align:right;color:#1e3a5f;font-size:11px;font-weight:bold}
-    .sech{background:#eef2f7;border-left:3px solid #1e3a5f;padding:4px 8px;font-size:11px;font-weight:bold;color:#1e3a5f;margin:10px 0 6px;text-transform:uppercase}
-    table{width:100%;border-collapse:collapse}
-    .info td{padding:3px 6px;font-size:11px;border-bottom:1px solid #ddd}
-    .info .lb{color:#555;font-weight:bold;width:90px}
-    .cols{display:flex;gap:14px}.cols>div{flex:1}
-    .cols h5{font-size:10px;margin:0 0 3px;border-bottom:1px solid #ccc;padding-bottom:2px}
-    .ci{font-size:9.5px;padding:1px 0}
-    .pay{margin-top:6px}.pay td{font-size:11px;padding:3px 6px}.pay .lb{text-align:right;font-weight:bold}
-    .sigrow{display:flex;gap:30px;margin-top:18px}.sigrow>div{flex:1}
-    .sigline{border-top:1px solid #333;margin-top:48px;padding-top:3px;font-size:9px;color:#555}
-    .sigimg{height:46px;position:absolute;margin-top:0}
-    .terms2{column-count:2;column-gap:18px}
-    .legal{font-size:8px;color:#444;line-height:1.4;margin-top:10px}
-  </style></head><body>
-  <div class="pg">
-    <div class="hd"><div><h1>STORM SHIELD PRO</h1><div class="sub">ROOFING AND CONSTRUCTION<br>Office: (832) 910-7735 | office@stormshieldproroofing.com</div></div>
-      <div class="r">CONTRACT CONFIRMATION<br><span style="font-size:9px;font-weight:normal">PAGE 1 OF 2</span></div></div>
-
-    <div class="sech">Customer &amp; Project Information</div>
-    <table class="info"><tr><td class="lb">Customer</td><td>${esc(c.customer)}</td><td class="lb">Cell #</td><td>${esc(c.cell)}</td></tr>
-    <tr><td class="lb">Street</td><td>${esc(c.street)}</td><td class="lb">Representative</td><td>${esc(c.rep)}</td></tr>
-    <tr><td class="lb">City/St/Zip</td><td>${esc(c.citystatezip)}</td><td class="lb">Contract Date</td><td>${esc(c.contractDate)}</td></tr>
-    <tr><td class="lb">Email</td><td>${esc(c.email)}</td><td class="lb">Build Date</td><td>${esc(c.buildDate)}</td></tr></table>
-
-    <div class="sech">Material &amp; Specifications</div>
-    <div class="cols">
-      <div><h5>SHINGLES</h5>
-        <div class="ci">${on('sh_certainteed')} CertainTeed &nbsp; ${on('sh_landmark')} Landmark &nbsp; ${on('sh_lpro')} Landmark Pro</div>
-        <div class="ci">${on('sh_ltl')} Landmark TL &nbsp; ${on('sh_presshake')} Presidential Shake &nbsp; ${on('sh_grandmanor')} Grand Manor</div>
-        <div class="ci">${on('sh_tamkotitan')} Tamko Titan XT &nbsp; ${on('sh_solaris')} Solaris &nbsp; ${on('sh_other')} Other ${esc(q.sh_other_txt||'')}</div>
-      </div>
-      <div><h5>COLORS</h5>
-        <div class="ci">${on('cl_weathered')} Weathered Wood &nbsp; ${on('cl_moire')} Moire Black &nbsp; ${on('cl_hunter')} Hunter Green</div>
-        <div class="ci">${on('cl_georgetown')} Georgetown Gray &nbsp; ${on('cl_colonial')} Colonial Slate</div>
-        <div class="ci">${on('cl_other')} Other ${esc(q.cl_other_txt||'')}</div>
-      </div>
-    </div>
-    <div class="cols" style="margin-top:8px">
-      <div><h5>UNDERLAYMENT</h5><div class="ci">${on('ul_synthetic')} Synthetic &nbsp; ${on('ul_radiant')} Radiant Barrier</div></div>
-      <div><h5>RIDGE</h5><div class="ci">${on('rg_xt25')} XT-25 &nbsp; ${on('rg_shadow')} Shadow Ridge &nbsp; ${on('rg_cedar')} Cedar Crest</div></div>
-      <div><h5>VALLEY</h5><div class="ci">${on('vl_ice')} Ice &amp; Water &nbsp; ${on('vl_wmetal')} "W" Metal</div></div>
-    </div>
-    <div class="cols" style="margin-top:8px">
-      <div><h5>VENTILATION</h5><div class="ci">${on('vn_ridge')} Ridge${qt('vn_ridge_lf')} LF &nbsp; ${on('vn_power')} Power${qt('vn_power_qty')} &nbsp; ${on('vn_turbine')} Turbine${qt('vn_turbine_qty')}</div></div>
-      <div><h5>PLUMBING STACKS</h5><div class="ci">${on('pb_3in1')} 3in1${qt('pb_3in1_qty')} &nbsp; ${on('pb_15lead')} 1½"${qt('pb_15_qty')} &nbsp; ${on('pb_2lead')} 2"${qt('pb_2_qty')} &nbsp; ${on('pb_3lead')} 3"${qt('pb_3_qty')}</div></div>
-      <div><h5>DECKING</h5><div class="ci">${on('dk_osb')} OSB &nbsp; ${on('dk_plywood')} Plywood &nbsp; ${on('dk_radiant')} Radiant</div></div>
-    </div>
-
-    ${(c.addl||[]).some(x=>x)?`<div class="sech">Additional Items</div><div style="font-size:10px">${(c.addl||[]).filter(x=>x).map((x,i)=>`${i+1}. ${esc(x)}`).join('<br>')}</div>`:''}
-
-    <div class="sech">Warranty</div>
-    <div class="ci">${on('wr_standard')} Standard &nbsp; ${on('wr_3star')} 3-Star (20yr) &nbsp; ${on('wr_4star')} 4-Star (50yr) &nbsp; ${on('wr_5star')} 5-Star &nbsp; ${on('wr_lifetime')} Lifetime Workmanship &nbsp; ${on('wr_class3')} Class 3 Impact</div>
-
-    <div class="sech">Payment Schedule</div>
-    <table class="pay" style="max-width:340px"><tr><td class="lb">RCV Total Charge</td><td>$ ${esc(c.rcv)}</td></tr>
-    <tr><td class="lb">Net Claim Due</td><td>$ ${esc(c.netClaim)}</td></tr>
-    <tr><td class="lb">Deductible Due</td><td>$ ${esc(c.deductible)}</td></tr>
-    <tr><td class="lb">Depreciation Due</td><td>$ ${esc(c.depreciation)}</td></tr></table>
-    <div style="font-size:9px;color:#b00;margin-top:4px">Please make checks payable to: STORMSHIELD PRO ROOFING</div>
-
-    <div class="legal">Due to the unique nature of repairs to insurance claims, this contract does not include an explicit price because the final scope has not been agreed upon with the insurer. By signing, you authorize StormShield Pro Roofing to reach agreement on the price and scope of repairs on your behalf, bidding the work using Xactimate at customary insurance industry rates (10% overhead, 10% profit). Substantial additions or deductions will be handled by written change orders. By executing this two-page agreement, the customer acknowledges receipt, review, and acceptance of both Page 1 and the Terms &amp; Conditions on Page 2.</div>
-
-    <div class="sigrow">
-      <div style="position:relative"><div class="sigimg">${sig('homeowner')}</div><div class="sigline">Authorized Homeowner Signature &nbsp;&nbsp; Date: ${sigDate('homeowner')}</div></div>
-      <div style="position:relative"><div class="sigimg">${sig('rep')}</div><div class="sigline">StormShield Pro Representative &nbsp;&nbsp; Date: ${sigDate('rep')}</div></div>
-    </div>
-  </div>
-
-  <div class="pg">
-    <div class="hd"><div><h1 style="font-size:13px">STORM SHIELD PRO ROOFING AND CONSTRUCTION</h1><div class="sub">Master Contract Terms &amp; Conditions • Legal Addendum Riders</div></div><div class="r" style="font-size:9px">PAGE 2 OF 2</div></div>
-    <div class="terms2">${termsHtml}</div>
-  </div>
-  </body></html>`);
-  w.document.close();
-  setTimeout(()=>{ w.focus(); w.print(); }, 400);
-  if(typeof toast==='function') toast('Contract ready to print/save as PDF');
-};
 // Preserves section order and blank line between sections for readability.
 function serializeScopeSections(sections){
   const blocks = sections.map(sec => {
