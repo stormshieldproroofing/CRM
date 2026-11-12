@@ -1705,11 +1705,37 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sm-note{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:var(--muted);margin-top:10px;line-height:1.4}
 .sm-note .ti{font-size:14px;margin-top:1px}
 .sm-bars{display:flex;flex-direction:column;gap:12px}
-.sm-bar-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:#E8ECF3;margin-bottom:6px}
-.sm-bar-name{display:flex;align-items:center;gap:7px;min-width:0}
-.sm-bar-n{color:var(--muted);font-size:12px}
+.sm-mbar-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:#E8ECF3;margin-bottom:6px}
+.sm-mbar-name{display:flex;align-items:center;gap:7px;min-width:0}
+.sm-mbar-n{color:var(--muted);font-size:12px}
 .sm-track{height:8px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden}
 .sm-track > div{height:100%;border-radius:999px}
+.sm-pager,.sm-pg1{display:contents}
+.sm-pgx{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.sm-pg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.sm-pg-card{display:flex;flex-direction:column;box-sizing:border-box}
+.sm-pg-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sm-pg-note{font-size:12px;color:var(--muted);white-space:nowrap}
+.sm-delta{font-weight:600}.sm-delta.up{color:#34D399}.sm-delta.down{color:#F87171}
+.sm-mbars{flex:1;display:flex;align-items:flex-end;gap:4px;min-height:118px;margin-top:8px}
+.sm-mbar{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;padding:0;border:0;background:none;color:var(--muted);font:inherit;cursor:pointer}
+.sm-mbar-v{font-size:9px;font-weight:700;color:#E8ECF3;white-space:nowrap;min-height:11px}
+.sm-mbar-b{width:100%;min-height:2px;border-radius:4px 4px 0 0;background:#33405A}
+.sm-mbar.future .sm-mbar-b{background:#232A38}
+.sm-mbar.now .sm-mbar-b{background:var(--brand-light,#5B8DEF)}
+.sm-mbar-m{font-size:10px;font-weight:500}
+.sm-mbar.now .sm-mbar-m{color:#fff;font-weight:700}
+.sm-goal-top{display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap}
+.sm-goal-of{font-size:13px;color:var(--muted)}
+.sm-goal-track{height:10px;margin-top:10px}
+.sm-goal-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-top:6px}
+.sm-goal-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:auto;padding-top:10px}
+.sm-goal-stats b{display:block;font-size:17px;font-weight:700;color:#fff;margin-top:1px}
+.sm-goal-stats span{font-size:12px;color:var(--muted)}
+.sm-goal-btn{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.05);color:#E8ECF3;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.sm-goal-edit{border:0;background:none;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:8px 0 8px 12px;margin:-8px 0}
+.sm-goal-empty{flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:10px;font-size:13px;color:var(--muted)}
+.sm-dots{display:none}
 .sm-wk-date{width:44px;height:44px;flex-shrink:0;border-radius:12px;background:rgba(56,189,248,.1);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#7DD3FC;line-height:1.1}
 .sm-wk-date span{font-size:10px;font-weight:700;text-transform:uppercase}
 .sm-wk-date b{font-size:16px}
@@ -1730,6 +1756,15 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sm-todo-item.locked{opacity:.55;cursor:not-allowed}
 @media (max-width:1180px){
   .sm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sm-pager{grid-column:1/-1;display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+  .sm-pager::-webkit-scrollbar{display:none}
+  .sm-pgx{display:contents}
+  .sm-pg1,.sm-pg{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+  .sm-pg1,.sm-pg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .sm-dots{grid-column:1/-1;display:flex;justify-content:center;gap:2px;margin-top:-4px}
+  .sm-dot{width:28px;height:24px;border:0;background:none;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .sm-dot i{display:block;width:6px;height:6px;border-radius:3px;background:#2A3142;transition:width .15s,background .15s}
+  .sm-dot.on i{width:16px;background:var(--brand-light,#5B8DEF)}
   .sm-kpi-jobs{grid-column:1/-1}
   .sm-cols{grid-template-columns:1fr}
   .sm-todo-list{max-height:none}
@@ -6022,7 +6057,14 @@ function openSummaryDetail(key){
     pend: { title:'Pending commission', total:summary.pendingCommission, color:'#A78BFA',
             rows: list.map(j => ({ j, amt:commissionUnpaid(j, user), lead:dot(j),
               sub: !jobFullyPaid(j) ? (bal(j) > 0 ? `Owes ${m0(bal(j))}` : 'Supplement pending') : 'Paid in full · ready to pay' })) }
-  }[key];
+  }[key] || (() => {
+    // "mo:<0-11>" — jobs created in that month of this year (Revenue by month bars)
+    const m = /^mo:(\d+)$/.exec(key||''); if(!m) return null;
+    const mi = Number(m[1]), y = new Date().getFullYear();
+    const rows = list.filter(j => { const d = smCreatedDate(j); return d && d.getFullYear() === y && d.getMonth() === mi; })
+      .map(j => ({ j, amt:moneyValue(j.potVal), sub:stage(j) }));
+    return { title:'Revenue · ' + new Date(y, mi, 1).toLocaleDateString('en-US',{month:'long'}), total:rows.reduce((t,r) => t + r.amt, 0), color:'var(--brand)', rows };
+  })();
   if(!cfg) return;
   // Newest first: Commission earned by the date it was paid in full, the rest by
   // when the job was created. Undated jobs go last, biggest amount first.
@@ -6083,7 +6125,7 @@ function openSummaryDetail(key){
   const vh = window.innerHeight;
   const nav = document.querySelector('.topnav');
   const navBottom = nav ? Math.max(0, Math.round(nav.getBoundingClientRect().bottom)) : 0;
-  const lastTile = [...document.querySelectorAll('#boardSalesSummary .sm-kpis > .sm-kpi')].pop();
+  const lastTile = document.querySelector('#boardSalesSummary .sm-pager') || [...document.querySelectorAll('#boardSalesSummary .sm-kpis > .sm-kpi')].pop();
   let top = lastTile ? Math.round(lastTile.getBoundingClientRect().bottom) + 8 : Math.round(vh * 0.45);
   top = Math.min(Math.round(vh * 0.55), Math.max(navBottom + 6, 10, top));
   sheet.style.setProperty('--sd-h', `calc(100dvh - ${top}px)`);
@@ -6126,6 +6168,52 @@ function openSummaryDetail(key){
   ov.querySelectorAll('.sd-row').forEach(b => b.addEventListener('click', () => { close(); if(typeof openDetail === 'function') openDetail(b.dataset.job); }));
 }
 window.openSummaryDetail = openSummaryDetail;
+
+// ── Summary swipe pages: this month, revenue by month, yearly goal ──────
+function smCreatedDate(j){
+  const d = new Date(String(j.createdAt||j.created||'').replace(' at ', ' '));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+// Yearly revenue goals, shared with the team (app_settings, admin sets them).
+// Keyed by pipeline + who the Summary is showing ("all" or a rep's id).
+const SM_GOALS_KEY = 'stormshield_summary_goals';
+let smGoals = (() => { try{ return JSON.parse(localStorage.getItem(SM_GOALS_KEY)||'{}') || {}; }catch(_){ return {}; } })();
+window.__smGoalsLoaded = false;
+async function loadSummaryGoals(){
+  if(window.__smGoalsLoaded || !window.sb) return;
+  window.__smGoalsLoaded = true;
+  try{
+    const { data, error } = await window.sb.from('app_settings').select('value').eq('key','summary_goals').maybeSingle();
+    if(error){ window.__smGoalsLoaded = false; return; }
+    const v = data && data.value;
+    if(v && typeof v === 'object' && JSON.stringify(v) !== JSON.stringify(smGoals)){
+      smGoals = v;
+      try{ localStorage.setItem(SM_GOALS_KEY, JSON.stringify(v)); }catch(_){}
+      if(document.getElementById('summaryPage')?.style.display !== 'none') renderBoardSalesSummary();
+    }
+  }catch(_){ window.__smGoalsLoaded = false; }
+}
+function smGoalScope(userId){
+  const me = window.currentMember;
+  const seesAll = !me || me.role === 'admin' || me.role === 'manager';
+  return currentPipelineId + '|' + (userId || (seesAll ? 'all' : me.id));
+}
+async function editSummaryGoal(scope, who){
+  if(!isAdmin()){ toast('Only admins can set goals'); return; }
+  const cur = Number(smGoals[scope]) || 0;
+  const raw = prompt(`Revenue goal for ${new Date().getFullYear()} — ${who}\n(leave blank to remove the goal)`, cur ? String(cur) : '');
+  if(raw === null) return;
+  const n = Math.round(Number(String(raw).replace(/[^0-9.]/g,'')) || 0);
+  smGoals = Object.assign({}, smGoals);
+  if(n > 0) smGoals[scope] = n; else delete smGoals[scope];
+  try{ localStorage.setItem(SM_GOALS_KEY, JSON.stringify(smGoals)); }catch(_){}
+  renderBoardSalesSummary();
+  if(!window.sb) return;
+  try{
+    const { error } = await window.sb.from('app_settings').upsert({ key:'summary_goals', value:smGoals, updated_at:new Date().toISOString() }, { onConflict:'key' });
+    if(error) toast('Saved on this device only — could not sync to team');
+  }catch(_){ toast('Saved on this device only — could not sync to team'); }
+}
 
 function renderBoardSalesSummary(){
   const wrap=$('boardSalesSummary');
@@ -6450,6 +6538,69 @@ function renderBoardSalesSummary(){
   const kpi = (label, value, sub, color, extra='', key='') => key
     ? `<button type="button" class="sm-kpi sm-kpi-btn" data-sumkpi="${key}" aria-label="${label}: ${value}. Show jobs"><div class="sm-kpi-label">${label}</div><div class="sm-kpi-value" style="color:${color}">${value}</div>${sub?`<div class="sm-kpi-sub">${sub}</div>`:''}${extra}<span class="sm-kpi-chev" aria-hidden="true"><i class="ti ti-chevron-right"></i></span></button>`
     : `<div class="sm-kpi"><div class="sm-kpi-label">${label}</div><div class="sm-kpi-value" style="color:${color}">${value}</div>${sub?`<div class="sm-kpi-sub">${sub}</div>`:''}${extra}</div>`;
+  // Swipe pages after the four yearly cards: this month, revenue by month, goal.
+  const smNow = new Date(), smY = smNow.getFullYear(), smM = smNow.getMonth();
+  const smPrev = new Date(smY, smM - 1, 1);
+  const inMonth = (d, y, m) => !!d && d.getFullYear() === y && d.getMonth() === m;
+  const monthStats = (y, m) => {
+    let rev = 0, n = 0, coll = 0, comm = 0;
+    summaryJobs.forEach(j => {
+      if(inMonth(smCreatedDate(j), y, m)){ rev += moneyValue(j.potVal); n++; }
+      (j.deposits||[]).forEach(d => { const t = new Date(String(d.date||'') + 'T12:00:00'); if(!Number.isNaN(t.getTime()) && inMonth(t, y, m)) coll += moneyValue(d.amount); });
+      jobCommissionPayouts(j).forEach(p => { if(user && p.paidTo !== user.id) return; if(inMonth(_payoutDate(p), y, m)) comm += moneyValue(p.amount) || 0; });
+    });
+    return { rev, n, coll, comm };
+  };
+  const mNow = monthStats(smY, smM), mPrev = monthStats(smPrev.getFullYear(), smPrev.getMonth());
+  const mShort = smNow.toLocaleDateString('en-US',{month:'short'}), pShort = smPrev.toLocaleDateString('en-US',{month:'short'});
+  const delta = (cur, prev, isCount) => {
+    if(Math.round(cur) === Math.round(prev)) return `Same as ${pShort}`;
+    const up = cur > prev, cls = up ? 'up' : 'down', arrow = up ? '▲' : '▼';
+    if(isCount) return `<span class="sm-delta ${cls}">${arrow} ${Math.abs(cur - prev)}</span> vs ${pShort}`;
+    if(prev <= 0) return `<span class="sm-delta ${cls}">${arrow}</span> ${pShort} was $0`;
+    return `<span class="sm-delta ${cls}">${arrow} ${Math.round(Math.abs(cur - prev) / prev * 100)}%</span> vs ${pShort}`;
+  };
+  const byMonth = Array.from({length:12}, (_, m) => summaryJobs.reduce((t, j) => t + (inMonth(smCreatedDate(j), smY, m) ? moneyValue(j.potVal) : 0), 0));
+  const bmMax = Math.max(1, ...byMonth), bmBest = byMonth.indexOf(Math.max(...byMonth));
+  const kShort = v => v >= 1000 ? '$' + (v >= 100000 ? Math.round(v/1000) : Math.round(v/100)/10) + 'k' : '$' + Math.round(v);
+  const barsHtml = byMonth.map((v, m) => {
+    const name = new Date(smY, m, 1).toLocaleDateString('en-US',{month:'long'});
+    const label = v > 0 && (m === smM || m === bmBest) ? kShort(v) : '';
+    return `<button type="button" class="sm-mbar${m===smM?' now':''}${m>smM?' future':''}" data-sumkpi="mo:${m}" aria-label="${name}: ${money0(v)}. Show jobs"><span class="sm-mbar-v">${label}</span><span class="sm-mbar-b" style="height:${Math.round(v / bmMax * 78)}%"></span><span class="sm-mbar-m">${name[0]}</span></button>`;
+  }).join('');
+  const goalScope = smGoalScope(user ? user.id : null);
+  const goalWho = user ? user.name : ((window.currentMember && !['admin','manager'].includes(window.currentMember.role)) ? 'you' : 'the company');
+  const goal = Number(smGoals[goalScope]) || 0;
+  const yStart = new Date(smY, 0, 1), yEnd = new Date(smY + 1, 0, 1);
+  const daysIn = Math.max(1, (smNow - yStart) / 864e5), daysLeft = Math.max(0, Math.ceil((yEnd - smNow) / 864e5));
+  const pace = summary.revenue / daysIn * ((yEnd - yStart) / 864e5);
+  const goalPct = goal ? Math.min(100, Math.round(summary.revenue / goal * 100)) : 0;
+  const toGo = Math.max(0, goal - summary.revenue);
+  const goalHtml = goal ? `
+      <div class="sm-pg-head"><span class="sm-kpi-label">${smY} goal</span><span class="sm-pg-note">${daysLeft} days left${isAdmin()?`<button type="button" class="sm-goal-edit" data-smgoal>Edit</button>`:''}</span></div>
+      <div class="sm-goal-top"><span class="sm-kpi-value" style="margin-top:0">${money0(summary.revenue)}</span><span class="sm-goal-of">of ${money0(goal)}</span></div>
+      <div class="sm-track sm-goal-track"><div style="width:${goalPct}%;background:${toGo<=0?'#34D399':'var(--brand-light,#5B8DEF)'}"></div></div>
+      <div class="sm-goal-row"><span>${goalPct}% of goal</span><span>${toGo>0?money0(toGo)+' to go':'Goal reached'}</span></div>
+      <div class="sm-goal-stats">
+        <div><span>Need per week</span><b style="${toGo>0?'color:#FBBF24':''}">${toGo>0?money0(toGo / Math.max(1, daysLeft / 7)):'$0'}</b></div>
+        <div><span>On pace for</span><b style="${pace>=goal?'color:#34D399':''}">${money0(pace)}</b></div>
+      </div>` : `
+      <div class="sm-pg-head"><span class="sm-kpi-label">${smY} goal</span><span class="sm-pg-note">${daysLeft} days left</span></div>
+      <div class="sm-goal-empty"><span>No revenue goal set for ${escapeHtml(goalWho)} yet. On pace for <b style="color:#fff">${money0(pace)}</b> this year.</span>
+        ${isAdmin()?`<button type="button" class="sm-goal-btn" data-smgoal>Set a goal</button>`:`<span>An admin can set one.</span>`}</div>`;
+  const morePagesHtml = `<div class="sm-pgx">
+          <div class="sm-pg sm-pg-grid">
+            ${kpi(mShort + ' revenue', money0(mNow.rev), delta(mNow.rev, mPrev.rev), 'var(--brand)', '', 'mo:' + smM)}
+            ${kpi(mShort + ' new jobs', String(mNow.n), delta(mNow.n, mPrev.n, true), '#fff')}
+            ${kpi(mShort + ' collected', money0(mNow.coll), delta(mNow.coll, mPrev.coll), '#34D399')}
+            ${kpi(mShort + ' commission', money0(mNow.comm), delta(mNow.comm, mPrev.comm), '#60C4FF')}
+          </div>
+          <div class="sm-pg sm-kpi sm-pg-card">
+            <div class="sm-pg-head"><span class="sm-kpi-label">Revenue by month</span><span class="sm-pg-note">${money0(summary.revenue)} in ${smY}</span></div>
+            <div class="sm-mbars">${barsHtml}</div>
+          </div>
+          <div class="sm-pg sm-kpi sm-pg-card">${goalHtml}</div>
+        </div>`;
   wrap.innerHTML = `
     <div class="sm-page">
       <div class="sm-head">
@@ -6461,10 +6612,16 @@ function renderBoardSalesSummary(){
           <div class="sm-jobs-head"><span class="sm-kpi-label">Jobs in pipeline</span><span class="sm-jobs-total">${shownTotal} total</span></div>
           ${stagesHtml}
         </div>
+        <div class="sm-pager" id="smPager">
+          <div class="sm-pg1">
         ${kpi('Revenue', money0(summary.revenue), 'This year', 'var(--brand)', '', 'rev')}
         ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid out this year', '#60C4FF', '', 'com')}
         ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`, 'recv')}
         ${kpi('Pending commission', money0(summary.pendingCommission), 'Not paid out yet', '#A78BFA', '', 'pend')}
+          </div>
+          ${morePagesHtml}
+        </div>
+        <div class="sm-dots" id="smDots" aria-label="Summary pages">${['This year','This month','Revenue by month','Goal'].map((t,i)=>`<button type="button" class="sm-dot${i===0?' on':''}" data-smdot="${i}" aria-label="${t}"><i></i></button>`).join('')}</div>
       </div>
       <div class="sm-cols">
         <div class="sm-col">
@@ -6479,6 +6636,23 @@ function renderBoardSalesSummary(){
       </div>
     </div>`;
   wrap.querySelectorAll('[data-sumkpi]').forEach(b => b.addEventListener('click', () => openSummaryDetail(b.dataset.sumkpi)));
+  wrap.querySelectorAll('[data-smgoal]').forEach(b => b.addEventListener('click', () => editSummaryGoal(goalScope, goalWho)));
+  // Swipe pager (phones/tablets): remember the page across re-renders, keep the dots in sync.
+  const pager = wrap.querySelector('#smPager'), dots = [...wrap.querySelectorAll('[data-smdot]')];
+  if(pager && dots.length){
+    const pages = () => [pager.querySelector('.sm-pg1'), ...pager.querySelectorAll('.sm-pg')];
+    const setDot = i => dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    const goTo = (i, smooth) => { const el = pages()[i]; if(el && getComputedStyle(pager).display === 'flex') pager.scrollTo({ left: el.offsetLeft - pager.offsetLeft, behavior: smooth ? 'smooth' : 'auto' }); };
+    const saved = Math.min(dots.length - 1, window.__smPg || 0);
+    if(saved){ goTo(saved, false); setDot(saved); }
+    pager.addEventListener('scroll', () => {
+      const w = pager.clientWidth + 10; if(w <= 10) return;
+      const i = Math.max(0, Math.min(dots.length - 1, Math.round(pager.scrollLeft / w)));
+      if(i !== window.__smPg){ window.__smPg = i; setDot(i); }
+    }, { passive:true });
+    dots.forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.smdot), true)));
+  }
+  loadSummaryGoals();
   wrap.querySelectorAll('[data-sm-fold]').forEach(d => d.addEventListener('toggle', () => {
     window.__sumOpen = Object.assign({}, window.__sumOpen, { [d.dataset.smFold]: d.open });
   }));
