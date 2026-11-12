@@ -344,6 +344,16 @@
       return t.lastChild;
     };
     const vContract = tile('Contract'), vCollected = tile('Collected', 'pos'), vBalance = tile('Balance', 'due');
+    // Collected opens the list of payments (and Add payment)
+    const colTile = vCollected.parentElement;
+    colTile.classList.add('tap');
+    colTile.setAttribute('role', 'button');
+    colTile.setAttribute('tabindex', '0');
+    colTile.setAttribute('aria-label', 'Collected. Show payments');
+    colTile.firstChild.insertAdjacentHTML('beforeend', '<span class="rd-tile-go" aria-hidden="true">›</span>');
+    const openPay = e => { e.stopPropagation(); openPaymentsSheet(currentJob() || j); };
+    colTile.addEventListener('click', openPay);
+    colTile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPay(e); } });
     const dep = $id('summaryDeposits'), bal = $id('summaryBalance');
     watch([dep, bal], () => {
       const d = num(dep && dep.textContent), b = num(bal && bal.textContent);
@@ -558,6 +568,153 @@
     return { wrap, draw, fakeHeader };
   }
 
+  // ── Payments: tap Collected → every payment, tagged by how it was paid ──
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const cap = s => { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); };
+  function payDate(v) {
+    const t = String(v || '').trim();
+    if (!t) return 0;
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? new Date(t + 'T12:00:00') : new Date(t);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+  function paySheet(label, title, sub) {
+    const menu = sheet(label, title, sub);
+    if (menu) menu.classList.add('rd-pay');
+    return menu;
+  }
+  function payFoot(menu, buttons) {
+    const f = document.createElement('div');
+    f.className = 'rd-pay-foot';
+    buttons.forEach(([text, cls, fn]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'rd-pay-btn ' + cls; b.textContent = text;
+      b.addEventListener('click', e => { e.stopPropagation(); fn(b); });
+      f.appendChild(b);
+    });
+    menu.appendChild(f);
+    return f;
+  }
+  function openPaymentsSheet(j) {
+    if (!j) return;
+    const deps = (j.deposits || []).map((d, i) => ({ d, i })).sort((a, b) => (payDate(b.d.date) - payDate(a.d.date)) || (b.i - a.i));
+    let got = 0, owed = 0;
+    try { got = jobDepositTotal(j); owed = jobAmountOwed(j); } catch (e) {}
+    const left = Math.max(0, owed - got), pct = owed > 0 ? Math.min(100, Math.round(got / owed * 100)) : 0;
+    const menu = paySheet('Payments', 'Collected · ' + usd(got), deps.length + ' payment' + (deps.length === 1 ? '' : 's') + (owed > 0 ? ' · of ' + usd(owed) : ''));
+    if (!menu) return;
+    if (owed > 0) {
+      const bar = document.createElement('div');
+      bar.className = 'rd-pay-bar';
+      bar.innerHTML = '<div class="rd-pay-track"><div style="width:' + pct + '%"></div></div><div class="rd-pay-barrow"><span>' + pct + '% collected</span><span>' + (left > 0.5 ? usd(left) + ' still owed' : 'Paid in full') + '</span></div>';
+      menu.appendChild(bar);
+    }
+    const list = document.createElement('div');
+    list.className = 'rd-pay-list';
+    if (!deps.length) list.innerHTML = '<div class="rd-pay-empty">No payments yet.</div>';
+    deps.forEach(({ d, i }) => {
+      const meta = payMeta(j, d), m = meta.method || '';
+      const bits = [d.date, m === 'Check' && meta.ref ? 'check #' + meta.ref : (m === 'Cash' && meta.ref ? 'received by ' + meta.ref : meta.ref), d.checkFile ? 'photo' : ''].filter(Boolean);
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'rd-pay-row';
+      b.innerHTML = '<span class="pay-tag ' + (m ? 'pay-' + esc(m.toLowerCase()) : 'pay-none') + '">' + esc(m || 'Not set') + '</span>'
+        + '<span class="rd-pay-main"><span class="rd-pay-what">' + esc(cap(d.desc) || 'Payment') + '</span><span class="rd-pay-sub">' + esc(bits.join(' · ')) + '</span></span>'
+        + '<span class="rd-pay-amt">' + usd(parseFloat(d.amount) || 0) + '</span>';
+      b.addEventListener('click', e => { e.stopPropagation(); openPaymentRow(j, i); });
+      list.appendChild(b);
+    });
+    menu.appendChild(list);
+    payFoot(menu, [['Close', 'ghost', closeMenu], ['+ Add payment', 'go', () => openPaymentForm(j)]]);
+  }
+  // One payment: change how it was paid, or jump to the full edit form
+  function openPaymentRow(j, idx) {
+    const d = (j.deposits || [])[idx];
+    if (!d) return;
+    const menu = paySheet('Payment', usd(parseFloat(d.amount) || 0) + ' · ' + (cap(d.desc) || 'Payment'), d.date || '');
+    if (!menu) return;
+    menu.insertAdjacentHTML('beforeend', '<div class="rd-pay-lbl">Paid by</div>');
+    const chips = document.createElement('div');
+    chips.className = 'rd-pay-chips';
+    const cur = payMeta(j, d).method || '';
+    PAY_METHODS.forEach(m => {
+      const c = document.createElement('button');
+      c.type = 'button'; c.className = 'rd-pay-chip' + (m === cur ? ' on' : ''); c.textContent = m;
+      c.setAttribute('aria-pressed', String(m === cur));
+      c.addEventListener('click', e => {
+        e.stopPropagation();
+        payMetaSet(j, d, { method: m });
+        try { saveToStorage(); } catch (err) {}
+        try { renderDetailPanel(); } catch (err) {}
+        later(() => openPaymentsSheet(currentJob() || j));
+      });
+      chips.appendChild(c);
+    });
+    menu.appendChild(chips);
+    payFoot(menu, [['Back', 'ghost', () => openPaymentsSheet(j)], ['Edit amount, date or photo', 'plain', () => {
+      closeMenu();
+      const body = $id('depBody'), head = $id('depAccHeader');
+      if (head && body && (body.style.display === 'none' || !body.style.display && getComputedStyle(body).display === 'none')) head.click();
+      const item = body && body.closest('.rd-fin-item');
+      if (item) later(() => item.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    }]]);
+  }
+  function openPaymentForm(j) {
+    let left = 0;
+    try { left = Math.max(0, jobAmountOwed(j) - jobDepositTotal(j)); } catch (e) {}
+    const menu = paySheet('Add payment', 'Add payment', (j.name || 'Job') + (left > 0.5 ? ' · ' + usd(left) + ' still owed' : ''));
+    if (!menu) return;
+    const now = new Date(), today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const st = { method: 'Check', file: null };
+    const form = document.createElement('div');
+    form.className = 'rd-pay-form';
+    form.innerHTML = '<div class="rd-pay-lbl">Paid by</div><div class="rd-pay-chips" data-k="method"></div>'
+      + '<div class="rd-pay-grid"><label><span class="rd-pay-lbl">Amount</span><input class="rd-pay-in amt" data-k="amount" type="text" inputmode="decimal" placeholder="$0.00" autocomplete="off"></label>'
+      + '<label><span class="rd-pay-lbl">Date</span><input class="rd-pay-in" data-k="date" type="date" value="' + today + '" max="' + today + '"></label></div>'
+      + '<label><span class="rd-pay-lbl">What it’s for</span><select class="rd-pay-in" data-k="desc">' + PAY_DESCS.map(o => '<option value="' + o + '">' + cap(o) + '</option>').join('') + '</select></label>'
+      + '<label><span class="rd-pay-lbl" data-k="refLbl"></span><input class="rd-pay-in" data-k="ref" type="text" autocomplete="off"></label>'
+      + '<button type="button" class="rd-pay-photo" data-k="photo"><span data-k="photoT"></span><span class="rd-pay-photo-s" data-k="photoS"></span></button>'
+      + '<input type="file" accept="image/*,application/pdf" data-k="file" hidden>'
+      + '<div class="rd-pay-err" data-k="err" role="alert"></div>';
+    menu.appendChild(form);
+    const el = k => form.querySelector('[data-k="' + k + '"]');
+    const REF = { Check: ['Check # (optional)', 'check photo'], Zelle: ['Confirmation # (optional)', 'Zelle screenshot'], Cash: ['Received by (optional)', 'receipt photo'], Card: ['Note (optional)', 'receipt photo'], Other: ['Note (optional)', 'photo'] };
+    let saveBtn = null;
+    const amount = () => Math.round((parseFloat(String(el('amount').value).replace(/[^0-9.]/g, '')) || 0) * 100) / 100;
+    const draw = () => {
+      el('method').querySelectorAll('button').forEach(b => { const on = b.textContent === st.method; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+      el('refLbl').textContent = REF[st.method][0];
+      el('photoT').textContent = st.file ? st.file.name : 'Add ' + REF[st.method][1];
+      el('photoS').textContent = st.file ? 'Tap to change' : 'Optional';
+      el('photo').classList.toggle('has', !!st.file);
+      if (saveBtn) saveBtn.textContent = amount() ? 'Save ' + st.method + ' · ' + usd(amount()) : 'Save payment';
+    };
+    PAY_METHODS.forEach(m => {
+      const c = document.createElement('button');
+      c.type = 'button'; c.className = 'rd-pay-chip'; c.textContent = m;
+      c.addEventListener('click', e => { e.stopPropagation(); st.method = m; draw(); });
+      el('method').appendChild(c);
+    });
+    el('amount').addEventListener('input', draw);
+    el('photo').addEventListener('click', e => { e.stopPropagation(); el('file').click(); });
+    el('file').addEventListener('change', () => { st.file = el('file').files[0] || null; draw(); });
+    form.addEventListener('click', e => e.stopPropagation());
+    payFoot(menu, [['Cancel', 'ghost', () => openPaymentsSheet(j)], ['Save payment', 'go', async btn => {
+      if (!amount()) { el('err').textContent = 'Enter the amount received.'; el('amount').focus(); return; }
+      el('err').textContent = '';
+      btn.disabled = true; btn.textContent = st.file ? 'Uploading photo…' : 'Saving…';
+      try {
+        await addJobPayment(j.id, { amount: amount(), desc: el('desc').value, method: st.method, ref: el('ref').value, date: el('date').value, file: st.file });
+        closeMenu();
+        try { toast(st.method + ' payment added · ' + usd(amount())); } catch (e) {}
+      } catch (err) {
+        console.error('[payment] save failed', err);
+        btn.disabled = false; draw();
+        el('err').textContent = 'The photo did not upload, so the payment was not saved. Try again, or remove the photo.';
+      }
+    }]]);
+    saveBtn = menu.querySelector('.rd-pay-btn.go');
+    draw();
+  }
+
   // Money list: short lines, everything minimized. Tapping a line opens its
   // breakdown and the CRM's own form right underneath; tapping again closes it. The original cards stay
   // in the page, hidden, so every form, save and total runs exactly as before.
@@ -610,7 +767,7 @@
     if ($id('cpBreakdownSummary')) $id('cpBreakdownSummary').classList.add('rd-hidden');   // the statement replaces it
     L.contract = line({ label: 'Contract price', header: stmt.fakeHeader, body: stmt.wrap, parts: [stmt.wrap, $id('cpEditRow')] });
     L.supp = line({ label: 'Supplements', header: $id('suppHeader'), body: $id('suppBody'), parts: [$id('suppBody')] });
-    L.checks = line({ label: 'Checks collected', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
+    L.checks = line({ label: 'Payments collected', header: $id('depAccHeader'), body: $id('depBody'), parts: [$id('depBody')] });
     // Expenses: the per-type breakdown only shows once the line is opened
     L.exp = line({ label: 'Expenses', header: $id('expAccHeader'), body: $id('expBody'), parts: [$id('expBody')], cls: 'cost' });
     // Net profit, Overhead and Commission are regular lines like the rest
