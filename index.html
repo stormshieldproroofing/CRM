@@ -3103,7 +3103,11 @@ window.onContractSigned = onContractSigned;
 // j.claimFiledAt stamp so the alert fires exactly once per job, ever.
 const __claimFiledFired = new Set();
 function onClaimFiled(j){
-  if(!j || __claimFiledFired.has(j.id) || j.claimFiledAt) return;
+  if(!j || __claimFiledFired.has(j.id)) return;
+  // A stamp dated before the cutoff is the quiet one older jobs were given so
+  // they would not all alert at once. It means "never alerted", so a real
+  // filing (moved into Claim Filed, or a claim # typed in now) still alerts once.
+  if(j.claimFiledAt && !(j.claimFiledAt < CLAIM_FILED_CUTOFF)) return;
   __claimFiledFired.add(j.id);
   j.claimFiledAt = new Date().toISOString();
   if(typeof logActivity === 'function') logActivity(j, 'insurance', 'Claim filed', j.claimNum ? `Claim # ${j.claimNum}` : '');
@@ -3135,20 +3139,26 @@ window.onClaimFiled = onClaimFiled;
 // Skips jobs that were already past filing when this shipped, so old jobs
 // don't all alert at once: anything created before the cutoff is stamped quietly.
 const CLAIM_FILED_CUTOFF = '2026-11-08T00:00:00Z';
-function checkClaimFiled(j){
-  if(!j || j.claimFiledAt) return;
+// fresh = the claim # was just typed into a job that had none, so it is a real
+// filing even on an older job.
+function checkClaimFiled(j, fresh){
+  if(!j) return;
+  const quiet = !!j.claimFiledAt && j.claimFiledAt < CLAIM_FILED_CUTOFF;
+  if(j.claimFiledAt && !(fresh && quiet)) return;
   const num = (j.claimNum || '').trim();
   if(!num || num === '—') return;
   const createdAt = j.timeline?.[0]?.at || '';
-  if(createdAt && createdAt < CLAIM_FILED_CUTOFF){ j.claimFiledAt = createdAt; return; }
+  if(!fresh && createdAt && createdAt < CLAIM_FILED_CUTOFF){ j.claimFiledAt = createdAt; return; }
   onClaimFiled(j);
 }
 window.checkClaimFiled = checkClaimFiled;
 const __claimFiledTimers = {};
-function checkClaimFiledDebounced(j){
+const __claimFiledFresh = {};
+function checkClaimFiledDebounced(j, fresh){
   if(!j) return;
+  if(fresh) __claimFiledFresh[j.id] = true;
   clearTimeout(__claimFiledTimers[j.id]);
-  __claimFiledTimers[j.id] = setTimeout(() => { checkClaimFiled(j); if(j.claimFiledAt) saveToStorage(); }, 2500);
+  __claimFiledTimers[j.id] = setTimeout(() => { checkClaimFiled(j, !!__claimFiledFresh[j.id]); delete __claimFiledFresh[j.id]; if(j.claimFiledAt) saveToStorage(); }, 2500);
 }
 
 // ── PAYROLL ALERT: final check collected → time to break down commissions ──
@@ -10125,7 +10135,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       saveToStorage();
       body.innerHTML=lossHTML(false);
     };
-    window.lossSyncField=function(field,val){ j[field]=val; saveToStorage(); if(field==='claimNum') checkClaimFiledDebounced(j); };  // live sync to job + persist
+    window.lossSyncField=function(field,val){ const hadClaim = field==='claimNum' && !!String(j.claimNum||'').replace('—','').trim(); j[field]=val; saveToStorage(); if(field==='claimNum') checkClaimFiledDebounced(j, !hadClaim); };  // live sync to job + persist
     window.lossRerender=function(){ body.innerHTML=lossHTML(false); };
     window.lossSave=function(){saveToStorage();toast('Insurance details saved');};
     window.lossAutofill=async function(){
@@ -11745,6 +11755,7 @@ $('saveJob').onclick=async ()=>{
         (j.netClaim||'') !== (claimData.netClaim||'');
 
       const oldPm = j.projectManager || null;
+      const hadClaimNum = !!String(j.claimNum||'').replace('—','').trim();
       j.name=name; Object.assign(j,claimData);
       if(oldPm !== (j.projectManager || null)){
         const pmN = id => teamMemberById(id)?.name || '—';
@@ -11757,7 +11768,7 @@ $('saveJob').onclick=async ()=>{
       if(oldUser  !== newUser)  logActivity(j, 'assigned', 'Reassigned',   `${userName(oldUser) || '—'} → ${userName(newUser) || '—'}`);
       if(oldPipeline !== newPipeline) logActivity(j, 'pipeline', 'Pipeline changed', `${pipeName(oldPipeline)} → ${pipeName(newPipeline)}`);
       if(insChanged) logActivity(j, 'insurance', 'Insurance details updated', '');
-      checkClaimFiled(j);
+      checkClaimFiled(j, !hadClaimNum);
     }
     saveToStorage();
     __ajSaving = true;
