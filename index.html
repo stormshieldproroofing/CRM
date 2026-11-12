@@ -1715,6 +1715,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 .sm-wk-date b{font-size:16px}
 .sm-wk-date.today{background:var(--brand-light);color:#fff}
 .sm-wk-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-wk-kind{font-weight:700}
+.sm-wk-kind i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .sm-chev{color:var(--muted);font-size:18px}
 .sm-todo-list{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 240px);overflow:auto}
 .sm-todo-job{display:flex;align-items:center;gap:8px;padding:8px 10px;border-left:3px solid;border-radius:6px;background:rgba(255,255,255,.04);cursor:pointer}
@@ -6259,17 +6261,32 @@ function renderBoardSalesSummary(){
     if(ar!==br) return br-ar;
     return a.jobName.localeCompare(b.jobName);
   });
-  // ── Upcoming This Week panel — scheduled events (build dates) for the next 7 days ──
+  // ── This week panel — everything on the schedule for the next 7 days: builds plus
+  // every appointment booked from a job (inspections, closing, collection). It covers
+  // all pipelines (a rep's week isn't split by pipeline) and follows the rep filter.
   const weekTeam = window.TEAM || window.USERS || [];
   const wkStart = new Date(); wkStart.setHours(0,0,0,0);
+  const wkJobs = jobs.filter(j => jobMatchesAssigneeFilter(j, userId));
+  const wkKinds = window.APPT_KINDS || {};   // defined further down; empty until that code has run
   const wkDays = [];
   for(let i=0;i<7;i++){
     const d = new Date(wkStart); d.setDate(wkStart.getDate()+i);
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    const dayJobs = summaryJobs.filter(j => j.buildDate === key);
-    wkDays.push({ d, key, jobs:dayJobs });
+    const events = [];
+    wkJobs.forEach(j => {
+      if(String(j.buildDate||'').slice(0,10) === key) events.push({ j, kind:'build', label:'Build', color:'#38BDF8', time:'' });
+      Object.keys(wkKinds).forEach(kind => {
+        const a = window.apptGet(j, kind);
+        if(String(a.date||'').slice(0,10) === key) events.push({ j, kind, label:wkKinds[kind].label, color:wkKinds[kind].color, time:a.time||'' });
+      });
+    });
+    // builds (all day) first, then by time; untimed appointments before timed ones
+    events.sort((x,y) => (y.kind==='build') - (x.kind==='build') || String(x.time).localeCompare(String(y.time)));
+    wkDays.push({ d, key, events });
   }
-  const wkTotal = wkDays.reduce((s,x)=>s+x.jobs.length,0);
+  const wkTotal = wkDays.reduce((s,x)=>s+x.events.length,0);
+  const wkBuilds = wkDays.reduce((s,x)=>s+x.events.filter(e=>e.kind==='build').length,0);
+  const wkAppts = wkTotal - wkBuilds;
 
   // ── Follow-ups: only jobs that are moving. Leads sitting in the Lead stage
   // are left out unless someone set a follow-up date on them. Top 5 shown.
@@ -6330,15 +6347,18 @@ function renderBoardSalesSummary(){
   const upcomingHtml = `
     <section class="sm-panel">
       <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-calendar-week"></i>This week</div>
-      <div class="sm-panel-sub">${wkTotal} build${wkTotal===1?'':'s'} in the next 7 days</div></div></div>
-      ${wkTotal===0 ? `<div class="sm-empty">No builds scheduled in the next 7 days.</div>` : `
+      <div class="sm-panel-sub">${wkTotal===0 ? 'Next 7 days' : `${wkBuilds} build${wkBuilds===1?'':'s'} · ${wkAppts} appointment${wkAppts===1?'':'s'} in the next 7 days`}</div></div></div>
+      ${wkTotal===0 ? `<div class="sm-empty">Nothing scheduled in the next 7 days.</div>` : `
       <div class="sm-list">
-        ${wkDays.filter(x=>x.jobs.length).map(x => x.jobs.map(j => {
+        ${wkDays.filter(x=>x.events.length).map(x => x.events.map(ev => {
+          const j = ev.j;
           const who = jobRep(j).name;
           const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+          const what = ev.label + (ev.time ? ' · ' + window.apptTimeLabel(ev.time) : '');
           return `<div class="sm-wk-row" onclick="openDetail('${j.id}')">
             <div class="sm-wk-date${x.key===todayKey?' today':''}"><span>${x.key===todayKey?'Today':dowShort[x.d.getDay()]}</span><b>${x.d.getDate()}</b></div>
-            <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name||'Job')}</div><div class="sm-wk-sub">${escapeHtml(addr)}${addr&&who?' · ':''}${escapeHtml(who||'')}</div></div>
+            <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name||'Job')}</div>
+              <div class="sm-wk-sub"><span class="sm-wk-kind" style="color:${ev.color}"><i style="background:${ev.color}"></i>${escapeHtml(what)}</span>${addr?' · '+escapeHtml(addr):''}${who?' · '+escapeHtml(who):''}</div></div>
             <i class="ti ti-chevron-right sm-chev"></i>
           </div>`;
         }).join('')).join('')}
@@ -13465,7 +13485,7 @@ function apptSet(j, kind, date, time, items){
   if(typeof openJobId !== 'undefined' && openJobId === j.id && typeof renderDetailPanel === 'function') try{ renderDetailPanel(); }catch(_){}
   toast(date ? k.label + ': ' + apptLabel(j, kind) : k.label + ' removed');
 }
-window.apptLabel = apptLabel; window.apptGet = apptGet; window.APPT_KINDS = APPT_KINDS;
+window.apptLabel = apptLabel; window.apptGet = apptGet; window.APPT_KINDS = APPT_KINDS; window.apptTimeLabel = apptTimeLabel;
 
 function openApptSheet(jobId, kind){
   const j = jobs.find(x => x.id === jobId);
