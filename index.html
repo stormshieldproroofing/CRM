@@ -658,7 +658,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=9"></script>
+<script src="supabase-crm.js?v=10"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=18"></script>
@@ -2581,6 +2581,9 @@ function logActivity(jobOrId, type, label, detail){
     if(type === 'stage' && /stage changed/i.test(label||'')){
       if(/(→|->)\s*contract signed/i.test(detail||'')) onContractSigned(j);
       if(/(→|->)\s*claim filed/i.test(detail||'')) onClaimFiled(j);
+      // Appraisal decided: the job leaves the Appraisal stage for an approved or a denied stage.
+      const apr = /^\s*appraisal\s*(?:→|->)\s*(.+)$/i.exec(detail||'');
+      if(apr) onAppraisalResult(j, apr[1].trim());
       // Ready-to-invoice: when a job reaches a completion/invoicing stage AND
       // no supplement is still pending. If a supplement is Submitted/Partial,
       // this stays silent — the manual button (with warning) handles those.
@@ -3120,6 +3123,41 @@ window.onContractSigned = onContractSigned;
 // De-dupe guard for claim-filed alerts. In-session Set plus a persisted
 // j.claimFiledAt stamp so the alert fires exactly once per job, ever.
 const __claimFiledFired = new Set();
+// ── Appraisal approved / denied → Cliq "appraisal" channel ──────────────
+// Fires when a job is moved out of the Appraisal stage into an approved stage
+// (Overturned / Approved) or a denied one (Closed – Denied, Going Retail).
+// Moving it anywhere else (e.g. back to Awaiting Decision) is not a decision.
+// The same result never alerts twice for a job; a changed result alerts again.
+const __appraisalFired = new Set();
+function onAppraisalResult(j, toStage){
+  if(!j) return;
+  const result = /overturn|approv/i.test(toStage) ? 'approved' : /denied|retail|lost/i.test(toStage) ? 'denied' : '';
+  if(!result) return;
+  if(__appraisalFired.has(j.id + '|' + result) || (j.appraisalResult && j.appraisalResult.result === result)) return;
+  __appraisalFired.clear && [...__appraisalFired].forEach(k => { if(k.startsWith(j.id + '|')) __appraisalFired.delete(k); });
+  __appraisalFired.add(j.id + '|' + result);
+  j.appraisalResult = { result, stage: toStage, at: new Date().toISOString() };
+  const ok = result === 'approved';
+  if(typeof logActivity === 'function') logActivity(j, 'insurance', ok ? 'Appraisal approved' : 'Appraisal denied', `Moved to ${toStage}`);
+  const name = j.name || 'Customer';
+  const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+  const rep = (typeof userNameById==='function' && j.user) ? userNameById(j.user) : '';   // assigned salesman, not whoever moved the card
+  const carrier = (j.carrier && j.carrier!=='—') ? j.carrier : '';
+  const claimNo = (j.claimNum && j.claimNum!=='—') ? j.claimNum : '';
+  try{ teamFeedAdd({ kind:'appraisal_' + result, icon: ok ? 'ti-circle-check' : 'ti-circle-x', color: ok ? '#34D399' : '#F87171',
+    title:`Appraisal ${result}: ${name}`, sub:`${addr}${rep?' · '+rep:''}${carrier?' · '+carrier:''}` }); }catch(_){}
+  const lines = [
+    ok ? `✅ **Appraisal Approved**` : `❌ **Appraisal Denied**`,
+    `👤 ${name}`,
+    addr ? `📍 ${addr}` : '',
+    rep ? `👷 ${rep}` : '',
+    carrier ? `🏢 ${carrier}` : '',
+    claimNo ? `#️⃣ Claim ${claimNo}` : '',
+    `➡️ Moved to ${toStage}`,
+  ].filter(Boolean);
+  notifyDiscord(lines.join('\n'), 'appraisal');
+}
+
 function onClaimFiled(j){
   if(!j || __claimFiledFired.has(j.id)) return;
   // A stamp dated before the cutoff is the quiet one older jobs were given so
