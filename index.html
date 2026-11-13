@@ -646,7 +646,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
     +'<link rel="stylesheet" href="redesign.css?v=47">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=28"><\/script>');
+    +'<script src="redesign-job.js?v=29"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -658,7 +658,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=8"></script>
+<script src="supabase-crm.js?v=9"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=18"></script>
@@ -666,6 +666,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-notes.js?v=33"></script>
 <script src="crm-notifications.js?v=9"></script>
 <script src="crm-certs.js?v=1"></script>
+<script src="crm-review.js?v=1"></script>
 
 <div style="position:relative;overflow:hidden">
 
@@ -3876,7 +3877,7 @@ const STAGE_TEXT_TEMPLATES = {
   'invoiced':
     'Hi {firstName}, this is {repName} with {company}. Your invoice has been sent over. Keep an eye out for your recoverable depreciation check from your insurance company \u2014 it\u2019s typically released after they receive our final invoice. Any questions about payment or paperwork, don\u2019t hesitate to reach out:',
   'completed':
-    'Hi {firstName}, your new roof is complete \u2014 thank you for choosing {company}! Your workmanship warranty has you covered if anything ever comes up. If you were happy with our work, a quick Google review would mean the world, and we always appreciate referrals to friends and neighbors!',
+    'Hi {firstName}, your new roof is complete \u2014 thank you for choosing {company}! Your workmanship warranty has you covered if anything ever comes up. We always appreciate referrals to friends and neighbors!',
   'denied':
     'Hi {firstName}, this is {repName} with {company}. I saw your claim decision came back \u2014 please don\u2019t worry, this isn\u2019t the end of the road. I\u2019d like to go over your options with you, including filing an appeal. Call or text me anytime:',
   'appeal':
