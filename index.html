@@ -1533,8 +1533,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 #gsOverlay.gs-in{animation:gsIn .2s ease both}
 #gsOverlay.gs-in .gs-card{animation:gsCardIn .26s cubic-bezier(.2,.8,.2,1) both}
 #gsOverlay.gs-out{animation:gsOut .16s ease both;pointer-events:none}
-#gsOverlay.gs-settle{transition:opacity .22s ease}
-#gsOverlay.gs-settle .gs-card{transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+#gsOverlay.gs-settle{transition:opacity .38s ease}
+#gsOverlay.gs-settle .gs-card{transition:transform .42s cubic-bezier(.2,.8,.2,1)}
 @media (prefers-reduced-motion:reduce){
   #gsOverlay.gs-in,#gsOverlay.gs-in .gs-card,#gsOverlay.gs-out{animation:none}
   #gsOverlay.gs-settle,#gsOverlay.gs-settle .gs-card{transition:none}
@@ -27602,7 +27602,8 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
   // The real Search screen follows the finger: it fades in and its contents slide
   // down into place as you pull, then settles open (or fades away) when you let go.
   const ov = () => document.getElementById('gsOverlay');
-  const SLIDE = 28;
+  const SLIDE = 36;
+  const FADE = 220;                                         // px of pull for the fade to finish (longer than the trigger, so it eases in slowly)
   let showing = false;
   function show(d){
     const o = ov(); if (!o) return;
@@ -27614,8 +27615,8 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
       try { const inp = document.getElementById('gsInput'); inp.value = ''; window.__gsList = null; gsRender(); } catch (err) {}
       o.classList.add('pulling');
     }
-    const p = Math.max(0, Math.min(1, d / NEED));
-    const eased = 1 - Math.pow(1 - p, 2);                   // quick at first, gentle near the end
+    const p = Math.max(0, Math.min(1, d / FADE));
+    const eased = p * p * (3 - 2 * p);                      // slow start, slow finish: tracks the finger without popping in
     o.style.opacity = String(eased);
     if (card) card.style.transform = `translateY(${-(1 - eased) * SLIDE}px)`;
   }
@@ -27631,7 +27632,7 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
     window.__gsPullT = setTimeout(() => {
       o.classList.remove('gs-settle', 'pulling');
       o.style.opacity = ''; if (card) card.style.transform = '';
-    }, 280);
+    }, 440);
   }
   function hide(){ settle(false); }
 
