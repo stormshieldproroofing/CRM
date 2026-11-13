@@ -3125,7 +3125,7 @@ window.onContractSigned = onContractSigned;
 const __claimFiledFired = new Set();
 // ── Appraisal approved / denied → Cliq "appraisal" channel ──────────────
 // Fires when a job is moved out of the Appraisal stage into an approved stage
-// (Overturned / Approved) or a denied one (Closed – Denied, Going Retail).
+// (Overturned / Approved) or a denied one (Appraisal Denied, Closed – Denied).
 // Moving it anywhere else (e.g. back to Awaiting Decision) is not a decision.
 // The same result never alerts twice for a job; a changed result alerts again.
 const __appraisalFired = new Set();
@@ -6700,7 +6700,7 @@ function renderBoardSalesSummary(){
       const pid = j.pipeline || 'insurance';
       const col = columnsForPipeline(pid).find(c => c.id === j.col);
       const nm = String((col && col.name) || j.col || '').toLowerCase();
-      if(denialPipeIds.has(pid)) return !/closed|overturned|going retail/.test(nm);
+      if(denialPipeIds.has(pid)) return !/closed|overturned|going retail|appraisal denied/.test(nm);   // finished outcomes, not open appeals
       return pid === currentPipelineId && (j.col === 'denied' || j.col === 'appeal' || nm === 'denied' || nm.startsWith('appeal'));
     }).length;
     return { name:'Denied', color:'#EF4444', count:n };
