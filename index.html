@@ -644,9 +644,9 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   if(new URLSearchParams(location.search).get('ui')==='old') return;
   document.documentElement.classList.add('ui-new');
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
-    +'<link rel="stylesheet" href="redesign.css?v=46">'
+    +'<link rel="stylesheet" href="redesign.css?v=47">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=26"><\/script>');
+    +'<script src="redesign-job.js?v=27"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -658,7 +658,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
-<script src="supabase-crm.js?v=7"></script>
+<script src="supabase-crm.js?v=8"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
 <script src="crm-packet.js?v=18"></script>
@@ -4999,8 +4999,11 @@ async function addJobPayment(jobId, p){
   payMetaSet(j, dep, { method, ref: String(p.ref||'').trim() || undefined });
   if(!Array.isArray(j.deposits)) j.deposits = [];
   j.deposits.push(dep);
+  // Replacement for a rejected payment: link the two.
+  const replaced = p.replaces ? (j.rejectedPays||[]).find(r => r.id === p.replaces) : null;
+  if(replaced){ replaced.replacedBy = dep._did; replaced.replacedOn = dep.date; }
   j.paidVal = j.deposits.reduce((s,d) => s + (parseFloat(d.amount)||0), 0).toFixed(2);
-  logActivity(j, 'deposit_add', 'Payment added', `$${amt.toLocaleString()} · ${dep.desc} · ${method}${dep.checkFile?' · photo attached':''}`);
+  logActivity(j, 'deposit_add', replaced ? 'Replacement payment added' : 'Payment added', `$${amt.toLocaleString()} · ${dep.desc} · ${method}${dep.checkFile?' · photo attached':''}`);
   saveToStorage();
   try{ notifyFinalCheck(j); }catch(_){}
   if(typeof openJobId !== 'undefined' && openJobId === j.id && typeof renderDetailPanel === 'function') try{ renderDetailPanel(); }catch(_){}
@@ -5008,6 +5011,79 @@ async function addJobPayment(jobId, p){
   if(typeof refreshDpTabBadges === 'function') try{ refreshDpTabBadges(); }catch(_){}
   return true;
 }
+// ── Rejected payments: a deposited check (or other payment) that came back ──
+// The payment is moved out of j.deposits into j.rejectedPays, so every total
+// in the CRM stops counting it, and it stays on the job as a crossed-out record.
+// Saved with the job (contract.__rejectedPays); no database change needed.
+const PAY_REJECT_REASONS = ['Mortgage co. must endorse','Missing signature','Name doesn’t match','Insufficient funds','Stale / stop payment','Other'];
+function payShortDate(iso){
+  const d = iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(iso + 'T12:00:00') : new Date();
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+function payRecalc(j){ j.paidVal = (j.deposits||[]).reduce((s,d) => s + (parseFloat(d.amount)||0), 0).toFixed(2); }
+function payRefresh(j){
+  saveToStorage();
+  if(typeof openJobId !== 'undefined' && openJobId === j.id && typeof renderDetailPanel === 'function') try{ renderDetailPanel(); }catch(_){}
+  try{ renderBoard(); }catch(_){}
+  if(typeof refreshDpTabBadges === 'function') try{ refreshDpTabBadges(); }catch(_){}
+}
+// p = { reason, date:'YYYY-MM-DD', note, file }
+async function rejectJobPayment(jobId, idx, p){
+  const j = jobs.find(x => x.id === jobId);
+  const d = j && (j.deposits||[])[idx];
+  if(!d || !p || !p.reason) return false;
+  let notice;
+  if(p.file){
+    const rec = await intakeJobFile(p.file, 'check', null);   // throws if the upload fails; nothing changes then
+    if(!j.checks) j.checks = [];
+    j.checks.push(rec);
+    notice = { id: rec.id, name: rec.name, path: rec.path || undefined };
+  }
+  const meta = payMeta(j, d);
+  const rec = {
+    id: 'rj' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    amount: d.amount, desc: d.desc, date: d.date, time: d.time, checkFile: d.checkFile,
+    method: meta.method, ref: meta.ref,
+    reason: String(p.reason), returned: payShortDate(p.date), note: String(p.note||'').trim() || undefined, notice,
+    at: new Date().toISOString(),
+  };
+  if(!Array.isArray(j.rejectedPays)) j.rejectedPays = [];
+  j.rejectedPays.push(rec);
+  // Take it out of the collected payments (same steps as deleting a payment).
+  if(d.zohoId && d.zohoId !== 'synced'){
+    if(!j.zohoDeleted) j.zohoDeleted = { exp: [], pay: [] };
+    j.zohoDeleted.pay.push(d.zohoId);
+  }
+  j.deposits.splice(idx, 1);
+  if(d._did && j.payMeta) delete j.payMeta[d._did];
+  if((d._id || d._rowId) && window.sb){
+    window.sb.from('deposits').delete().eq('id', d._id || d._rowId)
+      .then(({ error }) => { if(error) console.error('[Supabase] rejected payment row delete failed:', error); });
+  }
+  payRecalc(j);
+  const amt = parseFloat(d.amount) || 0;
+  logActivity(j, 'deposit_remove', (rec.method && rec.method !== 'Check' ? 'Payment' : 'Check') + ' rejected', `$${amt.toLocaleString()} · ${d.desc} · ${rec.reason} · returned ${rec.returned}${rec.note ? ' · ' + rec.note : ''}`);
+  payRefresh(j);
+  return true;
+}
+// Marked rejected by mistake: put it back as a normal payment.
+function restoreRejectedPayment(jobId, rid){
+  const j = jobs.find(x => x.id === jobId);
+  const i = j ? (j.rejectedPays||[]).findIndex(r => r.id === rid) : -1;
+  if(i < 0) return false;
+  const r = j.rejectedPays.splice(i, 1)[0];
+  const dep = { amount: r.amount, desc: r.desc, date: r.date };
+  if(r.time) dep.time = r.time;
+  if(r.checkFile) dep.checkFile = r.checkFile;
+  if(r.method || r.ref) payMetaSet(j, dep, { method: r.method, ref: r.ref });
+  if(!Array.isArray(j.deposits)) j.deposits = [];
+  j.deposits.push(dep);
+  payRecalc(j);
+  logActivity(j, 'deposit_add', 'Payment restored', `$${(parseFloat(r.amount)||0).toLocaleString()} · ${r.desc} · was marked rejected by mistake`);
+  payRefresh(j);
+  return true;
+}
+window.PAY_REJECT_REASONS = PAY_REJECT_REASONS; window.rejectJobPayment = rejectJobPayment; window.restoreRejectedPayment = restoreRejectedPayment;
 window.PAY_METHODS = PAY_METHODS; window.PAY_DESCS = PAY_DESCS; window.payMeta = payMeta; window.payMetaSet = payMetaSet; window.addJobPayment = addJobPayment;
 
 function jobDepositTotal(j){
