@@ -219,6 +219,7 @@ async function loadAllFromSupabase() {
         reviewReq: (r.contract && r.contract.__reviewReq && typeof r.contract.__reviewReq === 'object') ? r.contract.__reviewReq : undefined,
         appts: (r.contract && r.contract.__appts && typeof r.contract.__appts === 'object') ? r.contract.__appts : undefined,
         payMeta: (r.contract && r.contract.__payMeta && typeof r.contract.__payMeta === 'object') ? r.contract.__payMeta : undefined,
+        appraisalResult: (r.contract && r.contract.__appraisal && typeof r.contract.__appraisal === 'object') ? r.contract.__appraisal : undefined,
         rejectedPays: (r.contract && Array.isArray(r.contract.__rejectedPays)) ? r.contract.__rejectedPays : undefined,
         supplements: (r.contract && Array.isArray(r.contract.__supplements)) ? r.contract.__supplements : undefined,
         // Overhead & commission settings (admin/manager-editable), stored in contract JSON
@@ -753,6 +754,7 @@ async function pushAllToSupabase() {
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           base.__supplementStatus = j.supplementStatus || null;
           base.__payMeta = (j.payMeta && typeof j.payMeta === 'object' && Object.keys(j.payMeta).length) ? j.payMeta : null;   // how each payment was paid
+          base.__appraisal = (j.appraisalResult && typeof j.appraisalResult === 'object') ? j.appraisalResult : null;   // last appraisal alert sent (approved / denied)
           base.__rejectedPays = (Array.isArray(j.rejectedPays) && j.rejectedPays.length) ? j.rejectedPays : null;   // payments that came back rejected
           base.__appts = (j.appts && typeof j.appts === 'object') ? j.appts : null;   // inspection time + closing appointment
           base.__claimFiledAt = j.claimFiledAt || null;  // Claim Filed alert already sent (once per job)
