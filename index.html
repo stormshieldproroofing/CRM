@@ -1519,12 +1519,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 }
 
 /* ── SEARCH on phones: a Search button opens a full-screen search ── */
-.dep-rej{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 12px;margin-bottom:6px;border:1px dashed rgba(248,113,113,.45);border-radius:7px;background:rgba(248,113,113,.06);color:inherit;font:inherit;text-align:left;cursor:pointer}
-.dep-rej-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.dep-rej-what{font-size:13px;font-weight:600}
-.dep-rej-sub{font-size:11px;line-height:1.4;color:#FCA5A5}
-.dep-rej.done .dep-rej-sub{color:var(--muted)}
-.dep-rej-amt{font-size:13px;font-weight:700;color:var(--muted);text-decoration:line-through;white-space:nowrap}
+.dep-rej .dep-rej-amt{color:var(--muted);text-decoration:line-through}
+html.ui-new .dep-rej .rd-row-ic{color:#F87171}
 .gs-btn,#gsOverlay{display:none}
 /* Search fades and slides in (tap or pull-down) and fades out, like iPhone search */
 @keyframes gsIn{from{opacity:0}to{opacity:1}}
@@ -8205,13 +8201,31 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
         // Rejected payments (checks that came back) stay listed as a record: crossed out, not counted.
         const rejJob=jobs.find(x=>x.id===openJobId);
         const rejShort=v=>{ const t=smPayDate(v); return t?t.toLocaleDateString('en-US',{month:'short',day:'numeric'}):String(v||''); };
+        const rejCal=`<svg width="11" height="11" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
         const rejHtml=((rejJob&&rejJob.rejectedPays)||[]).map(r=>{
-          const bits=[r.method==='Check'&&r.ref?'Check #'+r.ref:(r.method||''), r.replacedBy?'replaced '+rejShort(r.replacedOn):'returned '+rejShort(r.returned), r.replacedBy?'':r.reason].filter(Boolean).join(' · ');
-          return `<button type="button" class="dep-rej${r.replacedBy?' done':''}" onclick="event.stopPropagation(); if(window.rdOpenRejected) window.rdOpenRejected('${escapeHtml(r.id)}')">
-            <span class="pay-tag pay-rejected">Rejected</span>
-            <span class="dep-rej-main"><span class="dep-rej-what">${escapeHtml(r.desc?r.desc.charAt(0).toUpperCase()+r.desc.slice(1):'Payment')}</span><span class="dep-rej-sub">${escapeHtml(bits)}</span></span>
-            <span class="dep-rej-amt">$${fmtMoney(r.amount)}</span>
-          </button>`;
+          const bits=[r.replacedBy?'Replaced '+rejShort(r.replacedOn):'Returned '+rejShort(r.returned), r.replacedBy?'':r.reason, r.method==='Check'&&r.ref?'check #'+r.ref:''].filter(Boolean).join(' · ');
+          // Same layout as a normal payment row; the only differences are the red tag and the crossed-out amount.
+          const open = `event.stopPropagation(); if(window.rdOpenRejected) window.rdOpenRejected('${escapeHtml(r.id)}')`;
+          const label = escapeHtml(r.desc?r.desc.charAt(0).toUpperCase()+r.desc.slice(1):'Payment');
+          return `
+            <div id="dep-card-rj-${escapeHtml(r.id)}" class="dep-rej${r.replacedBy?' done':''}" style="border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:#1E253A;overflow:hidden;cursor:pointer" onclick="${open}">
+              <div id="dep-view-rj-${escapeHtml(r.id)}" style="padding:9px 12px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                  <div style="min-width:0;flex:1">
+                    <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+                      <span class="dep-rej-amt" style="font-size:13px;font-weight:700;flex-shrink:0">$${fmtMoney(r.amount)}</span>
+                      <span style="font-size:11px;color:var(--muted);white-space:nowrap">— ${label}</span><span class="pay-tag pay-rejected">Rejected</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                      <span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px">${rejCal} ${escapeHtml(bits)}</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:5px;flex-shrink:0">
+                    <button type="button" class="rd-row-more" aria-label="Rejected payment details" onclick="${open}" style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);padding:0"><i class="ti ti-dots"></i></button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
         }).join('');
         if(!deps.length){
           dl.innerHTML=(rejHtml?'':'<div style="font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px">No deposits added yet</div>')+rejHtml;
