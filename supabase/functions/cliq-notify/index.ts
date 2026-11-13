@@ -14,7 +14,8 @@
 //   CLIQ_CHANNEL_DEFAULT   — general
 //   CLIQ_CHANNEL_PAYROLL   — payroll channel unique name
 //   CLIQ_CHANNEL_INVOICING — invoices channel unique name
-//   CLIQ_CHANNEL_APPRAISAL — appraisal channel unique name (appraisal approved / denied)
+//   CLIQ_CHANNEL_APPRAISAL — optional; appraisal channel unique name. Defaults to
+//                            "appraisalpublicadjuster" (appraisal approved / denied)
 //   CLIQ_DC                — cliq.zoho.com
 //
 // A channel key with no secret set falls back to CLIQ_CHANNEL_DEFAULT.
@@ -69,7 +70,7 @@ async function postViaBot(content, channelKey) {
   const map = {
     payroll: Deno.env.get("CLIQ_CHANNEL_PAYROLL"),
     invoicing: Deno.env.get("CLIQ_CHANNEL_INVOICING"),
-    appraisal: Deno.env.get("CLIQ_CHANNEL_APPRAISAL"),
+    appraisal: Deno.env.get("CLIQ_CHANNEL_APPRAISAL") || "appraisalpublicadjuster",
   };
   const channelName = (channelKey && map[channelKey.toLowerCase()]) || Deno.env.get("CLIQ_CHANNEL_DEFAULT") || "";
   if (!channelName) return { ok: false, error: "No channel configured (set CLIQ_CHANNEL_DEFAULT)" };
