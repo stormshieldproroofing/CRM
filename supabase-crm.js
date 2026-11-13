@@ -216,6 +216,7 @@ async function loadAllFromSupabase() {
         cpSupplement:   (r.contract && r.contract.__cpSupplement   != null) ? r.contract.__cpSupplement   : undefined,
         supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         claimFiledAt: (r.contract && r.contract.__claimFiledAt) ? r.contract.__claimFiledAt : undefined,
+        reviewReq: (r.contract && r.contract.__reviewReq && typeof r.contract.__reviewReq === 'object') ? r.contract.__reviewReq : undefined,
         appts: (r.contract && r.contract.__appts && typeof r.contract.__appts === 'object') ? r.contract.__appts : undefined,
         payMeta: (r.contract && r.contract.__payMeta && typeof r.contract.__payMeta === 'object') ? r.contract.__payMeta : undefined,
         rejectedPays: (r.contract && Array.isArray(r.contract.__rejectedPays)) ? r.contract.__rejectedPays : undefined,
@@ -755,6 +756,7 @@ async function pushAllToSupabase() {
           base.__rejectedPays = (Array.isArray(j.rejectedPays) && j.rejectedPays.length) ? j.rejectedPays : null;   // payments that came back rejected
           base.__appts = (j.appts && typeof j.appts === 'object') ? j.appts : null;   // inspection time + closing appointment
           base.__claimFiledAt = j.claimFiledAt || null;  // Claim Filed alert already sent (once per job)
+          base.__reviewReq = (j.reviewReq && typeof j.reviewReq === 'object') ? j.reviewReq : null;   // Google review request: when sent / marked posted
           base.__supplements = Array.isArray(j.supplements) ? j.supplements : null;
           // Overhead & commission settings (no dedicated columns — persisted here)
           base.__overheadPct    = (j.overheadPct    != null && j.overheadPct    !== '') ? parseFloat(j.overheadPct)    : null;

@@ -262,6 +262,13 @@
       const st = sheetItem(menu, 'ti-message-dots', 'Text for this stage', () => textLeadWithCard(j.id), { now: true, note: phone ? stageNameOf(j) : 'No phone' });
       if (!phone) off(st);
     }
+    // Google review request: available once the build is complete
+    if (window.crmReview) {
+      const built = crmReview.isBuildComplete(j), st = crmReview.statusOf(j);
+      const rv = sheetItem(menu, 'ti-star', 'Review request', () => crmReview.openSheet(j),
+        { note: !built ? 'After the build' : st === 'posted' ? 'Posted' : st === 'sent' ? 'Sent' : 'Not sent yet', noteCls: st === 'posted' ? 'ok' : '' });
+      if (!built) off(rv);
+    }
     if (typeof textLeadCardPhoto === 'function') {
       sheetItem(menu, 'ti-id', 'Send business card', () => textLeadCardPhoto(j.id), { now: true });
     }
@@ -1053,6 +1060,10 @@
       head.appendChild(sv);
     }
     if (contact) cust.appendChild(contact);
+
+    // Google review request (shows once the build is complete)
+    const reviewCard = window.crmReview ? crmReview.card(j) : null;
+    if (reviewCard) section(ov, 'Review').appendChild(reviewCard);
 
     // 3. Next step
     const next = section(ov, 'Next step');
