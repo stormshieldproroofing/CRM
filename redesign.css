@@ -953,3 +953,19 @@ html.ui-new .rd-pay-err:empty{display:none}
 @media (min-width:761px){
   html.ui-new .rd-menu.rd-pay{width:400px;padding:14px 16px 16px}
 }
+
+/* ── Rejected payments ── */
+.pay-tag.pay-rejected{background:#3B1414;color:#FCA5A5}
+html.ui-new .rd-pay-banner{display:flex;flex-direction:column;gap:3px;margin:4px 0 8px;padding:10px 12px;border-radius:12px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.45);font-size:12px;line-height:1.45;color:#C4CBD8}
+html.ui-new .rd-pay-banner b{font-size:13px;font-weight:700;color:#FCA5A5}
+html.ui-new .rd-pay-banner .ok{color:#6EE7B7;font-weight:600}
+html.ui-new .rd-pay-row.rej .rd-pay-amt{color:var(--muted);text-decoration:line-through}
+html.ui-new .rd-pay-row.rej .rd-pay-sub{color:#FCA5A5}
+html.ui-new .rd-pay-row.rej.done .rd-pay-sub{color:var(--muted)}
+html.ui-new .rd-pay-chips.wrap{flex-wrap:wrap}
+html.ui-new .rd-pay-chips.wrap .rd-pay-chip{flex:0 0 auto;padding:0 12px;font-weight:600}
+html.ui-new .rd-pay-chip.on.red{border-color:#F87171;background:rgba(248,113,113,.14)}
+html.ui-new .rd-pay-btn.red{flex:2;border:0;background:#F87171;color:#2A0A0A;font-weight:700}
+html.ui-new .rd-pay-btn.warn{border-color:rgba(248,113,113,.5);color:#FCA5A5}
+html.ui-new .rd-pay-btn.wide{flex:1.4;font-size:14px}
+html.ui-new .rd-pay-foot + .rd-pay-foot{margin-top:10px}

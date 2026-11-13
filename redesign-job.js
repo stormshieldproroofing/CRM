@@ -616,7 +616,9 @@
     let got = 0, owed = 0;
     try { got = jobDepositTotal(j); owed = jobAmountOwed(j); } catch (e) {}
     const left = Math.max(0, owed - got), pct = owed > 0 ? Math.min(100, Math.round(got / owed * 100)) : 0;
-    const menu = paySheet('Payments', 'Collected · ' + usd(got), deps.length + ' payment' + (deps.length === 1 ? '' : 's') + (owed > 0 ? ' · of ' + usd(owed) : ''));
+    const rej = (j.rejectedPays || []).slice().sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+    const open = rej.filter(r => !r.replacedBy);
+    const menu = paySheet('Payments', 'Collected · ' + usd(got), deps.length + (rej.length ? ' good' : '') + ' payment' + (deps.length === 1 ? '' : 's') + (rej.length ? ' · ' + rej.length + ' rejected' : '') + (owed > 0 ? ' · of ' + usd(owed) : ''));
     if (!menu) return;
     if (owed > 0) {
       const bar = document.createElement('div');
@@ -624,9 +626,17 @@
       bar.innerHTML = '<div class="rd-pay-track"><div style="width:' + pct + '%"></div></div><div class="rd-pay-barrow"><span>' + pct + '% collected</span><span>' + (left > 0.5 ? usd(left) + ' still owed' : 'Paid in full') + '</span></div>';
       menu.appendChild(bar);
     }
+    if (open.length) {
+      const sum = open.reduce((t, r) => t + (parseFloat(r.amount) || 0), 0), r0 = open[0];
+      const ban = document.createElement('div');
+      ban.className = 'rd-pay-banner';
+      ban.innerHTML = '<b>' + open.length + ' payment' + (open.length === 1 ? '' : 's') + ' rejected · ' + usd(sum) + ' not counted</b>'
+        + '<span>' + esc(open.length === 1 ? r0.reason + ' · returned ' + shortDay(r0.returned) : 'Tap a rejected payment below for details') + '</span>';
+      menu.appendChild(ban);
+    }
     const list = document.createElement('div');
     list.className = 'rd-pay-list';
-    if (!deps.length) list.innerHTML = '<div class="rd-pay-empty">No payments yet.</div>';
+    if (!deps.length && !rej.length) list.innerHTML = '<div class="rd-pay-empty">No payments yet.</div>';
     deps.forEach(({ d, i }) => {
       const meta = payMeta(j, d), m = meta.method || '';
       const bits = [d.date, m === 'Check' && meta.ref ? 'check #' + meta.ref : (m === 'Cash' && meta.ref ? 'received by ' + meta.ref : meta.ref), d.checkFile ? 'photo' : ''].filter(Boolean);
@@ -638,8 +648,90 @@
       b.addEventListener('click', e => { e.stopPropagation(); openPaymentRow(j, i); });
       list.appendChild(b);
     });
+    rej.forEach(r => {
+      const bits = [r.method === 'Check' && r.ref ? 'Check #' + r.ref : (r.method || ''), r.replacedBy ? 'replaced ' + shortDay(r.replacedOn) : 'returned ' + shortDay(r.returned)].filter(Boolean);
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'rd-pay-row rej' + (r.replacedBy ? ' done' : '');
+      b.innerHTML = '<span class="pay-tag pay-rejected">Rejected</span>'
+        + '<span class="rd-pay-main"><span class="rd-pay-what">' + esc(cap(r.desc) || 'Payment') + '</span><span class="rd-pay-sub">' + esc(bits.join(' · ')) + '</span></span>'
+        + '<span class="rd-pay-amt">' + usd(parseFloat(r.amount) || 0) + '</span>';
+      b.addEventListener('click', e => { e.stopPropagation(); openRejectedRow(j, r.id); });
+      list.appendChild(b);
+    });
     menu.appendChild(list);
-    payFoot(menu, [['Close', 'ghost', closeMenu], ['+ Add payment', 'go', () => openPaymentForm(j)]]);
+    payFoot(menu, open.length
+      ? [['Record replacement', 'ghost wide', () => openPaymentForm(j, open[0])], ['+ Add payment', 'go', () => openPaymentForm(j)]]
+      : [['Close', 'ghost', closeMenu], ['+ Add payment', 'go', () => openPaymentForm(j)]]);
+  }
+  const shortDay = v => { const t = payDate(v); return t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : String(v || ''); };
+  // A rejected payment: what happened, record its replacement, or undo
+  function openRejectedRow(j, rid) {
+    const r = (j.rejectedPays || []).find(x => x.id === rid);
+    if (!r) return;
+    const menu = paySheet('Rejected payment', usd(parseFloat(r.amount) || 0) + ' · ' + (cap(r.desc) || 'Payment'), [r.method === 'Check' && r.ref ? 'Check #' + r.ref : r.method, r.date ? 'deposited ' + shortDay(r.date) : ''].filter(Boolean).join(' · '));
+    if (!menu) return;
+    const info = document.createElement('div');
+    info.className = 'rd-pay-banner';
+    info.innerHTML = '<b>' + esc(r.reason) + '</b><span>Returned ' + esc(shortDay(r.returned)) + (r.notice ? ' · return notice saved in Checks' : '') + '</span>'
+      + (r.note ? '<span>' + esc(r.note) + '</span>' : '')
+      + (r.replacedBy ? '<span class="ok">Replaced ' + esc(shortDay(r.replacedOn)) + '</span>' : '');
+    menu.appendChild(info);
+    if (!r.replacedBy) payFoot(menu, [['Record replacement', 'go', () => openPaymentForm(j, r)]]);
+    // Once a replacement is recorded, putting the original back would count it twice.
+    payFoot(menu, r.replacedBy ? [['Back', 'ghost', () => openPaymentsSheet(j)]] : [['Back', 'ghost', () => openPaymentsSheet(j)], ['Not rejected, put it back', 'plain', () => {
+      try { restoreRejectedPayment(j.id, r.id); toast('Payment put back'); } catch (e) {}
+      later(() => openPaymentsSheet(currentJob() || j));
+    }]]);
+  }
+  // Mark a collected payment as rejected (check came back from the bank)
+  function openRejectForm(j, idx) {
+    const d = (j.deposits || [])[idx];
+    if (!d) return;
+    const meta = payMeta(j, d), isCheck = !meta.method || meta.method === 'Check';
+    const menu = paySheet('Rejected', isCheck ? 'Check came back' : 'Payment was rejected', [usd(parseFloat(d.amount) || 0), cap(d.desc), meta.ref && isCheck ? 'check #' + meta.ref : '', d.date ? 'deposited ' + shortDay(d.date) : ''].filter(Boolean).join(' · '));
+    if (!menu) return;
+    const now = new Date(), today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const st = { reason: '', file: null };
+    const form = document.createElement('div');
+    form.className = 'rd-pay-form';
+    form.innerHTML = '<div class="rd-pay-lbl">Why was it rejected</div><div class="rd-pay-chips wrap" data-k="reason"></div>'
+      + '<label><span class="rd-pay-lbl">Date returned</span><input class="rd-pay-in" data-k="date" type="date" value="' + today + '" max="' + today + '"></label>'
+      + '<label><span class="rd-pay-lbl">Note (optional)</span><input class="rd-pay-in" data-k="note" type="text" autocomplete="off" placeholder="e.g. sent to mortgage company"></label>'
+      + '<button type="button" class="rd-pay-photo" data-k="photo"><span data-k="photoT"></span><span class="rd-pay-photo-s" data-k="photoS"></span></button>'
+      + '<input type="file" accept="image/*,application/pdf" data-k="file" hidden>'
+      + '<div class="rd-pay-err" data-k="err" role="alert"></div>';
+    menu.appendChild(form);
+    const el = k => form.querySelector('[data-k="' + k + '"]');
+    const draw = () => {
+      el('reason').querySelectorAll('button').forEach(b => { const on = b.textContent === st.reason; b.classList.toggle('on', on); b.classList.toggle('red', on); b.setAttribute('aria-pressed', String(on)); });
+      el('photoT').textContent = st.file ? st.file.name : 'Add photo of the bank’s return notice';
+      el('photoS').textContent = st.file ? 'Tap to change' : 'Optional';
+      el('photo').classList.toggle('has', !!st.file);
+    };
+    PAY_REJECT_REASONS.forEach(r => {
+      const c = document.createElement('button');
+      c.type = 'button'; c.className = 'rd-pay-chip'; c.textContent = r;
+      c.addEventListener('click', e => { e.stopPropagation(); st.reason = r; el('err').textContent = ''; draw(); });
+      el('reason').appendChild(c);
+    });
+    el('photo').addEventListener('click', e => { e.stopPropagation(); el('file').click(); });
+    el('file').addEventListener('change', () => { st.file = el('file').files[0] || null; draw(); });
+    form.addEventListener('click', e => e.stopPropagation());
+    const label = 'Mark rejected · −' + usd(parseFloat(d.amount) || 0);
+    payFoot(menu, [['Cancel', 'ghost', () => openPaymentRow(j, idx)], [label, 'red', async btn => {
+      if (!st.reason) { el('err').textContent = 'Pick why it was rejected.'; return; }
+      btn.disabled = true; btn.textContent = st.file ? 'Uploading photo…' : 'Saving…';
+      try {
+        await rejectJobPayment(j.id, idx, { reason: st.reason, date: el('date').value, note: el('note').value, file: st.file });
+        try { toast('Marked rejected · ' + usd(parseFloat(d.amount) || 0) + ' taken off Collected'); } catch (e) {}
+        later(() => openPaymentsSheet(currentJob() || j));
+      } catch (err) {
+        console.error('[payment] reject failed', err);
+        btn.disabled = false; btn.textContent = label;
+        el('err').textContent = 'The photo did not upload, so nothing was changed. Try again, or remove the photo.';
+      }
+    }]]);
+    draw();
   }
   // One payment: change how it was paid, or jump to the full edit form
   function openPaymentRow(j, idx) {
@@ -665,6 +757,7 @@
       chips.appendChild(c);
     });
     menu.appendChild(chips);
+    payFoot(menu, [[(!cur || cur === 'Check') ? 'Check came back (rejected)' : 'Payment was rejected', 'warn', () => openRejectForm(j, idx)]]);
     payFoot(menu, [['Back', 'ghost', () => openPaymentsSheet(j)], ['Edit amount, date or photo', 'plain', () => {
       closeMenu();
       const body = $id('depBody'), head = $id('depAccHeader');
@@ -673,13 +766,15 @@
       if (item) later(() => item.scrollIntoView({ block: 'center', behavior: 'smooth' }));
     }]]);
   }
-  function openPaymentForm(j) {
+  function openPaymentForm(j, replaces) {
     let left = 0;
     try { left = Math.max(0, jobAmountOwed(j) - jobDepositTotal(j)); } catch (e) {}
-    const menu = paySheet('Add payment', 'Add payment', (j.name || 'Job') + (left > 0.5 ? ' · ' + usd(left) + ' still owed' : ''));
+    const menu = replaces
+      ? paySheet('Replacement', 'Record replacement', 'Replaces the ' + usd(parseFloat(replaces.amount) || 0) + ' ' + String(replaces.desc || 'payment') + ' returned ' + shortDay(replaces.returned))
+      : paySheet('Add payment', 'Add payment', (j.name || 'Job') + (left > 0.5 ? ' · ' + usd(left) + ' still owed' : ''));
     if (!menu) return;
     const now = new Date(), today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-    const st = { method: 'Check', file: null };
+    const st = { method: (replaces && PAY_METHODS.includes(replaces.method)) ? replaces.method : 'Check', file: null };
     const form = document.createElement('div');
     form.className = 'rd-pay-form';
     form.innerHTML = '<div class="rd-pay-lbl">Paid by</div><div class="rd-pay-chips" data-k="method"></div>'
@@ -692,6 +787,7 @@
       + '<div class="rd-pay-err" data-k="err" role="alert"></div>';
     menu.appendChild(form);
     const el = k => form.querySelector('[data-k="' + k + '"]');
+    if (replaces && PAY_DESCS.includes(replaces.desc)) el('desc').value = replaces.desc;
     const REF = { Check: ['Check # (optional)', 'check photo'], Zelle: ['Confirmation # (optional)', 'Zelle screenshot'], Cash: ['Received by (optional)', 'receipt photo'], Card: ['Note (optional)', 'receipt photo'], Other: ['Note (optional)', 'photo'] };
     let saveBtn = null;
     const amount = () => Math.round((parseFloat(String(el('amount').value).replace(/[^0-9.]/g, '')) || 0) * 100) / 100;
@@ -718,7 +814,7 @@
       el('err').textContent = '';
       btn.disabled = true; btn.textContent = st.file ? 'Uploading photo…' : 'Saving…';
       try {
-        await addJobPayment(j.id, { amount: amount(), desc: el('desc').value, method: st.method, ref: el('ref').value, date: el('date').value, file: st.file });
+        await addJobPayment(j.id, { amount: amount(), desc: el('desc').value, method: st.method, ref: el('ref').value, date: el('date').value, file: st.file, replaces: replaces ? replaces.id : undefined });
         closeMenu();
         try { toast(st.method + ' payment added · ' + usd(amount())); } catch (e) {}
       } catch (err) {
