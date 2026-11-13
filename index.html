@@ -1520,12 +1520,26 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 
 /* ── SEARCH on phones: a Search button opens a full-screen search ── */
 .gs-btn,#gsOverlay{display:none}
+/* Search fades and slides in (tap or pull-down) and fades out, like iPhone search */
+@keyframes gsIn{from{opacity:0}to{opacity:1}}
+@keyframes gsCardIn{from{transform:translateY(-18px)}to{transform:none}}
+@keyframes gsOut{from{opacity:1}to{opacity:0}}
+#gsOverlay.gs-in{animation:gsIn .2s ease both}
+#gsOverlay.gs-in .gs-card{animation:gsCardIn .26s cubic-bezier(.2,.8,.2,1) both}
+#gsOverlay.gs-out{animation:gsOut .16s ease both;pointer-events:none}
+#gsOverlay.gs-settle{transition:opacity .22s ease}
+#gsOverlay.gs-settle .gs-card{transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){
+  #gsOverlay.gs-in,#gsOverlay.gs-in .gs-card,#gsOverlay.gs-out{animation:none}
+  #gsOverlay.gs-settle,#gsOverlay.gs-settle .gs-card{transition:none}
+}
 @media (max-width:760px){
   #globalSearch{display:none !important}
   .gs-btn{display:flex;align-items:center;gap:6px;flex:1;min-width:0;height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.06);color:var(--muted);font-size:15px;font-family:inherit;cursor:pointer}
   .gs-btn .ti{font-size:18px;color:var(--brand-light)}
   html.gs-lock,html.gs-lock body{overflow:hidden}
-  #gsOverlay.open{display:flex;flex-direction:column;position:fixed;inset:0;z-index:500;background:#0E1219}
+  #gsOverlay.open,#gsOverlay.pulling{display:flex;flex-direction:column;position:fixed;inset:0;z-index:500;background:#0E1219}
+  #gsOverlay.pulling:not(.open){pointer-events:none}
   #gsOverlay .gs-card{display:flex;flex-direction:column;flex:1;min-height:0}
   .gs-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;border-bottom:1px solid var(--border);background:#12161E}
   .gs-field{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:46px;padding:0 6px 0 12px;border-radius:12px;background:#1A1F29;border:1px solid rgba(77,157,224,.5)}
@@ -11951,6 +11965,11 @@ function gsRecent(){ try{ return JSON.parse(localStorage.getItem(GS_RECENT_KEY)|
 function gsRemember(id){ try{ const r=gsRecent().filter(x=>x!==id); r.unshift(id); localStorage.setItem(GS_RECENT_KEY, JSON.stringify(r.slice(0,6))); }catch(e){} }
 window.gsOpen=function(){
   const o=document.getElementById('gsOverlay'); if(!o) return;
+  clearTimeout(window.__gsOutT); o.classList.remove('gs-out');
+  // Opened by a tap: fade in. Opened by the pull-down: it is already on screen, following the finger.
+  if(!o.classList.contains('pulling') && !o.classList.contains('open')){
+    o.classList.add('gs-in'); setTimeout(()=>o.classList.remove('gs-in'), 320);
+  }
   o.classList.add('open'); document.documentElement.classList.add('gs-lock');
   const inp=document.getElementById('gsInput'); inp.value=''; window.__gsList=null; gsRender();
   // Focus right away, while we're still inside the tap / pull: iPhones only raise the
@@ -11959,8 +11978,14 @@ window.gsOpen=function(){
   setTimeout(()=>{ if(document.activeElement!==inp) inp.focus(); }, 30);
 };
 window.gsClose=function(){
-  const o=document.getElementById('gsOverlay'); if(o) o.classList.remove('open');
+  const o=document.getElementById('gsOverlay');
   document.documentElement.classList.remove('gs-lock');
+  if(!o || !o.classList.contains('open')) return;
+  // Fade out, then hide. Taps pass through straight away.
+  try{ document.getElementById('gsInput').blur(); }catch(e){}
+  o.classList.remove('gs-in'); o.classList.add('gs-out');
+  clearTimeout(window.__gsOutT);
+  window.__gsOutT = setTimeout(()=>{ o.classList.remove('open','gs-out'); }, 170);
 };
 window.gsClear=function(){ const inp=document.getElementById('gsInput'); inp.value=''; gsRender(); inp.focus(); };
 function gsStage(j){
@@ -27536,11 +27561,11 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
 
 // Phone: pull down at the top of any main screen to open Search (like iPhone's pull-down search).
 // Only when the screen is already scrolled to the top and nothing is open on top of it.
-// A pill follows your finger ("Pull to search" → "Release to search"); let go past it to open.
+// The Search screen fades in under your finger as you pull; let go past the threshold to open it.
 (function pullToSearch(){
   const phone = () => window.matchMedia && window.matchMedia('(max-width:760px)').matches;
   const NEED = 80;                                          // px of pull to trigger
-  let pill = null, sx = 0, sy = 0, armed = false, mode = '', dy = 0;
+  let sx = 0, sy = 0, armed = false, mode = '', dy = 0;
   function blocked(){
     if (document.documentElement.classList.contains('gs-lock')) return true;            // search already open
     const ov = document.getElementById('detailOverlay'); if (ov && ov.classList.contains('open')) return true;
@@ -27557,32 +27582,41 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
     }
     return true;
   }
-  function ensurePill(){
-    if (pill) return pill;
-    pill = document.createElement('div');
-    pill.className = 'pts-pill'; pill.setAttribute('aria-hidden', 'true');
-    pill.innerHTML = '<i class="ti ti-search"></i><span>Pull to search</span>';
-    document.body.appendChild(pill);
-    const st = document.createElement('style');
-    st.textContent = '.pts-pill{position:fixed;left:50%;top:calc(60px + env(safe-area-inset-top));z-index:650;display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:999px;background:#1A2330;border:1px solid #2A3846;color:#C4CBD8;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.45);transform:translate(-50%,-44px);opacity:0;pointer-events:none;will-change:transform}'
-      + '.pts-pill .ti{font-size:18px;color:#7DD3FC}.pts-pill.ready{background:#38BDF8;border-color:#38BDF8;color:#06202E}.pts-pill.ready .ti{color:#06202E}'
-      + '.pts-pill.back{transition:transform .22s ease,opacity .22s ease}';
-    document.head.appendChild(st);
-    return pill;
-  }
+  // The real Search screen follows the finger: it fades in and its contents slide
+  // down into place as you pull, then settles open (or fades away) when you let go.
+  const ov = () => document.getElementById('gsOverlay');
+  const SLIDE = 28;
+  let showing = false;
   function show(d){
-    const p = ensurePill();
-    const y = Math.min(d * 0.5, 44) - 44;
-    p.classList.remove('back');
-    p.style.transform = `translate(-50%,${y}px)`;
-    p.style.opacity = String(Math.min(1, d / 40));
-    const ready = d >= NEED;
-    if (ready !== p.classList.contains('ready')){
-      p.classList.toggle('ready', ready);
-      p.querySelector('span').textContent = ready ? 'Release to search' : 'Pull to search';
+    const o = ov(); if (!o) return;
+    const card = o.querySelector('.gs-card');
+    if (!showing){
+      showing = true;
+      clearTimeout(window.__gsOutT); clearTimeout(window.__gsPullT);
+      o.classList.remove('gs-out', 'gs-in', 'gs-settle', 'open');
+      try { const inp = document.getElementById('gsInput'); inp.value = ''; window.__gsList = null; gsRender(); } catch (err) {}
+      o.classList.add('pulling');
     }
+    const p = Math.max(0, Math.min(1, d / NEED));
+    const eased = 1 - Math.pow(1 - p, 2);                   // quick at first, gentle near the end
+    o.style.opacity = String(eased);
+    if (card) card.style.transform = `translateY(${-(1 - eased) * SLIDE}px)`;
   }
-  function hide(){ if (!pill) return; pill.classList.add('back'); pill.style.transform = 'translate(-50%,-44px)'; pill.style.opacity = '0'; pill.classList.remove('ready'); }
+  function settle(open){
+    const o = ov(); if (!o || !showing) return;
+    showing = false;
+    const card = o.querySelector('.gs-card');
+    o.classList.add('gs-settle');
+    void o.offsetWidth;                                     // start the transition from where the finger left it
+    o.style.opacity = open ? '1' : '0';
+    if (card) card.style.transform = open ? 'none' : `translateY(${-SLIDE}px)`;
+    clearTimeout(window.__gsPullT);
+    window.__gsPullT = setTimeout(() => {
+      o.classList.remove('gs-settle', 'pulling');
+      o.style.opacity = ''; if (card) card.style.transform = '';
+    }, 280);
+  }
+  function hide(){ settle(false); }
 
   document.addEventListener('touchstart', e => {
     armed = false; mode = ''; dy = 0;
@@ -27610,8 +27644,9 @@ try { localStorage.removeItem('stormshield_team_v1'); } catch(e) {}
     if (!armed) return;
     armed = false;
     const go = mode === 'pull' && dy >= NEED;
-    mode = ''; hide();
-    if (go){ try { window.gsOpen(); } catch (err) {} }
+    mode = '';
+    if (go){ try { window.gsOpen(); } catch (err) {} settle(true); }   // focus inside the gesture so the keyboard comes up
+    else hide();
   };
   document.addEventListener('touchend', end, { passive: true, capture: true });
   document.addEventListener('touchcancel', () => { armed = false; mode = ''; hide(); }, { passive: true, capture: true });
