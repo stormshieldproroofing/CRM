@@ -683,6 +683,8 @@
       later(() => openPaymentsSheet(currentJob() || j));
     }]]);
   }
+  // The Payments collected list (index.html) opens a rejected payment through this.
+  window.rdOpenRejected = rid => { const j = currentJob(); if (j) openRejectedRow(j, rid); };
   // Mark a collected payment as rejected (check came back from the bank)
   function openRejectForm(j, idx) {
     const d = (j.deposits || [])[idx];

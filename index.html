@@ -646,7 +646,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
     +'<link rel="stylesheet" href="redesign.css?v=47">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=27"><\/script>');
+    +'<script src="redesign-job.js?v=28"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1519,6 +1519,12 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 }
 
 /* ── SEARCH on phones: a Search button opens a full-screen search ── */
+.dep-rej{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 12px;margin-bottom:6px;border:1px dashed rgba(248,113,113,.45);border-radius:7px;background:rgba(248,113,113,.06);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dep-rej-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.dep-rej-what{font-size:13px;font-weight:600}
+.dep-rej-sub{font-size:11px;line-height:1.4;color:#FCA5A5}
+.dep-rej.done .dep-rej-sub{color:var(--muted)}
+.dep-rej-amt{font-size:13px;font-weight:700;color:var(--muted);text-decoration:line-through;white-space:nowrap}
 .gs-btn,#gsOverlay{display:none}
 /* Search fades and slides in (tap or pull-down) and fades out, like iPhone search */
 @keyframes gsIn{from{opacity:0}to{opacity:1}}
@@ -8196,8 +8202,19 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       // Deposit list
       const dl=$('depList');
       if(dl){
+        // Rejected payments (checks that came back) stay listed as a record: crossed out, not counted.
+        const rejJob=jobs.find(x=>x.id===openJobId);
+        const rejShort=v=>{ const t=smPayDate(v); return t?t.toLocaleDateString('en-US',{month:'short',day:'numeric'}):String(v||''); };
+        const rejHtml=((rejJob&&rejJob.rejectedPays)||[]).map(r=>{
+          const bits=[r.method==='Check'&&r.ref?'Check #'+r.ref:(r.method||''), r.replacedBy?'replaced '+rejShort(r.replacedOn):'returned '+rejShort(r.returned), r.replacedBy?'':r.reason].filter(Boolean).join(' · ');
+          return `<button type="button" class="dep-rej${r.replacedBy?' done':''}" onclick="event.stopPropagation(); if(window.rdOpenRejected) window.rdOpenRejected('${escapeHtml(r.id)}')">
+            <span class="pay-tag pay-rejected">Rejected</span>
+            <span class="dep-rej-main"><span class="dep-rej-what">${escapeHtml(r.desc?r.desc.charAt(0).toUpperCase()+r.desc.slice(1):'Payment')}</span><span class="dep-rej-sub">${escapeHtml(bits)}</span></span>
+            <span class="dep-rej-amt">$${fmtMoney(r.amount)}</span>
+          </button>`;
+        }).join('');
         if(!deps.length){
-          dl.innerHTML='<div style="font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px">No deposits added yet</div>';
+          dl.innerHTML=(rejHtml?'':'<div style="font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px">No deposits added yet</div>')+rejHtml;
         } else {
           const svgPencil=`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
           const svgTrash=`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -8277,7 +8294,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
                 </div>
               </div>
             </div>`;
-          }).join('');
+          }).join('') + rejHtml;
         }
       }
     }
