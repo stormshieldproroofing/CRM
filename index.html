@@ -1763,6 +1763,14 @@ html.ui-new .dep-rej .rd-row-ic{color:#F87171}
 .sm-wk-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sm-wk-kind{font-weight:700}
 .sm-wk-kind i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+/* This week list, grouped by day: one date tile per day, that day's events beside it */
+.sm-wk-day{display:flex;gap:12px;padding:10px 4px;border-top:1px solid rgba(255,255,255,.05)}
+.sm-wk-day:first-child{border-top:none}
+.sm-wk-evs{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sm-wk-ev{display:flex;align-items:center;gap:10px;min-height:44px;padding:2px 4px;border-radius:8px;cursor:pointer}
+.sm-wk-ev:hover{background:rgba(255,255,255,.025)}
+.sm-wk-bar{width:5px;height:30px;border-radius:3px;flex-shrink:0}
+.sm-wk-time{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;flex-shrink:0}
 /* This week: list ⇄ mini calendar (swipe on touch, tabs everywhere) */
 .sm-wk-tabs{display:flex;gap:2px;padding:3px;border-radius:10px;background:rgba(255,255,255,.05);flex-shrink:0}
 .sm-wk-tab{width:44px;height:36px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -6754,19 +6762,25 @@ function renderBoardSalesSummary(){
       <div class="sm-wk-pager" id="smWkPager">
       <div class="sm-wk-pg">
       ${wkTotal===0 ? `<div class="sm-empty">Nothing scheduled in the next 7 days.</div>` : `
-      <div class="sm-list">
-        ${wkDays.filter(x=>x.events.length).map(x => x.events.map(ev => {
-          const j = ev.j;
-          const who = jobRep(j).name;
-          const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
-          const what = ev.label + (ev.time ? ' · ' + window.apptTimeLabel(ev.time) : '');
-          return `<div class="sm-wk-row" onclick="openDetail('${j.id}')">
-            <div class="sm-wk-date${x.key===todayKey?' today':''}"><span>${x.key===todayKey?'Today':dowShort[x.d.getDay()]}</span><b>${x.d.getDate()}</b></div>
-            <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name||'Job')}</div>
-              <div class="sm-wk-sub"><span class="sm-wk-kind" style="color:${ev.color}"><i style="background:${ev.color}"></i>${escapeHtml(what)}</span>${addr?' · '+escapeHtml(addr):''}${who?' · '+escapeHtml(who):''}</div></div>
-            <i class="ti ti-chevron-right sm-chev"></i>
-          </div>`;
-        }).join('')).join('')}
+      <div class="sm-wk-days">
+        ${wkDays.filter(x=>x.events.length).map(x => `
+        <div class="sm-wk-day">
+          <div class="sm-wk-date${x.key===todayKey?' today':''}"><span>${x.key===todayKey?'Today':dowShort[x.d.getDay()]}</span><b>${x.d.getDate()}</b></div>
+          <div class="sm-wk-evs">
+            ${x.events.map(ev => {
+              const j = ev.j;
+              const who = jobRep(j).name;
+              const addr = (j.address && j.address!=='—') ? j.address.split(',')[0] : '';
+              const when = ev.kind==='build' ? 'All day' : (ev.time ? window.apptTimeLabel(ev.time) : '');
+              return `<div class="sm-wk-ev" onclick="openDetail('${j.id}')">
+                <i class="sm-wk-bar" style="background:${ev.color}"></i>
+                <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name||'Job')}</div>
+                  <div class="sm-wk-sub"><span class="sm-wk-kind" style="color:${ev.color}">${escapeHtml(ev.label)}</span>${addr?' · '+escapeHtml(addr):''}${who?' · '+escapeHtml(who):''}</div></div>
+                ${when?`<div class="sm-wk-time">${escapeHtml(when)}</div>`:''}
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`).join('')}
       </div>`}
       </div>
       <div class="sm-wk-pg" id="smWkCal"></div>
