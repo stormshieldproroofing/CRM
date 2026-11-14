@@ -146,4 +146,146 @@ test('auto-snap: snaps after ~0.4s still, or ~1.1s steady-enough in the hand', (
   assert.strictEqual(cam.readyToSnap(0, 8), true);
 });
 
+/* ---------- find the page, straighten, whiten ---------- */
+
+// A photo of a sheet of paper on a table: corners given in pixels, shaded
+// (darker toward one side, warm tint) with a few lines of "ink".
+function inQuad(q, x, y) {
+  let s = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i], b = q[(i + 1) % 4];
+    const z = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+    if (z === 0) continue;
+    if (s && (z > 0 ? 1 : -1) !== s) return false;
+    s = z > 0 ? 1 : -1;
+  }
+  return true;
+}
+function photo(w, h, q, o) {
+  o = o || {};
+  const px = new Uint8ClampedArray(w * h * 4), lum = new Uint8Array(w * h);
+  const toPage = cam.homography(q, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    let r = o.table == null ? 55 : o.table, g = r - 8, b = r - 16;
+    if (o.blueTable) { r = 20; g = 40; b = 160; }
+    if (inQuad(q, x + 0.5, y + 0.5)) {
+      const p = cam.mapPoint(toPage, x + 0.5, y + 0.5);
+      const shade = 1 - 0.35 * p.x;                      // a shadow across the page
+      r = 235 * shade; g = 225 * shade; b = 195 * shade;  // warm room light
+      if (o.ink && p.x > 0.15 && p.x < 0.85 && Math.floor(p.y * 20) % 2 === 1 && p.y > 0.15 && p.y < 0.85) { r *= 0.2; g *= 0.2; b *= 0.2; }
+    }
+    px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255;
+    lum[y * w + x] = (px[i] * 77 + px[i + 1] * 150 + px[i + 2] * 29) >> 8;
+  }
+  return { px, lum, w, h };
+}
+const TILTED = [{ x: 62, y: 40 }, { x: 250, y: 58 }, { x: 236, y: 204 }, { x: 34, y: 180 }];   // in a 300 × 240 photo
+
+test('find the page: a tilted sheet on a dark table → its four corners', () => {
+  const p = photo(300, 240, TILTED, { ink: true });
+  const r = cam.findPage(p.lum, p.w, p.h);
+  assert.ok(r, 'page found');
+  r.quad.forEach((c, i) => {
+    assert.ok(near(c.x * p.w, TILTED[i].x, 3), `corner ${i} x: ${c.x * p.w} vs ${TILTED[i].x}`);
+    assert.ok(near(c.y * p.h, TILTED[i].y, 3), `corner ${i} y: ${c.y * p.h} vs ${TILTED[i].y}`);
+  });
+  assert.strictEqual(r.edge, false);
+  assert.ok(r.area > 0.3 && r.area < 0.6);
+});
+test('find the page: white paper on a white counter → not found (set the corners by hand)', () => {
+  const p = photo(300, 240, TILTED, { table: 215 });
+  assert.strictEqual(cam.findPage(p.lum, p.w, p.h), null);
+});
+test('find the page: an L-shaped bright patch (glare, a window) is not a page', () => {
+  const w = 200, h = 160, lum = new Uint8Array(w * h).fill(40);
+  for (let y = 20; y < 140; y++) for (let x = 20; x < 180; x++) if (x < 70 || y > 100) lum[y * w + x] = 230;
+  assert.strictEqual(cam.findPage(lum, w, h), null);
+});
+test('find the page: a page running off the picture is flagged', () => {
+  const p = photo(300, 240, [{ x: 0, y: 30 }, { x: 240, y: 30 }, { x: 240, y: 210 }, { x: 0, y: 210 }]);
+  const r = cam.findPage(p.lum, p.w, p.h);
+  assert.ok(r && r.edge);
+});
+test('find the page: nothing bright, or too dark → not found', () => {
+  assert.strictEqual(cam.findPage(new Uint8Array(200 * 160).fill(10), 200, 160), null);
+  const p = photo(300, 240, [{ x: 140, y: 110 }, { x: 160, y: 110 }, { x: 160, y: 130 }, { x: 140, y: 130 }]);
+  assert.strictEqual(cam.findPage(p.lum, p.w, p.h), null);   // a scrap, not a page
+});
+
+test('corners: crossed-over corners are refused', () => {
+  assert.strictEqual(cam.quadOk(TILTED), true);
+  assert.strictEqual(cam.quadOk([TILTED[0], TILTED[2], TILTED[1], TILTED[3]]), false);
+});
+
+test('straighten: the map sends each corner of the page to a corner of the picture', () => {
+  const to = [{ x: 0, y: 0 }, { x: 850, y: 0 }, { x: 850, y: 1100 }, { x: 0, y: 1100 }];
+  const m = cam.homography(TILTED, to);
+  TILTED.forEach((c, i) => {
+    const p = cam.mapPoint(m, c.x, c.y);
+    assert.ok(near(p.x, to[i].x, 1e-6) && near(p.y, to[i].y, 1e-6));
+  });
+});
+test('straighten: a page close to letter shape is saved as exactly letter; others keep their shape', () => {
+  const s = cam.warpSize([{ x: 0, y: 0 }, { x: 800, y: 30 }, { x: 790, y: 1000 }, { x: 10, y: 1010 }], 2400);
+  assert.ok(near(s.w / s.h, 8.5 / 11, 0.002));
+  const land = cam.warpSize([{ x: 0, y: 0 }, { x: 1100, y: 0 }, { x: 1100, y: 830 }, { x: 0, y: 830 }], 2400);
+  assert.ok(near(land.w / land.h, 11 / 8.5, 0.002));
+  const receipt = cam.warpSize([{ x: 0, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 900 }, { x: 0, y: 900 }], 2400);
+  assert.ok(near(receipt.w / receipt.h, 1 / 3, 0.002));
+  const big = cam.warpSize([{ x: 0, y: 0 }, { x: 4000, y: 0 }, { x: 4000, y: 5176 }, { x: 0, y: 5176 }], 2400);
+  assert.strictEqual(Math.max(big.w, big.h), 2400);
+});
+test('straighten: the tilted page comes out flat, filling the picture, table cropped away', () => {
+  const p = photo(300, 240, TILTED, { ink: true, blueTable: true });
+  const s = cam.warpSize(TILTED, 400);
+  const out = cam.warp(p.px, p.w, p.h, TILTED, s.w, s.h);
+  // no table (blue here) anywhere but the outermost pixels
+  let table = 0;
+  for (let y = 3; y < s.h - 3; y++) for (let x = 3; x < s.w - 3; x++) {
+    const i = (y * s.w + x) * 4;
+    if (out[i + 2] - out[i] > 60) table++;
+  }
+  assert.strictEqual(table, 0);
+  // the ink lines are level now: a row through a line is ink from 15% to 85% across
+  const row = Math.round(s.h * 0.175);   // middle of the first printed line
+  const at = fx => out[(row * s.w + Math.round(s.w * fx)) * 4];
+  assert.ok(at(0.3) < 80 && at(0.5) < 80 && at(0.7) < 80, 'ink line runs level');
+  assert.ok(at(0.07) > 150 && at(0.93) > 120, 'margins are paper');
+});
+
+test('whiten: shaded, yellowed paper turns white; ink stays dark', () => {
+  const p = photo(300, 240, TILTED, { ink: true });
+  const s = cam.warpSize(TILTED, 400);
+  const out = cam.warp(p.px, p.w, p.h, TILTED, s.w, s.h);
+  const before = (fx, fy) => { const i = (Math.round(s.h * fy) * s.w + Math.round(s.w * fx)) * 4; return [out[i], out[i + 1], out[i + 2]]; };
+  const dim = before(0.92, 0.5);
+  assert.ok(dim[0] < 180 && dim[0] - dim[2] > 15, 'starts grey and yellow on the shaded side');
+  cam.cleanPage(out, s.w, s.h, 'white');
+  for (const [fx, fy] of [[0.07, 0.5], [0.5, 0.07], [0.92, 0.5], [0.92, 0.92]]) {
+    const c = before(fx, fy);
+    assert.ok(c[0] >= 250 && c[1] >= 250 && c[2] >= 250, `paper is white at ${fx},${fy}: ${c}`);
+  }
+  const ink = before(0.5, 0.175);
+  assert.ok(ink[0] < 60 && ink[1] < 60 && ink[2] < 60, `ink stays dark: ${ink}`);
+});
+test('whiten: blue pen keeps its colour; black & white makes it black', () => {
+  const w = 160, h = 200;
+  const mk = () => {
+    const px = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4, sig = y > 150 && y < 160 && x > 30 && x < 130;
+      px[i] = sig ? 40 : 200; px[i + 1] = sig ? 60 : 195; px[i + 2] = sig ? 170 : 175; px[i + 3] = 255;
+    }
+    return px;
+  };
+  const i = (155 * w + 80) * 4, j = (60 * w + 80) * 4;
+  const white = cam.cleanPage(mk(), w, h, 'white');
+  assert.ok(white[i + 2] - white[i] > 100, 'still blue');
+  assert.ok(white[j] >= 250 && white[j + 2] >= 250);
+  const bw = cam.cleanPage(mk(), w, h, 'bw');
+  assert.ok(bw[i] === bw[i + 1] && bw[i + 1] === bw[i + 2] && bw[i] < 30, `black: ${bw[i]}`);
+  assert.strictEqual(bw[j], 255);
+});
+
 console.log(`\n${passed} passed`);
