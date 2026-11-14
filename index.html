@@ -658,6 +658,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-sync.js"></script>
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
+<script src="crm-weekcal.js"></script>
 <script src="supabase-crm.js?v=10"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=2"></script>
@@ -1762,6 +1763,30 @@ html.ui-new .dep-rej .rd-row-ic{color:#F87171}
 .sm-wk-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sm-wk-kind{font-weight:700}
 .sm-wk-kind i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+/* This week: list ⇄ mini calendar (swipe on touch, tabs everywhere) */
+.sm-wk-tabs{display:flex;gap:2px;padding:3px;border-radius:10px;background:rgba(255,255,255,.05);flex-shrink:0}
+.sm-wk-tab{width:44px;height:36px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sm-wk-tab.on{background:var(--brand-light);color:#fff}
+.sm-wk-pager{display:flex;align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;transition:height .2s ease}
+.sm-wk-pager::-webkit-scrollbar{display:none}
+.sm-wk-pg{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+.sm-cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.sm-cal-month{font-size:14px;font-weight:700;color:#fff}
+.sm-cal-nav{display:flex;gap:4px}
+.sm-cal-nav button{width:44px;height:36px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:none;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sm-cal-dow,.sm-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}
+.sm-cal-dow span{text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);padding-bottom:4px}
+.sm-cal-day{height:44px;padding:4px 0 0;border:0;border-radius:9px;background:none;color:#fff;font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.sm-cal-day b{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+.sm-cal-day.out b{color:var(--muted);font-weight:500}
+.sm-cal-day.today b{background:var(--brand-light);color:#fff}
+.sm-cal-day.sel{background:rgba(255,255,255,.08)}
+.sm-cal-dots{display:flex;gap:3px;height:5px}
+.sm-cal-dots i{width:5px;height:5px;border-radius:50%}
+.sm-cal-sel{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:12px 4px 2px}
+.sm-cal-sel.today{color:var(--brand-light)}
+.sm-cal-none{font-size:13px;color:var(--muted);padding:10px 4px}
+.sm-cal-time{width:64px;flex-shrink:0;font-size:12px;font-weight:700;color:var(--muted)}
 .sm-chev{color:var(--muted);font-size:18px}
 .sm-todo-list{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 240px);overflow:auto}
 .sm-todo-job{display:flex;align-items:center;gap:8px;padding:8px 10px;border-left:3px solid;border-radius:6px;background:rgba(255,255,255,.04);cursor:pointer}
@@ -6440,6 +6465,66 @@ async function editSummaryGoal(scope, who){
   }catch(_){ toast('Saved on this device only — could not sync to team'); }
 }
 
+// Summary → This week → calendar page. A small month grid with a dot per kind of event;
+// tapping a day lists that day's builds and appointments. Uses the same jobs as the list
+// (already narrowed to what this user may see and to the rep filter).
+function renderSumWeekCal(){
+  const box = document.getElementById('smWkCal');
+  const wc = window.crmWeekCal;
+  if(!box || !wc) return;
+  const todayKey = wc.dayKey(new Date());
+  const ym = window.__smWkMonth || todayKey.slice(0, 7);
+  const [y, m] = ym.split('-').map(Number);
+  const byDay = wc.eventsByDay(window.__smWkJobs || [], window.APPT_KINDS || {}, window.apptGet);
+  let sel = window.__smWkSel;
+  if(!sel || sel.slice(0, 7) !== ym) sel = todayKey.slice(0, 7) === ym ? todayKey : ym + '-01';
+  const selDate = new Date(sel + 'T12:00:00');
+  const selLabel = (sel === todayKey ? 'Today · ' : '') + selDate.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  const evs = byDay[sel] || [];
+  const timeLabel = t => (typeof window.apptTimeLabel === 'function' && t) ? window.apptTimeLabel(t) : '';
+  box.innerHTML = `
+    <div class="sm-cal-head">
+      <div class="sm-cal-month">${new Date(y, m - 1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' })}</div>
+      <div class="sm-cal-nav">
+        <button type="button" data-smcal="prev" aria-label="Previous month"><i class="ti ti-chevron-left"></i></button>
+        <button type="button" data-smcal="next" aria-label="Next month"><i class="ti ti-chevron-right"></i></button>
+      </div>
+    </div>
+    <div class="sm-cal-dow">${['S','M','T','W','T','F','S'].map(d => `<span>${d}</span>`).join('')}</div>
+    <div class="sm-cal-grid">
+      ${wc.monthCells(y, m).map(c => {
+        const list = byDay[c.key] || [];
+        const cls = (c.inMonth ? '' : ' out') + (c.key === todayKey ? ' today' : '') + (c.key === sel ? ' sel' : '');
+        return `<button type="button" class="sm-cal-day${cls}" data-smcal="day:${c.key}" aria-label="${c.key}, ${list.length} scheduled"><b>${c.day}</b><span class="sm-cal-dots">${wc.dayDots(list, 3).map(col => `<i style="background:${col}"></i>`).join('')}</span></button>`;
+      }).join('')}
+    </div>
+    <div class="sm-cal-sel${sel === todayKey ? ' today' : ''}">${escapeHtml(selLabel)}</div>
+    ${!evs.length ? `<div class="sm-cal-none">Nothing scheduled.</div>` : `
+    <div class="sm-list">
+      ${evs.map(ev => {
+        const j = ev.j;
+        const who = jobRep(j).name;
+        const addr = (j.address && j.address !== '—') ? j.address.split(',')[0] : '';
+        return `<div class="sm-wk-row" onclick="openDetail('${j.id}')">
+          <div class="sm-cal-time">${ev.kind === 'build' ? 'All day' : (timeLabel(ev.time) || '—')}</div>
+          <div class="sm-fu-main"><div class="sm-fu-name">${escapeHtml(j.name || 'Job')}</div>
+            <div class="sm-wk-sub"><span class="sm-wk-kind" style="color:${ev.color}"><i style="background:${ev.color}"></i>${escapeHtml(ev.label)}</span>${addr ? ' · ' + escapeHtml(addr) : ''}${who ? ' · ' + escapeHtml(who) : ''}</div></div>
+          <i class="ti ti-chevron-right sm-chev"></i>
+        </div>`;
+      }).join('')}
+    </div>`}
+    <button type="button" class="sm-more" data-smcal="open">Open full calendar</button>`;
+  box.onclick = e => {
+    const b = e.target.closest('[data-smcal]'); if(!b) return;
+    const act = b.dataset.smcal;
+    if(act === 'open'){ if(typeof switchPage === 'function') switchPage('calendar'); return; }
+    if(act === 'prev' || act === 'next'){ window.__smWkMonth = wc.shiftMonth(ym, act === 'prev' ? -1 : 1); window.__smWkSel = ''; }
+    else if(act.indexOf('day:') === 0){ window.__smWkSel = act.slice(4); window.__smWkMonth = window.__smWkSel.slice(0, 7); }
+    renderSumWeekCal();
+  };
+  if(typeof window.__smWkSyncH === 'function') window.__smWkSyncH();
+}
+
 function renderBoardSalesSummary(){
   const wrap=$('boardSalesSummary');
   if(!wrap) return;
@@ -6658,9 +6743,16 @@ function renderBoardSalesSummary(){
   const dowShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const todayKey = wkDays[0].key;
   const upcomingHtml = `
-    <section class="sm-panel">
+    <section class="sm-panel sm-wk">
       <div class="sm-panel-head"><div><div class="sm-panel-title"><i class="ti ti-calendar-week"></i>This week</div>
-      <div class="sm-panel-sub">${wkTotal===0 ? 'Next 7 days' : `${wkBuilds} build${wkBuilds===1?'':'s'} · ${wkAppts} appointment${wkAppts===1?'':'s'} in the next 7 days`}</div></div></div>
+      <div class="sm-panel-sub">${wkTotal===0 ? 'Next 7 days' : `${wkBuilds} build${wkBuilds===1?'':'s'} · ${wkAppts} appointment${wkAppts===1?'':'s'} in the next 7 days`}</div></div>
+        <div class="sm-wk-tabs" role="tablist" aria-label="This week view">
+          <button type="button" class="sm-wk-tab on" role="tab" aria-selected="true" data-smwk="0" aria-label="List" title="List"><i class="ti ti-list"></i></button>
+          <button type="button" class="sm-wk-tab" role="tab" aria-selected="false" data-smwk="1" aria-label="Calendar" title="Calendar"><i class="ti ti-calendar-month"></i></button>
+        </div>
+      </div>
+      <div class="sm-wk-pager" id="smWkPager">
+      <div class="sm-wk-pg">
       ${wkTotal===0 ? `<div class="sm-empty">Nothing scheduled in the next 7 days.</div>` : `
       <div class="sm-list">
         ${wkDays.filter(x=>x.events.length).map(x => x.events.map(ev => {
@@ -6676,6 +6768,9 @@ function renderBoardSalesSummary(){
           </div>`;
         }).join('')).join('')}
       </div>`}
+      </div>
+      <div class="sm-wk-pg" id="smWkCal"></div>
+      </div>
     </section>`;
 
   // ── Sales by agent: just job count and total revenue, highest first.
@@ -6877,6 +6972,37 @@ function renderBoardSalesSummary(){
       if(i !== window.__smPg){ window.__smPg = i; setDot(i); }
     }, { passive:true });
     dots.forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.smdot), true)));
+  }
+  // This week: swipe (or tap the tabs) between the 7-day list and the mini calendar.
+  // The page is remembered across re-renders; the pager's height follows the page shown.
+  window.__smWkJobs = wkJobs;
+  const wkPager = wrap.querySelector('#smWkPager'), wkTabs = [...wrap.querySelectorAll('[data-smwk]')];
+  if(wkPager && wkTabs.length){
+    const wkPgs = [...wkPager.children];
+    const wkSetTab = i => wkTabs.forEach((t, k) => { t.classList.toggle('on', k === i); t.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
+    const wkSyncH = () => { const el = wkPgs[window.__smWkPg || 0]; wkPager.style.height = (el && el.offsetHeight) ? el.offsetHeight + 'px' : ''; };
+    window.__smWkSyncH = wkSyncH;
+    renderSumWeekCal();
+    const wkGo = (i, smooth) => {
+      window.__smWkPg = i; wkSetTab(i); wkSyncH();
+      wkPager.scrollTo({ left: i * wkPager.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+    };
+    if(window.__smWkPg) wkGo(1, false); else wkSyncH();
+    wkPager.addEventListener('scroll', () => {
+      const w = wkPager.clientWidth; if(!w) return;
+      const i = Math.max(0, Math.min(wkPgs.length - 1, Math.round(wkPager.scrollLeft / w)));
+      if(i !== (window.__smWkPg || 0)){ window.__smWkPg = i; wkSetTab(i); wkSyncH(); }
+    }, { passive:true });
+    wkTabs.forEach(t => t.addEventListener('click', () => wkGo(Number(t.dataset.smwk), true)));
+    if(window.ResizeObserver){
+      const ro = new ResizeObserver(() => {
+        wkSyncH();
+        // keep the remembered page in view when the panel is first shown or resized
+        const want = (window.__smWkPg || 0) * wkPager.clientWidth;
+        if(Math.abs(wkPager.scrollLeft - want) > 2) wkPager.scrollTo({ left: want, behavior: 'auto' });
+      });
+      wkPgs.forEach(p => ro.observe(p));
+    }
   }
   loadSummaryGoals();
   wrap.querySelectorAll('[data-sm-fold]').forEach(d => d.addEventListener('toggle', () => {
