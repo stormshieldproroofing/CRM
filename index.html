@@ -6194,9 +6194,20 @@ function commissionUnpaid(j, user){
   return Math.max(0, estimatedTotalCommission(j) - paid);
 }
 
-// Pending commission only counts once the build is done (same test as revenue:
-// build date reached, or no build date but paid in full).
-function commissionPending(j, user){ return jobRevenueDate(j) ? commissionUnpaid(j, user) : 0; }
+// A job is "invoiced" once it sits in the Invoiced stage or any later one
+// (Paid, Job Completed), in any pipeline, or once its invoice exists in Zoho.
+function jobInvoiced(j){
+  if(!j) return false;
+  if(j.zoho && j.zoho.invoiceId) return true;
+  const pid = j.pipeline || 'insurance';
+  const col = (typeof columnsForPipeline === 'function' ? columnsForPipeline(pid) : []).find(c => c.id === j.col);
+  const base = col ? calBaseStageId(col, pid) : String(j.col||'');
+  const nm = String((col && col.name) || '').toLowerCase();
+  return base === 'invoiced' || base === 'completed' || /\binvoiced\b|\bpaid\b|complet/.test(nm);
+}
+// Pending commission only counts once the job has been invoiced. A built job
+// that has not been invoiced yet is too early.
+function commissionPending(j, user){ return jobInvoiced(j) ? commissionUnpaid(j, user) : 0; }
 
 function salesmanSummary(user){
   if(!user) return {revenue:0,commissionYtd:0,jobsInPipeline:0,receivable:0,pendingCommission:0};
@@ -6832,7 +6843,7 @@ function renderBoardSalesSummary(){
         ${kpi('Revenue', money0(summary.revenue), 'Jobs built this year', 'var(--brand)', '', 'rev')}
         ${kpi('Commission earned', money0(summary.commissionYtd), 'Paid out this year', '#60C4FF', '', 'com')}
         ${kpi('Receivable', money0(summary.receivable), `${collectionPct}% collected`, summary.receivable>0?'#FBBF24':'#34D399', `<div class="sm-track sm-kpi-track"><div style="width:${collectionPct}%;background:#34D399"></div></div>`, 'recv')}
-        ${kpi('Pending commission', money0(summary.pendingCommission), 'Built jobs, not paid out', '#A78BFA', '', 'pend')}
+        ${kpi('Pending commission', money0(summary.pendingCommission), 'Invoiced jobs, not paid out', '#A78BFA', '', 'pend')}
           </div>
           ${morePagesHtml}
         </div>
