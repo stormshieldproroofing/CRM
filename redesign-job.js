@@ -617,6 +617,25 @@
     menu.appendChild(f);
     return f;
   }
+  // The photo saved with a payment (check photo, Zelle screenshot, receipt), if it is still on the job
+  function payPhoto(j, idx) {
+    try { return (depositAttachments(j).find(it => it.depIdx === idx) || {}).rec || null; } catch (e) { return null; }
+  }
+  const payPhotoIsPdf = rec => !!(rec && (rec.isPdf || rec.type === 'application/pdf' || /\.pdf$/i.test(rec.name || '')));
+  function viewPayPhoto(j, idx) {
+    try { openDepositCheck(j.id, idx); } catch (e) { console.error('[payment] photo did not open', e); }
+  }
+  // Fill a holder with the real picture (PDFs keep the file icon)
+  function loadPayPhoto(holder, rec) {
+    if (payPhotoIsPdf(rec)) return;
+    Promise.resolve().then(() => jobFileUrl(rec)).then(url => {
+      if (!url || !holder.isConnected) return;
+      const img = new Image();
+      img.alt = '';
+      img.onload = () => { if (holder.isConnected) { holder.textContent = ''; holder.appendChild(img); } };
+      img.src = url;
+    }).catch(() => {});
+  }
   function openPaymentsSheet(j) {
     if (!j) return;
     const deps = (j.deposits || []).map((d, i) => ({ d, i })).sort((a, b) => (payDate(b.d.date) - payDate(a.d.date)) || (b.i - a.i));
@@ -652,7 +671,19 @@
       b.innerHTML = '<span class="pay-tag ' + (m ? 'pay-' + esc(m.toLowerCase()) : 'pay-none') + '">' + esc(m || 'Not set') + '</span>'
         + '<span class="rd-pay-main"><span class="rd-pay-what">' + esc(cap(d.desc) || 'Payment') + '</span><span class="rd-pay-sub">' + esc(bits.join(' · ')) + '</span></span>'
         + '<span class="rd-pay-amt">' + usd(parseFloat(d.amount) || 0) + '</span>';
-      b.addEventListener('click', e => { e.stopPropagation(); openPaymentRow(j, i); });
+      const rec = d.checkFile ? payPhoto(j, i) : null;
+      if (rec) {
+        const t = document.createElement('span');
+        t.className = 'rd-pay-thumb';
+        t.title = m === 'Check' || !m ? 'View check' : 'View photo';
+        t.innerHTML = '<i class="ti ' + (payPhotoIsPdf(rec) ? 'ti-file-type-pdf' : 'ti-photo') + '" aria-hidden="true"></i>';
+        b.appendChild(t);
+        loadPayPhoto(t, rec);
+      }
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        if (rec && e.target.closest('.rd-pay-thumb')) viewPayPhoto(j, i); else openPaymentRow(j, i);
+      });
       list.appendChild(b);
     });
     rej.forEach(r => {
@@ -748,10 +779,22 @@
     if (!d) return;
     const menu = paySheet('Payment', usd(parseFloat(d.amount) || 0) + ' · ' + (cap(d.desc) || 'Payment'), d.date || '');
     if (!menu) return;
+    const cur = payMeta(j, d).method || '';
+    const rec = d.checkFile ? payPhoto(j, idx) : null;
+    if (rec) {
+      const what = !cur || cur === 'Check' ? 'check' : 'photo';
+      const v = document.createElement('button');
+      v.type = 'button'; v.className = 'rd-pay-view';
+      v.setAttribute('aria-label', 'View ' + what + ' full size');
+      v.innerHTML = '<span class="rd-pay-view-img"><i class="ti ' + (payPhotoIsPdf(rec) ? 'ti-file-type-pdf' : 'ti-photo') + '" aria-hidden="true"></i></span>'
+        + '<span class="rd-pay-view-cap">Tap to view ' + what + ' full size</span>';
+      v.addEventListener('click', e => { e.stopPropagation(); viewPayPhoto(j, idx); });
+      menu.appendChild(v);
+      loadPayPhoto(v.querySelector('.rd-pay-view-img'), rec);
+    }
     menu.insertAdjacentHTML('beforeend', '<div class="rd-pay-lbl">Paid by</div>');
     const chips = document.createElement('div');
     chips.className = 'rd-pay-chips';
-    const cur = payMeta(j, d).method || '';
     PAY_METHODS.forEach(m => {
       const c = document.createElement('button');
       c.type = 'button'; c.className = 'rd-pay-chip' + (m === cur ? ' on' : ''); c.textContent = m;
