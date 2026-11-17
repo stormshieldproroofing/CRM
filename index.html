@@ -5492,9 +5492,12 @@ function parseAbcInvoice(text){
   // ── ASO Roofing Supply CREDIT NOTE (returns) ──
   // Different layout from ASO invoices: amounts in parentheses "($512.02)",
   // "Total Credit" instead of TOTAL/BALANCE DUE, and "Credit Note No" / "CN-###".
-  if(isAso && /Credit\s*Note/i.test(text) && /Total\s*Credit/i.test(text)){
+  // A "Cash Sale Refund" (refund on a debit/cash purchase) uses the same layout
+  // with "Refund No" / "Refund Date" in place of the Credit Note labels.
+  const asoRefund = /Cash\s*Sale\s*Refund/i.test(text) || /Refund\s*No\b/i.test(text);
+  if(isAso && (/Credit\s*Note/i.test(text) || asoRefund) && /Total\s*Credit/i.test(text)){
     out.isReturn = true;
-    out.docType = 'Credit Note';
+    out.docType = /Credit\s*Note/i.test(text) ? 'Credit Note' : 'Cash Sale Refund';
     const amt = re => { const m = text.match(re); return m ? money(m[1]) : null; };
     out.total = amt(/Total\s*Credit\s*\(?\s*-?\$?\s*([\d,]+\.\d{2})/i);
     out.subTotal = amt(/Total\s*Amount\s*\(?\s*-?\$?\s*([\d,]+\.\d{2})/i);
@@ -5507,8 +5510,10 @@ function parseAbcInvoice(text){
     const ref = text.match(/Your\s*Ref\s+(\d{2,6}\s+[A-Za-z][A-Za-z0-9 .]*?)(?=\s+(?:Taken\s*By|Our\s*Ref|\d{2,6}\s)|\n|$)/i);
     if(ref) out.orderName = ref[1].trim();
     const ret = text.match(/Returns?\s*from\s*(\d{2,6}\s+[\s\S]{3,80}?\b\d{5})\b/i) || text.match(/Delivery\s*Address:\s*(\d{2,6}\s+[\s\S]{3,80}?\b\d{5})\b/i);
-    if(ret) out.address = ret[1].replace(/\s+/g,' ').replace(/,?\s*Texas\b/i, ', TX').trim();
-    const dt = text.match(/Credit\s*Date\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i) || text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    // One refund can cover returns from two jobs ("2202 Rising Bay Ln & 10319 Cades Creek Ct") — match on the first address.
+    const retAddr = ret ? ret[1].split(/\s+&\s+/)[0] : '';
+    if(retAddr) out.address = retAddr.replace(/\s+/g,' ').replace(/,?\s*Texas\b/i, ', TX').trim();
+    const dt = text.match(/(?:Credit|Refund)\s*Date\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i) || text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if(dt){ let yr=parseInt(dt[3],10); if(yr<100) yr+=2000; out.date = `${yr}-${String(dt[1]).padStart(2,'0')}-${String(dt[2]).padStart(2,'0')}`; }
     return out;
   }
