@@ -217,6 +217,7 @@ async function loadAllFromSupabase() {
         supplementStatus: (r.contract && r.contract.__supplementStatus) ? r.contract.__supplementStatus : undefined,
         claimFiledAt: (r.contract && r.contract.__claimFiledAt) ? r.contract.__claimFiledAt : undefined,
         reviewReq: (r.contract && r.contract.__reviewReq && typeof r.contract.__reviewReq === 'object') ? r.contract.__reviewReq : undefined,
+        followUp: (r.contract && r.contract.__followUp && typeof r.contract.__followUp === 'object') ? r.contract.__followUp : undefined,
         appts: (r.contract && r.contract.__appts && typeof r.contract.__appts === 'object') ? r.contract.__appts : undefined,
         payMeta: (r.contract && r.contract.__payMeta && typeof r.contract.__payMeta === 'object') ? r.contract.__payMeta : undefined,
         appraisalResult: (r.contract && r.contract.__appraisal && typeof r.contract.__appraisal === 'object') ? r.contract.__appraisal : undefined,
@@ -759,6 +760,7 @@ async function pushAllToSupabase() {
           base.__appts = (j.appts && typeof j.appts === 'object') ? j.appts : null;   // inspection time + closing appointment
           base.__claimFiledAt = j.claimFiledAt || null;  // Claim Filed alert already sent (once per job)
           base.__reviewReq = (j.reviewReq && typeof j.reviewReq === 'object') ? j.reviewReq : null;   // Google review request: when sent / marked posted
+          base.__followUp = (j.followUp && typeof j.followUp === 'object' && Object.keys(j.followUp).length) ? j.followUp : null;   // manual follow-up: what's needed, last note, done history
           base.__supplements = Array.isArray(j.supplements) ? j.supplements : null;
           // Overhead & commission settings (no dedicated columns — persisted here)
           base.__overheadPct    = (j.overheadPct    != null && j.overheadPct    !== '') ? parseFloat(j.overheadPct)    : null;

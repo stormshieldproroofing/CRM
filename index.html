@@ -659,7 +659,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
 <script src="crm-weekcal.js"></script>
-<script src="supabase-crm.js?v=10"></script>
+<script src="supabase-crm.js?v=11"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=3"></script>
 <script src="crm-packet.js?v=18"></script>
@@ -668,6 +668,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-notifications.js?v=9"></script>
 <script src="crm-certs.js?v=1"></script>
 <script src="crm-review.js?v=1"></script>
+<script src="crm-followups.js?v=1"></script>
 
 <div style="position:relative;overflow:hidden">
 
@@ -2640,8 +2641,15 @@ function logContact(jobOrId, party, method, note, opts){
   const entry = { at: new Date().toISOString(), party, method, note: note || '', by };
   if(opts && opts.dir === 'in') entry.dir = 'in';                  // they reached out to us
   j.contactLog.push(entry);
-  if(opts && opts.followUp) j.nextFollowUp = opts.followUp;        // 'YYYY-MM-DD'
-  if(opts && opts.clearFollowUp) delete j.nextFollowUp;
+  const fuApi = window.crmFollowUps;
+  if(opts && opts.followUp){                                       // 'YYYY-MM-DD'
+    if(fuApi) fuApi.setFollowUp(j, { date: opts.followUp, need: opts.need || undefined, by });
+    else j.nextFollowUp = opts.followUp;
+  }
+  if(opts && opts.clearFollowUp){                                  // contact logged with no next date = follow-up done
+    if(fuApi && j.nextFollowUp) fuApi.complete(j, { note: note || '', by });
+    else delete j.nextFollowUp;
+  }
   const partyLabel = party === 'client' ? 'Client' : (party === 'adjuster' ? 'Adjuster' : 'Carrier');
   logActivity(j, 'contact', `${partyLabel} contact — ${method}${entry.dir === 'in' ? ' (inbound)' : ''}`, note || '');
   saveToStorage();
@@ -2756,6 +2764,19 @@ function openLogContact(jobId){
           <label style="font-size:11px;color:var(--muted);flex-shrink:0">Next follow-up</label>
           <input id="lcFollowUp" type="date" style="flex:1;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;color-scheme:dark" ${j.nextFollowUp?`value="${j.nextFollowUp}"`:''}>
         </div>
+        ${window.crmFollowUps ? (() => {
+          const cur = (j.followUp && j.followUp.need) || '';
+          const known = crmFollowUps.NEEDS.reduce((a, g) => a.concat(g.items), []);
+          return `<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <label for="lcNeed" style="font-size:11px;color:var(--muted);flex-shrink:0">What's needed</label>
+          <select id="lcNeed" style="flex:1;min-width:0;background:#1E253A;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--brand);font-family:'Barlow',sans-serif;outline:none;color-scheme:dark">
+            <option value="">${cur ? 'Same as now' : 'Follow up'}</option>
+            ${cur && known.indexOf(cur) < 0 && cur !== crmFollowUps.DEFAULT_NEED ? `<option value="${escapeHtml(cur)}" selected>${escapeHtml(cur)}</option>` : ''}
+            ${crmFollowUps.NEEDS.map(g => `<optgroup label="${escapeHtml(g.group)}">${g.items.map(t => `<option value="${escapeHtml(t)}"${t === cur ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</optgroup>`).join('')}
+          </select>
+        </div>
+        ${j.nextFollowUp ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">Clear the date to mark the follow-up done.</div>` : ''}`;
+        })() : ''}
         <button id="lcSave" class="btn-primary" style="width:100%;margin-top:14px;font-size:13px;padding:10px" disabled>Save Contact</button>
       </div>
     </div>`;
@@ -2782,10 +2803,12 @@ function openLogContact(jobId){
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   saveBtn.addEventListener('click', () => {
     const fu = overlay.querySelector('#lcFollowUp').value;
+    const needEl = overlay.querySelector('#lcNeed');
     logContact(j, state.party, state.method, overlay.querySelector('#lcNote').value.trim(),
-      fu ? { followUp: fu } : (j.nextFollowUp && !fu ? { clearFollowUp: true } : undefined));
+      fu ? { followUp: fu, need: (needEl && needEl.value) || undefined } : (j.nextFollowUp && !fu ? { clearFollowUp: true } : undefined));
     close();
     if(typeof renderDetailPanel === 'function') renderDetailPanel();
+    if(typeof renderBoardSalesSummary === 'function') renderBoardSalesSummary();
     toast('Contact logged');
   });
 }
@@ -6699,59 +6722,9 @@ function renderBoardSalesSummary(){
   const wkBuilds = wkDays.reduce((s,x)=>s+x.events.filter(e=>e.kind==='build').length,0);
   const wkAppts = wkTotal - wkBuilds;
 
-  // ── Follow-ups: only jobs that are moving. Leads sitting in the Lead stage
-  // are left out unless someone set a follow-up date on them. Top 5 shown.
-  const isLeadStage = j => {
-    const col = columnsForPipeline(j.pipeline || 'insurance').find(c => c.id === j.col);
-    const id = (j.col||'').toLowerCase(), nm = (col?.name||'').toLowerCase();
-    return id === 'lead' || id === 'new-lead' || nm === 'lead' || nm === 'new lead' || nm === 'leads';
-  };
-  let fuHiddenLeads = 0;
-  const fuAll = summaryJobs.map(j => {
-    const st = (typeof followUpStatus==='function') ? followUpStatus(j) : null;
-    if(!st) return null;
-    const lead = isLeadStage(j);
-    const due = st.due.filter(it => it.party === 'date' || !lead);
-    if(!due.length){ fuHiddenLeads++; return null; }
-    due.sort((x,y) => (y.party==='date') - (x.party==='date') || y.overdueBy - x.overdueBy);
-    return { j, st: { worst: due[0], due } };
-  }).filter(Boolean).sort((a,b) => (b.st.worst.party==='date') - (a.st.worst.party==='date') || b.st.worst.overdueBy - a.st.worst.overdueBy);
-  const fuShowAll = !!window.__sumFuAll;
-  const fuRows = fuShowAll ? fuAll : fuAll.slice(0, 5);
-  const fuItemLabel = it => {
-    if(it.party === 'date') return it.days === 0 ? 'Follow-up set for today' : `Follow-up date passed ${it.days}d ago`;
-    const who = it.party === 'insurance' ? 'insurance' : 'client';
-    return it.never ? `No ${who} contact yet · job is ${it.days}d old` : `${it.days}d since ${who} contact`;
-  };
-  const stageOf = j => columnsForPipeline(j.pipeline || 'insurance').find(c => c.id === j.col);
-  const followUpsHtml = `
-    <section class="sm-panel sm-fu">
-      <div class="sm-panel-head">
-        <div><div class="sm-panel-title"><i class="ti ti-phone-outgoing"></i>Follow-ups</div>
-        <div class="sm-panel-sub">${fuAll.length ? `${fuAll.length} job${fuAll.length===1?'':'s'} to contact` : 'All caught up'}</div></div>
-      </div>
-      ${!fuAll.length ? `<div class="sm-empty">Nobody's waiting on a call. Nice.</div>` : `
-      <div class="sm-list">
-        ${fuRows.map(({j,st}) => {
-          const sev = st.worst.party==='date' ? '#60A5FA' : (st.worst.overdueBy >= 7 ? '#F87171' : '#FBBF24');
-          const col = stageOf(j);
-          const tel = (j.phone && j.phone!=='—') ? String(j.phone).replace(/[^\d+]/g,'') : '';
-          return `
-          <div class="sm-fu-row" onclick="openDetail('${j.id}')">
-            <div class="sm-fu-days" style="color:${sev};background:${sev}1A;border-color:${sev}55">${st.worst.party==='date' && st.worst.days===0 ? '<i class="ti ti-calendar-event"></i>' : st.worst.days+'d'}</div>
-            <div class="sm-fu-main">
-              <div class="sm-fu-name">${escapeHtml(j.name||'')}</div>
-              <div class="sm-fu-why" style="color:${sev}">${fuItemLabel(st.worst)}</div>
-              ${col?`<div class="sm-fu-stage"><span style="background:${col.color||'var(--brand-light)'}"></span>${escapeHtml(col.name)}</div>`:''}
-            </div>
-            <button type="button" class="sm-fu-btn log" title="Log contact" onclick="event.stopPropagation();openLogContact('${j.id}')"><i class="ti ti-notes"></i></button>
-            ${tel?`<a class="sm-fu-btn call" href="tel:${tel}" title="Call ${escapeHtml(j.name||'')}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i></a>`:''}
-          </div>`;
-        }).join('')}
-      </div>
-      ${fuAll.length > 5 ? `<button type="button" class="sm-more" onclick="window.__sumFuAll=${fuShowAll?'false':'true'};renderBoardSalesSummary()">${fuShowAll?'Show fewer':`Show all ${fuAll.length}`}</button>` : ''}`}
-      ${fuHiddenLeads ? `<div class="sm-note"><i class="ti ti-info-circle"></i>${fuHiddenLeads} lead${fuHiddenLeads===1?'':'s'} in the Lead stage not listed. Set a follow-up date on a lead to have it show here.</div>` : ''}
-    </section>`;
+  // ── Follow-ups: a manual list. Only jobs somebody gave a follow-up date show
+  // here (crm-followups.js) — nothing is added automatically.
+  const followUpsHtml = (window.crmFollowUps && typeof crmFollowUps.panelHtml === 'function') ? crmFollowUps.panelHtml(summaryJobs) : '';
 
   const dowShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const todayKey = wkDays[0].key;
@@ -7727,7 +7700,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
               </div>
               ${row('Client', lastContact(j,'client'))}
               ${row('Insurance', lastContact(j,'insurance'))}
-              ${fu ? `<div style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:${fuOverdue?'#F87171':'var(--brand-mid)'}"><i class="ti ti-bell${fuOverdue?'-ringing':''}" style="font-size:13px"></i><span>${fuOverdue?'Follow-up due':'Follow up'}: <strong>${new Date(fu+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</strong></span></div>` : ''}
+              ${fu ? `<div style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:${fuOverdue?'#F87171':'var(--brand-mid)'}"><i class="ti ti-bell${fuOverdue?'-ringing':''}" style="font-size:13px"></i><span>${fuOverdue?'Follow-up due':'Follow up'}: <strong>${new Date(fu+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</strong>${(j.followUp && j.followUp.need) ? ' · ' + escapeHtml(j.followUp.need) : ''}</span></div>` : ''}
             </div>`;
           })() : ''}
           ${window.currentMember?.role === 'admin' ? (() => {
