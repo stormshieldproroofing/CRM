@@ -288,4 +288,12 @@ test('whiten: blue pen keeps its colour; black & white makes it black', () => {
   assert.strictEqual(bw[j], 255);
 });
 
+test('corner zoom: sits top-left, and jumps to the right when the finger is up in that corner', () => {
+  assert.strictEqual(cam.loupeSide(300, 500, 358, 132), 'left');   // bottom-right corner
+  assert.strictEqual(cam.loupeSide(40, 500, 358, 132), 'left');    // bottom-left: well below the circle
+  assert.strictEqual(cam.loupeSide(300, 60, 358, 132), 'left');    // top-right corner
+  assert.strictEqual(cam.loupeSide(60, 70, 358, 132), 'right');    // top-left: the finger would cover it
+  assert.strictEqual(cam.loupeSide(60, 70, 200, 132), 'left');     // no room to move on a tiny screen
+});
+
 console.log(`\n${passed} passed`);

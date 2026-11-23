@@ -14,6 +14,7 @@
    Document mode — point at the page from any angle, as many pages as you like.
      It finds the edges of the paper (green outline) and snaps. Then:
        Check the corners — drag a dot if an edge is off
+                           (a zoom circle shows the spot under your finger, 3× bigger)
        Clean up          — the page pulled flat and cropped; Whiten / Black & white / Original
      Two or more pages are saved as one PDF.
 
@@ -434,6 +435,14 @@
     return px;
   }
 
+  // Where the zoom circle sits while a corner is dragged: top-left of the photo,
+  // or top-right when the finger is up in the left corner and would cover it.
+  // (x, y) finger in the photo area, size = the circle's width, all in px.
+  function loupeSide(x, y, w, size) {
+    const m = 28;   // a fingertip's worth of clearance
+    return x < size + m * 2 && y < size + m * 2 && w > size * 2 ? 'right' : 'left';
+  }
+
   const hasDOM = typeof document !== 'undefined';
   function supported() {
     return hasDOM && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -528,6 +537,8 @@
 .sscam-h{position:absolute;width:48px;height:48px;margin:-24px 0 0 -24px;border:0;background:transparent;padding:0;touch-action:none;cursor:grab}
 .sscam-h::after{content:"";position:absolute;left:12px;top:12px;width:24px;height:24px;box-sizing:border-box;border-radius:50%;background:#fff;border:4px solid #2F6FEB;box-shadow:0 1px 6px rgba(0,0,0,.5)}
 .sscam-h:focus-visible::after{outline:2px solid #fff;outline-offset:2px}
+.sscam-h.drag::after{background:transparent;border-width:2px;box-shadow:none}
+.sscam-loupe{position:absolute;top:10px;width:132px;height:132px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.6);background:#0A0D13;pointer-events:none;box-sizing:border-box}
 .sscam-hint{text-align:center;display:flex;flex-direction:column;gap:4px}
 .sscam-hint b{font-size:15px;font-weight:600}
 .sscam-hint span{font-size:13px;line-height:1.4;color:#A9B1C1}
@@ -893,7 +904,7 @@
       ed.screen = 'corners';
       edit.innerHTML = `
         <div class="sscam-rbar"><span style="width:44px"></span><div class="sscam-title">Check the corners</div><button type="button" class="sscam-ib" data-act="close" aria-label="Close">${ICON.x}</button></div>
-        <div class="sscam-stage"><canvas></canvas><svg aria-hidden="true"><polygon points=""/></svg>${CORNER.map((l, i) => `<button type="button" class="sscam-h" data-c="${i}" aria-label="${l}"></button>`).join('')}</div>
+        <div class="sscam-stage"><canvas></canvas><svg aria-hidden="true"><polygon points=""/></svg><canvas class="sscam-loupe" aria-hidden="true" hidden></canvas>${CORNER.map((l, i) => `<button type="button" class="sscam-h" data-c="${i}" aria-label="${l}"></button>`).join('')}</div>
         <div class="sscam-hint"><b>${ed.found ? 'Edges found for you' : 'Set the four corners'}</b><span>${ed.found
           ? 'Drag a dot only if a corner is off. Everything outside the blue line is cut away.'
           : 'Couldn\'t find the edges on this surface. Drag each dot to a corner of the page.'}</span></div>
@@ -908,7 +919,7 @@
       if (!stage || !ed) return;
       const box = fitBox(stage, ed.src.width, ed.src.height, 20);
       ed.box = box;
-      const cv = stage.querySelector('canvas');
+      const cv = stage.querySelector('canvas:not(.sscam-loupe)');
       Object.assign(cv.style, { left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' });
       const dpr = Math.min(2, root.devicePixelRatio || 1);
       const pw = Math.max(1, Math.round(box.w * dpr)), ph = Math.max(1, Math.round(box.h * dpr));
@@ -926,7 +937,47 @@
       ed.found = true;   // the person has set it
       placeCorners();
     }
-    let drag = null;
+    // Zoom circle: the photo around corner i, 3× the size it shows on screen, with
+    // the blue edges and a crosshair on the exact spot — so the corner can be set
+    // on the real edge of the paper even though the finger is covering it.
+    const LOUPE = 132, ZOOM = 3;
+    function paintLoupe(i) {
+      const stage = edit.querySelector('.sscam-stage'), lp = stage && stage.querySelector('.sscam-loupe');
+      if (!lp || !ed) return;
+      const box = ed.box, q = ed.quad, sw = ed.src.width, sh = ed.src.height;
+      const side = loupeSide(box.x + q[i].x * box.w, box.y + q[i].y * box.h, stage.clientWidth, LOUPE);
+      lp.style.left = side === 'left' ? '10px' : ''; lp.style.right = side === 'right' ? '10px' : '';
+      const dpr = Math.min(2, root.devicePixelRatio || 1), px = Math.round(LOUPE * dpr);
+      if (lp.width !== px) { lp.width = px; lp.height = px; }
+      const ctx = lp.getContext('2d');
+      const k = box.w / sw * ZOOM * dpr;   // loupe pixels per photo pixel
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#0A0D13'; ctx.fillRect(0, 0, px, px);
+      ctx.setTransform(k, 0, 0, k, px / 2 - q[i].x * sw * k, px / 2 - q[i].y * sh * k);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(ed.src, 0, 0);
+      const a = q[(i + 3) % 4], b = q[(i + 1) % 4];
+      ctx.beginPath();
+      ctx.moveTo(a.x * sw, a.y * sh); ctx.lineTo(q[i].x * sw, q[i].y * sh); ctx.lineTo(b.x * sw, b.y * sh);
+      ctx.strokeStyle = '#5B93FF'; ctx.lineWidth = 2 * dpr / k; ctx.lineJoin = 'round'; ctx.stroke();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const c = px / 2, r = 9 * dpr, g = 3 * dpr;
+      const cross = (color, width) => {
+        ctx.beginPath();
+        ctx.moveTo(c - r, c); ctx.lineTo(c - g, c); ctx.moveTo(c + g, c); ctx.lineTo(c + r, c);
+        ctx.moveTo(c, c - r); ctx.lineTo(c, c - g); ctx.moveTo(c, c + g); ctx.lineTo(c, c + r);
+        ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+      };
+      cross('rgba(0,0,0,.7)', 3.5 * dpr); cross('#fff', 1.5 * dpr);   // white with a dark rim: shows on paper and on the table
+      lp.hidden = false;
+    }
+    function hideLoupe() {
+      const lp = edit.querySelector('.sscam-loupe');
+      if (lp) lp.hidden = true;
+      edit.querySelectorAll('.sscam-h.drag').forEach(h => h.classList.remove('drag'));
+    }
+
+    let drag = null, keyLoupe = null;
     edit.addEventListener('pointerdown', e => {
       const b = e.target.closest('.sscam-h');
       if (!b || !ed) return;
@@ -935,13 +986,16 @@
       // keep the dot where it is under the finger: no jump on touch
       drag = { i, id: e.pointerId, dx: box.x + p.x * box.w - e.clientX, dy: box.y + p.y * box.h - e.clientY };
       try { b.setPointerCapture(e.pointerId); } catch (x) {}
+      b.classList.add('drag');   // hollow dot while dragging: the edge shows through it
+      paintLoupe(i);
     });
     edit.addEventListener('pointermove', e => {
       if (!drag || e.pointerId !== drag.id || !ed) return;
       const box = ed.box;
       moveCorner(drag.i, (e.clientX + drag.dx - box.x) / box.w, (e.clientY + drag.dy - box.y) / box.h);
+      paintLoupe(drag.i);
     });
-    const endDrag = e => { if (drag && e.pointerId === drag.id) drag = null; };
+    const endDrag = e => { if (drag && e.pointerId === drag.id) { drag = null; hideLoupe(); } };
     edit.addEventListener('pointerup', endDrag);
     edit.addEventListener('pointercancel', endDrag);
     edit.addEventListener('keydown', e => {
@@ -951,6 +1005,8 @@
       e.preventDefault();
       const i = +b.dataset.c, step = e.shiftKey ? 0.02 : 0.005;
       moveCorner(i, ed.quad[i].x + d[0] * step, ed.quad[i].y + d[1] * step);
+      paintLoupe(i);   // arrow keys get the zoom too; it goes away after a moment
+      clearTimeout(keyLoupe); keyLoupe = setTimeout(() => { if (!drag) hideLoupe(); }, 1200);
     });
 
     // Pull the page flat from the photo using the four corners.
@@ -1275,5 +1331,5 @@
     return new Blob([await doc.save()], { type: 'application/pdf' });
   }
 
-  return { CHECK_RATIO, DOC_RATIO, STILL, STEADY, frameRatio, fitFrame, cropRect, outSize, otsu, analyze, motion, readyToSnap, findPage, quadArea, quadOk, homography, mapPoint, warpSize, warp, paperMap, cleanPage, supported, open, pagesToPdf };
+  return { loupeSide, CHECK_RATIO, DOC_RATIO, STILL, STEADY, frameRatio, fitFrame, cropRect, outSize, otsu, analyze, motion, readyToSnap, findPage, quadArea, quadOk, homography, mapPoint, warpSize, warp, paperMap, cleanPage, supported, open, pagesToPdf };
 });
