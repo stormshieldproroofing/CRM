@@ -309,7 +309,7 @@
 .pk-b:disabled{opacity:.5;cursor:not-allowed}
 .pk-b.pk-mb{flex:none;width:46px;padding:0}
 .pk-b.pk-mb[aria-expanded="true"]{border-color:#5B7BD6;box-shadow:0 0 0 2px rgba(91,123,214,.25)}
-.pk-more{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:240px;background:#1E253A;border:1px solid #33405A;border-radius:12px;box-shadow:0 14px 30px rgba(0,0,0,.55);overflow:hidden}
+.pk-more{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:240px;background:#1E253A;border:1px solid #33405A;border-radius:12px;box-shadow:0 14px 30px rgba(0,0,0,.55);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .pk-more[hidden]{display:none}
 .pk-more>button,.pk-more>label{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;min-height:46px;box-sizing:border-box;border:0;border-top:1px solid #2A3346;background:none;color:var(--brand);font-family:inherit;font-size:14px;font-weight:500;line-height:1.3;text-align:left;cursor:pointer;margin:0}
 .pk-more>:first-child{border-top:0}
@@ -1436,6 +1436,18 @@
       if (panel[flag]) return;
       panel[flag] = true;
       const mine = () => panel.dataset.pkdoc === A.key;
+      // A long menu (the contract's has ten rows) runs off the bottom of a phone, where its
+      // last rows — Delete among them — can't be reached. Keep it on screen, above the job's
+      // bottom bar, and let it scroll inside itself.
+      const fitMenu = m => {
+        m.style.maxHeight = '';
+        const vh = (root.visualViewport && root.visualViewport.height) || root.innerHeight || 0;
+        if (!vh) return;
+        const room = vh - m.getBoundingClientRect().top - 96;   // 96: the bottom bar and a little air
+        m.style.maxHeight = Math.max(190, Math.round(room)) + 'px';
+        if (room < 190 && m.scrollIntoView) m.scrollIntoView({ block: 'nearest' });
+        m.scrollTop = 0;
+      };
       const closeMenus = keep => panel.querySelectorAll('[data-pkmorem]').forEach(m => {
         if (m === keep) return;
         m.hidden = true;
@@ -1456,6 +1468,7 @@
         if (mb) {
           const m = panel.querySelector(`[data-pkmorem="${mb.dataset.pkmore}"]`); if (!m) return;
           const open = m.hidden; closeMenus(m); m.hidden = !open; mb.setAttribute('aria-expanded', String(open));
+          if (open) fitMenu(m);
           return;
         }
         const fb = e.target.closest('[data-pkform]');

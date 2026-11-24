@@ -416,6 +416,12 @@
     openReadSheet(j, got);
   }
 
+  // The job as the CRM holds it right now. Reading takes a few seconds and the sheet
+  // stays open longer; meanwhile a sync (the upload itself sets one off, and so does
+  // coming back from the camera) reloads every job as a new object. Anything saved to
+  // the object we started with would then be lost, so always look the job up again.
+  const liveJob = j => (j && j.id != null && jobById(j.id)) || j;
+
   // What the job's contract price breakdown holds now. A job with a contract price but no
   // breakdown yet counts the whole price as net claim — the same way the job's editor opens.
   function breakdownNow(j) {
@@ -432,6 +438,7 @@
   function openReadSheet(j, got) {
     injectStyles();
     const old = document.getElementById('ctRead'); if (old) old.remove();
+    j = liveJob(j);
     const now = breakdownNow(j), priceNow = num(j.potVal) || 0;
     const bg = document.createElement('div');
     bg.id = 'ctRead';
@@ -479,6 +486,7 @@
       if (b.dataset.rd === 'skip') { close(); return; }
       const v = values();
       close();
+      j = liveJob(j);
       // Saved the way the job's own Contract Price editor saves: three parts and their total.
       READ_ROWS.forEach(([k, field]) => { j[field] = v[k].toFixed(2); });
       j.potVal = v.total.toFixed(2);
@@ -490,6 +498,7 @@
         READ_ROWS.map(([k, , label]) => label + ' ' + usd(v[k])).join(' · ') + ' · Total ' + usd(v.total));
       save(); rerender();
       if (typeof root.renderBoard === 'function') { try { root.renderBoard(); } catch (er) {} }
+      if (typeof root.renderJobsPage === 'function') { try { const pg = document.getElementById('jobsPage'); if (pg && pg.style.display !== 'none') root.renderJobsPage(); } catch (er) {} }
       say('Contract price filled in · ' + usd(v.total));
     });
     document.body.appendChild(bg);
