@@ -538,7 +538,7 @@
 .sscam-h::after{content:"";position:absolute;left:12px;top:12px;width:24px;height:24px;box-sizing:border-box;border-radius:50%;background:#fff;border:4px solid #2F6FEB;box-shadow:0 1px 6px rgba(0,0,0,.5)}
 .sscam-h:focus-visible::after{outline:2px solid #fff;outline-offset:2px}
 .sscam-h.drag::after{background:transparent;border-width:2px;box-shadow:none}
-.sscam-loupe{position:absolute;top:10px;width:132px;height:132px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.6);background:#0A0D13;pointer-events:none;box-sizing:border-box}
+.sscam-loupe{z-index:3;position:absolute;top:10px;width:132px;height:132px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.6);background:#0A0D13;pointer-events:none;box-sizing:border-box}
 .sscam-hint{text-align:center;display:flex;flex-direction:column;gap:4px}
 .sscam-hint b{font-size:15px;font-weight:600}
 .sscam-hint span{font-size:13px;line-height:1.4;color:#A9B1C1}
@@ -937,6 +937,8 @@
       ed.found = true;   // the person has set it
       placeCorners();
     }
+    // (The circle is drawn above the corner dots: another corner's dot sitting under it
+    // used to cover the crosshair.)
     // Zoom circle: the photo around corner i, 3× the size it shows on screen, with
     // the blue edges and a crosshair on the exact spot — so the corner can be set
     // on the real edge of the paper even though the finger is covering it.
