@@ -506,6 +506,32 @@
       }).filter(Boolean);
   }
 
+  // Appointments and the build, each on the day it is booked for — read from the job
+  // itself (not the activity log), so the line sits on the real date however late the
+  // stage gets moved, follows a reschedule and goes when the appointment is removed.
+  // Shown from the day itself on; before that the "… scheduled" line covers it.
+  function apptItems(j, now) {
+    if (!j) return [];
+    now = now || new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const kinds = window.APPT_KINDS || {}, get = window.apptGet;
+    const rows = [];
+    if (typeof get === 'function') Object.keys(kinds).forEach(k => {
+      const a = get(j, k) || {};
+      if (a.date) rows.push({ label: kinds[k].label || k, date: a.date, time: a.time || '', sub: 'Appointment date' });
+    });
+    if (j.buildDate) rows.push({ label: 'Build', date: j.buildDate, time: '', sub: 'Build date' });
+    return rows.map(r => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(r.date));
+      if (!m) return null;
+      const t = /^(\d{1,2}):(\d{2})/.exec(r.time);
+      const at = new Date(+m[1], +m[2] - 1, +m[3], t ? +t[1] : 12, t ? +t[2] : 0);   // no time set: midday
+      if (isNaN(at) || at >= tomorrow) return null;
+      const time = t ? ((+t[1] % 12) || 12) + ':' + t[2] + (+t[1] < 12 ? ' AM' : ' PM') : '';
+      return { kind: 'sys', appt: true, at: at.toISOString(), text: r.label + (time ? ' \u00b7 ' + time : ''), sub: r.sub };
+    }).filter(Boolean);
+  }
+
   function feedItems(jobId) {
     const notes = (state.notes[jobId] || []).filter(n => n && !n.pinned).map(n => ({ kind: 'note', at: n.created_at, n }));
     const j = jobById(jobId);
@@ -533,7 +559,7 @@
     const contacts = (j && Array.isArray(j.contactLog) ? j.contactLog : [])
       .filter(e => e && e.at).slice(-30)
       .map(e => ({ kind: 'contact', at: e.at, e }));
-    return collapseMoves(notes.concat(stages, money, packets, contacts).sort((a, b) => new Date(a.at) - new Date(b.at)));
+    return collapseMoves(notes.concat(stages, money, packets, contacts, apptItems(j)).sort((a, b) => new Date(a.at) - new Date(b.at)));
   }
   // Stage moves back and forth within a few minutes (with nothing else in between) show as
   // one line: where the job ended up. If it ended up where it started, they don't show at all.
@@ -573,10 +599,11 @@
     return shortDate(iso);
   }
   function timeOnly(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
-  function dcol(it) { return `<span class="ssn-tl-d">${it.showDay ? esc(dayLabel(it.at)) : ''}</span>`; }
+  function dcol(it) { return `<span class="ssn-tl-d">${it.showDay || it.appt ? esc(dayLabel(it.at)) : ''}</span>`; }   // an appointment line always says its day
 
   function noteHTML(it) {
     if (it.kind === 'sys') {
+      if (it.appt) return `<div class="ssn-tl-sys appt"><span class="ssn-dot appt" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t appt"><i class="ti ti-calendar-event" aria-hidden="true"></i>${esc(it.text)}<span class="ssn-tl-sub">${esc(it.sub)}</span></span></div>`;
       return `<div class="ssn-tl-sys"><span class="ssn-dot${it.stage ? ' stage' : ''}${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}" aria-hidden="true"></span>${dcol(it)}<span class="ssn-tl-t${it.money ? ' money' : ''}${it.check ? ' check' : ''}${it.comm ? ' comm' : ''}${it.packet ? ' packet' : ''}${it.sent ? ' sent' : ''}${it.denied ? ' denied' : ''}">${esc(it.text)}${it.sub ? `<span class="ssn-tl-sub">${esc(it.sub)}</span>` : ''}</span></div>`;
     }
     if (it.kind === 'contact') {
@@ -1319,6 +1346,11 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-dot.packet{background:#2DD4BF}
 .ssn-tl-t.packet{color:#5EEAD4;font-weight:600}
 .ssn-dot.note{background:#38BDF8;top:14px}
+.ssn-tl-sys.appt{margin:4px 0}
+.ssn-tl-sys.appt .ssn-dot{background:#E8ECF3;top:14px}
+.ssn-tl-sys.appt .ssn-tl-d{color:#E8ECF3;font-weight:600}
+.ssn-tl-t.appt{background:#161B24;border:1px solid #2B3345;border-radius:10px;padding:7px 10px;color:#fff;font-size:14px;font-weight:700}
+.ssn-tl-t.appt .ti{margin-right:6px;font-weight:400;color:#C4CBD8}
 .ssn-tl-sys{position:relative;display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;color:#8E9BAA}
 .ssn-tl-sys .ssn-dot{top:7px}
 .ssn-tl-d{width:46px;flex:none;font-size:12px;color:#6B7686}
