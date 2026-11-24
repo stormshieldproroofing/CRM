@@ -536,7 +536,7 @@
           <small data-rdnote="${k}"></small></div>`).join('')}</div>
       <div class="ct-rd-tot"><span>Contract price</span><b data-rdtot></b></div>
       <small class="ct-rd-chk" data-rdchk></small>
-      <div class="ct-rd-b"><button type="button" class="ct-rd-skip" data-rd="skip">Skip</button><button type="button" class="ct-rd-ok" data-rd="ok">Fill in</button></div>
+      <div class="ct-rd-b"><button type="button" class="ct-rd-skip" data-rd="skip">Skip</button><button type="button" class="ct-rd-ok" data-rd="ok" disabled>Fill in</button></div>
     </div>`;
     const box = k => bg.querySelector(`[data-rdk="${k}"]`);
     // A box left blank keeps what the breakdown has now.
@@ -580,12 +580,13 @@
       bg.querySelector('[data-rdmsg]').textContent = found
         ? 'Check these against the paper and fix any that are off. They fill the job’s contract price and the Contract tab; Insurance is not changed.'
         : 'Couldn’t read the amounts on this one. Type them in, or tap Skip.';
+      bg.querySelector('[data-rd="ok"]').disabled = false;
       recalc();
     });
 
     bg.addEventListener('click', e => {
       const b = e.target.closest('[data-rd]');
-      if (!b) return;
+      if (!b || b.disabled) return;
       if (b.dataset.rd === 'skip') { close(); return; }
       const v = values();
       close();
@@ -647,6 +648,7 @@
 #ctRead .ct-rd-b button{flex:1;min-height:50px;border-radius:12px;font:700 15px Inter,system-ui,sans-serif;cursor:pointer}
 #ctRead .ct-rd-skip{background:#1A1F29;color:#E8ECF3;border:1px solid #252B38}
 #ctRead .ct-rd-ok{flex:2 !important;background:#2F6FEB;color:#fff;border:0}
+#ctRead .ct-rd-ok:disabled{opacity:.5;cursor:default}
 @media (min-width:761px){#ctRead{align-items:center}#ctRead .ct-rd{border-radius:16px}}
 @media (max-width:640px){.ct-two,.ct-addl{grid-template-columns:1fr}}
 `;
