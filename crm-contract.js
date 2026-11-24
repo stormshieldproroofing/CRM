@@ -392,13 +392,15 @@
   };
   const CT = E.makeSignable(CONTRACT);
 
-  /* ---- a paper contract was scanned or uploaded: read its amounts into the job ---- */
-  // contract amount → the job's own box for it
+  /* ---- a paper contract was scanned or uploaded: read its amounts into the contract price ---- */
+  // The job's Contract Summary breaks the contract price into three parts that add up to
+  // it (the same three the "Contract Price" editor in the job saves). A scanned contract
+  // fills those — never the Insurance section, which is the carrier's numbers, not the contract's.
+  //   contract amount → the job's breakdown box for it
   const READ_ROWS = [
-    ['rcv', 'rcv', 'RCV'],
-    ['deductible', 'deductible', 'Deductible'],
-    ['netClaim', 'netClaim', 'Net claim'],
-    ['depreciation', 'recoverableDep', 'Depreciation'],
+    ['netClaim', 'cpNetClaim', 'Net claim'],
+    ['deductible', 'cpDeductible', 'Deductible'],
+    ['depreciation', 'cpDepreciation', 'Depreciation'],
   ];
   const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[$,\s]/g, '')); return isFinite(n) ? n : null; };
   const usd = v => '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
@@ -409,29 +411,64 @@
     let text = '';
     for (const f of recs) { try { const t = await root.ocrLossFile(f); if (t) text += '\n' + t; } catch (e) { console.warn('[contract] read failed', f && f.name, e); } }
     const got = parseContractAmounts(text);
-    if (!READ_ROWS.some(r => got[r[0]] != null)) { say('Couldn\u2019t read the amounts on the contract \u2014 enter them in the job'); return; }
+    if (!READ_ROWS.some(r => got[r[0]] != null)) { say('Couldn’t read the amounts on the contract — enter the contract price in the job'); return; }
     openReadSheet(j, got);
+  }
+
+  // What the job's contract price breakdown holds now. A job with a contract price but no
+  // breakdown yet counts the whole price as net claim — the same way the job's editor opens.
+  function breakdownNow(j) {
+    const has = j.cpNetClaim != null || j.cpDeductible != null || j.cpDepreciation != null;
+    return {
+      has,
+      netClaim: has ? (num(j.cpNetClaim) || 0) : (num(j.potVal) || 0),
+      deductible: has ? (num(j.cpDeductible) || 0) : 0,
+      depreciation: has ? (num(j.cpDepreciation) || 0) : 0,
+    };
   }
 
   // The amounts that were read, for the rep to check against the paper before anything is saved.
   function openReadSheet(j, got) {
     injectStyles();
     const old = document.getElementById('ctRead'); if (old) old.remove();
+    const now = breakdownNow(j), priceNow = num(j.potVal) || 0;
     const bg = document.createElement('div');
     bg.id = 'ctRead';
     bg.innerHTML = `<div class="ct-rd" role="dialog" aria-modal="true" aria-labelledby="ctReadT">
       <div class="ct-rd-h"><b id="ctReadT">Read from the contract</b><button type="button" class="ct-rd-x" data-rd="skip" aria-label="Close">${ICON && ICON.x ? ICON.x : '&times;'}</button></div>
-      <p class="ct-rd-p">Check these against the paper and fix any that are off. Nothing is saved until you tap Fill in.</p>
-      <div class="ct-rd-g">${READ_ROWS.map(([k, field, label]) => {
-        const has = num(j[field]), v = got[k];
-        const note = v == null ? 'Not found \u2014 type it in, or leave blank'
-          : has != null && has > 0 && Math.abs(has - v) > 0.004 ? 'Job has ' + usd(has) + ' now' : '';
+      <p class="ct-rd-p">These fill the job’s contract price breakdown. Check them against the paper and fix any that are off. Nothing is saved until you tap Fill in, and the Insurance section is not changed.</p>
+      <div class="ct-rd-g three">${READ_ROWS.map(([k, , label]) => {
+        const v = got[k], has = now.has ? now[k] : 0;
+        const note = v == null ? 'Not found — type it in, or leave blank'
+          : has > 0 && Math.abs(has - v) > 0.004 ? 'Breakdown has ' + usd(has) + ' now' : '';
         return `<div class="ct-rd-f"><label for="ctRead_${k}">${label} ($)</label>
           <input id="ctRead_${k}" data-rdk="${k}" type="text" inputmode="decimal" autocomplete="off" value="${esc(amountText(v))}">
-          <small class="${note.indexOf('Job has') === 0 ? 'diff' : ''}">${esc(note)}</small></div>`;
+          <small class="${note.indexOf('Breakdown has') === 0 ? 'diff' : ''}">${esc(note)}</small></div>`;
       }).join('')}</div>
+      <div class="ct-rd-tot"><span>Contract price</span><b data-rdtot></b></div>
+      <small class="ct-rd-chk" data-rdchk></small>
       <div class="ct-rd-b"><button type="button" class="ct-rd-skip" data-rd="skip">Skip</button><button type="button" class="ct-rd-ok" data-rd="ok">Fill in</button></div>
     </div>`;
+    // A box left blank keeps what the breakdown has now.
+    const values = () => {
+      const out = {};
+      READ_ROWS.forEach(([k]) => { const v = num(bg.querySelector(`[data-rdk="${k}"]`).value); out[k] = v != null && v >= 0 ? v : now[k]; });
+      out.total = +(out.netClaim + out.deductible + out.depreciation).toFixed(2);
+      return out;
+    };
+    const recalc = () => {
+      const v = values();
+      bg.querySelector('[data-rdtot]').textContent = usd(v.total);
+      const chk = bg.querySelector('[data-rdchk]');
+      // The contract's RCV is the total charge: it should equal the three parts added up.
+      const off = got.rcv != null && Math.abs(got.rcv - v.total) > 0.004;
+      chk.className = 'ct-rd-chk' + (off ? ' diff' : '');
+      chk.textContent = off ? 'The contract’s RCV reads ' + usd(got.rcv) + ', but these add up to ' + usd(v.total) + '. Check the numbers.'
+        : got.rcv != null ? 'Matches the RCV on the contract (' + usd(got.rcv) + ').'
+        : priceNow > 0 && Math.abs(priceNow - v.total) > 0.004 ? 'The job’s contract price is ' + usd(priceNow) + ' now.' : '';
+    };
+    bg.addEventListener('input', recalc);
+    recalc();
     const close = () => { bg.remove(); document.removeEventListener('keydown', onKey, true); };
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
     document.addEventListener('keydown', onKey, true);
@@ -439,20 +476,16 @@
       const b = e.target.closest('[data-rd]');
       if (!b) return;
       if (b.dataset.rd === 'skip') { close(); return; }
-      const c = ensureContract(j), done = [];
-      READ_ROWS.forEach(([k, field, label]) => {
-        const v = num(bg.querySelector(`[data-rdk="${k}"]`).value);
-        if (v == null || v <= 0) return;       // blank: leave what the job has
-        j[field] = amountText(v);
-        c[k] = amountText(v);                  // the Contract tab shows the same amounts as the paper
-        done.push(label + ' ' + usd(v));
-      });
+      const v = values();
       close();
-      if (!done.length) return;
-      if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Contract amounts filled in', done.join(' \u00b7 '));
+      // Saved the way the job's own Contract Price editor saves: three parts and their total.
+      READ_ROWS.forEach(([k, field]) => { j[field] = v[k].toFixed(2); });
+      j.potVal = v.total.toFixed(2);
+      if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Contract price filled in from the contract',
+        READ_ROWS.map(([k, , label]) => label + ' ' + usd(v[k])).join(' · ') + ' · Total ' + usd(v.total));
       save(); rerender();
-      if (typeof root.renderBoard === 'function') { try { root.renderBoard(); } catch (e) {} }
-      say('Filled in from the contract');
+      if (typeof root.renderBoard === 'function') { try { root.renderBoard(); } catch (er) {} }
+      say('Contract price filled in · ' + usd(v.total));
     });
     document.body.appendChild(bg);
     // Focus the sheet, not a box: a focused box would pop the phone keyboard over the amounts.
@@ -491,6 +524,12 @@
 #ctRead .ct-rd-f input:focus-visible{outline:2px solid #5B93FF;outline-offset:1px}
 #ctRead .ct-rd-f small{font-size:12px;line-height:1.35;color:#8B94A7;min-height:16px}
 #ctRead .ct-rd-f small.diff{color:#FCD34D}
+#ctRead .ct-rd-g.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#ctRead .ct-rd-g.three input{padding:11px 8px;font-size:15px}
+#ctRead .ct-rd-tot{display:flex;justify-content:space-between;align-items:center;background:#161B24;border:1px solid #2B3345;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;color:#C4CBD8}
+#ctRead .ct-rd-tot b{font-size:17px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+#ctRead .ct-rd-chk{font-size:12px;line-height:1.4;color:#8B94A7;min-height:17px}
+#ctRead .ct-rd-chk.diff{color:#FCD34D}
 #ctRead .ct-rd-b{display:flex;gap:12px}
 #ctRead .ct-rd-b button{flex:1;min-height:50px;border-radius:12px;font:700 15px Inter,system-ui,sans-serif;cursor:pointer}
 #ctRead .ct-rd-skip{background:#1A1F29;color:#E8ECF3;border:1px solid #252B38}
