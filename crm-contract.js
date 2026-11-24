@@ -395,7 +395,8 @@
   /* ---- a paper contract was scanned or uploaded: read its amounts into the contract price ---- */
   // The job's Contract Summary breaks the contract price into three parts that add up to
   // it (the same three the "Contract Price" editor in the job saves). A scanned contract
-  // fills those — never the Insurance section, which is the carrier's numbers, not the contract's.
+  // fills those, and the Contract tab's amounts — never the Insurance section, which is
+  // the carrier's numbers, not the contract's.
   //   contract amount → the job's breakdown box for it
   const READ_ROWS = [
     ['netClaim', 'cpNetClaim', 'Net claim'],
@@ -436,7 +437,7 @@
     bg.id = 'ctRead';
     bg.innerHTML = `<div class="ct-rd" role="dialog" aria-modal="true" aria-labelledby="ctReadT">
       <div class="ct-rd-h"><b id="ctReadT">Read from the contract</b><button type="button" class="ct-rd-x" data-rd="skip" aria-label="Close">${ICON && ICON.x ? ICON.x : '&times;'}</button></div>
-      <p class="ct-rd-p">These fill the job’s contract price breakdown. Check them against the paper and fix any that are off. Nothing is saved until you tap Fill in, and the Insurance section is not changed.</p>
+      <p class="ct-rd-p">These fill the job’s contract price breakdown. Check them against the paper and fix any that are off. The Contract tab gets the same amounts. Nothing is saved until you tap Fill in, and the Insurance section is not changed.</p>
       <div class="ct-rd-g three">${READ_ROWS.map(([k, , label]) => {
         const v = got[k], has = now.has ? now[k] : 0;
         const note = v == null ? 'Not found — type it in, or leave blank'
@@ -481,6 +482,10 @@
       // Saved the way the job's own Contract Price editor saves: three parts and their total.
       READ_ROWS.forEach(([k, field]) => { j[field] = v[k].toFixed(2); });
       j.potVal = v.total.toFixed(2);
+      // The Contract tab shows the same amounts as the paper; its RCV is the total charge.
+      const c = ensureContract(j);
+      READ_ROWS.forEach(([k]) => { c[k] = amountText(v[k]); });
+      c.rcv = amountText(v.total);
       if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Contract price filled in from the contract',
         READ_ROWS.map(([k, , label]) => label + ' ' + usd(v[k])).join(' · ') + ' · Total ' + usd(v.total));
       save(); rerender();
