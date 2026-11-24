@@ -1817,6 +1817,8 @@
         }
         if (typeof root.logActivity === 'function') root.logActivity(j, 'file', A.longName + ' uploaded', 'Signed paper copy uploaded');
         save(); say('Signed ' + A.noun + ' uploaded'); rerender();
+        // e.g. the contract reads its amounts off the paper
+        if (A.afterUpload) { try { A.afterUpload(j, recs.filter(Boolean)); } catch (e) { console.warn('[sign] afterUpload', e); } }
       } catch (e) { console.error('[sign] upload failed', e); say('Upload failed — try again'); }
     }
 
