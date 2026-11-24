@@ -160,7 +160,60 @@
     return sh.concat(col).join(' · ');
   }
 
-  const api = { TEMPLATE_URL, CONTRACT_VERSION, TEXT_FIELDS, DATE_FIELDS, QTY_KEYS, GROUPS, CHECK_KEYS, DEFAULT_ADDL,
+  /* ---- reading a scanned paper contract ---- */
+  // The four payment amounts, off the text read from a scan (OCR). → numbers, or null
+  // where one wasn't found: { rcv, netClaim, deductible, depreciation }.
+  // The text comes in three shapes, and all three are handled:
+  //   label and amount on one line      "Deductible amount due $2,500.00"
+  //   two labels across one line        "RCV total charge $18,400 Net claim amount due $12,900"
+  //   labels first, amounts after       "RCV total charge" / "Net claim amount due" / "$18,400" / "$12,900"
+  const AMOUNT_LABELS = [
+    ['rcv', /\brcv\b|replacement\s+cost/i],
+    ['netClaim', /net\s+claim/i],
+    ['deductible', /deductible/i],
+    ['depreciation', /depreciation/i],
+  ];
+  const MONEY_RE = /\$?\s*(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/;
+  function moneyIn(s) {
+    const m = MONEY_RE.exec(String(s || ''));
+    if (!m) return null;
+    const v = parseFloat(m[1].replace(/,/g, ''));
+    return isFinite(v) && v > 0 ? v : null;
+  }
+  function parseContractAmounts(text) {
+    const out = { rcv: null, netClaim: null, deductible: null, depreciation: null };
+    const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let waiting = [], idle = 0;   // labels still waiting for their amount, in order
+    const set = (k, v) => { if (out[k] == null && v != null) out[k] = v; };
+    lines.forEach(line => {
+      const hits = [];
+      AMOUNT_LABELS.forEach(([k, re]) => {
+        const m = re.exec(line);
+        if (m && !(k === 'depreciation' && /non-?\s*recoverable/i.test(line))) hits.push({ k, at: m.index, end: m.index + m[0].length });
+      });
+      hits.sort((a, b) => a.at - b.at);
+      if (hits.length) {
+        let any = false;
+        const late = [];
+        hits.forEach((h, i) => {
+          const v = moneyIn(line.slice(h.end, i + 1 < hits.length ? hits[i + 1].at : line.length));
+          if (v != null) { set(h.k, v); any = true; } else late.push(h.k);
+        });
+        // A long line with a label word and no amount is a sentence from the terms, not the form.
+        if (any || line.length <= 60) { late.forEach(k => { if (out[k] == null && waiting.indexOf(k) < 0) waiting.push(k); }); idle = 0; }
+        return;
+      }
+      if (waiting.length && /^\$?\s*[\d,]+(?:\.\d{1,2})?$/.test(line)) { set(waiting.shift(), moneyIn(line)); idle = 0; return; }
+      if (++idle > 2) waiting = [];
+    });
+    // An amount bigger than the whole job was misread.
+    if (out.rcv != null) ['netClaim', 'deductible', 'depreciation'].forEach(k => { if (out[k] != null && out[k] > out.rcv) out[k] = null; });
+    return out;
+  }
+  // 18400 → "18400", 2500.5 → "2500.50" (how the job's money boxes hold a number)
+  const amountText = v => v == null ? '' : (v % 1 ? v.toFixed(2) : String(v));
+
+  const api = { parseContractAmounts, amountText, TEMPLATE_URL, CONTRACT_VERSION, TEXT_FIELDS, DATE_FIELDS, QTY_KEYS, GROUPS, CHECK_KEYS, DEFAULT_ADDL,
     splitAddress, fmtLooseDate, ensureContract, prefillFromJob, contractFields, missingForSigning, sectionMissing, specSummary };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
   root.crmContract = api;
@@ -310,6 +363,7 @@
     missing: j => missingForSigning(ensureContract(j)),
     rememberContact: (j, phone, email) => { const c = ensureContract(j); if (phone && isBlank(c.cell)) c.cell = phone; if (email && isBlank(c.email)) c.email = email; },
     doc: CONTRACT_DOC, finalize: finalizeSigned, warm: () => loadTemplate().catch(() => {}),
+    afterUpload: (j, recs) => { readPaper(j, recs); },
     fileName: 'StormShield Contract (signed).pdf',
     signedFileName: (f, at) => `${E.cleanName(f.customer) || 'Homeowner'} - ${E.cleanName(f.street) || 'Property'} - Contract (signed) - ${E.fileDay(at)}.pdf`,
     linkSubject: 'Your StormShield roofing contract — please sign',
@@ -338,6 +392,120 @@
   };
   const CT = E.makeSignable(CONTRACT);
 
+  /* ---- a paper contract was scanned or uploaded: read its amounts into the contract price ---- */
+  // The job's Contract Summary breaks the contract price into three parts that add up to
+  // it (the same three the "Contract Price" editor in the job saves). A scanned contract
+  // fills those, and the Contract tab's amounts — never the Insurance section, which is
+  // the carrier's numbers, not the contract's.
+  //   contract amount → the job's breakdown box for it
+  const READ_ROWS = [
+    ['netClaim', 'cpNetClaim', 'Net claim'],
+    ['deductible', 'cpDeductible', 'Deductible'],
+    ['depreciation', 'cpDepreciation', 'Depreciation'],
+  ];
+  const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[$,\s]/g, '')); return isFinite(n) ? n : null; };
+  const usd = v => '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
+
+  async function readPaper(j, recs) {
+    recs = (recs || []).filter(Boolean);
+    if (!j || !recs.length || typeof root.ocrLossFile !== 'function') return;
+    let text = '';
+    for (const f of recs) { try { const t = await root.ocrLossFile(f); if (t) text += '\n' + t; } catch (e) { console.warn('[contract] read failed', f && f.name, e); } }
+    const got = parseContractAmounts(text);
+    if (!READ_ROWS.some(r => got[r[0]] != null)) { say('Couldn’t read the amounts on the contract — enter the contract price in the job'); return; }
+    openReadSheet(j, got);
+  }
+
+  // The job as the CRM holds it right now. Reading takes a few seconds and the sheet
+  // stays open longer; meanwhile a sync (the upload itself sets one off, and so does
+  // coming back from the camera) reloads every job as a new object. Anything saved to
+  // the object we started with would then be lost, so always look the job up again.
+  const liveJob = j => (j && j.id != null && jobById(j.id)) || j;
+
+  // What the job's contract price breakdown holds now. A job with a contract price but no
+  // breakdown yet counts the whole price as net claim — the same way the job's editor opens.
+  function breakdownNow(j) {
+    const has = j.cpNetClaim != null || j.cpDeductible != null || j.cpDepreciation != null;
+    return {
+      has,
+      netClaim: has ? (num(j.cpNetClaim) || 0) : (num(j.potVal) || 0),
+      deductible: has ? (num(j.cpDeductible) || 0) : 0,
+      depreciation: has ? (num(j.cpDepreciation) || 0) : 0,
+    };
+  }
+
+  // The amounts that were read, for the rep to check against the paper before anything is saved.
+  function openReadSheet(j, got) {
+    injectStyles();
+    const old = document.getElementById('ctRead'); if (old) old.remove();
+    j = liveJob(j);
+    const now = breakdownNow(j), priceNow = num(j.potVal) || 0;
+    const bg = document.createElement('div');
+    bg.id = 'ctRead';
+    bg.innerHTML = `<div class="ct-rd" role="dialog" aria-modal="true" aria-labelledby="ctReadT">
+      <div class="ct-rd-h"><b id="ctReadT">Read from the contract</b><button type="button" class="ct-rd-x" data-rd="skip" aria-label="Close">${ICON && ICON.x ? ICON.x : '&times;'}</button></div>
+      <p class="ct-rd-p">These fill the job’s contract price breakdown. Check them against the paper and fix any that are off. The Contract tab gets the same amounts. Nothing is saved until you tap Fill in, and the Insurance section is not changed.</p>
+      <div class="ct-rd-g three">${READ_ROWS.map(([k, , label]) => {
+        const v = got[k], has = now.has ? now[k] : 0;
+        const note = v == null ? 'Not found — type it in, or leave blank'
+          : has > 0 && Math.abs(has - v) > 0.004 ? 'Breakdown has ' + usd(has) + ' now' : '';
+        return `<div class="ct-rd-f"><label for="ctRead_${k}">${label} ($)</label>
+          <input id="ctRead_${k}" data-rdk="${k}" type="text" inputmode="decimal" autocomplete="off" value="${esc(amountText(v))}">
+          <small class="${note.indexOf('Breakdown has') === 0 ? 'diff' : ''}">${esc(note)}</small></div>`;
+      }).join('')}</div>
+      <div class="ct-rd-tot"><span>Contract price</span><b data-rdtot></b></div>
+      <small class="ct-rd-chk" data-rdchk></small>
+      <div class="ct-rd-b"><button type="button" class="ct-rd-skip" data-rd="skip">Skip</button><button type="button" class="ct-rd-ok" data-rd="ok">Fill in</button></div>
+    </div>`;
+    // A box left blank keeps what the breakdown has now.
+    const values = () => {
+      const out = {};
+      READ_ROWS.forEach(([k]) => { const v = num(bg.querySelector(`[data-rdk="${k}"]`).value); out[k] = v != null && v >= 0 ? v : now[k]; });
+      out.total = +(out.netClaim + out.deductible + out.depreciation).toFixed(2);
+      return out;
+    };
+    const recalc = () => {
+      const v = values();
+      bg.querySelector('[data-rdtot]').textContent = usd(v.total);
+      const chk = bg.querySelector('[data-rdchk]');
+      // The contract's RCV is the total charge: it should equal the three parts added up.
+      const off = got.rcv != null && Math.abs(got.rcv - v.total) > 0.004;
+      chk.className = 'ct-rd-chk' + (off ? ' diff' : '');
+      chk.textContent = off ? 'The contract’s RCV reads ' + usd(got.rcv) + ', but these add up to ' + usd(v.total) + '. Check the numbers.'
+        : got.rcv != null ? 'Matches the RCV on the contract (' + usd(got.rcv) + ').'
+        : priceNow > 0 && Math.abs(priceNow - v.total) > 0.004 ? 'The job’s contract price is ' + usd(priceNow) + ' now.' : '';
+    };
+    bg.addEventListener('input', recalc);
+    recalc();
+    const close = () => { bg.remove(); document.removeEventListener('keydown', onKey, true); };
+    const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    bg.addEventListener('click', e => {
+      const b = e.target.closest('[data-rd]');
+      if (!b) return;
+      if (b.dataset.rd === 'skip') { close(); return; }
+      const v = values();
+      close();
+      j = liveJob(j);
+      // Saved the way the job's own Contract Price editor saves: three parts and their total.
+      READ_ROWS.forEach(([k, field]) => { j[field] = v[k].toFixed(2); });
+      j.potVal = v.total.toFixed(2);
+      // The Contract tab shows the same amounts as the paper; its RCV is the total charge.
+      const c = ensureContract(j);
+      READ_ROWS.forEach(([k]) => { c[k] = amountText(v[k]); });
+      c.rcv = amountText(v.total);
+      if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Contract price filled in from the contract',
+        READ_ROWS.map(([k, , label]) => label + ' ' + usd(v[k])).join(' · ') + ' · Total ' + usd(v.total));
+      save(); rerender();
+      if (typeof root.renderBoard === 'function') { try { root.renderBoard(); } catch (er) {} }
+      if (typeof root.renderJobsPage === 'function') { try { const pg = document.getElementById('jobsPage'); if (pg && pg.style.display !== 'none') root.renderJobsPage(); } catch (er) {} }
+      say('Contract price filled in · ' + usd(v.total));
+    });
+    document.body.appendChild(bg);
+    // Focus the sheet, not a box: a focused box would pop the phone keyboard over the amounts.
+    const sheet = bg.querySelector('.ct-rd'); sheet.tabIndex = -1; setTimeout(() => sheet.focus({ preventScroll: true }), 50);
+  }
+
   function injectStyles() {
     E.injectStyles();
     if (document.getElementById('ct-styles')) return;
@@ -356,6 +524,31 @@
 .ct-addl .pk-fld input{padding:7px 9px;font-size:13px}
 .ct-pay .pk-fld input{text-align:right;font-variant-numeric:tabular-nums}
 .ct-files{margin-top:4px}
+#ctRead{position:fixed;inset:0;z-index:100000;background:rgba(5,7,11,.72);display:flex;align-items:flex-end;justify-content:center;font-family:Inter,system-ui,sans-serif}
+#ctRead .ct-rd{width:100%;max-width:460px;max-height:100%;overflow:auto;box-sizing:border-box;background:#0E1219;color:#E8ECF3;border:1px solid #252B38;border-radius:16px 16px 0 0;padding:14px 16px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+#ctRead .ct-rd:focus{outline:none}
+#ctRead .ct-rd-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#ctRead .ct-rd-h b{font-size:17px;font-weight:700}
+#ctRead .ct-rd-x{width:44px;height:44px;border-radius:22px;border:0;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+#ctRead .ct-rd-p{font-size:13px;line-height:1.45;color:#A9B1C1;margin:0}
+#ctRead .ct-rd-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#ctRead .ct-rd-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+#ctRead .ct-rd-f label{font-size:12px;font-weight:600;color:#C4CBD8}
+#ctRead .ct-rd-f input{background:#161B24;border:1px solid #33405A;border-radius:10px;padding:11px 12px;color:#fff;font:600 16px Inter,system-ui,sans-serif;text-align:right;font-variant-numeric:tabular-nums;min-width:0;width:100%;box-sizing:border-box}
+#ctRead .ct-rd-f input:focus-visible{outline:2px solid #5B93FF;outline-offset:1px}
+#ctRead .ct-rd-f small{font-size:12px;line-height:1.35;color:#8B94A7;min-height:16px}
+#ctRead .ct-rd-f small.diff{color:#FCD34D}
+#ctRead .ct-rd-g.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#ctRead .ct-rd-g.three input{padding:11px 8px;font-size:15px}
+#ctRead .ct-rd-tot{display:flex;justify-content:space-between;align-items:center;background:#161B24;border:1px solid #2B3345;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;color:#C4CBD8}
+#ctRead .ct-rd-tot b{font-size:17px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+#ctRead .ct-rd-chk{font-size:12px;line-height:1.4;color:#8B94A7;min-height:17px}
+#ctRead .ct-rd-chk.diff{color:#FCD34D}
+#ctRead .ct-rd-b{display:flex;gap:12px}
+#ctRead .ct-rd-b button{flex:1;min-height:50px;border-radius:12px;font:700 15px Inter,system-ui,sans-serif;cursor:pointer}
+#ctRead .ct-rd-skip{background:#1A1F29;color:#E8ECF3;border:1px solid #252B38}
+#ctRead .ct-rd-ok{flex:2 !important;background:#2F6FEB;color:#fff;border:0}
+@media (min-width:761px){#ctRead{align-items:center}#ctRead .ct-rd{border-radius:16px}}
 @media (max-width:640px){.ct-two,.ct-addl{grid-template-columns:1fr}}
 `;
     document.head.appendChild(st);
@@ -481,6 +674,6 @@
     }));
   }
 
-  Object.assign(api, { renderContractTab, startSigning: CT.startSigning, preview: CT.preview, uploadPaper: CT.uploadPaper, deleteFile: CT.deleteFile,
+  Object.assign(api, { readPaper, renderContractTab, startSigning: CT.startSigning, preview: CT.preview, uploadPaper: CT.uploadPaper, deleteFile: CT.deleteFile,
     startOver: CT.startOver, sendForSignature: CT.sendForSignature, resendLink: CT.resendLink, voidLink: CT.voidLink, renderLinks: CT.renderLinks });
 })(typeof window !== 'undefined' ? window : globalThis);
