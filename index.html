@@ -7309,15 +7309,29 @@ function renderCard(j){
 // ---- Mobile: move a job between stages without drag-and-drop ----
 // HTML5 drag events don't fire on touch devices, so cards get a tap-to-move
 // button (shown via CSS on coarse pointers / small screens) that opens this picker.
-// Gate: block entry into "Contract Signed" without a contract price, so the
-// Discord alert and Zoho invoice never fire with $0. Returns true if allowed.
-function canEnterContractStage(j, cdef){
+// A signed contract on file: signed in the CRM or a paper copy scanned / uploaded on the
+// Contract tab, or one in the older contract uploads.
+function jobHasContract(j){
+  return !!(j && ((Array.isArray(j.signedContractFiles) && j.signedContractFiles.length) || (Array.isArray(j.contracts) && j.contracts.length)));
+}
+window.jobHasContract = jobHasContract;
+// Gate: a job can only enter "Contract Signed" with a contract price entered AND the
+// signed contract on file — so the stage means what it says, and the Cliq alert and
+// Zoho invoice never fire with $0. Returns true if allowed.
+// stay: don't jump to the job (the caller has its own form open).
+function canEnterContractStage(j, cdef, stay){
   if(!cdef || !/contract signed/i.test(cdef.name || '')) return true;
-  const amt = moneyNum(j.potVal);
-  if(amt > 0) return true;
-  toast('Enter the Contract Price in the Contract Summary before marking this signed');
-  // Jump the user straight to the job so they can fill it in.
+  const needPrice = !(moneyNum(j.potVal) > 0), needFile = !jobHasContract(j);
+  if(!needPrice && !needFile) return true;
+  toast(needPrice && needFile ? 'Before Contract Signed: enter the contract price and upload the signed contract'
+    : needPrice ? 'Before Contract Signed: enter the contract price (Overview \u2192 Contract price)'
+    : 'Before Contract Signed: upload the signed contract (Contract tab)');
+  if(stay || !j.id) return false;
+  // Jump the user straight to where the missing piece goes.
   if(typeof openDetail === 'function' && openJobId !== j.id) openDetail(j.id);
+  if(needFile && openJobId === j.id && typeof renderDetailPanel === 'function'){
+    try{ activeTab = 'contract'; renderDetailPanel(); }catch(e){}
+  }
   return false;
 }
 window.canEnterContractStage = canEnterContractStage;
@@ -9662,6 +9676,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       if(!next){toast('Already at final stage');return}
       if(next.locked){toast(`${next.name} is locked`);return}
       if(!canMoveToStage(j,next.id))return;
+      if(!canEnterContractStage(j,next))return;
       const fromStageName = jobColumns.find(c=>c.id===j.col)?.name||j.col;
       j.col=next.id;logActivity(j,'stage','Stage changed',`${fromStageName} → ${next.name}`);saveToStorage();toast(`Moved to ${next.name}`);renderBoard();
       if($('jobsPage')?.style.display!=='none') renderJobsPage();
@@ -12056,6 +12071,8 @@ $('saveJob').onclick=async ()=>{
   if(editingJobId){
     const j=jobs.find(x=>x.id===editingJobId);
     if(j&&j.col!==claimData.col&&!canMoveToStage(j,claimData.col))return;
+    // The stage picked in this form goes through the same Contract Signed check as a drag.
+    if(j&&j.col!==claimData.col&&!canEnterContractStage(j,columnsForPipeline(claimData.pipeline||j.pipeline||'insurance').find(c=>c.id===claimData.col),true))return;
     if(j){
       // ── Activity log: detect what changed ──
       const oldStage = j.col, newStage = claimData.col;
@@ -12100,6 +12117,8 @@ $('saveJob').onclick=async ()=>{
     if($('jobsPage')?.style.display!=='none') renderJobsPage();
     if($('detailOverlay').classList.contains('open')) renderDetailPanel();
   } else {
+    // A brand-new job has no price or contract yet, so it can't start in Contract Signed.
+    if(!canEnterContractStage({potVal:0},columnsForPipeline(claimData.pipeline||'insurance').find(c=>c.id===claimData.col),true))return;
     const newJob = Object.assign({id:'j'+Date.now(),name,priority:'low',docs:0,notes:0,tasks:0,tasksDone:0,potVal:'0.00',paidVal:'0.00',created:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})},claimData);
     newJob.timeline = [];
     syncPmExpense(newJob);
