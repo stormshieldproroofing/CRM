@@ -1818,6 +1818,8 @@
       const j = jobById(jobId); if (!j) return;
       const files = Array.from(fileList || []); if (!files.length) return;
       const p = A.state(j);
+      // e.g. the contract reads its amounts off the paper, alongside the upload
+      if (A.beforeUpload) { try { A.beforeUpload(j, files); } catch (e) { console.warn('[sign] beforeUpload', e); } }
       try {
         say('Uploading…');
         const recs = await Promise.all(files.map(fl => root.intakeJobFile(fl, A.fileKind, null)));
@@ -1830,8 +1832,6 @@
         }
         if (typeof root.logActivity === 'function') root.logActivity(j, 'file', A.longName + ' uploaded', 'Signed paper copy uploaded');
         save(); say('Signed ' + A.noun + ' uploaded'); rerender();
-        // e.g. the contract reads its amounts off the paper
-        if (A.afterUpload) { try { A.afterUpload(j, recs.filter(Boolean)); } catch (e) { console.warn('[sign] afterUpload', e); } }
       } catch (e) { console.error('[sign] upload failed', e); say('Upload failed — try again'); }
     }
 

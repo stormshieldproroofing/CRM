@@ -662,8 +662,8 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="supabase-crm.js?v=10"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=4"></script>
-<script src="crm-packet.js?v=20"></script>
-<script src="crm-contract.js?v=5"></script>
+<script src="crm-packet.js?v=21"></script>
+<script src="crm-contract.js?v=6"></script>
 <script src="crm-notes.js?v=33"></script>
 <script src="crm-notifications.js?v=9"></script>
 <script src="crm-certs.js?v=1"></script>
@@ -10138,6 +10138,8 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
     window.contractAddFiles=async function(files){
       const pending=Array.from(files);
       if(!pending.length) return;
+      // read net claim, deductible and depreciation off the paper, alongside the upload (crm-contract.js)
+      try{ if(window.crmContract && window.crmContract.readPaper) window.crmContract.readPaper(j, pending); }catch(e){ console.warn('[contract] read', e); }
       toast('Uploading…');
       const records=await Promise.all(pending.map(f=>intakeJobFile(f,'contract',null)));
       j.contracts.push(...records);
@@ -10145,8 +10147,6 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       body.innerHTML=contractHTML();
       wireContractLightbox();
       toast('Contract uploaded');
-      // read net claim, deductible and depreciation off the paper into the contract price breakdown (crm-contract.js)
-      try{ if(window.crmContract && window.crmContract.readPaper) window.crmContract.readPaper(j, records); }catch(e){ console.warn('[contract] read', e); }
     };
     window.contractDelete=function(i){const rec=j.contracts[i];window.deleteJobFile?.(rec);j.contracts.splice(i,1);saveToStorage();body.innerHTML=contractHTML();wireContractLightbox()};
     window.contractOpenFile=function(i){
