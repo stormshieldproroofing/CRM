@@ -96,4 +96,45 @@ test('splitAddress', () => {
   assert.deepStrictEqual(ct.splitAddress('—'), { street: '', cityStateZip: '' });
 });
 
+
+/* ---------- reading a scanned paper contract ---------- */
+test('scan: label and amount on one line', () => {
+  const r = ct.parseContractAmounts('PAYMENT SCHEDULE\nRCV total charge ($) 18,400.00\nNet claim amount due ($): $12,900\nDeductible amount due $ 2,500\nDepreciation amount due 3000.50');
+  assert.deepStrictEqual(r, { rcv: 18400, netClaim: 12900, deductible: 2500, depreciation: 3000.5 });
+});
+test('scan: two labels across one line each get their own amount', () => {
+  const r = ct.parseContractAmounts('RCV total charge $18,400 Net claim amount due $12,900\nDeductible amount due $2,500 Depreciation amount due $3,000');
+  assert.deepStrictEqual(r, { rcv: 18400, netClaim: 12900, deductible: 2500, depreciation: 3000 });
+});
+test('scan: labels first, amounts after, pair up in order', () => {
+  const r = ct.parseContractAmounts('RCV total charge ($)\nNet claim amount due ($)\n$18,400.00\n$12,900.00\nDeductible amount due ($)\nDepreciation amount due ($)\n2,500\n3,000');
+  assert.deepStrictEqual(r, { rcv: 18400, netClaim: 12900, deductible: 2500, depreciation: 3000 });
+});
+test('scan: label on one line, amount on the next', () => {
+  const r = ct.parseContractAmounts('Deductible\n$1,000\nRCV\n22500');
+  assert.strictEqual(r.deductible, 1000);
+  assert.strictEqual(r.rcv, 22500);
+  assert.strictEqual(r.netClaim, null);
+});
+test('scan: a sentence in the terms that says "deductible" is not an amount', () => {
+  const r = ct.parseContractAmounts('The homeowner is responsible for paying the deductible to StormShield before work begins.\n2\nPage 2 of 2\nRCV total charge $18,400');
+  assert.strictEqual(r.deductible, null);
+  assert.strictEqual(r.rcv, 18400);
+});
+test('scan: a blank box does not borrow an amount from far away', () => {
+  const r = ct.parseContractAmounts('Depreciation amount due ($)\nCustomer signature\nDate\nPrinted name\n11/20/2026\n832');
+  assert.strictEqual(r.depreciation, null);
+});
+test('scan: non-recoverable depreciation is not the depreciation due; an amount over the RCV is dropped', () => {
+  assert.strictEqual(ct.parseContractAmounts('Non-recoverable depreciation $900').depreciation, null);
+  const r = ct.parseContractAmounts('RCV total charge $18,400\nDeductible amount due $250,000');
+  assert.strictEqual(r.deductible, null);
+});
+test('scan: nothing readable → all blank; amounts are held the way the job holds them', () => {
+  assert.deepStrictEqual(ct.parseContractAmounts(''), { rcv: null, netClaim: null, deductible: null, depreciation: null });
+  assert.strictEqual(ct.amountText(18400), '18400');
+  assert.strictEqual(ct.amountText(2500.5), '2500.50');
+  assert.strictEqual(ct.amountText(null), '');
+});
+
 console.log(passed + ' passed');
