@@ -1347,10 +1347,10 @@ html.ssn-strip-solo .dp-body{padding-bottom:calc(90px + env(safe-area-inset-bott
 .ssn-tl-t.packet{color:#5EEAD4;font-weight:600}
 .ssn-dot.note{background:#38BDF8;top:14px}
 .ssn-tl-sys.appt{margin:4px 0}
-.ssn-tl-sys.appt .ssn-dot{background:#E8ECF3;top:14px}
-.ssn-tl-sys.appt .ssn-tl-d{color:#E8ECF3;font-weight:600}
-.ssn-tl-t.appt{background:#161B24;border:1px solid #2B3345;border-radius:10px;padding:7px 10px;color:#fff;font-size:14px;font-weight:700}
-.ssn-tl-t.appt .ti{margin-right:6px;font-weight:400;color:#C4CBD8}
+.ssn-tl-sys.appt .ssn-dot{background:#FB923C;top:14px}
+.ssn-tl-sys.appt .ssn-tl-d{color:#FDBA74;font-weight:600}
+.ssn-tl-t.appt{background:rgba(251,146,60,.10);border:1px solid rgba(251,146,60,.45);border-radius:10px;padding:7px 10px;color:#FDBA74;font-size:14px;font-weight:700}
+.ssn-tl-t.appt .ti{margin-right:6px;font-weight:400;color:#FB923C}
 .ssn-tl-sys{position:relative;display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;color:#8E9BAA}
 .ssn-tl-sys .ssn-dot{top:7px}
 .ssn-tl-d{width:46px;flex:none;font-size:12px;color:#6B7686}

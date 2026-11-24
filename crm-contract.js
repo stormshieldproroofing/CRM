@@ -363,7 +363,7 @@
     missing: j => missingForSigning(ensureContract(j)),
     rememberContact: (j, phone, email) => { const c = ensureContract(j); if (phone && isBlank(c.cell)) c.cell = phone; if (email && isBlank(c.email)) c.email = email; },
     doc: CONTRACT_DOC, finalize: finalizeSigned, warm: () => loadTemplate().catch(() => {}),
-    afterUpload: (j, recs) => { readPaper(j, recs); },
+    beforeUpload: (j, files) => { readPaper(j, files); },
     fileName: 'StormShield Contract (signed).pdf',
     signedFileName: (f, at) => `${E.cleanName(f.customer) || 'Homeowner'} - ${E.cleanName(f.street) || 'Property'} - Contract (signed) - ${E.fileDay(at)}.pdf`,
     linkSubject: 'Your StormShield roofing contract — please sign',
@@ -406,20 +406,74 @@
   const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[$,\s]/g, '')); return isFinite(n) ? n : null; };
   const usd = v => '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
 
-  async function readPaper(j, recs) {
-    recs = (recs || []).filter(Boolean);
-    if (!j || !recs.length || typeof root.ocrLossFile !== 'function') return;
-    let text = '';
-    for (const f of recs) { try { const t = await root.ocrLossFile(f); if (t) text += '\n' + t; } catch (e) { console.warn('[contract] read failed', f && f.name, e); } }
-    const got = parseContractAmounts(text);
-    if (!READ_ROWS.some(r => got[r[0]] != null)) { say('Couldn’t read the amounts on the contract — enter the contract price in the job'); return; }
-    openReadSheet(j, got);
+  // One page at a time as a small JPEG — big enough for Vision to read handwriting,
+  // small enough to send over a phone connection in a second or two. (The first version
+  // waited for the upload, downloaded the file again and sent up to six full-size pages.)
+  const OCR_SIDE = 1800, OCR_PAGES = 4;
+  const jpegOf = cv => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.82));
+  async function smallImage(blob) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('image')); im.src = url; });
+      const k = Math.min(1, OCR_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+      if (k === 1 && blob.size < 700000) return blob;
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      return (await jpegOf(cv)) || blob;
+    } finally { URL.revokeObjectURL(url); }
+  }
+  // src: a File straight from the scanner / file picker, or a saved file record ({ url, name }).
+  async function* pagesOf(src) {
+    let blob = src instanceof Blob ? src : (src && src._file instanceof Blob ? src._file : null);
+    if (!blob && src && src.url) blob = await (await fetch(src.url)).blob();
+    if (!blob) return;
+    const isPdf = blob.type === 'application/pdf' || /\.pdf$/i.test((src && src.name) || '');
+    if (!isPdf) { yield await smallImage(blob); return; }
+    if (typeof root.pdfjsLib === 'undefined') return;
+    const pdf = await root.pdfjsLib.getDocument({ data: await blob.arrayBuffer() }).promise;
+    for (let p = 1; p <= Math.min(pdf.numPages, OCR_PAGES); p++) {
+      const page = await pdf.getPage(p);
+      const one = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: OCR_SIDE / Math.max(one.width, one.height) });
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(viewport.width); cv.height = Math.round(viewport.height);
+      await page.render({ canvasContext: cv.getContext('2d'), viewport }).promise;
+      const b = await jpegOf(cv);
+      if (b) yield b;
+    }
+  }
+  // Read pages until the three breakdown amounts are found — the payment schedule is on
+  // page 1, so that is normally one page and one request.
+  async function readAmounts(sources) {
+    const out = { rcv: null, netClaim: null, deductible: null, depreciation: null };
+    const done = () => READ_ROWS.every(r => out[r[0]] != null);
+    for (const src of sources) {
+      try {
+        for await (const pg of pagesOf(src)) {
+          let text = '';
+          try { text = await root.ocrLossFile({ _file: pg, name: 'page.jpg' }); } catch (e) { console.warn('[contract] page read failed', e); }
+          const got = parseContractAmounts(text);
+          Object.keys(out).forEach(k => { if (out[k] == null && got[k] != null) out[k] = got[k]; });
+          if (done()) return out;
+        }
+      } catch (e) { console.warn('[contract] read failed', src && src.name, e); }
+    }
+    return out;
   }
 
-  // The job as the CRM holds it right now. Reading takes a few seconds and the sheet
-  // stays open longer; meanwhile a sync (the upload itself sets one off, and so does
-  // coming back from the camera) reloads every job as a new object. Anything saved to
-  // the object we started with would then be lost, so always look the job up again.
+  // Called the moment a paper contract is scanned or picked — before the upload, so the
+  // reading runs alongside it and the sheet is on screen straight away.
+  function readPaper(j, sources) {
+    sources = Array.from(sources || []).filter(Boolean);
+    if (!j || !sources.length || typeof root.ocrLossFile !== 'function') return;
+    openReadSheet(j, readAmounts(sources));
+  }
+
+  // The job as the CRM holds it right now. The sheet stays open a while; meanwhile a sync
+  // (the upload itself sets one off, and so does coming back from the camera) reloads
+  // every job as a new object. Anything saved to the object we started with would then
+  // be lost, so always look the job up again.
   const liveJob = j => (j && j.id != null && jobById(j.id)) || j;
 
   // What the job's contract price breakdown holds now. A job with a contract price but no
@@ -434,33 +488,61 @@
     };
   }
 
-  // The amounts that were read, for the rep to check against the paper before anything is saved.
-  function openReadSheet(j, got) {
+  // Write the confirmed amounts onto the job, the way its own Contract Price editor saves
+  // them (three parts and their total), plus the Contract tab's amounts.
+  function applyAmounts(j, v) {
+    READ_ROWS.forEach(([k, field]) => { j[field] = v[k].toFixed(2); });
+    j.potVal = v.total.toFixed(2);
+    const c = ensureContract(j);
+    READ_ROWS.forEach(([k]) => { c[k] = amountText(v[k]); });
+    c.rcv = amountText(v.total);              // the contract's RCV is the total charge
+  }
+  const hasAmounts = (j, v) => !!j && j.potVal === v.total.toFixed(2) && READ_ROWS.every(([k, field]) => j[field] === v[k].toFixed(2));
+  const redraw = () => {
+    rerender();
+    if (typeof root.renderBoard === 'function') { try { root.renderBoard(); } catch (e) {} }
+    if (typeof root.renderJobsPage === 'function') { try { const pg = document.getElementById('jobsPage'); if (pg && pg.style.display !== 'none') root.renderJobsPage(); } catch (e) {} }
+  };
+  // Save now (not on the usual short delay) so a sync landing in between can't put the old
+  // price back; then check twice that the job still has the amounts, and put them back if
+  // a reload that started before the save replaced the job.
+  async function saveAmounts(j, v) {
+    const push = async () => { if (typeof root.flushSaveNow === 'function') { try { await root.flushSaveNow(); return; } catch (e) { console.warn('[contract] save now failed', e); } } save(); };
+    await push();
+    for (const wait of [1500, 4000]) {
+      await new Promise(r => setTimeout(r, wait));
+      const now = liveJob(j);
+      if (hasAmounts(now, v)) continue;
+      applyAmounts(now, v); redraw();
+      await push();
+    }
+  }
+
+  // The amounts off the contract, for the rep to check against the paper before anything
+  // is saved. Opens at once, showing "Reading…", and fills in when `reading` resolves.
+  function openReadSheet(j, reading) {
     injectStyles();
     const old = document.getElementById('ctRead'); if (old) old.remove();
     j = liveJob(j);
     const now = breakdownNow(j), priceNow = num(j.potVal) || 0;
+    let got = null;                        // null while reading
     const bg = document.createElement('div');
     bg.id = 'ctRead';
     bg.innerHTML = `<div class="ct-rd" role="dialog" aria-modal="true" aria-labelledby="ctReadT">
-      <div class="ct-rd-h"><b id="ctReadT">Read from the contract</b><button type="button" class="ct-rd-x" data-rd="skip" aria-label="Close">${ICON && ICON.x ? ICON.x : '&times;'}</button></div>
-      <p class="ct-rd-p">These fill the job’s contract price breakdown. Check them against the paper and fix any that are off. The Contract tab gets the same amounts. Nothing is saved until you tap Fill in, and the Insurance section is not changed.</p>
-      <div class="ct-rd-g three">${READ_ROWS.map(([k, , label]) => {
-        const v = got[k], has = now.has ? now[k] : 0;
-        const note = v == null ? 'Not found — type it in, or leave blank'
-          : has > 0 && Math.abs(has - v) > 0.004 ? 'Breakdown has ' + usd(has) + ' now' : '';
-        return `<div class="ct-rd-f"><label for="ctRead_${k}">${label} ($)</label>
-          <input id="ctRead_${k}" data-rdk="${k}" type="text" inputmode="decimal" autocomplete="off" value="${esc(amountText(v))}">
-          <small class="${note.indexOf('Breakdown has') === 0 ? 'diff' : ''}">${esc(note)}</small></div>`;
-      }).join('')}</div>
+      <div class="ct-rd-h"><b id="ctReadT">Contract price</b><button type="button" class="ct-rd-x" data-rd="skip" aria-label="Close">${ICON && ICON.x ? ICON.x : '&times;'}</button></div>
+      <p class="ct-rd-p" data-rdmsg aria-live="polite"><span class="ct-rd-spin" aria-hidden="true"></span>Reading the amounts off the contract…</p>
+      <div class="ct-rd-g three">${READ_ROWS.map(([k, , label]) => `<div class="ct-rd-f"><label for="ctRead_${k}">${label} ($)</label>
+          <input id="ctRead_${k}" data-rdk="${k}" type="text" inputmode="decimal" autocomplete="off" value="">
+          <small data-rdnote="${k}"></small></div>`).join('')}</div>
       <div class="ct-rd-tot"><span>Contract price</span><b data-rdtot></b></div>
       <small class="ct-rd-chk" data-rdchk></small>
-      <div class="ct-rd-b"><button type="button" class="ct-rd-skip" data-rd="skip">Skip</button><button type="button" class="ct-rd-ok" data-rd="ok">Fill in</button></div>
+      <div class="ct-rd-b"><button type="button" class="ct-rd-skip" data-rd="skip">Skip</button><button type="button" class="ct-rd-ok" data-rd="ok" disabled>Fill in</button></div>
     </div>`;
+    const box = k => bg.querySelector(`[data-rdk="${k}"]`);
     // A box left blank keeps what the breakdown has now.
     const values = () => {
       const out = {};
-      READ_ROWS.forEach(([k]) => { const v = num(bg.querySelector(`[data-rdk="${k}"]`).value); out[k] = v != null && v >= 0 ? v : now[k]; });
+      READ_ROWS.forEach(([k]) => { const v = num(box(k).value); out[k] = v != null && v >= 0 ? v : now[k]; });
       out.total = +(out.netClaim + out.deductible + out.depreciation).toFixed(2);
       return out;
     };
@@ -468,38 +550,53 @@
       const v = values();
       bg.querySelector('[data-rdtot]').textContent = usd(v.total);
       const chk = bg.querySelector('[data-rdchk]');
+      const rcv = got && got.rcv;
       // The contract's RCV is the total charge: it should equal the three parts added up.
-      const off = got.rcv != null && Math.abs(got.rcv - v.total) > 0.004;
+      const off = rcv != null && Math.abs(rcv - v.total) > 0.004;
       chk.className = 'ct-rd-chk' + (off ? ' diff' : '');
-      chk.textContent = off ? 'The contract’s RCV reads ' + usd(got.rcv) + ', but these add up to ' + usd(v.total) + '. Check the numbers.'
-        : got.rcv != null ? 'Matches the RCV on the contract (' + usd(got.rcv) + ').'
+      chk.textContent = off ? 'The contract’s RCV reads ' + usd(rcv) + ', but these add up to ' + usd(v.total) + '. Check the numbers.'
+        : rcv != null ? 'Matches the RCV on the contract (' + usd(rcv) + ').'
         : priceNow > 0 && Math.abs(priceNow - v.total) > 0.004 ? 'The job’s contract price is ' + usd(priceNow) + ' now.' : '';
     };
-    bg.addEventListener('input', recalc);
+    bg.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.rdk) e.target.dataset.typed = '1'; recalc(); });
     recalc();
-    const close = () => { bg.remove(); document.removeEventListener('keydown', onKey, true); };
+    let open = true;
+    const close = () => { open = false; bg.remove(); document.removeEventListener('keydown', onKey, true); };
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
     document.addEventListener('keydown', onKey, true);
+
+    Promise.resolve(reading).catch(() => null).then(res => {
+      if (!open) return;
+      got = res || { rcv: null, netClaim: null, deductible: null, depreciation: null };
+      const found = READ_ROWS.some(r => got[r[0]] != null);
+      READ_ROWS.forEach(([k]) => {
+        const el = box(k), v = got[k], has = now.has ? now[k] : 0;
+        if (v != null && !el.dataset.typed) el.value = amountText(v);    // never over something the rep typed while waiting
+        const note = bg.querySelector(`[data-rdnote="${k}"]`);
+        const diff = v != null && has > 0 && Math.abs(has - v) > 0.004;
+        note.className = diff ? 'diff' : '';
+        note.textContent = v == null ? (found ? 'Not found — type it in, or leave blank' : '') : diff ? 'Breakdown has ' + usd(has) + ' now' : '';
+      });
+      bg.querySelector('[data-rdmsg]').textContent = found
+        ? 'Check these against the paper and fix any that are off. They fill the job’s contract price and the Contract tab; Insurance is not changed.'
+        : 'Couldn’t read the amounts on this one. Type them in, or tap Skip.';
+      bg.querySelector('[data-rd="ok"]').disabled = false;
+      recalc();
+    });
+
     bg.addEventListener('click', e => {
       const b = e.target.closest('[data-rd]');
-      if (!b) return;
+      if (!b || b.disabled) return;
       if (b.dataset.rd === 'skip') { close(); return; }
       const v = values();
       close();
       j = liveJob(j);
-      // Saved the way the job's own Contract Price editor saves: three parts and their total.
-      READ_ROWS.forEach(([k, field]) => { j[field] = v[k].toFixed(2); });
-      j.potVal = v.total.toFixed(2);
-      // The Contract tab shows the same amounts as the paper; its RCV is the total charge.
-      const c = ensureContract(j);
-      READ_ROWS.forEach(([k]) => { c[k] = amountText(v[k]); });
-      c.rcv = amountText(v.total);
+      applyAmounts(j, v);
       if (typeof root.logActivity === 'function') root.logActivity(j, 'file', 'Contract price filled in from the contract',
         READ_ROWS.map(([k, , label]) => label + ' ' + usd(v[k])).join(' · ') + ' · Total ' + usd(v.total));
-      save(); rerender();
-      if (typeof root.renderBoard === 'function') { try { root.renderBoard(); } catch (er) {} }
-      if (typeof root.renderJobsPage === 'function') { try { const pg = document.getElementById('jobsPage'); if (pg && pg.style.display !== 'none') root.renderJobsPage(); } catch (er) {} }
+      redraw();
       say('Contract price filled in · ' + usd(v.total));
+      saveAmounts(j, v);
     });
     document.body.appendChild(bg);
     // Focus the sheet, not a box: a focused box would pop the phone keyboard over the amounts.
@@ -544,10 +641,14 @@
 #ctRead .ct-rd-tot b{font-size:17px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
 #ctRead .ct-rd-chk{font-size:12px;line-height:1.4;color:#8B94A7;min-height:17px}
 #ctRead .ct-rd-chk.diff{color:#FCD34D}
+#ctRead .ct-rd-spin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid #33405A;border-top-color:#8FB4FF;border-radius:50%;animation:ctRdSpin .8s linear infinite}
+@keyframes ctRdSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#ctRead .ct-rd-spin{animation-duration:2.4s}}
 #ctRead .ct-rd-b{display:flex;gap:12px}
 #ctRead .ct-rd-b button{flex:1;min-height:50px;border-radius:12px;font:700 15px Inter,system-ui,sans-serif;cursor:pointer}
 #ctRead .ct-rd-skip{background:#1A1F29;color:#E8ECF3;border:1px solid #252B38}
 #ctRead .ct-rd-ok{flex:2 !important;background:#2F6FEB;color:#fff;border:0}
+#ctRead .ct-rd-ok:disabled{opacity:.5;cursor:default}
 @media (min-width:761px){#ctRead{align-items:center}#ctRead .ct-rd{border-radius:16px}}
 @media (max-width:640px){.ct-two,.ct-addl{grid-template-columns:1fr}}
 `;
