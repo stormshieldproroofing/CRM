@@ -509,7 +509,8 @@
   // Appointments and the build, each on the day it is booked for — read from the job
   // itself (not the activity log), so the line sits on the real date however late the
   // stage gets moved, follows a reschedule and goes when the appointment is removed.
-  // Shown from the day itself on; before that the "… scheduled" line covers it.
+  // They show as soon as they are booked, even while the date is still ahead (those
+  // sit at the bottom of the notes, marked "Scheduled …").
   function apptItems(j, now) {
     if (!j) return [];
     now = now || new Date();
@@ -526,9 +527,10 @@
       if (!m) return null;
       const t = /^(\d{1,2}):(\d{2})/.exec(r.time);
       const at = new Date(+m[1], +m[2] - 1, +m[3], t ? +t[1] : 12, t ? +t[2] : 0);   // no time set: midday
-      if (isNaN(at) || at >= tomorrow) return null;
+      if (isNaN(at)) return null;
+      const ahead = at >= tomorrow;
       const time = t ? ((+t[1] % 12) || 12) + ':' + t[2] + (+t[1] < 12 ? ' AM' : ' PM') : '';
-      return { kind: 'sys', appt: true, at: at.toISOString(), text: r.label + (time ? ' \u00b7 ' + time : ''), sub: r.sub };
+      return { kind: 'sys', appt: true, ahead, at: at.toISOString(), text: r.label + (time ? ' \u00b7 ' + time : ''), sub: ahead ? 'Scheduled ' + r.sub.toLowerCase() : r.sub };
     }).filter(Boolean);
   }
 
@@ -768,7 +770,8 @@
     const list = state.notes[state.jobId] || [];
     const pin = list.slice().reverse().find(n => n && n.pinned);
     // The newest line in the notes, whatever it is (a pinned note always wins)
-    const items = feedItems(state.jobId);
+    // — but not an appointment or build that is still ahead: those would sit there for days
+    const items = feedItems(state.jobId).filter(it => !it.ahead);
     const latest = items[items.length - 1];
     let html;
     if (pin) html = '<b class="ssn-strip-pin">Pinned:</b> ' + esc(pin.body);
