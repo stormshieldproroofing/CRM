@@ -646,7 +646,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   document.write('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
     +'<link rel="stylesheet" href="redesign.css?v=48">'
     +'<script src="redesign.js?v=10"><\/script>'
-    +'<script src="redesign-job.js?v=30"><\/script>');
+    +'<script src="redesign-job.js?v=31"><\/script>');
 }catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -659,7 +659,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-profit.js"></script>
 <script src="crm-rep.js"></script>
 <script src="crm-weekcal.js"></script>
-<script src="supabase-crm.js?v=10"></script>
+<script src="supabase-crm.js?v=11"></script>
 <script src="crm-photos.js?v=1"></script>
 <script src="crm-scancam.js?v=5"></script>
 <script src="crm-packet.js?v=21"></script>
@@ -668,6 +668,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
 <script src="crm-notifications.js?v=9"></script>
 <script src="crm-certs.js?v=1"></script>
 <script src="crm-review.js?v=1"></script>
+<script src="crm-lost.js?v=1"></script>
 
 <div style="position:relative;overflow:hidden">
 
@@ -728,6 +729,7 @@ button.cc-copy:hover{opacity:1;color:var(--brand-light);background:rgba(77,157,2
   </div>
   <button class="pill-btn" id="editBoardBtn"><i class="ti ti-layout-columns" aria-hidden="true"></i>Edit Boards</button>
   <button class="pill-btn" id="toggleClosedBtn" onclick="toggleShowClosed()"><i class="ti ti-archive" aria-hidden="true"></i><span id="toggleClosedLabel">Show Completed/Lost</span></button>
+  <button class="pill-btn" id="lostLeadsBtn" onclick="window.crmLost&&crmLost.openList()"><i class="ti ti-user-off" aria-hidden="true"></i><span>Lost leads</span></button>
   <div class="filter-wrap">
     <button class="pill-btn" id="pipelineBtn"><i class="ti ti-adjustments-horizontal" aria-hidden="true"></i><span id="pipelineBtnLabel">Edit Pipeline</span></button>
     <div class="filter-drop" id="pipelineDrop" style="display:none;width:240px;left:auto;right:0"></div>
@@ -2705,7 +2707,9 @@ function followUpStatus(j){
   if(!col || col.closed) return null;
   const th = CONTACT_THRESHOLDS[col.id] || CONTACT_THRESHOLDS._default;
   const items = [];
-  ['client','insurance'].forEach(party => {
+  // A lost lead isn't chased on the usual clock — only its try-again date brings it back.
+  const lost = !!(window.crmLost && crmLost.isLostStage(col));
+  if(!lost) ['client','insurance'].forEach(party => {
     const limit = th[party];
     if(limit == null) return;
     const last = lastContact(j, party);
@@ -7074,7 +7078,8 @@ function canMoveToStage(j,targetColId){
   const isOffTrack = target?.closed === true
     || FORK_STAGE_IDS.has(targetColId)
     || targetName.includes('off-track') || targetName.includes('off track')
-    || targetName.includes('closed') || targetName.includes('denied');
+    || targetName.includes('closed') || targetName.includes('denied')
+    || !!(window.crmLost && crmLost.isLostStage(target));   // a lost lead doesn't need the stage's checklist finished
   if(isOffTrack) return true;
   // Backward moves (to an earlier stage) are always allowed — the checklist gate
   // only blocks forward progress, so you can pull a job back without completing it.
@@ -7216,7 +7221,7 @@ function renderBoard(){
       const tc=cb.closest('.col').dataset.col;
       const cdef=columns.find(c=>c.id===tc);
       if(cdef&&cdef.locked){toast('This stage is locked');return}
-      if(draggingId){const j=jobs.find(x=>x.id===draggingId);if(j){if(j.col!==tc&&!canMoveToStage(j,tc)){draggingId=null;return}if(j.col!==tc&&!canEnterContractStage(j,cdef)){draggingId=null;return}const fromStage=columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name||j.col;j.col=tc;logActivity(j,'stage','Stage changed',`${fromStage} → ${cdef.name}`);saveToStorage();toast(`Moved to ${cdef.name}`);renderBoard()}draggingId=null}
+      if(draggingId){const j=jobs.find(x=>x.id===draggingId);if(j){if(j.col!==tc&&window.crmLost&&crmLost.isLostStage(cdef)){draggingId=null;crmLost.open(j.id,tc);return}if(j.col!==tc&&!canMoveToStage(j,tc)){draggingId=null;return}if(j.col!==tc&&!canEnterContractStage(j,cdef)){draggingId=null;return}const fromStage=columnsForPipeline(j.pipeline).find(c=>c.id===j.col)?.name||j.col;j.col=tc;logActivity(j,'stage','Stage changed',`${fromStage} → ${cdef.name}`);saveToStorage();toast(`Moved to ${cdef.name}`);renderBoard()}draggingId=null}
     });
   });
   document.querySelectorAll('.job-card').forEach(c=>{
@@ -7336,13 +7341,15 @@ function canEnterContractStage(j, cdef, stay){
 }
 window.canEnterContractStage = canEnterContractStage;
 
-function moveJobToStage(jobId, targetColId){
+function moveJobToStage(jobId, targetColId, opts){
   const j=jobs.find(x=>x.id===jobId); if(!j) return;
   const jobCols=columnsForPipeline(pipelineForJob(j)?.id);
   const cdef=jobCols.find(c=>c.id===targetColId);
   if(!cdef) return;
   if(cdef.locked){toast('This stage is locked');return}
   if(j.col===targetColId) return;
+  // Lost Lead asks why first (crm-lost.js), then comes back here with lostConfirmed.
+  if(!(opts&&opts.lostConfirmed) && window.crmLost && crmLost.isLostStage(cdef)){ crmLost.open(j.id,targetColId); return; }
   if(!canMoveToStage(j,targetColId)) return;
   if(!canEnterContractStage(j,cdef)) return;
   const fromStage=jobCols.find(c=>c.id===j.col)?.name||j.col;
@@ -9675,6 +9682,7 @@ function renderDetailTab(j,u,col,jobPipeline,jobColumns){
       const ci=jobColumns.findIndex(c=>c.id===j.col),next=jobColumns[ci+1];
       if(!next){toast('Already at final stage');return}
       if(next.locked){toast(`${next.name} is locked`);return}
+      if(window.crmLost && crmLost.isLostStage(next)){ crmLost.open(j.id,next.id); return; }
       if(!canMoveToStage(j,next.id))return;
       if(!canEnterContractStage(j,next))return;
       const fromStageName = jobColumns.find(c=>c.id===j.col)?.name||j.col;
@@ -12070,6 +12078,9 @@ $('saveJob').onclick=async ()=>{
 
   if(editingJobId){
     const j=jobs.find(x=>x.id===editingJobId);
+    // Lost Lead picked in this form: save the rest, then ask why it was lost (crm-lost.js).
+    let askLost=null;
+    if(j&&j.col!==claimData.col&&window.crmLost&&crmLost.isLostStage(columnsForPipeline(claimData.pipeline||j.pipeline||'insurance').find(c=>c.id===claimData.col))){ askLost=claimData.col; claimData.col=j.col; }
     if(j&&j.col!==claimData.col&&!canMoveToStage(j,claimData.col))return;
     // The stage picked in this form goes through the same Contract Signed check as a drag.
     if(j&&j.col!==claimData.col&&!canEnterContractStage(j,columnsForPipeline(claimData.pipeline||j.pipeline||'insurance').find(c=>c.id===claimData.col),true))return;
@@ -12116,6 +12127,7 @@ $('saveJob').onclick=async ()=>{
     renderBoard();
     if($('jobsPage')?.style.display!=='none') renderJobsPage();
     if($('detailOverlay').classList.contains('open')) renderDetailPanel();
+    if(askLost && j) crmLost.open(j.id, askLost);
   } else {
     // A brand-new job has no price or contract yet, so it can't start in Contract Signed.
     if(!canEnterContractStage({potVal:0},columnsForPipeline(claimData.pipeline||'insurance').find(c=>c.id===claimData.col),true))return;

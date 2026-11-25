@@ -1086,6 +1086,10 @@
     body.insertBefore(ov, body.firstChild);   // in the page from the start, so lookups by id keep working
 
 
+    // Lost lead: why, when to try again, Reopen (crm-lost.js). First, so it can't be missed.
+    const lostCard = window.crmLost ? crmLost.card(j) : null;
+    if (lostCard) section(ov, 'Lost').appendChild(lostCard);
+
     // 2. Customer & claim (Save to phone contacts is the green icon on the name row)
     const cust = section(ov, 'Customer & claim');
     // "Save to contacts" sits on the title line, right-aligned
