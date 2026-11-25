@@ -210,6 +210,7 @@ async function loadAllFromSupabase() {
         buildDate: r.build_date || null,
         buildConfirmed: !!(r.contract && typeof r.contract === 'object' && r.contract.__buildConfirmed),
         zohoCalEventId: (r.contract && typeof r.contract === 'object' && r.contract.__zohoCalEventId) ? r.contract.__zohoCalEventId : undefined,
+        lost: (r.contract && r.contract.__lost && typeof r.contract.__lost === 'object') ? r.contract.__lost : undefined,   // why a lost lead was lost (crm-lost.js)
         cpNetClaim:     (r.contract && r.contract.__cpNetClaim     != null) ? r.contract.__cpNetClaim     : undefined,
         cpDeductible:   (r.contract && r.contract.__cpDeductible   != null) ? r.contract.__cpDeductible   : undefined,
         cpDepreciation: (r.contract && r.contract.__cpDepreciation != null) ? r.contract.__cpDepreciation : undefined,
@@ -753,6 +754,7 @@ async function pushAllToSupabase() {
           base.__cpDepreciation= (j.cpDepreciation != null) ? j.cpDepreciation : null;
           base.__cpSupplement  = (j.cpSupplement != null) ? j.cpSupplement : null;
           base.__supplementStatus = j.supplementStatus || null;
+          base.__lost = (j.lost && typeof j.lost === 'object') ? j.lost : null;   // why a lost lead was lost, and when to try again (crm-lost.js)
           base.__payMeta = (j.payMeta && typeof j.payMeta === 'object' && Object.keys(j.payMeta).length) ? j.payMeta : null;   // how each payment was paid
           base.__appraisal = (j.appraisalResult && typeof j.appraisalResult === 'object') ? j.appraisalResult : null;   // last appraisal alert sent (approved / denied)
           base.__rejectedPays = (Array.isArray(j.rejectedPays) && j.rejectedPays.length) ? j.rejectedPays : null;   // payments that came back rejected
